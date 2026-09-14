@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import {
   AlertCircle,
   ArrowRight,
@@ -43,27 +43,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "秒約 Miao Yue — 派工排程一次搞定｜預約派工管理系統" },
-      {
-        name: "description",
-        content:
-          "秒約為到店服務與到府派工業者打造：客戶預約、師傅排程、抽成薪資結算一套串起來。智慧建單、跨店行事曆、LINE 通知整合。",
-      },
-      { property: "og:title", content: "秒約 Miao Yue — 派工排程一次搞定" },
-      {
-        property: "og:description",
-        content: "客戶預約、師傅排程、帳務結算，一套系統全部串起來——到店服務、到府派工都適用。",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: Landing,
-});
 
 const navLinks = [
   { href: "#功能特色", label: "功能特色" },
@@ -178,7 +157,7 @@ const faqs = [
   },
 ];
 
-function Landing() {
+export default function Landing() {
   return (
     <div className="min-h-screen bg-background font-sans antialiased">
       <Header />

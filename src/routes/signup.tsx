@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -8,20 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/signup")({
-  ssr: false,
-  head: () => ({
-    meta: [
-      { title: "建立帳號｜秒約 Miao Yue" },
-      { name: "description", content: "建立秒約帳號，開始管理預約、派工與薪資結算。" },
-      { property: "og:title", content: "建立帳號｜秒約 Miao Yue" },
-      { property: "og:description", content: "建立秒約帳號，開始管理預約與派工。" },
-    ],
-  }),
-  component: SignUp,
-});
-
-function SignUp() {
+export default function SignUp() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -41,11 +28,11 @@ function SignUp() {
       return;
     }
     if (data.session) {
-      navigate({ to: "/app", replace: true });
+      navigate("/app", { replace: true });
       return;
     }
     toast.success("帳號已建立", { description: "請使用剛剛的 Email 與密碼登入。" });
-    navigate({ to: "/signin", replace: true });
+    navigate("/signin", { replace: true });
   }
 
   return (

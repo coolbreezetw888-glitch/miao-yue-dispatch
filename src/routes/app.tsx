@@ -1,25 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/app")({
-  ssr: false,
-  head: () => ({
-    meta: [
-      { title: "派工後台｜秒約 Miao Yue" },
-      { name: "description", content: "秒約派工管理後台。" },
-      { property: "og:title", content: "派工後台｜秒約 Miao Yue" },
-      { property: "og:description", content: "秒約派工管理後台。" },
-      { name: "robots", content: "noindex" },
-    ],
-  }),
-  component: AppShell,
-});
-
-function AppShell() {
+export default function AppShell() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [email, setEmail] = useState<string | null>(null);
@@ -30,14 +16,14 @@ function AppShell() {
     supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
       if (!data.user) {
-        navigate({ to: "/signin", replace: true });
+        navigate("/signin", { replace: true });
         return;
       }
       setEmail(data.user.email ?? null);
       setChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) navigate({ to: "/signin", replace: true });
+      if (!session) navigate("/signin", { replace: true });
       else setEmail(session.user.email ?? null);
     });
     return () => {
@@ -50,7 +36,7 @@ function AppShell() {
     await queryClient.cancelQueries();
     queryClient.clear();
     await supabase.auth.signOut();
-    navigate({ to: "/signin", replace: true });
+    navigate("/signin", { replace: true });
   }
 
   if (!checked) {

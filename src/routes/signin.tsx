@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
@@ -8,20 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/signin")({
-  ssr: false,
-  head: () => ({
-    meta: [
-      { title: "登入｜秒約 Miao Yue" },
-      { name: "description", content: "登入秒約派工預約系統，管理訂單、排程與結算。" },
-      { property: "og:title", content: "登入｜秒約 Miao Yue" },
-      { property: "og:description", content: "登入秒約派工預約系統。" },
-    ],
-  }),
-  component: SignIn,
-});
-
-function SignIn() {
+export default function SignIn() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,7 +16,7 @@ function SignIn() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/app", replace: true });
+      if (data.session) navigate("/app", { replace: true });
     });
   }, [navigate]);
 
@@ -42,7 +29,7 @@ function SignIn() {
       toast.error("登入失敗", { description: error.message });
       return;
     }
-    navigate({ to: "/app", replace: true });
+    navigate("/app", { replace: true });
   }
 
   return (
