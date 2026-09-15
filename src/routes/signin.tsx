@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { getVerifiedUser } from "@/lib/auth-guard";
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -15,9 +16,20 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate("/app", { replace: true });
+    let active = true;
+    // 2026-09 修正:原本用 supabase.auth.getSession() 判斷「已登入就導去 /app」,但 getSession()
+    // 只讀本機快取、不會跟伺服器確認憑證是否還有效。如果本機留著一份已經失效的憑證(過期/被撤銷),
+    // 會誤判成「已登入」導回 /app,而 /app 那邊用會打伺服器驗證的 getUser() 發現憑證無效又導回
+    // /signin,兩邊各自「信任」不同來源的登入狀態,形成 /app <-> /signin 無限跳轉的迴圈(詳見
+    // src/lib/auth-guard.ts 開頭的完整說明)。改用 getVerifiedUser(),確保這裡看到的「已登入」
+    // 一定是經伺服器驗證過的結果,不是只讀本機快取。
+    getVerifiedUser().then((user) => {
+      if (!active) return;
+      if (user) navigate("/app", { replace: true });
     });
+    return () => {
+      active = false;
+    };
   }, [navigate]);
 
   async function onSubmit(e: FormEvent) {

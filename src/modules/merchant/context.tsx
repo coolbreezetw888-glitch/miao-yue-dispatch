@@ -23,6 +23,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import { getVerifiedUser } from "@/lib/auth-guard";
 import { fetchAccessibleMerchants, fetchMerchantAdminUsers, getFeatureFlag } from "./api";
 import { getCurrentMerchantStorageKey } from "./constants";
 import type { MerchantAdminUser, MerchantWithGroup } from "./types";
@@ -75,9 +76,13 @@ export function CurrentMerchantProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    // 2026-09 修正:改用 getVerifiedUser(),取代直接呼叫 supabase.auth.getUser()。原因跟
+    // src/routes/app.tsx 同一次修正一致——憑證確實無效時要順手清掉本機那份無效憑證,避免
+    // /signin 頁面誤判成「已登入」形成 /app <-> /signin 無限跳轉迴圈(完整原因見
+    // src/lib/auth-guard.ts)。
+    getVerifiedUser().then((user) => {
       if (!active) return;
-      setUserId(data.user?.id ?? null);
+      setUserId(user?.id ?? null);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;

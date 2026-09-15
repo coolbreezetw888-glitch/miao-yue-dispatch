@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { supabase } from "@/integrations/supabase/client";
+import { getVerifiedUser } from "@/lib/auth-guard";
 import { amIPlatformAdmin } from "./api";
 
 export function PlatformAdminGuard({ children }: { children: ReactNode }) {
@@ -17,9 +18,11 @@ export function PlatformAdminGuard({ children }: { children: ReactNode }) {
     let active = true;
 
     async function check() {
-      const { data } = await supabase.auth.getUser();
+      // 2026-09 修正:改用 getVerifiedUser(),取代直接呼叫 supabase.auth.getUser()。原因跟
+      // src/routes/app.tsx 同一次修正一致(完整原因見 src/lib/auth-guard.ts)。
+      const user = await getVerifiedUser();
       if (!active) return;
-      if (!data.user) {
+      if (!user) {
         navigate("/signin", { replace: true });
         return;
       }

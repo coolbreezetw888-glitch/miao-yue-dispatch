@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { getVerifiedUser } from "@/lib/auth-guard";
 import { MerchantSwitcher } from "@/modules/merchant/MerchantSwitcher";
 import {
   useClearCurrentMerchantSelection,
@@ -25,13 +26,18 @@ export default function AppShell() {
 
   useEffect(() => {
     let active = true;
-    supabase.auth.getUser().then(({ data }) => {
+    // 2026-09 修正:改用 getVerifiedUser()(內部呼叫 supabase.auth.getUser() 並保證不會
+    // reject),取代直接呼叫 supabase.auth.getUser()。原本這裡沒有 .catch(),萬一 getUser()
+    // 意外 reject,authChecked 永遠不會變成 true,畫面會卡死在「載入中」;另外憑證確實無效時,
+    // getVerifiedUser() 會順手清掉本機那份無效憑證,避免 /signin 頁面誤判成「已登入」導回這裡,
+    // 形成無限跳轉迴圈(完整原因見 src/lib/auth-guard.ts)。
+    getVerifiedUser().then((user) => {
       if (!active) return;
-      if (!data.user) {
+      if (!user) {
         navigate("/signin", { replace: true });
         return;
       }
-      setEmail(data.user.email ?? null);
+      setEmail(user.email ?? null);
       setAuthChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
