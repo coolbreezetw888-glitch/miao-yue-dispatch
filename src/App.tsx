@@ -14,6 +14,10 @@ import { PlatformAdminGuard } from "@/modules/platform-admin/PlatformAdminGuard"
 import MerchantsOverviewPage from "@/modules/platform-admin/MerchantsOverviewPage";
 import MerchantDetailPage from "@/modules/platform-admin/MerchantDetailPage";
 import IndustryPresetsPage from "@/modules/platform-admin/IndustryPresetsPage";
+import StaffListPage from "@/modules/staff-agent/StaffListPage";
+import AgentListPage from "@/modules/staff-agent/AgentListPage";
+import AgentPermissionsPage from "@/modules/staff-agent/AgentPermissionsPage";
+import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePage";
 
 function NotFound() {
   return (
@@ -46,6 +50,10 @@ export default function App() {
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
         <Route path="/app/settings" element={<MerchantSettingsPage />} />
+        <Route path="/app/staff" element={<StaffListPage />} />
+        <Route path="/app/agents" element={<AgentListPage />} />
+        <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
+        <Route path="/app/agent-invite-complete" element={<AgentInviteCompletePage />} />
         <Route
           path="/platform-admin"
           element={

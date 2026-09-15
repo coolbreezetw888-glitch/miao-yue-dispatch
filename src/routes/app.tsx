@@ -13,6 +13,7 @@ import {
 } from "@/modules/merchant/context";
 import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
+import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 export default function AppShell() {
   const navigate = useNavigate();
@@ -23,6 +24,11 @@ export default function AppShell() {
   const { merchants, isLoading: merchantsLoading } = useGroupMerchants();
   const { merchant: currentMerchant } = useCurrentMerchant();
   const clearCurrentMerchantSelection = useClearCurrentMerchantSelection();
+  // 對應規格書(人員與權限管理)4.5:客服登入後,不顯示「新增分店」「商家設定」「人員/客服管理」
+  // 這些管理員專屬的操作按鈕。isAdmin 在角色還沒判斷完成時(role === undefined,含 role
+  // 尚未 enabled)先當作 false,避免畫面短暫誤閃管理員按鈕。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const isAdmin = merchantRole === "admin";
 
   useEffect(() => {
     let active = true;
@@ -103,12 +109,22 @@ export default function AppShell() {
           </Link>
           <div className="flex flex-1 items-center justify-end gap-2">
             <MerchantSwitcher />
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/new-merchant">新增分店</Link>
-            </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/settings">商家設定</Link>
-            </Button>
+            {isAdmin ? (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/staff">服務人員</Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/agents">客服管理</Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/new-merchant">新增分店</Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/settings">商家設定</Link>
+                </Button>
+              </>
+            ) : null}
             <Button variant="outline" size="sm" onClick={handleSignOut}>
               登出
             </Button>

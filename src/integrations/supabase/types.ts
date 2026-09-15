@@ -89,6 +89,97 @@ export type Database = {
           },
         ]
       }
+      merchant_agent_permissions: {
+        Row: {
+          agent_id: string
+          created_at: string
+          granted: boolean
+          id: string
+          section_key: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          granted?: boolean
+          id?: string
+          section_key: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          granted?: boolean
+          id?: string
+          section_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_agent_permissions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_agents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_agents: {
+        Row: {
+          activated_at: string | null
+          contact_email: string | null
+          created_at: string
+          id: string
+          invited_at: string
+          invited_email: string
+          merchant_id: string
+          name: string
+          nickname: string | null
+          phone: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_email: string
+          merchant_id: string
+          name: string
+          nickname?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          contact_email?: string | null
+          created_at?: string
+          id?: string
+          invited_at?: string
+          invited_email?: string
+          merchant_id?: string
+          name?: string
+          nickname?: string | null
+          phone?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_agents_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_feature_flags: {
         Row: {
           created_at: string
@@ -120,6 +211,130 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_staff: {
+        Row: {
+          advance_booking_days: number | null
+          auto_accept_booking: boolean
+          avatar_url: string | null
+          booking_window_max_days: number | null
+          booking_window_min_days: number | null
+          can_create_edit_orders: boolean
+          can_upload_construction_photos: boolean
+          contact_email: string | null
+          created_at: string
+          direct_accept_after_merchant_confirm: boolean
+          google_calendar_sync_enabled: boolean
+          id: string
+          intro: string | null
+          is_listed: boolean
+          line_bound: boolean
+          line_user_id: string | null
+          merchant_id: string
+          name: string
+          nickname: string | null
+          no_time_slot_limit: boolean
+          phone: string | null
+          show_member_info: boolean
+          status: string
+          unlimited_backend_edit: boolean
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          advance_booking_days?: number | null
+          auto_accept_booking?: boolean
+          avatar_url?: string | null
+          booking_window_max_days?: number | null
+          booking_window_min_days?: number | null
+          can_create_edit_orders?: boolean
+          can_upload_construction_photos?: boolean
+          contact_email?: string | null
+          created_at?: string
+          direct_accept_after_merchant_confirm?: boolean
+          google_calendar_sync_enabled?: boolean
+          id?: string
+          intro?: string | null
+          is_listed?: boolean
+          line_bound?: boolean
+          line_user_id?: string | null
+          merchant_id: string
+          name: string
+          nickname?: string | null
+          no_time_slot_limit?: boolean
+          phone?: string | null
+          show_member_info?: boolean
+          status?: string
+          unlimited_backend_edit?: boolean
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          advance_booking_days?: number | null
+          auto_accept_booking?: boolean
+          avatar_url?: string | null
+          booking_window_max_days?: number | null
+          booking_window_min_days?: number | null
+          can_create_edit_orders?: boolean
+          can_upload_construction_photos?: boolean
+          contact_email?: string | null
+          created_at?: string
+          direct_accept_after_merchant_confirm?: boolean
+          google_calendar_sync_enabled?: boolean
+          id?: string
+          intro?: string | null
+          is_listed?: boolean
+          line_bound?: boolean
+          line_user_id?: string | null
+          merchant_id?: string
+          name?: string
+          nickname?: string | null
+          no_time_slot_limit?: boolean
+          phone?: string | null
+          show_member_info?: boolean
+          status?: string
+          unlimited_backend_edit?: boolean
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_staff_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_staff_service_items: {
+        Row: {
+          created_at: string
+          id: string
+          service_item_id: string
+          staff_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          service_item_id: string
+          staff_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          service_item_id?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_staff_service_items_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
             referencedColumns: ["id"]
           },
         ]
@@ -215,6 +430,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      am_i_merchant_admin: { Args: { p_merchant_id: string }; Returns: boolean }
       am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
@@ -252,6 +468,12 @@ export type Database = {
           user_id: string
         }[]
       }
+      invite_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
+      mark_agent_active_if_self: { Args: never; Returns: undefined }
       platform_add_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined
@@ -270,6 +492,30 @@ export type Database = {
       }
       platform_set_group_admin: {
         Args: { p_group_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      record_invited_merchant_agent: {
+        Args: {
+          p_invited_email: string
+          p_merchant_id: string
+          p_name: string
+          p_nickname: string
+          p_phone: string
+          p_status: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      remove_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      remove_merchant_agent: {
+        Args: { p_agent_id: string }
+        Returns: undefined
+      }
+      set_agent_permission: {
+        Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
       }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
