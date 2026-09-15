@@ -5,7 +5,11 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { MerchantSwitcher } from "@/modules/merchant/MerchantSwitcher";
-import { useCurrentMerchant, useGroupMerchants } from "@/modules/merchant/context";
+import {
+  useClearCurrentMerchantSelection,
+  useCurrentMerchant,
+  useGroupMerchants,
+} from "@/modules/merchant/context";
 import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
 
@@ -17,6 +21,7 @@ export default function AppShell() {
 
   const { merchants, isLoading: merchantsLoading } = useGroupMerchants();
   const { merchant: currentMerchant } = useCurrentMerchant();
+  const clearCurrentMerchantSelection = useClearCurrentMerchantSelection();
 
   useEffect(() => {
     let active = true;
@@ -47,11 +52,29 @@ export default function AppShell() {
     }
   }, [authChecked, merchantsLoading, merchants.length, navigate]);
 
-  async function handleSignOut() {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
+  function handleSignOut() {
+    // 2026-09-15 主腦複查修正(QA 複驗抓到:登出後每次都穩定卡在 /app/onboarding 5-9 秒才跳轉，
+    // 不是偶發)。深入排查後找到確切原因，不是單純呼叫順序問題：
+    //
+    // 原本的寫法是 await 完 queryClient.clear() 跟 supabase.auth.signOut() 才 navigate。
+    // queryClient.clear() 執行的當下，supabase.auth.signOut() 都還沒開始呼叫，這個 provider
+    // 的 userId/authChecked 都還是「登入中」的狀態——clear() 把商家清單快取清空後，會出現一次
+    // merchants.length === 0 但 authChecked 仍是 true 的畫面，讓 4.6 AppShell 自己那條
+    // 「沒有商家 → 導去 Onboarding」的判斷搶先觸發，導去 /app/onboarding。
+    // 導去 /app/onboarding 後 AppShell 整個 unmount，連帶它自己監聽 onAuthStateChange、
+    // 原本會負責導回 /signin 的那個 effect 也被清掉——剩下唯一還會導去 /signin 的，只有
+    // handleSignOut 這個 async function 自己殘留的 promise chain 尾端，而它前面卡在
+    // await supabase.auth.signOut():這是打去 Supabase Auth 伺服器的真實網路請求，
+    // 實測就是卡住的那 5-9 秒的來源。
+    //
+    // 修法:「登出」這個操作，使用者體感上要立即生效，不應該等任何非同步網路請求跑完才轉場。
+    // 改成先同步導向 /signin，實際清 session 的網路請求、清 react-query 快取這些收尾動作都
+    // 改成背景執行、不擋畫面——這樣從源頭就不會再出現「clear() 先跑，搶先觸發 Onboarding
+    // 判斷」這個時序問題，不只是治標地調整呼叫順序。
     navigate("/signin", { replace: true });
+    clearCurrentMerchantSelection();
+    void queryClient.cancelQueries().then(() => queryClient.clear());
+    void supabase.auth.signOut();
   }
 
   if (!authChecked || merchantsLoading || (merchants.length === 0 && authChecked)) {
