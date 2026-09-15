@@ -189,11 +189,33 @@ export type Database = {
           },
         ]
       }
+      platform_admins: {
+        Row: {
+          created_at: string
+          id: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -229,6 +251,26 @@ export type Database = {
           merchant_id: string
           user_id: string
         }[]
+      }
+      platform_add_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      platform_get_merchant_admin_counts: {
+        Args: never
+        Returns: {
+          admin_count: number
+          merchant_id: string
+        }[]
+      }
+      platform_get_user_email: { Args: { p_user_id: string }; Returns: string }
+      platform_remove_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      platform_set_group_admin: {
+        Args: { p_group_id: string; p_user_email: string }
+        Returns: undefined
       }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
     }

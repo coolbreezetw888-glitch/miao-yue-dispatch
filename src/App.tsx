@@ -10,6 +10,10 @@ import { CurrentMerchantProvider } from "@/modules/merchant/context";
 import OnboardingPage from "@/modules/merchant/OnboardingPage";
 import NewMerchantPage from "@/modules/merchant/NewMerchantPage";
 import MerchantSettingsPage from "@/modules/merchant/MerchantSettingsPage";
+import { PlatformAdminGuard } from "@/modules/platform-admin/PlatformAdminGuard";
+import MerchantsOverviewPage from "@/modules/platform-admin/MerchantsOverviewPage";
+import MerchantDetailPage from "@/modules/platform-admin/MerchantDetailPage";
+import IndustryPresetsPage from "@/modules/platform-admin/IndustryPresetsPage";
 
 function NotFound() {
   return (
@@ -42,6 +46,30 @@ export default function App() {
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
         <Route path="/app/settings" element={<MerchantSettingsPage />} />
+        <Route
+          path="/platform-admin"
+          element={
+            <PlatformAdminGuard>
+              <MerchantsOverviewPage />
+            </PlatformAdminGuard>
+          }
+        />
+        <Route
+          path="/platform-admin/merchants/:id"
+          element={
+            <PlatformAdminGuard>
+              <MerchantDetailPage />
+            </PlatformAdminGuard>
+          }
+        />
+        <Route
+          path="/platform-admin/industry-presets"
+          element={
+            <PlatformAdminGuard>
+              <IndustryPresetsPage />
+            </PlatformAdminGuard>
+          }
+        />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/privacy" element={<Privacy />} />
