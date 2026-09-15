@@ -6,6 +6,10 @@ import SignIn from "@/routes/signin";
 import SignUp from "@/routes/signup";
 import Privacy from "@/routes/privacy";
 import Terms from "@/routes/terms";
+import { CurrentMerchantProvider } from "@/modules/merchant/context";
+import OnboardingPage from "@/modules/merchant/OnboardingPage";
+import NewMerchantPage from "@/modules/merchant/NewMerchantPage";
+import MerchantSettingsPage from "@/modules/merchant/MerchantSettingsPage";
 
 function NotFound() {
   return (
@@ -31,14 +35,19 @@ function NotFound() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/app" element={<AppShell />} />
-      <Route path="/signin" element={<SignIn />} />
-      <Route path="/signup" element={<SignUp />} />
-      <Route path="/privacy" element={<Privacy />} />
-      <Route path="/terms" element={<Terms />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <CurrentMerchantProvider>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/app" element={<AppShell />} />
+        <Route path="/app/onboarding" element={<OnboardingPage />} />
+        <Route path="/app/new-merchant" element={<NewMerchantPage />} />
+        <Route path="/app/settings" element={<MerchantSettingsPage />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </CurrentMerchantProvider>
   );
 }
