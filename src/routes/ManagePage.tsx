@@ -13,7 +13,7 @@
 // (例如客服完全沒被開放任何功能),顯示空狀態文字,不是讓這個分頁籤消失或顯示空白。
 
 import type { ComponentType } from "react";
-import { ClipboardList, Headset, Settings, Users } from "lucide-react";
+import { CalendarClock, ClipboardList, Headset, Settings, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,9 @@ export default function ManagePage() {
   // 模組 4 規格書 4.3/2.5 既有邏輯:商家管理員一律顯示,客服則透過這支 hook 判斷。
   const { data: canManageServiceItems } = useAgentPermission("service_items");
   const showServiceItemsCard = isAdmin || canManageServiceItems === true;
+  // 模組 5 規格書 4.7/規則 2.12:business_hours 這個 section_key 涵蓋營業時間設定卡片的顯示權限。
+  const { data: canManageBusinessHours } = useAgentPermission("business_hours");
+  const showBusinessHoursCard = isAdmin || canManageBusinessHours === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -59,6 +62,14 @@ export default function ManagePage() {
       description: "管理服務分類與服務項目、金額、工時",
       icon: ClipboardList,
       visible: showServiceItemsCard,
+    },
+    {
+      key: "business-hours",
+      to: "/app/business-hours",
+      label: "營業時間設定",
+      description: "每週營業時間、嚴格工時衝突檢查開關",
+      icon: CalendarClock,
+      visible: showBusinessHoursCard,
     },
     {
       key: "settings",

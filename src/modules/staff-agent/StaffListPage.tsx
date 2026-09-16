@@ -45,6 +45,9 @@ import {
   useMerchantServiceItems,
 } from "@/modules/service-items/context";
 import { UNCATEGORIZED_LABEL, type ServiceItem } from "@/modules/service-items/types";
+import { addStaffAvailabilityWindow, removeStaffAvailabilityWindow } from "@/modules/booking/api";
+import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 
 import {
   addMerchantStaff,
@@ -115,6 +118,128 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
     canCreateEditOrders: staff.can_create_edit_orders,
     canUploadConstructionPhotos: staff.can_upload_construction_photos,
   };
+}
+
+// 模組 5 規格書 4.2:比照模組 4 4.4 節先例,新增一週可預約時段設定區塊。允許同一天多組時段
+// (規格書 1.2)。空狀態(規則 2.5):完全沒設定任何時段、且 no_time_slot_limit=false 時,
+// 這位服務人員這次還不可預約,這裡用提示文字說明,不做任何攔阻(攔阻邏輯在 create_booking 裡)。
+function AvailabilityWindowsEditor({
+  staffId,
+  noTimeSlotLimit,
+}: {
+  staffId: string;
+  noTimeSlotLimit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const windowsQueryKey = ["booking-module", "staff-availability-windows", staffId] as const;
+  const { data: windows, isLoading } = useStaffAvailabilityWindows(staffId);
+
+  const [dayOfWeek, setDayOfWeek] = useState("1");
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("18:00");
+  const [adding, setAdding] = useState(false);
+
+  function refetch() {
+    return queryClient.invalidateQueries({ queryKey: windowsQueryKey });
+  }
+
+  async function handleAdd() {
+    if (startTime >= endTime) {
+      toast.error("開始時間必須早於結束時間");
+      return;
+    }
+    setAdding(true);
+    try {
+      await addStaffAvailabilityWindow(staffId, {
+        dayOfWeek: Number(dayOfWeek),
+        startTime,
+        endTime,
+      });
+      await refetch();
+      toast.success("已新增可預約時段");
+    } catch (err) {
+      toast.error("新增失敗", { description: getErrorMessage(err) });
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleRemove(windowId: string) {
+    try {
+      await removeStaffAvailabilityWindow(windowId);
+      await refetch();
+      toast.success("已刪除這組時段");
+    } catch (err) {
+      toast.error("刪除失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  return (
+    <div>
+      <Label className="text-sm font-semibold">可預約時段</Label>
+      <p className="mt-1 text-xs text-muted-foreground">
+        這位服務人員自己願意接單的時段,不必等於商家整體營業時間。
+        {noTimeSlotLimit
+          ? "目前已開啟「無時段限制」,以下設定會被忽略,只受商家整體營業時間限制。"
+          : "完全沒有設定任何時段時,這位服務人員這次還不可預約,除非開啟「無時段限制」。"}
+      </p>
+
+      {isLoading ? (
+        <p className="mt-2 text-sm text-muted-foreground">載入中⋯</p>
+      ) : !windows || windows.length === 0 ? (
+        <p className="mt-2 rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
+          尚未設定任何可預約時段
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {windows.map((w) => (
+            <li
+              key={w.id}
+              className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm"
+            >
+              <span>
+                星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
+                {w.end_time.slice(0, 5)}
+              </span>
+              <Button type="button" variant="outline" size="sm" onClick={() => handleRemove(w.id)}>
+                刪除
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          value={dayOfWeek}
+          onChange={(e) => setDayOfWeek(e.target.value)}
+        >
+          {DAY_OF_WEEK_LABELS.map((label, index) => (
+            <option key={label} value={index}>
+              星期{label}
+            </option>
+          ))}
+        </select>
+        <input
+          type="time"
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+        />
+        <span className="text-sm text-muted-foreground">至</span>
+        <input
+          type="time"
+          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+        />
+        <Button type="button" variant="outline" size="sm" disabled={adding} onClick={handleAdd}>
+          新增時段
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function StaffFormDialog({
@@ -387,6 +512,20 @@ function StaffFormDialog({
               </div>
             )}
           </div>
+
+          {staff ? (
+            <AvailabilityWindowsEditor
+              staffId={staff.id}
+              noTimeSlotLimit={form.noTimeSlotLimit ?? false}
+            />
+          ) : (
+            <div>
+              <Label className="text-sm font-semibold">可預約時段</Label>
+              <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可設定可預約時段。
+              </p>
+            </div>
+          )}
 
           <div>
             <div className="flex items-baseline justify-between">

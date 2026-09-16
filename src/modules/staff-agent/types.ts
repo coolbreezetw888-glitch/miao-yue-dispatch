@@ -131,7 +131,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "orders",
     label: "訂單管理",
-    description: "開放後客服可以看到並操作訂單列表(此功能尚未開發,先設定值)。",
+    description: "開放後客服可以在行事曆建立新預約、取消預約、把預約標記為完成。",
   },
   {
     key: "billing",
@@ -161,7 +161,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "business_hours",
     label: "營業時間設定",
-    description: "開放後客服可以調整營業時間設定(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以調整商家整體營業時間、服務人員個別可預約時段,以及嚴格工時衝突檢查開關。",
   },
   {
     key: "commission_settings",

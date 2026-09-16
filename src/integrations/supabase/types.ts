@@ -8,13 +8,121 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
+      bookings: {
+        Row: {
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_role: string
+          created_by_user_id: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          end_at: string
+          id: string
+          merchant_id: string
+          notes: string | null
+          service_item_id: string
+          source: string
+          staff_id: string
+          start_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_role: string
+          created_by_user_id?: string | null
+          customer_email?: string | null
+          customer_name: string
+          customer_phone: string
+          end_at: string
+          id?: string
+          merchant_id: string
+          notes?: string | null
+          service_item_id: string
+          source?: string
+          staff_id: string
+          start_at: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          cancelled_reason?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by_role?: string
+          created_by_user_id?: string | null
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string
+          end_at?: string
+          id?: string
+          merchant_id?: string
+          notes?: string | null
+          service_item_id?: string
+          source?: string
+          staff_id?: string
+          start_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_service_item_id_fkey"
+            columns: ["service_item_id"]
+            isOneToOne: false
+            referencedRelation: "service_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       groups: {
         Row: {
           created_at: string
@@ -173,6 +281,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "merchant_agents_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_business_hours: {
+        Row: {
+          close_time: string | null
+          created_at: string
+          day_of_week: number
+          id: string
+          is_closed: boolean
+          merchant_id: string
+          open_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          close_time?: string | null
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_closed?: boolean
+          merchant_id: string
+          open_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          close_time?: string | null
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_closed?: boolean
+          merchant_id?: string
+          open_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_business_hours_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
@@ -518,6 +667,44 @@ export type Database = {
           },
         ]
       }
+      staff_availability_windows: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          staff_id: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          id?: string
+          staff_id: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          staff_id?: string
+          start_time?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_availability_windows_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -528,6 +715,105 @@ export type Database = {
       apply_industry_preset: {
         Args: { p_merchant_id: string }
         Returns: undefined
+      }
+      cancel_booking: {
+        Args: { p_booking_id: string; p_reason?: string }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_role: string
+          created_by_user_id: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          end_at: string
+          id: string
+          merchant_id: string
+          notes: string | null
+          service_item_id: string
+          source: string
+          staff_id: string
+          start_at: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      complete_booking: {
+        Args: { p_booking_id: string }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_role: string
+          created_by_user_id: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          end_at: string
+          id: string
+          merchant_id: string
+          notes: string | null
+          service_item_id: string
+          source: string
+          staff_id: string
+          start_at: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_booking: {
+        Args: {
+          p_customer_email?: string
+          p_customer_name: string
+          p_customer_phone: string
+          p_merchant_id: string
+          p_notes?: string
+          p_service_item_id: string
+          p_staff_id: string
+          p_start_at: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_role: string
+          created_by_user_id: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          end_at: string
+          id: string
+          merchant_id: string
+          notes: string | null
+          service_item_id: string
+          source: string
+          staff_id: string
+          start_at: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       create_group_and_merchant: {
         Args: {
@@ -560,6 +846,10 @@ export type Database = {
           merchant_id: string
           user_id: string
         }[]
+      }
+      get_merchant_day_schedule: {
+        Args: { p_date: string; p_merchant_id: string }
+        Returns: Json
       }
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
@@ -740,7 +1030,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

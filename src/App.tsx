@@ -4,7 +4,6 @@ import Landing from "@/routes/index";
 import AppLayout from "@/routes/AppLayout";
 import HomePage from "@/routes/HomePage";
 import ManagePage from "@/routes/ManagePage";
-import CalendarPlaceholderPage from "@/routes/CalendarPlaceholderPage";
 import SignIn from "@/routes/signin";
 import SignUp from "@/routes/signup";
 import Privacy from "@/routes/privacy";
@@ -22,6 +21,8 @@ import AgentListPage from "@/modules/staff-agent/AgentListPage";
 import AgentPermissionsPage from "@/modules/staff-agent/AgentPermissionsPage";
 import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePage";
 import ServiceItemsPage from "@/modules/service-items/ServiceItemsPage";
+import BusinessHoursPage from "@/modules/booking/BusinessHoursPage";
+import CalendarPage from "@/modules/booking/CalendarPage";
 
 function NotFound() {
   return (
@@ -61,11 +62,12 @@ export default function App() {
           <Route path="/app" element={<HomePage />} />
           <Route path="/app/manage" element={<ManagePage />} />
           <Route path="/app/settings" element={<MerchantSettingsPage />} />
-          <Route path="/app/calendar" element={<CalendarPlaceholderPage />} />
+          <Route path="/app/calendar" element={<CalendarPage />} />
           <Route path="/app/staff" element={<StaffListPage />} />
           <Route path="/app/agents" element={<AgentListPage />} />
           <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
           <Route path="/app/service-items" element={<ServiceItemsPage />} />
+          <Route path="/app/business-hours" element={<BusinessHoursPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

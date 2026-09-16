@@ -197,13 +197,18 @@ export async function getFeatureFlag(
 /**
  * 5.3 對外介面:寫入某個功能開關的值。
  *
- * 注意(需要主腦/使用者確認的假設,已同步記錄在 SPECS-INDEX.md 備註欄):
- * 目前 `merchant_feature_flags` 的 RLS 政策(見規則 3.6)刻意沒有開放任何角色的 UPDATE，
- * 只有 `apply_industry_preset()`(security definer)能寫入初始值 —— 這是本模組「不做功能開關操作介面」
- * 的範圍界定的直接結果。也就是說，這個函式現在呼叫下去會被資料庫拒絕(RLS 阻擋)，
- * 直到未來某個模組(例如模組 2 超級管理員後台，或某個功能大項自己決定開放商家調整)
- * 明確加上一條 UPDATE 政策為止。先把這個函式的呼叫介面準備好，讓其他模組可以直接依賴這個
- * 統一窗口寫程式，不用等資料庫政策確定了才回頭改呼叫方式。
+ * 2026-09-16 品管打回修正(SPECS-INDEX 編號 123/127/142):模組 5 是第一個真的呼叫這支函式
+ * 「寫入」的模組(`/app/business-hours` 頁面的「嚴格工時衝突檢查」開關)。新商家的
+ * `merchant_feature_flags` 一開始是 0 筆，原本這裡只用 `.update()`，UPDATE 影響 0 筆但
+ * Supabase 不會因此報錯，導致前端誤以為寫入成功，實際上資料庫完全沒有這一筆列。
+ * 改成 upsert(以 `merchant_id, feature_key` 這組 unique 約束當 onConflict 目標，見
+ * migration `20260915100000_merchant_group_schema.sql` 1.4 節的 `unique (merchant_id, feature_key)`），
+ * 讓新商家第一次設定任何功能開關時能正確新增一筆，已有資料的商家再次修改時則正確更新既有列、
+ * 不會意外新增重複列。
+ *
+ * 對應的 RLS 政策見 `20260916150000_merchant_feature_flags_insert_policy.sql`——
+ * 原本只有 UPDATE 政策(`merchant_feature_flags_update`，比照 `can_manage_business_hours`)，
+ * 這次一併補上同樣判斷條件的 INSERT 政策，upsert 底層的 INSERT 分支才不會被 RLS 擋下。
  */
 export async function setFeatureFlag(
   merchantId: string,
@@ -212,8 +217,9 @@ export async function setFeatureFlag(
 ): Promise<void> {
   const { error } = await supabase
     .from("merchant_feature_flags")
-    .update({ enabled })
-    .eq("merchant_id", merchantId)
-    .eq("feature_key", featureKey);
+    .upsert(
+      { merchant_id: merchantId, feature_key: featureKey, enabled },
+      { onConflict: "merchant_id,feature_key" },
+    );
   if (error) throw error;
 }
