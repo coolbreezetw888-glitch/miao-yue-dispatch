@@ -159,7 +159,12 @@ function StaffFormDialog({
   }, [serviceItemIds, activeServiceItems]);
 
   const { data: removedSelectedItems } = useQuery({
-    queryKey: ["staff-agent-module", "removed-selected-service-items", staff?.id, removedSelectedIds],
+    queryKey: [
+      "staff-agent-module",
+      "removed-selected-service-items",
+      staff?.id,
+      removedSelectedIds,
+    ],
     queryFn: async () => {
       const results = await Promise.all(removedSelectedIds.map((id) => getServiceItem(id)));
       return results.filter((item): item is ServiceItem => item !== null);
@@ -492,136 +497,125 @@ function StaffListInner() {
   }
 
   return (
-    <div className="min-h-screen bg-surface font-sans antialiased">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-5">
-          <Link to="/app" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground">
-              秒
-            </span>
-            <span className="text-lg font-bold tracking-tight text-foreground">秒約</span>
-          </Link>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/app">返回後台</Link>
-          </Button>
+    <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
+      <div>
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員管理</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            「{merchant!.name}」的師傅/服務人員名錄
+          </p>
         </div>
-      </header>
+        <StaffFormDialog
+          merchantId={merchantId}
+          staff={null}
+          trigger={<Button variant="cta">新增服務人員</Button>}
+          onSaved={refetch}
+        />
+      </div>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員管理</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              「{merchant!.name}」的師傅/服務人員名錄
+      <Card>
+        <CardHeader>
+          <CardTitle>人員名單</CardTitle>
+          <CardDescription>包含已上架與未上架的服務人員</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : !staffList || staffList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              目前還沒有任何服務人員,點右上角新增一位。
             </p>
-          </div>
-          <StaffFormDialog
-            merchantId={merchantId}
-            staff={null}
-            trigger={<Button variant="cta">新增服務人員</Button>}
-            onSaved={refetch}
-          />
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>人員名單</CardTitle>
-            <CardDescription>包含已上架與未上架的服務人員</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
-            ) : !staffList || staffList.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                目前還沒有任何服務人員,點右上角新增一位。
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {staffList.map((staff) => (
-                  <li
-                    key={staff.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-                  >
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                        {staff.avatar_url ? (
-                          <img
-                            src={staff.avatar_url}
-                            alt={staff.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">無</span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {staff.name}
-                          {staff.nickname ? `(${staff.nickname})` : ""}
-                        </p>
-                        <div className="mt-0.5 flex gap-1.5">
-                          <Badge variant={staff.is_listed ? "default" : "secondary"}>
-                            {staff.is_listed ? "已上架" : "未上架"}
-                          </Badge>
-                          {staff.status === "removed" ? (
-                            <Badge variant="destructive">已移除</Badge>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      {staff.status === "active" ? (
-                        <>
-                          <StaffFormDialog
-                            merchantId={merchantId}
-                            staff={staff}
-                            trigger={
-                              <Button variant="outline" size="sm">
-                                編輯
-                              </Button>
-                            }
-                            onSaved={refetch}
-                          />
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" size="sm">
-                                移除
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>確定要移除這位服務人員嗎?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>取消</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleRemove(staff.id)}>
-                                  確定移除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
+          ) : (
+            <ul className="space-y-2">
+              {staffList.map((staff) => (
+                <li
+                  key={staff.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+                      {staff.avatar_url ? (
+                        <img
+                          src={staff.avatar_url}
+                          alt={staff.name}
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleReactivate(staff.id)}
-                        >
-                          恢復
-                        </Button>
+                        <span className="text-xs text-muted-foreground">無</span>
                       )}
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {staff.name}
+                        {staff.nickname ? `(${staff.nickname})` : ""}
+                      </p>
+                      <div className="mt-0.5 flex gap-1.5">
+                        <Badge variant={staff.is_listed ? "default" : "secondary"}>
+                          {staff.is_listed ? "已上架" : "未上架"}
+                        </Badge>
+                        {staff.status === "removed" ? (
+                          <Badge variant="destructive">已移除</Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    {staff.status === "active" ? (
+                      <>
+                        <StaffFormDialog
+                          merchantId={merchantId}
+                          staff={staff}
+                          trigger={
+                            <Button variant="outline" size="sm">
+                              編輯
+                            </Button>
+                          }
+                          onSaved={refetch}
+                        />
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              移除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>確定要移除這位服務人員嗎?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleRemove(staff.id)}>
+                                確定移除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReactivate(staff.id)}
+                      >
+                        恢復
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </main>
   );
 }
 

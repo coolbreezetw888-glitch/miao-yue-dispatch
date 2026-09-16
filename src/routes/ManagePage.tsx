@@ -1,0 +1,108 @@
+// 後台導覽外殼「功能」分頁籤(路由 /app/manage,新增)。
+//
+// 2026-09-16 修正:規格書從「管理功能/設定功能」兩個分頁籤合併成單一個「功能」分頁籤——
+// 使用者澄清不需要分類區隔,所有功能入口(服務人員/客服管理/服務項目管理/商家設定)
+// 全部放在同一個卡片網格裡,不分類別。之後模組 6-13 只要在下面 CARDS 陣列多加一筆設定就好,
+// 不用再回頭改外殼,也不用煩惱要分到哪一類。
+//
+// 卡片的顯示判斷邏輯直接沿用模組 3 對外介面(useCurrentMerchantRole/useAgentPermission),
+// 不重新發明——這次改版只是把「判斷結果拿去決定要不要渲染頂端按鈕」改成「拿去決定要不要
+// 渲染卡片」,底層權限判斷完全不變。
+//
+// 規格書明講:分頁籤本身永遠顯示,不因角色隱藏整個分頁籤——如果目前登入的人一張卡片都看不到
+// (例如客服完全沒被開放任何功能),顯示空狀態文字,不是讓這個分頁籤消失或顯示空白。
+
+import type { ComponentType } from "react";
+import { ClipboardList, Headset, Settings, Users } from "lucide-react";
+import { Link } from "react-router-dom";
+
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCurrentMerchantRole, useAgentPermission } from "@/modules/staff-agent/context";
+
+interface FunctionCardDef {
+  key: string;
+  to: string;
+  label: string;
+  description: string;
+  icon: ComponentType<{ className?: string }>;
+  visible: boolean;
+}
+
+export default function ManagePage() {
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const isAdmin = merchantRole === "admin";
+  // 模組 4 規格書 4.3/2.5 既有邏輯:商家管理員一律顯示,客服則透過這支 hook 判斷。
+  const { data: canManageServiceItems } = useAgentPermission("service_items");
+  const showServiceItemsCard = isAdmin || canManageServiceItems === true;
+
+  const cards: FunctionCardDef[] = [
+    {
+      key: "staff",
+      to: "/app/staff",
+      label: "服務人員",
+      description: "管理師傅/服務人員名錄與可承接的服務項目",
+      icon: Users,
+      visible: isAdmin,
+    },
+    {
+      key: "agents",
+      to: "/app/agents",
+      label: "客服管理",
+      description: "邀請客服、設定後台功能權限",
+      icon: Headset,
+      visible: isAdmin,
+    },
+    {
+      key: "service-items",
+      to: "/app/service-items",
+      label: "服務項目管理",
+      description: "管理服務分類與服務項目、金額、工時",
+      icon: ClipboardList,
+      visible: showServiceItemsCard,
+    },
+    {
+      key: "settings",
+      to: "/app/settings",
+      label: "商家設定",
+      description: "LOGO、店名、地址、主題色、公告等基本設定",
+      icon: Settings,
+      visible: isAdmin,
+    },
+  ];
+
+  const visibleCards = cards.filter((card) => card.visible);
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">功能</h1>
+        <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>
+      </div>
+
+      {visibleCards.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+          目前沒有開放給你的功能,請聯絡商家管理員開通權限。
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {visibleCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Link key={card.key} to={card.to}>
+                <Card className="h-full transition-colors hover:border-brand hover:bg-brand-soft/40">
+                  <CardHeader className="items-center gap-3 text-center">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                      <Icon className="h-6 w-6" />
+                    </span>
+                    <CardTitle className="text-base">{card.label}</CardTitle>
+                    <CardDescription className="text-xs">{card.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

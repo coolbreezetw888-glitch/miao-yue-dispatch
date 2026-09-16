@@ -150,7 +150,9 @@ function CategoryManager({
         </form>
 
         {categories.length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前還沒有任何分類,可先新增或直接建立未分類的服務項目。</p>
+          <p className="text-sm text-muted-foreground">
+            目前還沒有任何分類,可先新增或直接建立未分類的服務項目。
+          </p>
         ) : (
           <ul className="space-y-2">
             {categories.map((category) => (
@@ -194,7 +196,9 @@ function CategoryManager({
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>確定要刪除「{category.name}」這個分類嗎?</AlertDialogTitle>
+                            <AlertDialogTitle>
+                              確定要刪除「{category.name}」這個分類嗎?
+                            </AlertDialogTitle>
                             <AlertDialogDescription>
                               刪除後,底下的服務項目會變回未分類,不會被刪除。
                             </AlertDialogDescription>
@@ -482,123 +486,112 @@ function ServiceItemsPageInner() {
   }
 
   return (
-    <div className="min-h-screen bg-surface font-sans antialiased">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-5">
-          <Link to="/app" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground">
-              秒
-            </span>
-            <span className="text-lg font-bold tracking-tight text-foreground">秒約</span>
-          </Link>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/app">返回後台</Link>
-          </Button>
-        </div>
-      </header>
+    <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
+      <div>
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">服務項目管理</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          「{merchant!.name}」的服務分類與服務項目
+        </p>
+      </div>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">服務項目管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            「{merchant!.name}」的服務分類與服務項目
-          </p>
-        </div>
+      {categoriesLoading ? (
+        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      ) : (
+        <CategoryManager
+          merchantId={merchantId}
+          categories={categories ?? []}
+          onChanged={() => {
+            void refetchCategories();
+            void refetchItems();
+          }}
+        />
+      )}
 
-        {categoriesLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          <CategoryManager
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>服務項目</CardTitle>
+            <CardDescription>包含已上架與已下架的服務項目</CardDescription>
+          </div>
+          <ServiceItemFormDialog
             merchantId={merchantId}
+            item={null}
             categories={categories ?? []}
-            onChanged={() => {
-              void refetchCategories();
-              void refetchItems();
-            }}
+            trigger={<Button variant="cta">新增服務項目</Button>}
+            onSaved={refetchItems}
           />
-        )}
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <div>
-              <CardTitle>服務項目</CardTitle>
-              <CardDescription>包含已上架與已下架的服務項目</CardDescription>
-            </div>
-            <ServiceItemFormDialog
-              merchantId={merchantId}
-              item={null}
-              categories={categories ?? []}
-              trigger={<Button variant="cta">新增服務項目</Button>}
-              onSaved={refetchItems}
-            />
-          </CardHeader>
-          <CardContent>
-            {itemsLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
-            ) : !items || items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                目前還沒有任何服務項目,點右上角新增一項。
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        ${Number(item.price).toFixed(0)} ・{" "}
-                        {SERVICE_ITEM_TYPE_LABELS[item.item_type as ServiceItemType]} ・{" "}
-                        {item.duration_minutes} 分鐘 ・ {categoryName(item.category_id)}
-                      </p>
-                      <div className="mt-1">
-                        <Badge variant={item.status === "active" ? "default" : "secondary"}>
-                          {item.status === "active" ? "上架中" : "已下架"}
-                        </Badge>
-                      </div>
+        </CardHeader>
+        <CardContent>
+          {itemsLoading ? (
+            <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : !items || items.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              目前還沒有任何服務項目,點右上角新增一項。
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {items.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      ${Number(item.price).toFixed(0)} ・{" "}
+                      {SERVICE_ITEM_TYPE_LABELS[item.item_type as ServiceItemType]} ・{" "}
+                      {item.duration_minutes} 分鐘 ・ {categoryName(item.category_id)}
+                    </p>
+                    <div className="mt-1">
+                      <Badge variant={item.status === "active" ? "default" : "secondary"}>
+                        {item.status === "active" ? "上架中" : "已下架"}
+                      </Badge>
                     </div>
-                    <div className="flex shrink-0 gap-2">
-                      {item.status === "active" ? (
-                        <>
-                          <ServiceItemFormDialog
-                            merchantId={merchantId}
-                            item={item}
-                            categories={categories ?? []}
-                            trigger={
-                              <Button variant="outline" size="sm">
-                                編輯
-                              </Button>
-                            }
-                            onSaved={refetchItems}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRemoveItem(item.id)}
-                          >
-                            下架
-                          </Button>
-                        </>
-                      ) : (
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    {item.status === "active" ? (
+                      <>
+                        <ServiceItemFormDialog
+                          merchantId={merchantId}
+                          item={item}
+                          categories={categories ?? []}
+                          trigger={
+                            <Button variant="outline" size="sm">
+                              編輯
+                            </Button>
+                          }
+                          onSaved={refetchItems}
+                        />
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleReactivateItem(item.id)}
+                          onClick={() => handleRemoveItem(item.id)}
                         >
-                          重新上架
+                          下架
                         </Button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+                      </>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReactivateItem(item.id)}
+                      >
+                        重新上架
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </main>
   );
 }
 

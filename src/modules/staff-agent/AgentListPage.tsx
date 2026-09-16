@@ -101,155 +101,138 @@ function AgentListInner() {
   }
 
   return (
-    <div className="min-h-screen bg-surface font-sans antialiased">
-      <header className="border-b border-border bg-background">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-5">
-          <Link to="/app" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground">
-              秒
-            </span>
-            <span className="text-lg font-bold tracking-tight text-foreground">秒約</span>
-          </Link>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/app">返回後台</Link>
-          </Button>
-        </div>
-      </header>
+    <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
+      <div>
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">客服管理</h1>
+        <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的客服名單與邀請</p>
+      </div>
 
-      <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">客服管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的客服名單與邀請</p>
-        </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>邀請新客服</CardTitle>
+          <CardDescription>
+            對方會收到一封邀請信,點連結設定密碼後即可登入;如果對方已經有秒約帳號,會直接加為客服。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleInvite} className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="agent-email">Email *</Label>
+              <Input
+                id="agent-email"
+                type="email"
+                className="mt-2"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="agent-name">姓名 *</Label>
+              <Input
+                id="agent-name"
+                className="mt-2"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="agent-nickname">暱稱</Label>
+              <Input
+                id="agent-nickname"
+                className="mt-2"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="agent-phone">電話</Label>
+              <Input
+                id="agent-phone"
+                className="mt-2"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={inviting || !email.trim() || !name.trim()}>
+                {inviting ? "送出中⋯" : "送出邀請"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>邀請新客服</CardTitle>
-            <CardDescription>
-              對方會收到一封邀請信,點連結設定密碼後即可登入;如果對方已經有秒約帳號,會直接加為客服。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleInvite} className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="agent-email">Email *</Label>
-                <Input
-                  id="agent-email"
-                  type="email"
-                  className="mt-2"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="agent-name">姓名 *</Label>
-                <Input
-                  id="agent-name"
-                  className="mt-2"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="agent-nickname">暱稱</Label>
-                <Input
-                  id="agent-nickname"
-                  className="mt-2"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="agent-phone">電話</Label>
-                <Input
-                  id="agent-phone"
-                  className="mt-2"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Button type="submit" disabled={inviting || !email.trim() || !name.trim()}>
-                  {inviting ? "送出中⋯" : "送出邀請"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>客服名單</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
-            ) : !agents || agents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">目前還沒有任何客服。</p>
-            ) : (
-              <ul className="space-y-2">
-                {agents.map((agent) => (
-                  <li
-                    key={agent.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {agent.name}
-                        {agent.nickname ? `(${agent.nickname})` : ""}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {agent.invited_email}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Badge variant={statusBadgeVariant(agent.status as AgentStatus)}>
-                        {AGENT_STATUS_LABELS[agent.status as AgentStatus]}
-                      </Badge>
-                      {agent.status !== "removed" ? (
-                        <>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/app/agents/${agent.id}/permissions`}>權限設定</Link>
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={removingId === agent.id}
-                              >
-                                移除
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>確定要移除這位客服嗎?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  移除後對方無法再看到這間店的任何資料,但對方的秒約帳號本身不受影響,
-                                  資料採軟刪除,之後仍可查詢紀錄。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>取消</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleRemove(agent.id)}>
-                                  確定移除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>客服名單</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : !agents || agents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">目前還沒有任何客服。</p>
+          ) : (
+            <ul className="space-y-2">
+              {agents.map((agent) => (
+                <li
+                  key={agent.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {agent.name}
+                      {agent.nickname ? `(${agent.nickname})` : ""}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{agent.invited_email}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={statusBadgeVariant(agent.status as AgentStatus)}>
+                      {AGENT_STATUS_LABELS[agent.status as AgentStatus]}
+                    </Badge>
+                    {agent.status !== "removed" ? (
+                      <>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/app/agents/${agent.id}/permissions`}>權限設定</Link>
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" disabled={removingId === agent.id}>
+                              移除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>確定要移除這位客服嗎?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                移除後對方無法再看到這間店的任何資料,但對方的秒約帳號本身不受影響,
+                                資料採軟刪除,之後仍可查詢紀錄。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleRemove(agent.id)}>
+                                確定移除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </main>
   );
 }
 

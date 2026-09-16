@@ -1,7 +1,10 @@
 import { Link, Route, Routes } from "react-router-dom";
 
 import Landing from "@/routes/index";
-import AppShell from "@/routes/app";
+import AppLayout from "@/routes/AppLayout";
+import HomePage from "@/routes/HomePage";
+import ManagePage from "@/routes/ManagePage";
+import CalendarPlaceholderPage from "@/routes/CalendarPlaceholderPage";
 import SignIn from "@/routes/signin";
 import SignUp from "@/routes/signup";
 import Privacy from "@/routes/privacy";
@@ -47,15 +50,26 @@ export default function App() {
     <CurrentMerchantProvider>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/app" element={<AppShell />} />
+        {/* 後台導覽外殼(跨模組共用外殼):/app/* 底下的路由統一套用 AppLayout(品牌列 +
+            底部 3 個分頁籤:首頁/功能/行事曆),取代原本每個 /app/* 路由各自平行、各自手刻
+            頂端列的寫法。例外(維持獨立全螢幕流程,不套外殼,見規格書「例外」一節):
+            /app/onboarding、/app/agent-invite-complete。/app/new-merchant 這個獨立表單流程
+            也維持現狀不套外殼(規格書明講「細節不強制,由工程師視畫面觀感決定」)。
+            /app/settings 沒有另外的權限守衛包裝,行為跟改版前一致(沿用既有 MerchantSettingsPage,
+            「功能」分頁籤的卡片本身已經只對 isAdmin 顯示這個入口)。 */}
+        <Route element={<AppLayout />}>
+          <Route path="/app" element={<HomePage />} />
+          <Route path="/app/manage" element={<ManagePage />} />
+          <Route path="/app/settings" element={<MerchantSettingsPage />} />
+          <Route path="/app/calendar" element={<CalendarPlaceholderPage />} />
+          <Route path="/app/staff" element={<StaffListPage />} />
+          <Route path="/app/agents" element={<AgentListPage />} />
+          <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
+          <Route path="/app/service-items" element={<ServiceItemsPage />} />
+        </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
-        <Route path="/app/settings" element={<MerchantSettingsPage />} />
-        <Route path="/app/staff" element={<StaffListPage />} />
-        <Route path="/app/agents" element={<AgentListPage />} />
-        <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
         <Route path="/app/agent-invite-complete" element={<AgentInviteCompletePage />} />
-        <Route path="/app/service-items" element={<ServiceItemsPage />} />
         <Route
           path="/platform-admin"
           element={
