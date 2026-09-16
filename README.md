@@ -97,3 +97,21 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## Testing
+
+三層測試工具,分工與細節見 `.claude/skills/automated-testing/SKILL.md`(給工程師/QA 接手用的完整指南)。這裡只列常用指令:
+
+```sh
+# 前端邏輯(hooks、資料轉換函式)——Vitest
+npm run test:unit          # 跑一次
+npm run test:unit:watch    # watch 模式
+
+# 資料庫層(RLS 規則、資料庫函式)——pgTAP,跑在本機 Docker 裡的獨立 Postgres,不會碰正式資料庫
+npx supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+npm run test:db
+
+# 端對端瀏覽器流程——Playwright(會自動幫你啟動/關掉本機 npm run dev)
+npm run test:e2e
+npm run test:e2e:ui        # 有畫面、方便除錯的模式
+```

@@ -27,6 +27,14 @@ dist-ssr
 
 # Supabase CLI local cache (not project source)
 supabase/.temp/
+supabase/.branches/
+
+# 測試框架產生的暫存/報表(見 .claude/skills/automated-testing/SKILL.md)
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # Editor directories and files
 .vscode/*

@@ -36,5 +36,13 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // 測試框架的設定檔跟 Playwright e2e 測試都是在 Node 環境下執行(不是瀏覽器),
+    // 需要 process/__dirname 這類 Node 全域變數,見 .claude/skills/automated-testing/SKILL.md。
+    files: ["*.config.ts", "e2e/**/*.ts"],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
   eslintPluginPrettier,
 );

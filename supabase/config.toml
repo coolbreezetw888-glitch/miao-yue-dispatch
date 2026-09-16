@@ -1,1 +1,195 @@
+# For detailed configuration reference documentation, visit:
+# https://supabase.com/docs/guides/local-development/cli/config
+#
+# 2026-09-16 補充:這份檔案原本只有 project_id 一行(供 CLI link 到正式專案 wjtbmmnakcriuaqoknsq 用)。
+# 這次為了建立 pgTAP 自動化測試框架,補上完整設定,讓 `supabase start` / `supabase test db --local`
+# 能在「本機 Docker 容器」裡跑出一個完全獨立的 Postgres,套用 supabase/migrations 底下的全部
+# migration 檔案後執行 supabase/tests/database 底下的 pgTAP 測試。
+#
+# 重要:這個本機 stack 是獨立的 Docker 容器,跟正式的 wjtbmmnakcriuaqoknsq 專案(host:
+# db.wjtbmmnakcriuaqoknsq.supabase.co)完全是两台不同的資料庫伺服器,兩者沒有任何網路連線關係。
+# 任何 `supabase test db --local` 或 `supabase start` 的操作都只會碰本機這個容器,
+# 不會、也不可能寫到正式資料庫(除非之後有人手動改成 --linked 對正式庫下測試,那是完全不同的動作,
+# 見 .claude/skills/automated-testing/SKILL.md 的警語)。
 project_id = "wjtbmmnakcriuaqoknsq"
+
+[api]
+enabled = true
+# Port to use for the API URL.
+# 2026-09-16:改用 553xx 區段,避開這台機器上另一個(看起來是孤兒/停用中的)本機 Supabase stack
+# 已經佔用的 543xx 預設連接埠,避免搶埠衝突,兩邊資料完全獨立、互不影響。
+port = 55321
+# Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
+# endpoints. `public` and `graphql_public` schemas are included by default.
+schemas = ["public", "graphql_public"]
+# Extra schemas to add to the search_path of every request.
+extra_search_path = ["public", "extensions"]
+# The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
+# for accidental or malicious requests.
+max_rows = 1000
+
+[api.tls]
+enabled = false
+
+[db]
+# Port to use for the local database URL.
+port = 55322
+# Port used by db diff command to initialize the shadow database.
+shadow_port = 55320
+# Maximum amount of time to wait for health check when starting the local database.
+health_timeout = "2m"
+# 對齊正式專案 wjtbmmnakcriuaqoknsq 目前的 Postgres 大版本(17),見 get_project 查詢結果
+# database.postgres_engine = "17"。維持一致,避免本機測試通過、正式環境卻因版本差異行為不同。
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+# 這個專案目前沒有 seed.sql(不需要固定種子資料),停用避免 `db reset` 找不到檔案而失敗。
+# pgTAP 測試需要的測試資料一律在測試檔案自己的 transaction 裡建立與清除,見
+# .claude/skills/automated-testing/SKILL.md。
+enabled = false
+sql_paths = ["./seed.sql"]
+
+[db.network_restrictions]
+enabled = false
+allowed_cidrs = ["0.0.0.0/0"]
+allowed_cidrs_v6 = ["::/0"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 55323
+api_url = "http://127.0.0.1"
+
+[local_smtp]
+enabled = true
+port = 55324
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[storage.s3_protocol]
+enabled = true
+
+[storage.analytics]
+enabled = false
+max_namespaces = 5
+max_tables = 10
+max_catalogs = 2
+
+[storage.vector]
+enabled = true
+max_buckets = 10
+max_indexes = 5
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.rate_limit]
+email_sent = 2
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "1s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+template = "Your code is {{ .Code }}"
+max_frequency = "5s"
+
+[auth.sms.twilio]
+enabled = false
+account_sid = ""
+message_service_sid = ""
+auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
+
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = false
+verify_enabled = false
+
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+otp_length = 6
+template = "Your code is {{ .Code }}"
+max_frequency = "5s"
+
+[auth.external.apple]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
+[auth.web3.solana]
+enabled = false
+
+[auth.third_party.firebase]
+enabled = false
+
+[auth.third_party.auth0]
+enabled = false
+
+[auth.third_party.aws_cognito]
+enabled = false
+
+[auth.third_party.clerk]
+enabled = false
+
+[auth.oauth_server]
+enabled = false
+authorization_url_path = "/oauth/consent"
+allow_dynamic_registration = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+deno_version = 2
+
+[analytics]
+enabled = false
+port = 54327
+backend = "postgres"
+
+[experimental]
+orioledb_version = ""
+
+[experimental.pgdelta]
+enabled = true
