@@ -123,6 +123,12 @@ export interface AgentPermissionSectionDef {
 
 export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
+    key: "service_items",
+    label: "服務項目管理",
+    description:
+      "開放後客服可以新增/編輯/上下架服務項目與服務分類(對應模組 4 規則 2.5,這個開關同時涵蓋服務項目跟服務分類兩者)。",
+  },
+  {
     key: "orders",
     label: "訂單管理",
     description: "開放後客服可以看到並操作訂單列表(此功能尚未開發,先設定值)。",

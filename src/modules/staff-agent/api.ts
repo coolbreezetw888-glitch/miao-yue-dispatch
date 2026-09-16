@@ -227,8 +227,8 @@ export async function uploadStaffAvatar(merchantId: string, file: File): Promise
 }
 
 // =========================================================================
-// 1.2:服務人員 x 服務項目關聯(這次系統沒有任何 service_items 可選,清單一律回傳空陣列,
-// 4.2 畫面顯示「目前尚無服務項目可選」的空狀態,不報錯——見規格書 1.2 邊界情況)。
+// 1.2:服務人員 x 服務項目關聯。模組 4 定案 service_items 表結構、補上外鍵之後,
+// 這裡改成真正可勾選/取消勾選(對應模組 4 規格書 4.4)。
 // =========================================================================
 
 export async function fetchStaffServiceItemIds(staffId: string): Promise<string[]> {
@@ -238,6 +238,29 @@ export async function fetchStaffServiceItemIds(staffId: string): Promise<string[
     .eq("staff_id", staffId);
   if (error) throw error;
   return (data ?? []).map((row) => row.service_item_id);
+}
+
+/** 模組 4 規格書 4.4:勾選某項服務項目給這位服務人員。直接呼叫既有的 RLS 政策即可
+ * (模組 3 migration 已經幫 merchant_staff_service_items 補好 INSERT 政策),不需要另開 RPC。 */
+export async function addStaffServiceItem(staffId: string, serviceItemId: string): Promise<void> {
+  const { error } = await supabase
+    .from("merchant_staff_service_items")
+    .insert({ staff_id: staffId, service_item_id: serviceItemId });
+  if (error) throw error;
+}
+
+/** 模組 4 規格書 4.4:取消勾選某項服務項目。直接呼叫既有的 RLS 政策即可
+ * (模組 3 migration 已經幫 merchant_staff_service_items 補好 DELETE 政策),不需要另開 RPC。 */
+export async function removeStaffServiceItem(
+  staffId: string,
+  serviceItemId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("merchant_staff_service_items")
+    .delete()
+    .eq("staff_id", staffId)
+    .eq("service_item_id", serviceItemId);
+  if (error) throw error;
 }
 
 // =========================================================================

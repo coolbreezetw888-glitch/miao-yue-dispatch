@@ -18,6 +18,7 @@ import StaffListPage from "@/modules/staff-agent/StaffListPage";
 import AgentListPage from "@/modules/staff-agent/AgentListPage";
 import AgentPermissionsPage from "@/modules/staff-agent/AgentPermissionsPage";
 import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePage";
+import ServiceItemsPage from "@/modules/service-items/ServiceItemsPage";
 
 function NotFound() {
   return (
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/app/agents" element={<AgentListPage />} />
         <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
         <Route path="/app/agent-invite-complete" element={<AgentInviteCompletePage />} />
+        <Route path="/app/service-items" element={<ServiceItemsPage />} />
         <Route
           path="/platform-admin"
           element={

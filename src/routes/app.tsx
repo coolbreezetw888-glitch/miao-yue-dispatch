@@ -13,7 +13,7 @@ import {
 } from "@/modules/merchant/context";
 import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
-import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 export default function AppShell() {
   const navigate = useNavigate();
@@ -29,6 +29,10 @@ export default function AppShell() {
   // 尚未 enabled)先當作 false,避免畫面短暫誤閃管理員按鈕。
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
+  // 模組 4 規格書 4.3:「服務項目管理」入口要放在 isAdmin 專屬按鈕區塊之外——商家管理員一律
+  // 顯示,客服則透過 useAgentPermission('service_items') 判斷,回傳 true 時才顯示(規則 2.5)。
+  const { data: canManageServiceItems } = useAgentPermission("service_items");
+  const showServiceItemsLink = isAdmin || canManageServiceItems === true;
 
   useEffect(() => {
     let active = true;
@@ -124,6 +128,11 @@ export default function AppShell() {
                   <Link to="/app/settings">商家設定</Link>
                 </Button>
               </>
+            ) : null}
+            {showServiceItemsLink ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/app/service-items">服務項目管理</Link>
+              </Button>
             ) : null}
             <Button variant="outline" size="sm" onClick={handleSignOut}>
               登出

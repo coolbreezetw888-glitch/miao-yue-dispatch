@@ -3,7 +3,7 @@
 // (目前系統沒有任何服務項目,顯示空狀態文字,不報錯,見規格書 1.2 邊界情況)+
 // 權限功能區塊(1.1.1 的 11 個欄位逐一列出,附白話說明)。
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -38,13 +39,21 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import {
+  getServiceItem,
+  useMerchantServiceCategories,
+  useMerchantServiceItems,
+} from "@/modules/service-items/context";
+import { UNCATEGORIZED_LABEL, type ServiceItem } from "@/modules/service-items/types";
 
 import {
   addMerchantStaff,
+  addStaffServiceItem,
   fetchMerchantStaff,
   fetchStaffServiceItemIds,
   reactivateMerchantStaff,
   removeMerchantStaff,
+  removeStaffServiceItem,
   updateMerchantStaff,
   uploadStaffAvatar,
   type UpsertMerchantStaffInput,
@@ -123,12 +132,59 @@ function StaffFormDialog({
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<StaffFormState>(staff ? staffToFormState(staff) : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  const staffServiceItemsQueryKey = ["staff-agent-module", "staff-service-items", staff?.id];
 
   const { data: serviceItemIds } = useQuery({
-    queryKey: ["staff-agent-module", "staff-service-items", staff?.id],
+    queryKey: staffServiceItemsQueryKey,
     queryFn: () => fetchStaffServiceItemIds(staff!.id),
     enabled: open && Boolean(staff?.id),
   });
+
+  // 模組 4 規格書 4.4:讀取這間商家目前 status='active' 的服務項目清單(對外介面 5.1),
+  // 用來判斷「商家是否有任何服務項目可選」跟渲染真正的 checkbox 清單,不是只讀已勾選數量。
+  const { data: activeServiceItems, isLoading: activeServiceItemsLoading } =
+    useMerchantServiceItems(open ? merchantId : null);
+  const { data: categories } = useMerchantServiceCategories(open ? merchantId : null);
+
+  const merchantHasAnyServiceItems = (activeServiceItems?.length ?? 0) > 0;
+
+  // 規則 2.3 邊界情況:已下架但仍被這位服務人員勾選的項目,不會自動從關聯表消失,只是不會出現在
+  // 「可選」的 activeServiceItems 清單裡——這裡額外查出這些項目的名稱,加註「(已下架)」提示。
+  const removedSelectedIds = useMemo(() => {
+    if (!serviceItemIds || !activeServiceItems) return [];
+    const activeIds = new Set(activeServiceItems.map((item) => item.id));
+    return serviceItemIds.filter((id) => !activeIds.has(id));
+  }, [serviceItemIds, activeServiceItems]);
+
+  const { data: removedSelectedItems } = useQuery({
+    queryKey: ["staff-agent-module", "removed-selected-service-items", staff?.id, removedSelectedIds],
+    queryFn: async () => {
+      const results = await Promise.all(removedSelectedIds.map((id) => getServiceItem(id)));
+      return results.filter((item): item is ServiceItem => item !== null);
+    },
+    enabled: open && Boolean(staff?.id) && removedSelectedIds.length > 0,
+  });
+
+  function categoryName(categoryId: string | null): string {
+    if (!categoryId) return UNCATEGORIZED_LABEL;
+    return categories?.find((c) => c.id === categoryId)?.name ?? UNCATEGORIZED_LABEL;
+  }
+
+  async function handleToggleServiceItem(serviceItemId: string, checked: boolean) {
+    if (!staff) return;
+    try {
+      if (checked) {
+        await addStaffServiceItem(staff.id, serviceItemId);
+      } else {
+        await removeStaffServiceItem(staff.id, serviceItemId);
+      }
+      await queryClient.invalidateQueries({ queryKey: staffServiceItemsQueryKey });
+    } catch (err) {
+      toast.error("更新服務項目失敗", { description: getErrorMessage(err) });
+    }
+  }
 
   useEffect(() => {
     if (open) {
@@ -266,14 +322,64 @@ function StaffFormDialog({
 
           <div>
             <Label className="text-sm font-semibold">服務項目</Label>
-            {serviceItemIds && serviceItemIds.length > 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">
-                (已選 {serviceItemIds.length} 項服務項目)
-              </p>
-            ) : (
+            {/* 模組 4 規格書 4.4:先判斷「商家是否有任何 status='active' 的服務項目」,
+                不是只看「這位服務人員目前已勾選幾項」——避免把「商家根本沒有服務項目可選」
+                跟「有服務項目、只是這位人員還沒被勾選任何一項」這兩種情況搞混。 */}
+            {activeServiceItemsLoading ? (
+              <p className="mt-2 text-sm text-muted-foreground">載入中⋯</p>
+            ) : !merchantHasAnyServiceItems ? (
               <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
                 目前尚無服務項目可選,請先到服務項目管理設定
               </p>
+            ) : !staff ? (
+              <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可勾選服務項目。
+              </p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {activeServiceItems!.map((item) => {
+                  const checked = serviceItemIds?.includes(item.id) ?? false;
+                  return (
+                    <label
+                      key={item.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-foreground">{item.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
+                        </p>
+                      </div>
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => handleToggleServiceItem(item.id, v === true)}
+                      />
+                    </label>
+                  );
+                })}
+                {removedSelectedItems && removedSelectedItems.length > 0
+                  ? removedSelectedItems.map((item) => (
+                      <label
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-dashed border-border px-3 py-2 opacity-70"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm text-foreground">
+                            {item.name}
+                            <span className="ml-1 text-xs text-muted-foreground">(已下架)</span>
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
+                          </p>
+                        </div>
+                        <Checkbox
+                          checked
+                          onCheckedChange={(v) => handleToggleServiceItem(item.id, v === true)}
+                        />
+                      </label>
+                    ))
+                  : null}
+              </div>
             )}
           </div>
 
