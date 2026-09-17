@@ -155,12 +155,12 @@ export default function IndustryPresetsPage() {
                         {presetsForActiveTab.map((preset) => (
                           <li
                             key={preset.id}
-                            className="flex items-center justify-between rounded-md border border-border px-3 py-2"
+                            className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2"
                           >
-                            <span className="font-mono text-sm text-foreground">
+                            <span className="min-w-0 break-words font-mono text-sm text-foreground">
                               {preset.feature_key}
                             </span>
-                            <div className="flex items-center gap-3">
+                            <div className="flex shrink-0 items-center gap-3">
                               <Switch
                                 checked={preset.default_enabled}
                                 disabled={togglingId === preset.id}
@@ -196,9 +196,7 @@ export default function IndustryPresetsPage() {
                           </li>
                         ))}
                         {presetsForActiveTab.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            目前沒有設定任何預設功能
-                          </p>
+                          <p className="text-sm text-muted-foreground">目前沒有設定任何預設功能</p>
                         ) : null}
                       </ul>
                     )}

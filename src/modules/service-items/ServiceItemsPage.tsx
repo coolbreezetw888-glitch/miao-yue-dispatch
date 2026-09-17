@@ -176,8 +176,12 @@ function CategoryManager({
                   </div>
                 ) : (
                   <>
-                    <span className="text-sm text-foreground">{category.name}</span>
-                    <div className="flex gap-2">
+                    {/* 手機版容器寬度溢出修正:分類名稱是商家自行輸入的文字,長度不固定,
+                        加 min-w-0 break-words 讓它願意縮小換行,不會把右側按鈕擠出畫面外。 */}
+                    <span className="min-w-0 break-words text-sm text-foreground">
+                      {category.name}
+                    </span>
+                    <div className="flex shrink-0 gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -542,7 +546,10 @@ function ServiceItemsPageInner() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    {/* 手機版容器寬度溢出修正(編號 190):這行串接了金額/類型/工時/分類名稱,
+                        分類名稱是商家自訂文字、長度不固定,加 break-words 讓整行願意換行,
+                        不會被撐開、蓋住右側的編輯/下架按鈕。 */}
+                    <p className="mt-0.5 break-words text-xs text-muted-foreground">
                       ${Number(item.price).toFixed(0)} ・{" "}
                       {SERVICE_ITEM_TYPE_LABELS[item.item_type as ServiceItemType]} ・{" "}
                       {item.duration_minutes} 分鐘 ・ {categoryName(item.category_id)}

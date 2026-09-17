@@ -326,14 +326,18 @@ export default function MerchantDetailPage() {
                 {(admins ?? []).map((admin) => (
                   <li
                     key={admin.id}
-                    className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
+                    className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <span className="text-foreground">{admin.email}</span>
+                    {/* 手機版容器寬度溢出修正:跟 MerchantAdminList.tsx 同一種 bug——email
+                        長度不固定,窄螢幕下不能跟右側按鈕擠在同一個 nowrap 列,否則會撐開整個
+                        <li> 超出手機螢幕寬度。改成手機寬度垂直堆疊、sm 以上橫向排列。 */}
+                    <span className="min-w-0 break-words text-foreground">{admin.email}</span>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="outline"
                           size="sm"
+                          className="self-start sm:self-auto"
                           disabled={removingAdminId === admin.user_id}
                         >
                           移除
@@ -395,7 +399,9 @@ export default function MerchantDetailPage() {
               <p className="text-sm text-muted-foreground">載入中⋯</p>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">
+                {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):email 沒有空白字元,
+                    預設文字換行規則不會自動斷行,長 email 會撐出這個區塊,加 break-words。 */}
+                <p className="break-words text-sm text-muted-foreground">
                   目前的集團管理者:
                   <span className="ml-1 font-medium text-foreground">
                     {group?.group_admin_user_id ? (groupAdminEmail ?? "讀取中⋯") : "尚未設定"}

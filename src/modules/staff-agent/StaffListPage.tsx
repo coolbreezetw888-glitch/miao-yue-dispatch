@@ -476,7 +476,9 @@ function StaffFormDialog({
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm text-foreground">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):分類名稱是商家自訂
+                            文字、長度不固定,加 break-words 讓這行願意換行,不會撐開容器。 */}
+                        <p className="break-words text-xs text-muted-foreground">
                           {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
                         </p>
                       </div>
@@ -498,7 +500,9 @@ function StaffFormDialog({
                             {item.name}
                             <span className="ml-1 text-xs text-muted-foreground">(已下架)</span>
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):同上,分類名稱
+                              長度不固定,加 break-words 避免撐開容器。 */}
+                          <p className="break-words text-xs text-muted-foreground">
                             {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
                           </p>
                         </div>

@@ -391,8 +391,11 @@ function BookingFormDialog({
           ) : null}
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+        {/* min-w-0:同樣的原因,DialogContent 是 grid,這個 div 是它的直接子元素(grid item),
+            預設 min-width:auto 會被裡面過長的文字(例如服務人員下拉選單目前選中的長姓名)撐寬,
+            進而撐寬整個對話框超出手機螢幕,見 BookingDetailDialog 那邊同一個修法的說明。 */}
+        <div className="min-w-0 space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>服務人員 *</Label>
               <Select
@@ -534,7 +537,7 @@ function BookingFormDialog({
             </div>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="booking-customer-name">客戶姓名 *</Label>
               <Input
@@ -693,7 +696,10 @@ function BookingDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      {/* 手機版容器寬度溢出修正:長文字換行後內容可能變得比較高(尤其手機直向、視窗高度不到
+          700px 時),補上 max-h-[85vh] overflow-y-auto(比照下面 BookingFormDialog 既有的做法),
+          避免底部 DialogFooter 的按鈕列被推到畫面高度以外、完全點不到、也無法捲動看見。 */}
+      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>預約詳情</DialogTitle>
         </DialogHeader>
@@ -701,23 +707,31 @@ function BookingDetailDialog({
         {isLoading || !booking ? (
           <p className="text-sm text-muted-foreground">載入中⋯</p>
         ) : (
-          <div className="space-y-3 text-sm">
+          // min-w-0:DialogContent 本身是 `display: grid`,這個 div 是它的直接子元素(grid item),
+          // grid item 預設 `min-width: auto` 跟 flex item 一樣,不加這個會讓整個內容區塊(以及
+          // 下面每一列 flex 資訊列)被撐寬到超出對話框、超出手機螢幕,即使每一列自己內部已經有
+          // min-w-0/break-words 也沒用——因為撐開的是這一層,不是內層那些 flex 列。
+          <div className="min-w-0 space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">狀態</span>
               <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
                 {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
               </Badge>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">服務人員</span>
-              <span className="font-medium text-foreground">
+            {/* 手機版容器寬度溢出修正:比照 MerchantAdminList.tsx 已驗證有效的做法——右側值
+                的 <span> 加上 min-w-0 break-words,遇到長文字(長姓名/長地址/長 email 組合字串)
+                時願意縮小並自然換行,不會撐開整個 flex 容器導致 DialogContent 超出手機螢幕寬度。
+                items-center 改成 items-start,避免換行後垂直置中看起來奇怪。 */}
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">服務人員</span>
+              <span className="min-w-0 break-words text-right font-medium text-foreground">
                 {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
               </span>
             </div>
             {booking.assistants.length > 0 ? (
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">助手</span>
-                <span className="font-medium text-foreground">
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-muted-foreground">助手</span>
+                <span className="min-w-0 break-words text-right font-medium text-foreground">
                   {booking.assistants.map((a) => a.staffName).join("、")}
                 </span>
               </div>
@@ -730,9 +744,9 @@ function BookingDetailDialog({
               <span className="text-muted-foreground">服務項目</span>
               <ul className="mt-1 space-y-0.5">
                 {booking.serviceItems.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between text-foreground">
-                    <span>{i.name}</span>
-                    <span>{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
+                  <li key={i.id} className="flex items-start justify-between gap-3 text-foreground">
+                    <span className="min-w-0 break-words">{i.name}</span>
+                    <span className="shrink-0">{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
                   </li>
                 ))}
               </ul>
@@ -752,17 +766,19 @@ function BookingDetailDialog({
                 {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">客戶</span>
-              <span className="font-medium text-foreground">
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">客戶</span>
+              <span className="min-w-0 break-words text-right font-medium text-foreground">
                 {booking.customer_name} ・ {booking.customer_phone}
               </span>
             </div>
             {/* 建單表單細節修正第二節第 5 點:有值才顯示地址,沒有就不顯示這個欄位。 */}
             {booking.customer_address ? (
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">客戶地址</span>
-                <span className="font-medium text-foreground">{booking.customer_address}</span>
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-muted-foreground">客戶地址</span>
+                <span className="min-w-0 break-words text-right font-medium text-foreground">
+                  {booking.customer_address}
+                </span>
               </div>
             ) : null}
             {booking.materialCosts.length > 0 ? (
@@ -770,7 +786,7 @@ function BookingDetailDialog({
                 <span className="text-muted-foreground">料錢成本</span>
                 <ul className="mt-1 space-y-0.5">
                   {booking.materialCosts.map((c) => (
-                    <li key={c.materialCostItemId} className="text-foreground">
+                    <li key={c.materialCostItemId} className="break-words text-foreground">
                       {c.name} ・ ${c.amountSnapshot.toFixed(0)}
                     </li>
                   ))}
