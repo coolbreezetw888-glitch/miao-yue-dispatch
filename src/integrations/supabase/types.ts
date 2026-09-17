@@ -136,6 +136,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -156,6 +157,7 @@ export type Database = {
           created_at?: string
           created_by_role: string
           created_by_user_id?: string | null
+          customer_address?: string | null
           customer_email?: string | null
           customer_name: string
           customer_phone: string
@@ -176,6 +178,7 @@ export type Database = {
           created_at?: string
           created_by_role?: string
           created_by_user_id?: string | null
+          customer_address?: string | null
           customer_email?: string | null
           customer_name?: string
           customer_phone?: string
@@ -855,6 +858,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -884,6 +888,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -913,6 +918,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -936,6 +942,7 @@ export type Database = {
       create_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
+          p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
           p_customer_phone: string
@@ -953,6 +960,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string
@@ -1064,6 +1072,7 @@ export type Database = {
         Args: {
           p_assistant_staff_ids?: string[]
           p_booking_id: string
+          p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
           p_customer_phone: string
@@ -1080,6 +1089,7 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_phone: string

@@ -32,8 +32,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -47,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag } from "@/modules/merchant/api";
+import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 
@@ -61,6 +64,7 @@ import {
 } from "./api";
 import {
   useMerchantBookings,
+  useMerchantBusinessHours,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
 } from "./context";
@@ -86,6 +90,110 @@ const SLOT_PX = 30;
 
 type CalendarViewMode = "week" | "month";
 
+/** 建單表單細節修正第三節第 5 點:合併日期時間選擇器的觸發按鈕文字,例如「9月20日(六) 14:00」,
+ * 沒選之前顯示「請選擇日期時間」(由呼叫端自行處理沒選的情況,這支只負責已選定時的格式)。
+ * 用跟 dateUtils.ts 一致的「本機 Date getter 讀出來就是台北當地日期」慣例解析 dateKey,
+ * 不涉及任何時區換算(dateKey 本身已經是台北當地日曆日字串)。 */
+function formatDisplayDateTime(dateKey: string, time: string): string {
+  const d = new Date(`${dateKey}T00:00:00`);
+  const weekday = "日一二三四五六"[d.getDay()];
+  return `${d.getMonth() + 1}月${d.getDate()}日(${weekday}) ${time}`;
+}
+
+// ---------------------------------------------------------------------------
+// 建單表單細節修正第三節:日期時間合併選擇器(Popover:上方月曆+下方時段清單)。
+// 取代原本兩個獨立的原生 date/time 輸入框。時段資料來源複用既有的 useMerchantDaySchedule
+// (第 3 點:不重新開一支新的資料查詢),只列出「以目前已選服務項目總工時,能完整放進某個
+// available_window」的起始時間點(第 3 點)。這次的篩選是體驗層引導,不是安全邊界
+// (第 7 點)——真正擋住不合法時段的還是 create_booking/update_booking 資料庫層的驗證。
+// ---------------------------------------------------------------------------
+function BookingDateTimeField({
+  merchantId,
+  staffId,
+  totalDurationMinutes,
+  dateKey,
+  time,
+  closedWeekdays,
+  onChange,
+}: {
+  merchantId: string;
+  staffId: string;
+  totalDurationMinutes: number;
+  dateKey: string;
+  time: string;
+  closedWeekdays: Set<number>;
+  onChange: (dateKey: string, time: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: schedule } = useMerchantDaySchedule(merchantId, dateKey || null);
+
+  const staffBlock = (schedule?.staff ?? []).find((s) => s.staff_id === staffId);
+
+  // 第 3 點:只列出總工時能完整放進某個可預約區間的起始時間點,以現有的 SLOT_MINUTES 切格。
+  const slotOptions = useMemo(() => {
+    if (!staffBlock) return [];
+    const starts = new Set<string>();
+    for (const w of staffBlock.available_windows) {
+      const windowStart = timeToMinutes(w.start_time);
+      const windowEnd = timeToMinutes(w.end_time);
+      for (let m = windowStart; m + totalDurationMinutes <= windowEnd; m += SLOT_MINUTES) {
+        starts.add(minutesToTime(m));
+      }
+    }
+    return Array.from(starts).sort();
+  }, [staffBlock, totalDurationMinutes]);
+
+  const label = dateKey && time ? formatDisplayDateTime(dateKey, time) : "請選擇日期時間";
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button type="button" variant="outline" className="w-full justify-start font-normal">
+          {label}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          selected={dateKey ? new Date(`${dateKey}T00:00:00`) : undefined}
+          defaultMonth={dateKey ? new Date(`${dateKey}T00:00:00`) : getTaipeiNow()}
+          onSelect={(d) => {
+            if (!d) return;
+            onChange(toDateKey(d), time);
+          }}
+          disabled={(d) => closedWeekdays.has(d.getDay())}
+        />
+        <div className="border-t border-border p-3">
+          {!staffId ? (
+            <p className="text-center text-sm text-muted-foreground">請先選擇服務人員</p>
+          ) : !dateKey ? (
+            <p className="text-center text-sm text-muted-foreground">請先選擇日期</p>
+          ) : slotOptions.length === 0 ? (
+            <p className="text-center text-sm text-muted-foreground">這天沒有可預約的時段</p>
+          ) : (
+            <div className="grid max-h-48 grid-cols-3 gap-1.5 overflow-y-auto">
+              {slotOptions.map((t) => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={time === t ? "default" : "outline"}
+                  onClick={() => {
+                    onChange(dateKey, t);
+                    setOpen(false);
+                  }}
+                >
+                  {t}
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** 建單功能擴充規格書 2.3:料錢成本功能開關(查無資料視為關閉)。跟 BusinessHoursPage.tsx
  * 的 MaterialCostEnabledToggle 共用同一個 feature key,這裡只需要唯讀查詢決定表單要不要顯示。 */
 function useMaterialCostEnabled(merchantId: string) {
@@ -109,6 +217,7 @@ interface BookingFormPrefill {
 
 function BookingFormDialog({
   merchantId,
+  industryType,
   open,
   onOpenChange,
   prefill,
@@ -116,6 +225,7 @@ function BookingFormDialog({
   onSaved,
 }: {
   merchantId: string;
+  industryType: IndustryType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prefill: BookingFormPrefill;
@@ -127,6 +237,20 @@ function BookingFormDialog({
   const { data: serviceItems } = useMerchantServiceItems(merchantId);
   const { data: materialCostItems } = useMerchantMaterialCostItems(merchantId);
   const { data: materialCostEnabled } = useMaterialCostEnabled(merchantId);
+  const { data: businessHours } = useMerchantBusinessHours(merchantId);
+
+  // 建單表單細節修正第二節第 2/3 點:依商家 industry_type 判斷客戶地址是否必填。
+  const requiresCustomerAddress = INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[industryType];
+
+  // 建單表單細節修正第三節第 1 點:淡化商家公休/查無設定的日子(不強制隱藏,能點但下方時段清單
+  // 一定是空的)。這裡只依「星期幾公休」淡化,不逐日期查詢,已經覆蓋規格書要求的視覺提示。
+  const closedWeekdays = useMemo(() => {
+    const set = new Set([0, 1, 2, 3, 4, 5, 6]);
+    for (const h of businessHours ?? []) {
+      if (!h.is_closed) set.delete(h.day_of_week);
+    }
+    return set;
+  }, [businessHours]);
 
   const { data: editingDetail } = useQuery({
     queryKey: ["booking-module", "edit-detail", editingBookingId],
@@ -143,6 +267,7 @@ function BookingFormDialog({
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -160,6 +285,7 @@ function BookingFormDialog({
       setCustomerName(editingDetail.customer_name);
       setCustomerPhone(editingDetail.customer_phone);
       setCustomerEmail(editingDetail.customer_email ?? "");
+      setCustomerAddress(editingDetail.customer_address ?? "");
       setNotes(editingDetail.notes ?? "");
     } else {
       setStaffId(prefill.staffId ?? "");
@@ -171,6 +297,7 @@ function BookingFormDialog({
       setCustomerName("");
       setCustomerPhone("");
       setCustomerEmail("");
+      setCustomerAddress("");
       setNotes("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,6 +342,10 @@ function BookingFormDialog({
       toast.error("請填寫客戶電話");
       return;
     }
+    if (requiresCustomerAddress && !customerAddress.trim()) {
+      toast.error("請填寫客戶地址");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -225,6 +356,7 @@ function BookingFormDialog({
         customerName,
         customerPhone,
         customerEmail: customerEmail.trim() ? customerEmail.trim() : null,
+        customerAddress: customerAddress.trim() ? customerAddress.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
         assistantStaffIds,
         materialCostItemIds,
@@ -282,25 +414,22 @@ function BookingFormDialog({
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label htmlFor="booking-date">日期 *</Label>
-              <Input
-                id="booking-date"
-                type="date"
-                className="mt-2"
-                value={dateKey}
-                onChange={(e) => setDateKey(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="booking-time">時間 *</Label>
-              <Input
-                id="booking-time"
-                type="time"
-                className="mt-2"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-              />
+            <div className="sm:col-span-2">
+              <Label>預約日期時間 *</Label>
+              <div className="mt-2">
+                <BookingDateTimeField
+                  merchantId={merchantId}
+                  staffId={staffId}
+                  totalDurationMinutes={totalDurationMinutes}
+                  dateKey={dateKey}
+                  time={time}
+                  closedWeekdays={closedWeekdays}
+                  onChange={(d, t) => {
+                    setDateKey(d);
+                    setTime(t);
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -334,10 +463,20 @@ function BookingFormDialog({
             </p>
           </div>
 
-          {/* 建單功能擴充 2.2/5.1 第 2 點:助手欄位,排除已選為主要服務人員的那一位,可留空。 */}
+          {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
+              的那一位,可留空;未選定主要服務人員前整個區塊停用(checkbox disabled + 提示文字),
+              因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。 */}
           <div>
             <Label>助手(可留空,可多選)</Label>
-            <div className="mt-2 max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border p-2">
+            {!staffId ? (
+              <p className="mt-2 text-[11px] text-muted-foreground">請先選擇服務人員,才能指派助手。</p>
+            ) : null}
+            <div
+              className={cn(
+                "mt-2 max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border p-2",
+                !staffId && "pointer-events-none opacity-50",
+              )}
+            >
               {assistantCandidates.length === 0 ? (
                 <p className="text-xs text-muted-foreground">沒有其他可指派的服務人員。</p>
               ) : (
@@ -348,6 +487,7 @@ function BookingFormDialog({
                   >
                     <Checkbox
                       checked={assistantStaffIds.includes(s.id)}
+                      disabled={!staffId}
                       onCheckedChange={() =>
                         setAssistantStaffIds((prev) => toggleInArray(prev, s.id))
                       }
@@ -423,6 +563,20 @@ function BookingFormDialog({
                 onChange={(e) => setCustomerEmail(e.target.value)}
               />
             </div>
+            {/* 建單表單細節修正第二節:只有 industry_type 需要地址的產業(見
+                INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才顯示這個欄位並標記必填,不需要地址的產業
+                整個欄位不顯示。真正擋住不合法的空地址還是 create_booking/update_booking 資料庫層。 */}
+            {requiresCustomerAddress ? (
+              <div className="sm:col-span-2">
+                <Label htmlFor="booking-customer-address">客戶地址 *</Label>
+                <Input
+                  id="booking-customer-address"
+                  className="mt-2"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                />
+              </div>
+            ) : null}
             <div className="sm:col-span-2">
               <Label htmlFor="booking-notes">備註</Label>
               <Textarea
@@ -568,11 +722,29 @@ function BookingDetailDialog({
                 </span>
               </div>
             ) : null}
-            <div className="flex items-center justify-between">
+            {/* 建單表單細節修正第五節:每項服務項目旁邊顯示金額,下方加總「服務金額小計」。
+                這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的價格快照
+                (快照策略保留給未來模組 6 通盤設計,見 types.ts BookingDetailServiceItem 註解)。
+                已下架/已刪除的服務項目 price 是 null,顯示「—」,不要顯示 0。 */}
+            <div>
               <span className="text-muted-foreground">服務項目</span>
-              <span className="font-medium text-foreground">
-                {booking.serviceItems.map((i) => i.name).join("、")}
-              </span>
+              <ul className="mt-1 space-y-0.5">
+                {booking.serviceItems.map((i) => (
+                  <li key={i.id} className="flex items-center justify-between text-foreground">
+                    <span>{i.name}</span>
+                    <span>{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
+                <span className="text-muted-foreground">服務金額小計</span>
+                <span className="font-medium text-foreground">
+                  $
+                  {booking.serviceItems
+                    .reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price)), 0)
+                    .toFixed(0)}
+                </span>
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">時間</span>
@@ -586,6 +758,13 @@ function BookingDetailDialog({
                 {booking.customer_name} ・ {booking.customer_phone}
               </span>
             </div>
+            {/* 建單表單細節修正第二節第 5 點:有值才顯示地址,沒有就不顯示這個欄位。 */}
+            {booking.customer_address ? (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">客戶地址</span>
+                <span className="font-medium text-foreground">{booking.customer_address}</span>
+              </div>
+            ) : null}
             {booking.materialCosts.length > 0 ? (
               <div>
                 <span className="text-muted-foreground">料錢成本</span>
@@ -1033,6 +1212,7 @@ function CalendarPageInner() {
 
       <BookingFormDialog
         merchantId={merchantId}
+        industryType={merchant!.industry_type as IndustryType}
         open={formOpen}
         onOpenChange={setFormOpen}
         prefill={formPrefill}

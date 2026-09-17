@@ -133,6 +133,10 @@ export interface CreateBookingInput {
   notes?: string | null;
   assistantStaffIds?: string[];
   materialCostItemIds?: string[];
+  /** 建單表單細節修正第二節:客戶指定的服務地點,只有 industry_type 需要地址的產業
+   * (見 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才會用到,後端 create_booking 會依商家
+   * industry_type 再驗證一次是否必填,不是只靠前端擋。 */
+  customerAddress?: string | null;
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -148,6 +152,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.notes ? { p_notes: input.notes } : {}),
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
+    ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -166,6 +171,8 @@ export interface UpdateBookingInput {
   notes?: string | null;
   assistantStaffIds?: string[];
   materialCostItemIds?: string[];
+  /** 建單表單細節修正第二節:同 CreateBookingInput.customerAddress。 */
+  customerAddress?: string | null;
 }
 
 export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
@@ -180,6 +187,7 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(input.notes ? { p_notes: input.notes } : {}),
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
+    ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -259,7 +267,12 @@ export async function fetchMerchantBookings(
 /** 建單功能擴充 4.3:單筆預約詳情擴充,除了 bookings 主體欄位,一併回傳服務項目清單
  * (名稱+工時快照)、助手清單(姓名)、料錢成本清單(名稱+金額快照)。供 5.2 預約詳情彈窗顯示完整內容,
  * 也供 5.3 編輯表單帶入預設值。三張關聯表分開查詢(不用 PostgREST 巢狀 embed),邏輯簡單直接,
- * 也避免依賴 schema cache 對巢狀關聯的自動推斷。 */
+ * 也避免依賴 schema cache 對巢狀關聯的自動推斷。
+ *
+ * 建單表單細節修正第五節:service_items 的 join 多帶一個 price 欄位。**這是查詢當下的即時金額,
+ * 不是建立/編輯當下鎖定的價格快照**——如果服務項目之後改價,舊預約顯示的金額會跟著變動。金額快照
+ * 策略明確保留給未來模組 6(訂單管理)通盤設計,這裡刻意不做,不要被誤以為這裡顯示的金額有被鎖定。
+ * 服務項目已下架/已刪除時 price 回傳 null(fallback 顯示「—」,不要顯示 0)。 */
 export async function getBooking(id: string): Promise<BookingDetail | null> {
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
@@ -272,7 +285,7 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   const [serviceItemsRes, assistantsRes, materialCostsRes] = await Promise.all([
     supabase
       .from("booking_service_items")
-      .select("service_item_id, service_items(name)")
+      .select("service_item_id, service_items(name, price, status)")
       .eq("booking_id", id),
     supabase
       .from("booking_assistants")
@@ -288,7 +301,10 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   if (assistantsRes.error) throw assistantsRes.error;
   if (materialCostsRes.error) throw materialCostsRes.error;
 
-  type ServiceItemJoinRow = { service_item_id: string; service_items: { name: string } | null };
+  type ServiceItemJoinRow = {
+    service_item_id: string;
+    service_items: { name: string; price: number; status: string } | null;
+  };
   type AssistantJoinRow = { staff_id: string; merchant_staff: { name: string } | null };
   type MaterialCostJoinRow = {
     material_cost_item_id: string;
@@ -298,10 +314,20 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
 
   return {
     ...(booking as Booking),
-    serviceItems: ((serviceItemsRes.data ?? []) as ServiceItemJoinRow[]).map((row) => ({
-      id: row.service_item_id,
-      name: row.service_items?.name ?? "(已刪除的服務項目)",
-    })),
+    serviceItems: ((serviceItemsRes.data ?? []) as ServiceItemJoinRow[]).map((row) => {
+      // service_items 的 SELECT RLS 政策(service_items_select)只檢查管理權限,不排除
+      // status='removed' 的列,所以「整列被刪除」(row.service_items 為 null)跟「已下架但
+      // 資料列還在」(status !== 'active') 是兩種不同情況,都要視為「查不到目前有效的價格」。
+      // 名稱則刻意不比照下架 fallback:下架品項概念上不是「不存在」,只是「不能再被選用於新
+      // 預約」,繼續顯示它原本的真實名稱對使用者比較有意義;只有金額(規格書明確要求)才 fallback
+      // 成「—」,避免顯示 0 讓人誤以為是免費,或直接報錯。
+      const isRemoved = !row.service_items || row.service_items.status !== "active";
+      return {
+        id: row.service_item_id,
+        name: row.service_items?.name ?? "(已刪除的服務項目)",
+        price: isRemoved ? null : row.service_items!.price,
+      };
+    }),
     assistants: ((assistantsRes.data ?? []) as AssistantJoinRow[]).map((row) => ({
       staffId: row.staff_id,
       staffName: row.merchant_staff?.name ?? "(已刪除的人員)",

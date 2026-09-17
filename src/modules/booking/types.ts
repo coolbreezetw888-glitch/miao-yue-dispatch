@@ -98,6 +98,17 @@ export interface BookingDetailAssistant {
   staffName: string;
 }
 
+/** 建單表單細節修正規格書第五節:預約詳情用的服務項目,比 DayScheduleServiceItemRef 多一個
+ * price 欄位。**這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的金額快照**
+ * ——之後服務項目改價,舊預約顯示的金額會跟著變動,不是像 booking_service_items 的
+ * duration_minutes_snapshot 那樣寫死。金額快照策略明確保留給未來模組 6(訂單管理)通盤設計,
+ * 這裡刻意不做,避免變成之後模組 6 的絆腳石或要推翻重做。
+ * price 是 null 代表這個服務項目已經下架/被刪除,查不到目前的價格(fallback 顯示「—」,
+ * 不要顯示 0,那看起來像「免費」,會誤導使用者)。 */
+export interface BookingDetailServiceItem extends DayScheduleServiceItemRef {
+  price: number | null;
+}
+
 export interface BookingDetailMaterialCost {
   materialCostItemId: string;
   name: string;
@@ -105,7 +116,7 @@ export interface BookingDetailMaterialCost {
 }
 
 export interface BookingDetail extends Booking {
-  serviceItems: DayScheduleServiceItemRef[];
+  serviceItems: BookingDetailServiceItem[];
   assistants: BookingDetailAssistant[];
   materialCosts: BookingDetailMaterialCost[];
 }
