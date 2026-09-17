@@ -137,6 +137,9 @@ export interface CreateBookingInput {
    * (見 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才會用到,後端 create_booking 會依商家
    * industry_type 再驗證一次是否必填,不是只靠前端擋。 */
   customerAddress?: string | null;
+  /** 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到的備註),跟既有的 notes
+   * (內部備註,商家內部看、客戶看不到)分開存放。 */
+  customerNotes?: string | null;
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -153,6 +156,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
+    ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -173,6 +177,8 @@ export interface UpdateBookingInput {
   materialCostItemIds?: string[];
   /** 建單表單細節修正第二節:同 CreateBookingInput.customerAddress。 */
   customerAddress?: string | null;
+  /** 預約詳情資訊擴充與建單備註分類第一節:同 CreateBookingInput.customerNotes。 */
+  customerNotes?: string | null;
 }
 
 export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
@@ -188,6 +194,7 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
+    ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -301,6 +308,30 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   if (assistantsRes.error) throw assistantsRes.error;
   if (materialCostsRes.error) throw materialCostsRes.error;
 
+  // 預約詳情資訊擴充與建單備註分類第三節 3.2/3.3:把 created_by_user_id/last_modified_by_user_id
+  // 轉成可讀姓名。created_by_user_id 理論上一定有值(created_by_role 是必填,建單時一定會寫入
+  // auth.uid()),這裡仍防禦性地過濾 null,避免舊資料或未來邊界情況造成呼叫失敗。
+  const actorIds = Array.from(
+    new Set(
+      [(booking as Booking).created_by_user_id, (booking as Booking).last_modified_by_user_id].filter(
+        (id): id is string => Boolean(id),
+      ),
+    ),
+  );
+  const actorNameById = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: actorNames, error: actorNamesError } = await supabase.rpc("get_booking_actor_names", {
+      p_merchant_id: (booking as Booking).merchant_id,
+      p_user_ids: actorIds,
+    });
+    if (actorNamesError) throw actorNamesError;
+    for (const row of actorNames ?? []) {
+      actorNameById.set(row.user_id, row.display_name);
+    }
+  }
+  const createdByUserId = (booking as Booking).created_by_user_id;
+  const lastModifiedByUserId = (booking as Booking).last_modified_by_user_id;
+
   type ServiceItemJoinRow = {
     service_item_id: string;
     service_items: { name: string; price: number; status: string } | null;
@@ -337,6 +368,15 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
       name: row.material_cost_items?.name ?? "(已刪除的品項)",
       amountSnapshot: row.amount_snapshot,
     })),
+    // 預約詳情資訊擴充與建單備註分類第三節 3.2:createdByUserId 理論上一定查得到姓名
+    // (get_booking_actor_names 兩邊都查不到時 fallback「(已移除的人員)」,不會是 undefined),
+    // 這裡仍保留一個保底文字,避免防禦性過濾把它排除掉的極端情況下畫面顯示空白。
+    createdByName: createdByUserId ? (actorNameById.get(createdByUserId) ?? "(已移除的人員)") : "(已移除的人員)",
+    // 3.3:last_modified_by_user_id 是 null 時(從未被 confirm/update/cancel/complete 異動過)
+    // 回傳 null,前端據此判斷「這一列不顯示」。
+    lastModifiedByName: lastModifiedByUserId
+      ? (actorNameById.get(lastModifiedByUserId) ?? "(已移除的人員)")
+      : null,
   };
 }
 

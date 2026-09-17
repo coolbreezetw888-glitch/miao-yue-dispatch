@@ -8,6 +8,7 @@ import {
   buildMonthGrid,
   buildTaipeiIso,
   isoToTaipeiDateKey,
+  isoToTaipeiDateTimeWithSeconds,
   isoToTaipeiTime,
   minutesToTime,
   startOfMonth,
@@ -60,6 +61,21 @@ describe("isoToTaipeiDateKey / isoToTaipeiTime", () => {
   it("一般情況(不跨日)也正確換算", () => {
     const iso = "2026-09-22T02:00:00Z"; // Taipei 10:00
     expect(isoToTaipeiDateKey(iso)).toBe("2026-09-22");
+    expect(isoToTaipeiTime(iso)).toBe("10:00");
+  });
+});
+
+describe("isoToTaipeiDateTimeWithSeconds", () => {
+  it("預約詳情資訊擴充與建單備註分類第三節 3.1:換算成 Asia/Taipei 的年/月/日 時:分:秒(跨日情境)", () => {
+    // UTC 2026-09-21 16:30:05 = Asia/Taipei 2026-09-22 00:30:05(跨過午夜)。
+    const iso = "2026-09-21T16:30:05Z";
+    expect(isoToTaipeiDateTimeWithSeconds(iso)).toBe("2026/9/22 00:30:05");
+  });
+
+  it("一般情況(不跨日)也正確換算,且不受既有 isoToTaipeiTime(只到分鐘)的行為影響", () => {
+    const iso = "2026-09-22T02:00:09Z"; // Taipei 10:00:09
+    expect(isoToTaipeiDateTimeWithSeconds(iso)).toBe("2026/9/22 10:00:09");
+    // 既有的 isoToTaipeiTime 應該維持原本只到分鐘的行為,沒有被這次新增的函式意外牽動。
     expect(isoToTaipeiTime(iso)).toBe("10:00");
   });
 });

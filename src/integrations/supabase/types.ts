@@ -139,9 +139,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string
@@ -160,9 +163,12 @@ export type Database = {
           customer_address?: string | null
           customer_email?: string | null
           customer_name: string
+          customer_notes?: string | null
           customer_phone: string
           end_at: string
           id?: string
+          last_modified_at?: string | null
+          last_modified_by_user_id?: string | null
           merchant_id: string
           notes?: string | null
           source?: string
@@ -181,9 +187,12 @@ export type Database = {
           customer_address?: string | null
           customer_email?: string | null
           customer_name?: string
+          customer_notes?: string | null
           customer_phone?: string
           end_at?: string
           id?: string
+          last_modified_at?: string | null
+          last_modified_by_user_id?: string | null
           merchant_id?: string
           notes?: string | null
           source?: string
@@ -861,9 +870,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string
@@ -891,9 +903,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string
@@ -921,9 +936,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string
@@ -945,6 +963,7 @@ export type Database = {
           p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
+          p_customer_notes?: string
           p_customer_phone: string
           p_material_cost_item_ids?: string[]
           p_merchant_id: string
@@ -963,9 +982,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string
@@ -1003,6 +1025,13 @@ export type Database = {
         Returns: string
       }
       generate_booking_slug: { Args: { p_name: string }; Returns: string }
+      get_booking_actor_names: {
+        Args: { p_merchant_id: string; p_user_ids: string[] }
+        Returns: {
+          display_name: string
+          user_id: string
+        }[]
+      }
       get_merchant_admin_users: {
         Args: { p_merchant_id: string }
         Returns: {
@@ -1075,6 +1104,7 @@ export type Database = {
           p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
+          p_customer_notes?: string
           p_customer_phone: string
           p_material_cost_item_ids?: string[]
           p_notes?: string
@@ -1092,9 +1122,12 @@ export type Database = {
           customer_address: string | null
           customer_email: string | null
           customer_name: string
+          customer_notes: string | null
           customer_phone: string
           end_at: string
           id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
           source: string

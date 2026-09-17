@@ -75,6 +75,7 @@ import {
   buildTaipeiIso,
   getTaipeiNow,
   isoToTaipeiDateKey,
+  isoToTaipeiDateTimeWithSeconds,
   isoToTaipeiTime,
   minutesToTime,
   startOfMonth,
@@ -269,6 +270,9 @@ function BookingFormDialog({
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [notes, setNotes] = useState("");
+  // 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到),跟上面的 notes(內部備註,
+  // 商家內部看、客戶看不到)分開存放,對應 bookings.customer_notes。
+  const [customerNotes, setCustomerNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   // 每次開啟時重設表單:新建模式依 prefill,編輯模式等 editingDetail 載入後帶入既有值。
@@ -287,6 +291,7 @@ function BookingFormDialog({
       setCustomerEmail(editingDetail.customer_email ?? "");
       setCustomerAddress(editingDetail.customer_address ?? "");
       setNotes(editingDetail.notes ?? "");
+      setCustomerNotes(editingDetail.customer_notes ?? "");
     } else {
       setStaffId(prefill.staffId ?? "");
       setServiceItemIds([]);
@@ -299,6 +304,7 @@ function BookingFormDialog({
       setCustomerEmail("");
       setCustomerAddress("");
       setNotes("");
+      setCustomerNotes("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit, editingDetail]);
@@ -358,6 +364,7 @@ function BookingFormDialog({
         customerEmail: customerEmail.trim() ? customerEmail.trim() : null,
         customerAddress: customerAddress.trim() ? customerAddress.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
+        customerNotes: customerNotes.trim() ? customerNotes.trim() : null,
         assistantStaffIds,
         materialCostItemIds,
       };
@@ -580,14 +587,27 @@ function BookingFormDialog({
                 />
               </div>
             ) : null}
-            <div className="sm:col-span-2">
-              <Label htmlFor="booking-notes">備註</Label>
+            {/* 預約詳情資訊擴充與建單備註分類第一節:備註分成「內部備註」(既有 notes 欄位,
+                商家內部看、客戶看不到,這次只改標籤文字,欄位本身不改名)跟「客戶備註」
+                (新欄位 customer_notes,客戶看得到),兩個欄位並排顯示。 */}
+            <div>
+              <Label htmlFor="booking-notes">內部備註</Label>
               <Textarea
                 id="booking-notes"
                 className="mt-2"
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="booking-customer-notes">客戶備註</Label>
+              <Textarea
+                id="booking-customer-notes"
+                className="mt-2"
+                rows={2}
+                value={customerNotes}
+                onChange={(e) => setCustomerNotes(e.target.value)}
               />
             </div>
           </div>
@@ -704,106 +724,11 @@ function BookingDetailDialog({
           <DialogTitle>預約詳情</DialogTitle>
         </DialogHeader>
 
-        {isLoading || !booking ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          // min-w-0:DialogContent 本身是 `display: grid`,這個 div 是它的直接子元素(grid item),
-          // grid item 預設 `min-width: auto` 跟 flex item 一樣,不加這個會讓整個內容區塊(以及
-          // 下面每一列 flex 資訊列)被撐寬到超出對話框、超出手機螢幕,即使每一列自己內部已經有
-          // min-w-0/break-words 也沒用——因為撐開的是這一層,不是內層那些 flex 列。
-          <div className="min-w-0 space-y-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">狀態</span>
-              <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
-                {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
-              </Badge>
-            </div>
-            {/* 手機版容器寬度溢出修正:比照 MerchantAdminList.tsx 已驗證有效的做法——右側值
-                的 <span> 加上 min-w-0 break-words,遇到長文字(長姓名/長地址/長 email 組合字串)
-                時願意縮小並自然換行,不會撐開整個 flex 容器導致 DialogContent 超出手機螢幕寬度。
-                items-center 改成 items-start,避免換行後垂直置中看起來奇怪。 */}
-            <div className="flex items-start justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">服務人員</span>
-              <span className="min-w-0 break-words text-right font-medium text-foreground">
-                {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
-              </span>
-            </div>
-            {booking.assistants.length > 0 ? (
-              <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-muted-foreground">助手</span>
-                <span className="min-w-0 break-words text-right font-medium text-foreground">
-                  {booking.assistants.map((a) => a.staffName).join("、")}
-                </span>
-              </div>
-            ) : null}
-            {/* 建單表單細節修正第五節:每項服務項目旁邊顯示金額,下方加總「服務金額小計」。
-                這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的價格快照
-                (快照策略保留給未來模組 6 通盤設計,見 types.ts BookingDetailServiceItem 註解)。
-                已下架/已刪除的服務項目 price 是 null,顯示「—」,不要顯示 0。 */}
-            <div>
-              <span className="text-muted-foreground">服務項目</span>
-              <ul className="mt-1 space-y-0.5">
-                {booking.serviceItems.map((i) => (
-                  <li key={i.id} className="flex items-start justify-between gap-3 text-foreground">
-                    <span className="min-w-0 break-words">{i.name}</span>
-                    <span className="shrink-0">{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
-                <span className="text-muted-foreground">服務金額小計</span>
-                <span className="font-medium text-foreground">
-                  $
-                  {booking.serviceItems
-                    .reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price)), 0)
-                    .toFixed(0)}
-                </span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">時間</span>
-              <span className="font-medium text-foreground">
-                {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
-              </span>
-            </div>
-            <div className="flex items-start justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">客戶</span>
-              <span className="min-w-0 break-words text-right font-medium text-foreground">
-                {booking.customer_name} ・ {booking.customer_phone}
-              </span>
-            </div>
-            {/* 建單表單細節修正第二節第 5 點:有值才顯示地址,沒有就不顯示這個欄位。 */}
-            {booking.customer_address ? (
-              <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-muted-foreground">客戶地址</span>
-                <span className="min-w-0 break-words text-right font-medium text-foreground">
-                  {booking.customer_address}
-                </span>
-              </div>
-            ) : null}
-            {booking.materialCosts.length > 0 ? (
-              <div>
-                <span className="text-muted-foreground">料錢成本</span>
-                <ul className="mt-1 space-y-0.5">
-                  {booking.materialCosts.map((c) => (
-                    <li key={c.materialCostItemId} className="break-words text-foreground">
-                      {c.name} ・ ${c.amountSnapshot.toFixed(0)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {booking.notes ? (
-              <div>
-                <span className="text-muted-foreground">備註</span>
-                <p className="mt-1 text-foreground">{booking.notes}</p>
-              </div>
-            ) : null}
-          </div>
-        )}
-
+        {/* 預約詳情資訊擴充與建單備註分類第四節:操作按鈕從彈窗最下方搬到標題下方、
+            資訊列之上,純版面位置調整,按鈕本身的顯示條件/點擊行為完全不變(原本在下方
+            DialogFooter 的那一段程式碼原封不動搬過來,只是位置換了)。 */}
         {booking && (showConfirm || showComplete || showEditAndCancel) ? (
-          <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2 sm:justify-between">
             {showEditAndCancel ? (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -853,8 +778,144 @@ function BookingDetailDialog({
                 </Button>
               ) : null}
             </div>
-          </DialogFooter>
+          </div>
         ) : null}
+
+        {isLoading || !booking ? (
+          <p className="text-sm text-muted-foreground">載入中⋯</p>
+        ) : (
+          // min-w-0:DialogContent 本身是 `display: grid`,這個 div 是它的直接子元素(grid item),
+          // grid item 預設 `min-width: auto` 跟 flex item 一樣,不加這個會讓整個內容區塊(以及
+          // 下面每一列 flex 資訊列)被撐寬到超出對話框、超出手機螢幕,即使每一列自己內部已經有
+          // min-w-0/break-words 也沒用——因為撐開的是這一層,不是內層那些 flex 列。
+          <div className="min-w-0 space-y-3 text-sm">
+            {/* 預約詳情資訊擴充與建單備註分類第二節:「狀態」改名成「訂單狀態」。 */}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">訂單狀態</span>
+              <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
+                {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
+              </Badge>
+            </div>
+            {/* 第三節 3.1:建單時間,顯示既有的 created_at,格式補上秒數。 */}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">建單時間</span>
+              <span className="font-medium text-foreground">
+                {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
+              </span>
+            </div>
+            {/* 第三節 3.2:預約客服,createdByName 由 getBooking 透過 get_booking_actor_names
+                轉成可讀姓名,一定有值(每筆預約都有 created_by_user_id)。 */}
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">預約客服</span>
+              <span className="min-w-0 break-words text-right font-medium text-foreground">
+                {booking.createdByName}
+              </span>
+            </div>
+            {/* 第三節 3.3:最後修改,lastModifiedByName 是 null 代表從未被
+                confirm_booking/update_booking/cancel_booking/complete_booking 異動過,
+                這一列不顯示(比照客戶地址「有值才顯示」的慣例)。 */}
+            {booking.lastModifiedByName && booking.last_modified_at ? (
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-muted-foreground">最後修改</span>
+                <span className="min-w-0 break-words text-right font-medium text-foreground">
+                  {booking.lastModifiedByName} ・ {isoToTaipeiDateTimeWithSeconds(booking.last_modified_at)}
+                </span>
+              </div>
+            ) : null}
+            {/* 手機版容器寬度溢出修正:比照 MerchantAdminList.tsx 已驗證有效的做法——右側值
+                的 <span> 加上 min-w-0 break-words,遇到長文字(長姓名/長地址/長 email 組合字串)
+                時願意縮小並自然換行,不會撐開整個 flex 容器導致 DialogContent 超出手機螢幕寬度。
+                items-center 改成 items-start,避免換行後垂直置中看起來奇怪。 */}
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">服務人員</span>
+              <span className="min-w-0 break-words text-right font-medium text-foreground">
+                {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
+              </span>
+            </div>
+            {booking.assistants.length > 0 ? (
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-muted-foreground">助手</span>
+                <span className="min-w-0 break-words text-right font-medium text-foreground">
+                  {booking.assistants.map((a) => a.staffName).join("、")}
+                </span>
+              </div>
+            ) : null}
+            {/* 建單表單細節修正第五節:每項服務項目旁邊顯示金額,下方加總「服務金額小計」。
+                這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的價格快照
+                (快照策略保留給未來模組 6 通盤設計,見 types.ts BookingDetailServiceItem 註解)。
+                已下架/已刪除的服務項目 price 是 null,顯示「—」,不要顯示 0。 */}
+            <div>
+              <span className="text-muted-foreground">服務項目</span>
+              <ul className="mt-1 space-y-0.5">
+                {booking.serviceItems.map((i) => (
+                  <li key={i.id} className="flex items-start justify-between gap-3 text-foreground">
+                    <span className="min-w-0 break-words">{i.name}</span>
+                    <span className="shrink-0">{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
+                <span className="text-muted-foreground">服務金額小計</span>
+                <span className="font-medium text-foreground">
+                  $
+                  {booking.serviceItems
+                    .reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price)), 0)
+                    .toFixed(0)}
+                </span>
+              </div>
+            </div>
+            {/* 預約詳情資訊擴充與建單備註分類第二節:「時間」改名成「預約時間」。 */}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">預約時間</span>
+              <span className="font-medium text-foreground">
+                {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
+              </span>
+            </div>
+            {/* 第二節:「客戶」改名成「客戶姓名」,顯示邏輯不變(姓名+電話)。 */}
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-muted-foreground">客戶姓名</span>
+              <span className="min-w-0 break-words text-right font-medium text-foreground">
+                {booking.customer_name} ・ {booking.customer_phone}
+              </span>
+            </div>
+            {/* 建單表單細節修正第二節第 5 點:有值才顯示地址,沒有就不顯示這個欄位。 */}
+            {booking.customer_address ? (
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-muted-foreground">客戶地址</span>
+                <span className="min-w-0 break-words text-right font-medium text-foreground">
+                  {booking.customer_address}
+                </span>
+              </div>
+            ) : null}
+            {/* 第一節/第二節:新增「客戶備註」,顯示 customer_notes,有值才顯示,比照客戶地址的
+                fallback 邏輯。 */}
+            {booking.customer_notes ? (
+              <div>
+                <span className="text-muted-foreground">客戶備註</span>
+                <p className="mt-1 text-foreground">{booking.customer_notes}</p>
+              </div>
+            ) : null}
+            {booking.materialCosts.length > 0 ? (
+              <div>
+                <span className="text-muted-foreground">料錢成本</span>
+                <ul className="mt-1 space-y-0.5">
+                  {booking.materialCosts.map((c) => (
+                    <li key={c.materialCostItemId} className="break-words text-foreground">
+                      {c.name} ・ ${c.amountSnapshot.toFixed(0)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {/* 第二節:「備註」改名成「內部備註」,顯示邏輯不變(notes 有值才顯示)。 */}
+            {booking.notes ? (
+              <div>
+                <span className="text-muted-foreground">內部備註</span>
+                <p className="mt-1 text-foreground">{booking.notes}</p>
+              </div>
+            ) : null}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

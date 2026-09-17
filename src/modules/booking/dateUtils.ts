@@ -46,6 +46,35 @@ export function isoToTaipeiTime(iso: string): string {
   });
 }
 
+// ---------------------------------------------------------------------------
+// 預約詳情資訊擴充與建單備註分類第三節 3.1:「建單時間」需要顯示到秒數,既有的
+// isoToTaipeiTime 只到分鐘(給行事曆格線/預約詳情的「預約時間」欄位用,那些地方不需要秒數精度,
+// 不能為了這次的秒數需求動到既有函式,否則會改變其他呼叫端目前的顯示行為)。
+// 這裡新增一個獨立的「年/月/日 時:分:秒」格式化函式,只給「建單時間」「最後修改」這種需要完整
+// 時間戳記可讀性的欄位使用。
+// ---------------------------------------------------------------------------
+
+/** 把 timestamptz 轉成 Asia/Taipei 的完整日期時間字串,格式「YYYY/M/D HH:mm:ss」(含秒數)。
+ * 給「建單時間」「最後修改」這類需要完整時間戳記的欄位使用,跟只到分鐘的 isoToTaipeiTime
+ * 是兩支獨立的函式,不共用實作,避免任何一邊的顯示需求變動時互相牽連。 */
+export function isoToTaipeiDateTimeWithSeconds(iso: string): string {
+  const d = new Date(iso);
+  const datePart = d.toLocaleDateString("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
+  const timePart = d.toLocaleTimeString("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  return `${datePart} ${timePart}`;
+}
+
 /** 組出送往後端的 timestamptz 字串,明確帶 +08:00 偏移量。 */
 export function buildTaipeiIso(dateKey: string, time: string): string {
   return `${dateKey}T${time}:00+08:00`;

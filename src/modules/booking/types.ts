@@ -115,8 +115,15 @@ export interface BookingDetailMaterialCost {
   amountSnapshot: number;
 }
 
+/** 預約詳情資訊擴充與建單備註分類第三節 3.2/3.3:建立者/最後修改者轉成的可讀姓名,
+ * 由 get_booking_actor_names 這支 RPC 查詢得來。createdByName 一定有值(每筆預約都有
+ * created_by_user_id);lastModifiedByName 只有在 booking.last_modified_by_user_id
+ * 不是 null 時才會有值(從未被 confirm_booking/update_booking/cancel_booking/complete_booking
+ * 異動過的訂單維持 undefined,對應規格書「這一列不顯示」)。 */
 export interface BookingDetail extends Booking {
   serviceItems: BookingDetailServiceItem[];
   assistants: BookingDetailAssistant[];
   materialCosts: BookingDetailMaterialCost[];
+  createdByName: string;
+  lastModifiedByName: string | null;
 }
