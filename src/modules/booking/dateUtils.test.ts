@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  buildMonthGrid,
   buildTaipeiIso,
   isoToTaipeiDateKey,
   isoToTaipeiTime,
   minutesToTime,
+  startOfMonth,
   startOfWeek,
   timeToMinutes,
   toDateKey,
@@ -59,6 +61,39 @@ describe("isoToTaipeiDateKey / isoToTaipeiTime", () => {
     const iso = "2026-09-22T02:00:00Z"; // Taipei 10:00
     expect(isoToTaipeiDateKey(iso)).toBe("2026-09-22");
     expect(isoToTaipeiTime(iso)).toBe("10:00");
+  });
+});
+
+describe("buildMonthGrid", () => {
+  it("建單功能擴充 1.1:月曆格線一定是完整的 7 欄(含補進來的上下月日期)", () => {
+    // 2026-09-01 是星期二,月初前面要補 2 天(週日、週一)才湊滿一週。
+    const grid = buildMonthGrid(new Date(2026, 8, 15)); // 任一天在 9 月都應該產生同樣的格線
+    expect(grid.length % 7).toBe(0);
+    expect(toDateKey(grid[0]!.date)).toBe("2026-08-30"); // 那一週的週日
+    expect(grid[0]!.inCurrentMonth).toBe(false);
+
+    const sep1 = grid.find((d) => toDateKey(d.date) === "2026-09-01");
+    expect(sep1?.inCurrentMonth).toBe(true);
+
+    const sep30 = grid.find((d) => toDateKey(d.date) === "2026-09-30");
+    expect(sep30?.inCurrentMonth).toBe(true);
+
+    // 最後一天應該是完整一週的週六。
+    const last = grid[grid.length - 1]!;
+    expect(last.date.getDay()).toBe(6);
+  });
+
+  it("每一列都對齊星期日開頭", () => {
+    const grid = buildMonthGrid(new Date(2026, 1, 10)); // 2026 年 2 月
+    for (let i = 0; i < grid.length; i += 7) {
+      expect(grid[i]!.date.getDay()).toBe(0);
+    }
+  });
+});
+
+describe("startOfMonth", () => {
+  it("回傳該月第一天", () => {
+    expect(toDateKey(startOfMonth(new Date(2026, 8, 22)))).toBe("2026-09-01");
   });
 });
 

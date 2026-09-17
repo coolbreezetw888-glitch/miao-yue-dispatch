@@ -11,6 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import type {
   Booking,
+  BookingDetail,
+  MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
   StaffAvailabilityWindow,
@@ -108,35 +110,85 @@ export async function removeStaffAvailabilityWindow(windowId: string): Promise<v
 // =========================================================================
 // 1.4/規則 2.4:嚴格工時衝突檢查開關,沿用模組 1 既有的 getFeatureFlag/setFeatureFlag
 // 對外介面(src/modules/merchant/api.ts),這裡不重新實作。
+// 建單功能擴充 2.3/決策記錄 4:料錢成本功能開關,同一組對外介面,同一個 key 常數放這裡集中管理。
 // =========================================================================
 export const STRICT_CONFLICT_CHECK_FEATURE_KEY = "strict_conflict_check";
+export const MATERIAL_COST_ENABLED_FEATURE_KEY = "material_cost_enabled";
 
 // =========================================================================
-// 3.3/3.4/3.5:建立/取消/標記完成預約。
+// 3.3/3.4/3.5,建單功能擴充 4.1/4.8/4.9:建立/確認/編輯/取消/標記完成預約。
 // =========================================================================
 
+/** 建單功能擴充 4.1:create_booking 破壞性簽章變更——serviceItemId 改成 serviceItemIds(多選,
+ * 至少 1 個),新增 assistantStaffIds(助手清單,決策記錄 2)、materialCostItemIds(料錢成本品項,
+ * 決策記錄 4)。 */
 export interface CreateBookingInput {
   merchantId: string;
   staffId: string;
-  serviceItemId: string;
+  serviceItemIds: string[];
   startAt: string; // ISO 字串(含時區),對應 timestamptz
   customerName: string;
   customerPhone: string;
   customerEmail?: string | null;
   notes?: string | null;
+  assistantStaffIds?: string[];
+  materialCostItemIds?: string[];
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
   const { data, error } = await supabase.rpc("create_booking", {
     p_merchant_id: input.merchantId,
     p_staff_id: input.staffId,
-    p_service_item_id: input.serviceItemId,
+    p_service_item_ids: input.serviceItemIds,
     p_start_at: input.startAt,
     p_customer_name: input.customerName,
     p_customer_phone: input.customerPhone,
     // exactOptionalPropertyTypes:true 下,可選欄位不能明確賦值 undefined,要嘛不放這個 key。
     ...(input.customerEmail ? { p_customer_email: input.customerEmail } : {}),
     ...(input.notes ? { p_notes: input.notes } : {}),
+    p_assistant_staff_ids: input.assistantStaffIds ?? [],
+    p_material_cost_item_ids: input.materialCostItemIds ?? [],
+  });
+  if (error) throw error;
+  return data as Booking;
+}
+
+/** 建單功能擴充 4.9/決策記錄 6(新增):編輯已建立的預約,欄位範圍跟 CreateBookingInput 相同,
+ * 多一個 bookingId 指定要編輯哪一筆。 */
+export interface UpdateBookingInput {
+  bookingId: string;
+  staffId: string;
+  serviceItemIds: string[];
+  startAt: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string | null;
+  notes?: string | null;
+  assistantStaffIds?: string[];
+  materialCostItemIds?: string[];
+}
+
+export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
+  const { data, error } = await supabase.rpc("update_booking", {
+    p_booking_id: input.bookingId,
+    p_staff_id: input.staffId,
+    p_service_item_ids: input.serviceItemIds,
+    p_start_at: input.startAt,
+    p_customer_name: input.customerName,
+    p_customer_phone: input.customerPhone,
+    ...(input.customerEmail ? { p_customer_email: input.customerEmail } : {}),
+    ...(input.notes ? { p_notes: input.notes } : {}),
+    p_assistant_staff_ids: input.assistantStaffIds ?? [],
+    p_material_cost_item_ids: input.materialCostItemIds ?? [],
+  });
+  if (error) throw error;
+  return data as Booking;
+}
+
+/** 建單功能擴充 4.8/決策記錄 5(新增):把 pending_confirmation 轉成 accepted。 */
+export async function confirmBooking(bookingId: string): Promise<Booking> {
+  const { data, error } = await supabase.rpc("confirm_booking", {
+    p_booking_id: bookingId,
   });
   if (error) throw error;
   return data as Booking;
@@ -204,10 +256,145 @@ export async function fetchMerchantBookings(
   return (data ?? []) as Booking[];
 }
 
-export async function getBooking(id: string): Promise<Booking | null> {
-  const { data, error } = await supabase.from("bookings").select("*").eq("id", id).maybeSingle();
+/** 建單功能擴充 4.3:單筆預約詳情擴充,除了 bookings 主體欄位,一併回傳服務項目清單
+ * (名稱+工時快照)、助手清單(姓名)、料錢成本清單(名稱+金額快照)。供 5.2 預約詳情彈窗顯示完整內容,
+ * 也供 5.3 編輯表單帶入預設值。三張關聯表分開查詢(不用 PostgREST 巢狀 embed),邏輯簡單直接,
+ * 也避免依賴 schema cache 對巢狀關聯的自動推斷。 */
+export async function getBooking(id: string): Promise<BookingDetail | null> {
+  const { data: booking, error: bookingError } = await supabase
+    .from("bookings")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (bookingError) throw bookingError;
+  if (!booking) return null;
+
+  const [serviceItemsRes, assistantsRes, materialCostsRes] = await Promise.all([
+    supabase
+      .from("booking_service_items")
+      .select("service_item_id, service_items(name)")
+      .eq("booking_id", id),
+    supabase
+      .from("booking_assistants")
+      .select("staff_id, merchant_staff(name)")
+      .eq("booking_id", id),
+    supabase
+      .from("booking_material_costs")
+      .select("material_cost_item_id, amount_snapshot, material_cost_items(name)")
+      .eq("booking_id", id),
+  ]);
+
+  if (serviceItemsRes.error) throw serviceItemsRes.error;
+  if (assistantsRes.error) throw assistantsRes.error;
+  if (materialCostsRes.error) throw materialCostsRes.error;
+
+  type ServiceItemJoinRow = { service_item_id: string; service_items: { name: string } | null };
+  type AssistantJoinRow = { staff_id: string; merchant_staff: { name: string } | null };
+  type MaterialCostJoinRow = {
+    material_cost_item_id: string;
+    amount_snapshot: number;
+    material_cost_items: { name: string } | null;
+  };
+
+  return {
+    ...(booking as Booking),
+    serviceItems: ((serviceItemsRes.data ?? []) as ServiceItemJoinRow[]).map((row) => ({
+      id: row.service_item_id,
+      name: row.service_items?.name ?? "(已刪除的服務項目)",
+    })),
+    assistants: ((assistantsRes.data ?? []) as AssistantJoinRow[]).map((row) => ({
+      staffId: row.staff_id,
+      staffName: row.merchant_staff?.name ?? "(已刪除的人員)",
+    })),
+    materialCosts: ((materialCostsRes.data ?? []) as MaterialCostJoinRow[]).map((row) => ({
+      materialCostItemId: row.material_cost_item_id,
+      name: row.material_cost_items?.name ?? "(已刪除的品項)",
+      amountSnapshot: row.amount_snapshot,
+    })),
+  };
+}
+
+// =========================================================================
+// 建單功能擴充 6.1:料錢成本品項查詢(唯讀),供本模組建單表單、未來模組 6 使用。
+// =========================================================================
+
+/** 回傳某商家目前 status='active' 的料錢成本品項清單。 */
+export async function fetchMerchantMaterialCostItems(
+  merchantId: string,
+): Promise<MaterialCostItem[]> {
+  const { data, error } = await supabase
+    .from("material_cost_items")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data as Booking | null) ?? null;
+  return (data ?? []) as MaterialCostItem[];
+}
+
+// =========================================================================
+// 4.4/4.5:料錢成本品項管理頁(5.4)用的 CRUD,RLS 要求 private.can_manage_material_costs。
+// 比照模組 4 service_items 的既有做法,權限檢查下沉到 RLS,前端直接呼叫 supabase.from(...)。
+// =========================================================================
+
+/** 回傳某商家所有料錢成本品項(含已下架,5.4 畫面自行依 status 篩選/標示)。 */
+export async function fetchMerchantMaterialCostItemsAll(
+  merchantId: string,
+): Promise<MaterialCostItem[]> {
+  const { data, error } = await supabase
+    .from("material_cost_items")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as MaterialCostItem[];
+}
+
+export interface UpsertMaterialCostItemInput {
+  name: string;
+  amount: number;
+}
+
+export async function addMaterialCostItem(
+  merchantId: string,
+  input: UpsertMaterialCostItemInput,
+): Promise<MaterialCostItem> {
+  const { data, error } = await supabase
+    .from("material_cost_items")
+    .insert({ merchant_id: merchantId, name: input.name.trim(), amount: input.amount })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as MaterialCostItem;
+}
+
+export async function updateMaterialCostItem(
+  itemId: string,
+  input: Partial<UpsertMaterialCostItemInput>,
+): Promise<void> {
+  const payload: TablesUpdate<"material_cost_items"> = {
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+    ...(input.amount !== undefined ? { amount: input.amount } : {}),
+  };
+  const { error } = await supabase.from("material_cost_items").update(payload).eq("id", itemId);
+  if (error) throw error;
+}
+
+/** 規則 3.1:下架採軟刪除(status='removed'),不算危險操作。 */
+export async function removeMaterialCostItem(itemId: string): Promise<void> {
+  const { error } = await supabase
+    .from("material_cost_items")
+    .update({ status: "removed" })
+    .eq("id", itemId);
+  if (error) throw error;
+}
+
+export async function reactivateMaterialCostItem(itemId: string): Promise<void> {
+  const { error } = await supabase
+    .from("material_cost_items")
+    .update({ status: "active" })
+    .eq("id", itemId);
+  if (error) throw error;
 }
 
 // 型別工具,供未來需要局部更新 bookings 欄位的模組(例如模組 6)參考既有慣例,這次本模組不使用。

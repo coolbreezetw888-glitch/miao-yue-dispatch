@@ -65,3 +65,49 @@ export function minutesToTime(minutes: number): string {
   const m = (minutes % 60).toString().padStart(2, "0");
   return `${h}:${m}`;
 }
+
+// ---------------------------------------------------------------------------
+// 建單功能擴充 1.1:月檢視用的輔助函式。
+// ---------------------------------------------------------------------------
+
+/** 該日期所在月份的第一天(當地日曆日,時分秒歸零)。 */
+export function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+/** 該日期所在月份的下個月第一天(用來當作「不含」的查詢上界,或算天數)。 */
+export function startOfNextMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 1);
+}
+
+export function addMonths(d: Date, months: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + months, 1);
+}
+
+/**
+ * 產生月曆格線需要的完整日期陣列:從「該月第一天所在那一週的週日」開始,
+ * 到「該月最後一天所在那一週的週六」結束,確保格線永遠是完整的 7 欄。
+ * 月份前後補進來的日期會標記 inCurrentMonth=false,畫面上用來做淡化樣式,
+ * 但一樣可以點擊查看/建立當天的排程(比照多數行事曆 UI 慣例)。
+ */
+export interface MonthGridDay {
+  date: Date;
+  inCurrentMonth: boolean;
+}
+
+export function buildMonthGrid(monthAnchor: Date): MonthGridDay[] {
+  const firstOfMonth = startOfMonth(monthAnchor);
+  const firstOfNextMonth = startOfNextMonth(monthAnchor);
+  const gridStart = startOfWeek(firstOfMonth);
+  // 月曆最後一天所在週的週六:從下個月第一天往前一天(=本月最後一天),再找它那一週的週六。
+  const lastOfMonth = addDays(firstOfNextMonth, -1);
+  const gridEnd = addDays(startOfWeek(lastOfMonth), 6);
+
+  const days: MonthGridDay[] = [];
+  let cursor = gridStart;
+  while (cursor <= gridEnd) {
+    days.push({ date: cursor, inCurrentMonth: cursor.getMonth() === monthAnchor.getMonth() });
+    cursor = addDays(cursor, 1);
+  }
+  return days;
+}

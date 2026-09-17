@@ -14,7 +14,11 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag, setFeatureFlag } from "@/modules/merchant/api";
 
-import { upsertMerchantBusinessHours, STRICT_CONFLICT_CHECK_FEATURE_KEY } from "./api";
+import {
+  upsertMerchantBusinessHours,
+  MATERIAL_COST_ENABLED_FEATURE_KEY,
+  STRICT_CONFLICT_CHECK_FEATURE_KEY,
+} from "./api";
 import { useMerchantBusinessHours } from "./context";
 import { RequireBusinessHoursAccess } from "./RequireBusinessHoursAccess";
 import { DAY_OF_WEEK_LABELS, type MerchantBusinessHours } from "./types";
@@ -78,30 +82,38 @@ function DayRow({
     }
   }
 
+  // 對應規格書「首頁外殼與主題色優化」三:根因是這一列在手機寬度下,
+  // 「日期+開關」跟「時間區間選擇器」擠在同一個 flex-wrap 容器裡當「同一個」flex item,
+  // 兩個原生 <input type="time"> 加起來的最小內容寬度比手機螢幕窄的卡片還寬,flex-wrap
+  // 只能整組換行,不會把這組內部拆開,於是這個 item 自己把整個頁面 body 撐寬到需要左右拉。
+  // 修正方式:改成「窄螢幕垂直堆疊(日期/開關一行,時間選擇器另起一行)、sm 以上維持原本橫向排列」,
+  // 讓這一列的寬度需求不再依賴撐開卡片本身,而是自然往下換行,不是靠橫向捲動解決。
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2.5">
-      <span className="w-16 shrink-0 text-sm font-medium text-foreground">
-        星期{DAY_OF_WEEK_LABELS[dayOfWeek]}
-      </span>
+    <div className="flex flex-col gap-2 rounded-md border border-border px-3 py-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+      <div className="flex items-center gap-3">
+        <span className="w-16 shrink-0 text-sm font-medium text-foreground">
+          星期{DAY_OF_WEEK_LABELS[dayOfWeek]}
+        </span>
 
-      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Switch
-          checked={!form.isClosed}
-          disabled={saving}
-          onCheckedChange={(checked) => {
-            const next = { ...form, isClosed: !checked };
-            setForm(next);
-            void persist(next);
-          }}
-        />
-        {form.isClosed ? "公休" : "營業中"}
-      </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            checked={!form.isClosed}
+            disabled={saving}
+            onCheckedChange={(checked) => {
+              const next = { ...form, isClosed: !checked };
+              setForm(next);
+              void persist(next);
+            }}
+          />
+          {form.isClosed ? "公休" : "營業中"}
+        </label>
+      </div>
 
       {!form.isClosed ? (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <input
             type="time"
-            className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+            className="min-w-0 rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={form.openTime}
             disabled={saving}
             onChange={(e) => setForm((prev) => ({ ...prev, openTime: e.target.value }))}
@@ -110,7 +122,7 @@ function DayRow({
           <span className="text-muted-foreground">至</span>
           <input
             type="time"
-            className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+            className="min-w-0 rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={form.closeTime}
             disabled={saving}
             onChange={(e) => setForm((prev) => ({ ...prev, closeTime: e.target.value }))}
@@ -158,6 +170,53 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
             {isLoading ? "載入中⋯" : enabled ? "已開啟(擋下重疊預約)" : "已關閉(允許重疊預約)"}
           </span>
           <Switch checked={enabled ?? true} disabled={isLoading} onCheckedChange={handleToggle} />
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+// 建單功能擴充規格書 5.5/決策記錄 4:料錢成本功能開關。寫入權限比照 strict_conflict_check
+// (規則 2.4/1.4),歸在 business_hours 這個 section_key 底下——這個頁面本身已經被
+// RequireBusinessHoursAccess 擋過一次,能進到這頁的人(管理員或被授權 business_hours 的客服)
+// 本來就有權限操作這個開關,不需要在元件內再另外判斷一次。
+function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
+  const featureFlagQueryKey = ["booking-module", "material-cost-enabled", merchantId] as const;
+  const queryClient = useQueryClient();
+  const { data: enabled, isLoading } = useQuery({
+    queryKey: featureFlagQueryKey,
+    queryFn: async () => {
+      const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
+      // 規格書 2.3:查無資料一律視為關閉(預設值關閉)。
+      return value ?? false;
+    },
+  });
+
+  async function handleToggle(checked: boolean) {
+    try {
+      await setFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY, checked);
+      await queryClient.invalidateQueries({ queryKey: featureFlagQueryKey });
+      toast.success("已更新設定");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>料錢成本功能</CardTitle>
+        <CardDescription>
+          開啟後,建單/編輯表單會出現「料錢成本」勾選區塊,可以記錄這次服務預期會用掉的材料成本
+          (不是訂單金額計算)。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <label className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+          <span className="text-sm text-foreground">
+            {isLoading ? "載入中⋯" : enabled ? "已開啟" : "已關閉"}
+          </span>
+          <Switch checked={enabled ?? false} disabled={isLoading} onCheckedChange={handleToggle} />
         </label>
       </CardContent>
     </Card>
@@ -221,6 +280,7 @@ function BusinessHoursPageInner() {
       </Card>
 
       <StrictConflictCheckToggle merchantId={merchantId} />
+      <MaterialCostEnabledToggle merchantId={merchantId} />
     </main>
   );
 }

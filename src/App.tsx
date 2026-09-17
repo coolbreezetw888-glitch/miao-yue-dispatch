@@ -23,6 +23,7 @@ import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePa
 import ServiceItemsPage from "@/modules/service-items/ServiceItemsPage";
 import BusinessHoursPage from "@/modules/booking/BusinessHoursPage";
 import CalendarPage from "@/modules/booking/CalendarPage";
+import MaterialCostsPage from "@/modules/booking/MaterialCostsPage";
 
 function NotFound() {
   return (
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
           <Route path="/app/service-items" element={<ServiceItemsPage />} />
           <Route path="/app/business-hours" element={<BusinessHoursPage />} />
+          <Route path="/app/material-costs" element={<MaterialCostsPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

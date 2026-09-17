@@ -3,7 +3,7 @@
 -- (規則 2.1 ∩ 2.2)跟查無權限時被擋下。
 begin;
 
-select plan(8);
+select plan(10);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -64,20 +64,24 @@ select pg_temp.test_set_auth('b5000000-0000-4000-8000-000000000002');
 select pg_temp.test_clear_auth();
 
 insert into bookings (
-  merchant_id, staff_id, service_item_id, start_at, end_at,
+  id, merchant_id, staff_id, start_at, end_at,
   customer_name, customer_phone, source, created_by_role, status
 ) values (
+  'b5000000-0000-4000-8000-000000000091',
   'b5000000-0000-4000-8000-000000000022', 'b5000000-0000-4000-8000-000000000042',
-  'b5000000-0000-4000-8000-000000000032', '2026-09-22 11:00:00+08', '2026-09-22 12:00:00+08',
+  '2026-09-22 11:00:00+08', '2026-09-22 12:00:00+08',
   '二店的秘密客戶', '0988000000', 'manual', 'admin', 'accepted'
 );
+
+insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
+values ('b5000000-0000-4000-8000-000000000091', 'b5000000-0000-4000-8000-000000000032', 60);
 
 -- 一店也幫 A 師傅(一店)建一筆本店預約 10:00-11:00(在時段內)。
 select pg_temp.test_set_auth('b5000000-0000-4000-8000-000000000001');
 
 select id, status from create_booking(
   'b5000000-0000-4000-8000-000000000021', 'b5000000-0000-4000-8000-000000000041',
-  'b5000000-0000-4000-8000-000000000031', '2026-09-22 10:00:00+08',
+  array['b5000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
   '一店的客戶', '0966000000'
 ) \gset own_
 
@@ -109,6 +113,28 @@ select is(
   ),
   '一店的客戶',
   '3.6:本店預約完整顯示客戶姓名'
+);
+
+-- ③a 建單功能擴充 4.2 第 1/2 點:本店預約應該回傳 service_items 陣列(而不是舊的單一
+--    service_item_name 字串),且主要服務人員身份的 role 應該是 'main'。
+select is(
+  (
+    select s->'bookings'->0->'service_items'->0->>'name'
+    from jsonb_array_elements(get_merchant_day_schedule('b5000000-0000-4000-8000-000000000021', '2026-09-22')->'staff') s
+    where s->>'staff_id' = 'b5000000-0000-4000-8000-000000000041'
+  ),
+  '洗髮',
+  '建單功能擴充 4.2:本店預約正確回傳 service_items 陣列(取代原本的 service_item_name 單一字串)'
+);
+
+select is(
+  (
+    select s->'bookings'->0->>'role'
+    from jsonb_array_elements(get_merchant_day_schedule('b5000000-0000-4000-8000-000000000021', '2026-09-22')->'staff') s
+    where s->>'staff_id' = 'b5000000-0000-4000-8000-000000000041'
+  ),
+  'main',
+  '建單功能擴充 4.2:主要服務人員身份的預約,role 標示為 main'
 );
 
 -- ④ 跨商家占用(規則 2.6 第 3 點):應該能看到 foreign_bookings 有一筆,起訖時間跟二店那筆一致。

@@ -199,4 +199,10 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     label: "會員紅利設定",
     description: "開放後客服可以調整會員紅利設定(此功能尚未開發,先設定值)。",
   },
+  {
+    key: "material_costs",
+    label: "料錢成本管理",
+    description:
+      "開放後客服可以新增/編輯/下架料錢成本品項清單(對應建單功能擴充規格書 2.3 決策記錄 4)。建單/編輯時勾選既有品項不需要這個權限,只要有「訂單管理」權限即可。",
+  },
 ];

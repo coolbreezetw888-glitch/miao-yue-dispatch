@@ -4,7 +4,7 @@
 -- 就算有人繞過應用層邏輯直接寫 SQL,也要被擋下來。
 begin;
 
-select plan(9);
+select plan(15);
 
 insert into groups (id) values ('b6000000-0000-4000-8000-000000000010');
 
@@ -66,13 +66,13 @@ select lives_ok(
 select throws_ok(
   format(
     $$insert into bookings (
-        merchant_id, staff_id, service_item_id, start_at, end_at,
+        merchant_id, staff_id, start_at, end_at,
         customer_name, customer_phone, created_by_role, status
       ) values (
-        '%s', '%s', '%s', now(), now() + interval '30 minutes',
+        '%s', '%s', now(), now() + interval '30 minutes',
         '測試客戶', '0900000000', 'admin', 'not_a_real_status'
       )$$,
-    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000030'
+    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040'
   ),
   '23514', NULL,
   '規格書 1.3:status 不在六個定義好的值之內,被 CHECK 約束擋下'
@@ -83,13 +83,13 @@ select throws_ok(
 select lives_ok(
   format(
     $$insert into bookings (
-        merchant_id, staff_id, service_item_id, start_at, end_at,
+        merchant_id, staff_id, start_at, end_at,
         customer_name, customer_phone, created_by_role, status
       ) values (
-        '%s', '%s', '%s', now(), now() + interval '30 minutes',
+        '%s', '%s', now(), now() + interval '30 minutes',
         '測試客戶-待回覆', '0900000001', 'customer', 'pending_reply'
       )$$,
-    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000030'
+    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040'
   ),
   '規格書 1.3/2.9:CHECK 約束允許 pending_reply 這個預留狀態值存在(這次不會被任何函式觸發,但約束要先定義完整)'
 );
@@ -97,13 +97,13 @@ select lives_ok(
 select lives_ok(
   format(
     $$insert into bookings (
-        merchant_id, staff_id, service_item_id, start_at, end_at,
+        merchant_id, staff_id, start_at, end_at,
         customer_name, customer_phone, created_by_role, status
       ) values (
-        '%s', '%s', '%s', now(), now() + interval '30 minutes',
+        '%s', '%s', now(), now() + interval '30 minutes',
         '測試客戶-派單中', '0900000002', 'customer', 'dispatching'
       )$$,
-    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000030'
+    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040'
   ),
   '規格書 1.3/2.9:CHECK 約束允許 dispatching 這個預留狀態值存在'
 );
@@ -112,16 +112,90 @@ select lives_ok(
 select throws_ok(
   format(
     $$insert into bookings (
-        merchant_id, staff_id, service_item_id, start_at, end_at,
+        merchant_id, staff_id, start_at, end_at,
         customer_name, customer_phone, created_by_role, status
       ) values (
-        '%s', '%s', '%s', now(), now() - interval '30 minutes',
+        '%s', '%s', now(), now() - interval '30 minutes',
         '測試客戶', '0900000003', 'admin', 'accepted'
       )$$,
-    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000030'
+    'b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000040'
   ),
   '23514', NULL,
   '規格書 1.3:end_at 早於 start_at,被 CHECK 約束擋下'
+);
+
+-- ⑨ 建單功能擴充 2.1:booking_service_items.duration_minutes_snapshot 不能是負數。
+insert into bookings (id, merchant_id, staff_id, start_at, end_at, customer_name, customer_phone, created_by_role, status)
+values (
+  'b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000020',
+  'b6000000-0000-4000-8000-000000000040', now(), now() + interval '30 minutes',
+  '約束測試客戶', '0900000010', 'admin', 'pending_confirmation'
+);
+
+select throws_ok(
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', -1)$$,
+  '23514', NULL,
+  '建單功能擴充 2.1:duration_minutes_snapshot 不能是負數,被 CHECK 約束擋下'
+);
+
+-- ⑩ 建單功能擴充 2.1:同一筆預約不能重複選同一個服務項目(unique(booking_id, service_item_id))。
+insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
+values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30);
+
+select throws_ok(
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30)$$,
+  '23505', NULL,
+  '建單功能擴充 2.1:同一筆預約不能重複選同一個服務項目(unique 約束)'
+);
+
+-- ⑪ 建單功能擴充 2.2:同一人不能在同一筆預約裡被加派兩次助手(unique(booking_id, staff_id))。
+insert into merchant_staff (id, merchant_id, name)
+values ('b6000000-0000-4000-8000-000000000041', 'b6000000-0000-4000-8000-000000000020', '約束測試助手');
+
+insert into booking_assistants (booking_id, staff_id)
+values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000041');
+
+select throws_ok(
+  $$insert into booking_assistants (booking_id, staff_id)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000041')$$,
+  '23505', NULL,
+  '建單功能擴充 2.2:同一位助手不能在同一筆預約裡被加派兩次(unique 約束)'
+);
+
+-- ⑫ 建單功能擴充 2.3:material_cost_items.amount 不能是負數。
+select throws_ok(
+  format(
+    $$insert into material_cost_items (merchant_id, name, amount) values ('%s', '測試料錢品項', -10)$$,
+    'b6000000-0000-4000-8000-000000000020'
+  ),
+  '23514', NULL,
+  '建單功能擴充 2.3:material_cost_items.amount 不能是負數,被 CHECK 約束擋下'
+);
+
+-- ⑬ 建單功能擴充 2.3:material_cost_items.status 只能是 active/removed。
+select throws_ok(
+  format(
+    $$insert into material_cost_items (merchant_id, name, amount, status) values ('%s', '測試料錢品項2', 10, 'not_a_real_status')$$,
+    'b6000000-0000-4000-8000-000000000020'
+  ),
+  '23514', NULL,
+  '建單功能擴充 2.3:material_cost_items.status 不在 active/removed 之內,被 CHECK 約束擋下'
+);
+
+-- ⑭ 建單功能擴充 2.3:同一筆預約不能重複選同一個料錢成本品項(unique(booking_id, material_cost_item_id))。
+insert into material_cost_items (id, merchant_id, name, amount)
+values ('b6000000-0000-4000-8000-000000000060', 'b6000000-0000-4000-8000-000000000020', '約束測試料錢品項', 50);
+
+insert into booking_material_costs (booking_id, material_cost_item_id, amount_snapshot)
+values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000060', 50);
+
+select throws_ok(
+  $$insert into booking_material_costs (booking_id, material_cost_item_id, amount_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000060', 50)$$,
+  '23505', NULL,
+  '建單功能擴充 2.3:同一筆預約不能重複選同一個料錢成本品項(unique 約束)'
 );
 
 select * from finish();

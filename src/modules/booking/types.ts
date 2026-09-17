@@ -8,20 +8,32 @@ import type { Tables } from "@/integrations/supabase/types";
 export type MerchantBusinessHours = Tables<"merchant_business_hours">;
 export type StaffAvailabilityWindow = Tables<"staff_availability_windows">;
 export type Booking = Tables<"bookings">;
+export type BookingServiceItem = Tables<"booking_service_items">;
+export type BookingAssistant = Tables<"booking_assistants">;
+export type MaterialCostItem = Tables<"material_cost_items">;
+export type BookingMaterialCost = Tables<"booking_material_costs">;
 
-/** 規則 2.9:六個狀態值,這次只會真的用到 accepted/completed/cancelled 三種,
- * 其餘三種是預留給未來智慧建單/客戶自助預約/派工流程,這裡只需要存在顯示文案對照表裡。 */
+/** 規則 2.9,建單功能擴充決策記錄 5 更新:六個狀態值,這次會真的用到
+ * pending_confirmation/accepted/completed/cancelled 四種(pending_confirmation 是這次擴充新增的
+ * 實際會用到的狀態),其餘兩種(pending_reply/dispatching)是預留給未來智慧建單/客戶自助預約/
+ * 派工流程,這裡只需要存在顯示文案對照表裡。 */
 export type BookingStatus =
   "pending_reply" | "pending_confirmation" | "dispatching" | "accepted" | "completed" | "cancelled";
 
+/** 決策記錄 5:accepted 這個資料庫欄位值不改名,只改畫面顯示文字從「已接受」改成「已確認」,
+ * 更貼近使用者的實際用語習慣。 */
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   pending_reply: "待回覆",
   pending_confirmation: "待確認",
   dispatching: "派單中",
-  accepted: "已接受",
+  accepted: "已確認",
   completed: "已完成",
   cancelled: "已取消",
 };
+
+/** 建單功能擴充 2.4:這次還沒進入終止狀態(completed/cancelled)的兩種狀態,月檢視日期標示
+ * (1.2)、行事曆色塊(1.3)都要把這兩種狀態算進「這天有預約」。 */
+export const ACTIVE_BOOKING_STATUSES: BookingStatus[] = ["pending_confirmation", "accepted"];
 
 /** 0=星期日...6=星期六,對應 merchant_business_hours.day_of_week /
  * staff_availability_windows.day_of_week 跟 Postgres extract(dow from ...) 的回傳值。 */
@@ -32,6 +44,15 @@ export interface DayScheduleAvailableWindow {
   end_time: string;
 }
 
+/** 建單功能擴充 2.1:取代原本單一 service_item_id/service_item_name 字串。 */
+export interface DayScheduleServiceItemRef {
+  id: string;
+  name: string;
+}
+
+/** 建單功能擴充 4.2 第 2 點:標示這位服務人員在這筆預約裡是「主要」還是「協助」。 */
+export type BookingParticipantRole = "main" | "assistant";
+
 export interface DayScheduleOwnBooking {
   id: string;
   start_at: string;
@@ -40,8 +61,8 @@ export interface DayScheduleOwnBooking {
   customer_name: string;
   customer_phone: string;
   notes: string | null;
-  service_item_id: string;
-  service_item_name: string;
+  role: BookingParticipantRole;
+  service_items: DayScheduleServiceItemRef[];
 }
 
 export interface DayScheduleForeignBooking {
@@ -68,4 +89,23 @@ export interface MerchantDaySchedule {
     close_time: string | null;
   };
   staff: DayScheduleStaffBlock[];
+}
+
+/** 建單功能擴充 4.3:getBooking(id) 擴充後的完整詳情,供 5.2 預約詳情彈窗顯示、
+ * 5.3 編輯表單帶入預設值使用。商家未開啟料錢成本功能時 materialCosts 固定回傳空陣列。 */
+export interface BookingDetailAssistant {
+  staffId: string;
+  staffName: string;
+}
+
+export interface BookingDetailMaterialCost {
+  materialCostItemId: string;
+  name: string;
+  amountSnapshot: number;
+}
+
+export interface BookingDetail extends Booking {
+  serviceItems: DayScheduleServiceItemRef[];
+  assistants: BookingDetailAssistant[];
+  materialCosts: BookingDetailMaterialCost[];
 }

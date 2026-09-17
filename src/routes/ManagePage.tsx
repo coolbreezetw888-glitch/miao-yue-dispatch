@@ -13,7 +13,7 @@
 // (例如客服完全沒被開放任何功能),顯示空狀態文字,不是讓這個分頁籤消失或顯示空白。
 
 import type { ComponentType } from "react";
-import { CalendarClock, ClipboardList, Headset, Settings, Users } from "lucide-react";
+import { CalendarClock, ClipboardList, Coins, Headset, Settings, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,6 +37,9 @@ export default function ManagePage() {
   // 模組 5 規格書 4.7/規則 2.12:business_hours 這個 section_key 涵蓋營業時間設定卡片的顯示權限。
   const { data: canManageBusinessHours } = useAgentPermission("business_hours");
   const showBusinessHoursCard = isAdmin || canManageBusinessHours === true;
+  // 建單功能擴充規格書 5.6:material_costs 這個 section_key 決定料錢成本管理卡片的顯示權限。
+  const { data: canManageMaterialCosts } = useAgentPermission("material_costs");
+  const showMaterialCostsCard = isAdmin || canManageMaterialCosts === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -70,6 +73,14 @@ export default function ManagePage() {
       description: "每週營業時間、嚴格工時衝突檢查開關",
       icon: CalendarClock,
       visible: showBusinessHoursCard,
+    },
+    {
+      key: "material-costs",
+      to: "/app/material-costs",
+      label: "料錢成本管理",
+      description: "管理建單時可選用的料錢成本品項清單",
+      icon: Coins,
+      visible: showMaterialCostsCard,
     },
     {
       key: "settings",
