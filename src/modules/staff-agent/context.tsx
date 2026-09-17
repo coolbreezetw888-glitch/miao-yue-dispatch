@@ -74,6 +74,21 @@ export function useAgentPermission(sectionKey: string): UseQueryResult<boolean |
   });
 }
 
+/** 對應規格書「首頁外殼與主題色優化」1.2:首頁個人資料卡片用,讀取目前登入者自己在指定商家的
+ * merchant_agents 那一列(含新增的 job_title 欄位)。只有呼叫端(HomePage)確認目前使用者角色是
+ * agent 時才需要 enabled=true,不是 agent 時不會真的發出查詢。 */
+export function useMyAgentProfile(
+  merchantId: string | null | undefined,
+  userId: string | null | undefined,
+  enabled: boolean,
+): UseQueryResult<MerchantAgent | null> {
+  return useQuery({
+    queryKey: ["staff-agent-module", "my-agent-profile", merchantId, userId],
+    queryFn: () => fetchMyAgentRow(merchantId as string, userId as string),
+    enabled: enabled && Boolean(merchantId) && Boolean(userId),
+  });
+}
+
 /** 5.3 對外介面:回傳某商家目前有效(status='active')的服務人員名單,唯讀。 */
 export function useMerchantStaffList(
   merchantId: string | null | undefined,

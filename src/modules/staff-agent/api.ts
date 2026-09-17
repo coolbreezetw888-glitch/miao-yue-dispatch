@@ -393,3 +393,23 @@ export async function fetchMyAgentRow(
   if (error) throw error;
   return (data as MerchantAgent | null) ?? null;
 }
+
+// =========================================================================
+// 對應規格書「首頁外殼與主題色優化」1.2/1.3:首頁個人資料卡片(客服這一半)。
+// =========================================================================
+
+/** 1.3:客服自助編輯自己的暱稱/職位,呼叫 SECURITY DEFINER RPC update_my_agent_profile
+ * (資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷)。姓名沿用既有的 name 欄位,不開放編輯,
+ * 這裡只開放 nickname/job_title 兩個欄位,跟資料庫 RPC 的參數一致。 */
+export async function updateMyAgentProfile(
+  merchantId: string,
+  nickname: string,
+  jobTitle: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_my_agent_profile", {
+    p_merchant_id: merchantId,
+    p_nickname: nickname,
+    p_job_title: jobTitle,
+  });
+  if (error) throw error;
+}

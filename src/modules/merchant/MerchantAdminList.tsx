@@ -6,8 +6,16 @@
 // 不建立反向依賴)。
 // 錯誤訊息顯示沿用模組 2 已建立的 getErrorMessage() 共用工具(見模組 2 SKILL 記錄的踩坑:
 // Supabase 的 error 不是真正的 Error 實例),不重新發明一套。
+//
+// 2026-09-17 修正 SPECS-INDEX #85 回歸 bug:這個元件是被 MerchantSettingsPage.tsx 的外層
+// <form onSubmit={handleSubmit}>(店名/地址/主題色/公告等設定表單)包在裡面渲染的,HTML 不允許
+// 巢狀 <form>,原本這裡自己又包一層 <form onSubmit={handleAdd}> 會被瀏覽器忽略,實際效果是
+// email 輸入框跟「新增」按鈕變成屬於外層那個 <form>——點「新增」觸發的其實是外層表單的原生送出
+// (整頁重新載入),handleAdd 完全沒被呼叫。改成不用 <form> 包,「新增」按鈕改用
+// type="button" + onClick 直接呼叫 handleAdd 本體,不依賴表單送出事件;email 輸入框額外補上
+// Enter 鍵手動觸發,保留原本按 Enter 送出的操作習慣。
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -51,9 +59,8 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
   const [adding, setAdding] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
 
-  async function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    if (!merchantId || !newAdminEmail.trim()) return;
+  async function handleAdd() {
+    if (!merchantId || !newAdminEmail.trim() || adding) return;
     setAdding(true);
     try {
       await inviteMerchantAdmin(merchantId, newAdminEmail);
@@ -96,10 +103,16 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
         {(admins ?? []).map((admin) => (
           <li
             key={admin.id}
-            className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
+            className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
           >
-            <span className="text-foreground">{admin.email}</span>
-            <div className="flex items-center gap-3">
+            {/* 對應規格書「首頁外殼與主題色優化」三 + QA #183 打回:email 長度不固定(真實帳號
+                可能 25 字元以上),窄螢幕下不能跟右側日期/按鈕擠在同一個 nowrap 列,否則會把
+                整個 <li> 撐寬到超出卡片,連帶讓整個頁面 body 出現橫向捲軸。這裡改成手機寬度垂直
+                堆疊(email 自己一行、可以自然換行 + min-w-0 讓它真的能縮小換行,不撐開容器)、
+                sm 以上維持原本橫向排列,不是用整列橫向捲動處理(這是一般清單列,不是刻意設計成
+                可橫向捲動的區塊)。 */}
+            <span className="min-w-0 break-words text-foreground">{admin.email}</span>
+            <div className="flex items-center justify-between gap-3 sm:justify-end">
               <span className="text-xs text-muted-foreground">
                 {new Date(admin.created_at).toLocaleDateString("zh-TW")} 加入
               </span>
@@ -133,7 +146,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
         ) : null}
       </ul>
 
-      <form onSubmit={handleAdd} className="flex items-end gap-3">
+      <div className="flex items-end gap-3">
         <div className="flex-1">
           <Label htmlFor="new-merchant-admin-email">新增管理員(Email)</Label>
           <Input
@@ -142,13 +155,19 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
             className="mt-2"
             value={newAdminEmail}
             onChange={(e) => setNewAdminEmail(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleAdd();
+              }
+            }}
             placeholder="對方需已註冊過秒約帳號"
           />
         </div>
-        <Button type="submit" disabled={adding || !newAdminEmail.trim()}>
+        <Button type="button" onClick={() => void handleAdd()} disabled={adding || !newAdminEmail.trim()}>
           {adding ? "新增中⋯" : "新增"}
         </Button>
-      </form>
+      </div>
     </div>
   );
 }

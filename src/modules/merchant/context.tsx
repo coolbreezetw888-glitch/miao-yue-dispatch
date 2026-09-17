@@ -24,7 +24,13 @@ import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-q
 
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
-import { fetchAccessibleMerchants, fetchMerchantAdminUsers, getFeatureFlag } from "./api";
+import {
+  fetchAccessibleMerchants,
+  fetchMerchantAdminUsers,
+  fetchMyAdminProfile,
+  getFeatureFlag,
+  type MyAdminProfile,
+} from "./api";
 import { getCurrentMerchantStorageKey } from "./constants";
 import type { MerchantAdminUser, MerchantWithGroup } from "./types";
 
@@ -219,6 +225,21 @@ export function useFeatureFlag(featureKey: string): UseQueryResult<boolean | nul
     queryKey: ["merchant-module", "feature-flag", merchant?.id, featureKey],
     queryFn: () => getFeatureFlag(merchant!.id, featureKey),
     enabled: Boolean(merchant?.id),
+  });
+}
+
+/** 對應規格書「首頁外殼與主題色優化」1.2:首頁個人資料卡片用,讀取目前登入者自己在指定商家的
+ * display_name/job_title。只有呼叫端(HomePage)確認目前使用者角色是 admin 時才需要 enabled=true,
+ * 不是 admin 時不會真的發出查詢。 */
+export function useMyAdminProfile(
+  merchantId: string | null | undefined,
+  userId: string | null | undefined,
+  enabled: boolean,
+): UseQueryResult<MyAdminProfile | null> {
+  return useQuery({
+    queryKey: ["merchant-module", "my-admin-profile", merchantId, userId],
+    queryFn: () => fetchMyAdminProfile(merchantId as string, userId as string),
+    enabled: enabled && Boolean(merchantId) && Boolean(userId),
   });
 }
 

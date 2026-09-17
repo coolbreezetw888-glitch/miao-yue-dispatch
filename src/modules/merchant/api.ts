@@ -178,6 +178,53 @@ export async function fetchMerchantAdminUsers(merchantId: string): Promise<Merch
   return (data ?? []) as MerchantAdminUser[];
 }
 
+// =========================================================================
+// 對應規格書「首頁外殼與主題色優化」1.2/1.3:首頁個人資料卡片(管理員這一半)。
+// =========================================================================
+
+export interface MyAdminProfile {
+  displayName: string | null;
+  jobTitle: string | null;
+}
+
+/**
+ * 首頁個人資料卡片用:讀取目前登入者自己在指定商家的 display_name/job_title。
+ * 直接查 merchant_admins(既有 SELECT 政策 is_merchant_admin(merchant_id) 已經足夠讓管理員看到
+ * 這間店所有管理員的列,包含自己這一列,不需要另開 RPC)——但這張表一間店可能有多位管理員,
+ * 一定要多帶 eq('user_id', userId) 篩出「自己」這一列,不能只憑 merchant_id 篩選,否則
+ * .maybeSingle() 在多位管理員時會直接報錯,也會抓錯人的資料。
+ * 找不到列(理論上不會發生,呼叫端只在確認角色是 admin 時才會呼叫)回傳 null。
+ */
+export async function fetchMyAdminProfile(
+  merchantId: string,
+  userId: string,
+): Promise<MyAdminProfile | null> {
+  const { data, error } = await supabase
+    .from("merchant_admins")
+    .select("display_name, job_title")
+    .eq("merchant_id", merchantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return { displayName: data.display_name, jobTitle: data.job_title };
+}
+
+/** 1.3:管理員自助編輯自己的姓名/職位,呼叫 SECURITY DEFINER RPC update_my_admin_profile
+ * (資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷,見對應 migration 說明)。 */
+export async function updateMyAdminProfile(
+  merchantId: string,
+  displayName: string,
+  jobTitle: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_my_admin_profile", {
+    p_merchant_id: merchantId,
+    p_display_name: displayName,
+    p_job_title: jobTitle,
+  });
+  if (error) throw error;
+}
+
 /** 5.3 對外介面:讀取某個功能開關目前的值。找不到列時視為「未設定」,回傳 null。 */
 export async function getFeatureFlag(
   merchantId: string,
