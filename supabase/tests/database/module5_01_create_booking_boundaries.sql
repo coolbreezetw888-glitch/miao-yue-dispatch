@@ -62,7 +62,7 @@ select pg_temp.test_set_auth('b1000000-0000-4000-8000-000000000001');
 select lives_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000040',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶一', '0911000001'
   )$$,
   '規則 2.1+2.2:2026-09-22(週二)10:00 落在商家營業時間跟服務人員時段內,建立成功'
@@ -72,7 +72,7 @@ select lives_ok(
 select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000040',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 11:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
     '客戶二', '0911000002'
   )$$,
   'P0001', null,
@@ -83,7 +83,7 @@ select throws_ok(
 select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000040',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 08:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 08:00:00+08',
     '客戶三', '0911000003'
   )$$,
   'P0001', null,
@@ -94,7 +94,7 @@ select throws_ok(
 select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000040',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-23 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-23 10:00:00+08',
     '客戶四', '0911000004'
   )$$,
   'P0001', null,
@@ -105,7 +105,7 @@ select throws_ok(
 select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000040',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-24 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-24 10:00:00+08',
     '客戶五', '0911000005'
   )$$,
   'P0001', null,
@@ -117,7 +117,7 @@ select throws_ok(
 select lives_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000041',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 08:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 08:00:00+08',
     '客戶六', '0911000006'
   )$$,
   '規則 2.3:unlimited_backend_edit=true 且操作者是管理員,跳過邊界檢查,建立成功'
@@ -135,7 +135,7 @@ select pg_temp.test_set_auth('b1000000-0000-4000-8000-000000000001');
 select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000042',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶七', '0911000007'
   )$$,
   'P0001', null,
@@ -149,7 +149,7 @@ update merchant_staff set no_time_slot_limit = true where id = 'b1000000-0000-40
 select lives_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000042',
-    array['b1000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶八', '0911000008'
   )$$,
   '規則 2.2 例外:no_time_slot_limit=true 時只受商家營業時間限制,建立成功'

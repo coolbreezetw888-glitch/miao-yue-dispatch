@@ -55,7 +55,7 @@ select pg_temp.test_set_auth('b9000000-0000-4000-8000-000000000001');
 -- 建立第一筆預約(10:00-10:30,pending_confirmation)。
 select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
-  array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001'
 ) \gset booking_
 
@@ -65,7 +65,7 @@ select is(
     select end_at
     from update_booking(
       :'booking_id'::uuid, 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000032']::uuid[], '2026-09-22 10:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶甲(改名)', '0988000009'
     )
   ),
@@ -93,7 +93,7 @@ select lives_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000032']::uuid[], '2026-09-22 10:10:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:10:00+08',
       '客戶甲(延後)', '0988000009'
     )$$,
     :'booking_id'::text
@@ -105,7 +105,7 @@ select lives_ok(
 --    時段,應該要被擋下(證明 exclude 只排除自己,不是關掉所有衝突檢查)。
 select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
-  array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 14:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
   '客戶乙', '0988000002'
 ) \gset second_
 
@@ -113,7 +113,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 14:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
       '客戶甲(衝突)', '0988000009'
     )$$,
     :'booking_id'::text
@@ -127,7 +127,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 08:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 08:00:00+08',
       '客戶甲', '0988000009'
     )$$,
     :'booking_id'::text
@@ -144,7 +144,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 15:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 15:00:00+08',
       '客戶乙', '0988000002'
     )$$,
     :'second_id'::text
@@ -156,7 +156,7 @@ select throws_ok(
 -- ⑧ 規則 3.5 第 1 點:cancelled 狀態不能編輯。
 select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
-  array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 16:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:00:00+08',
   '客戶丙', '0988000003'
 ) \gset third_
 
@@ -166,7 +166,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 16:30:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:30:00+08',
       '客戶丙', '0988000003'
     )$$,
     :'third_id'::text
@@ -184,7 +184,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
-      array['b9000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:10:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:10:00+08',
       '不相干的管理員嘗試編輯', '0988000009'
     )$$,
     :'booking_id'::text

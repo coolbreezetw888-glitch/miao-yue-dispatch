@@ -13,7 +13,7 @@
 // (例如客服完全沒被開放任何功能),顯示空狀態文字,不是讓這個分頁籤消失或顯示空白。
 
 import type { ComponentType } from "react";
-import { CalendarClock, ClipboardList, Coins, Headset, Settings, Users } from "lucide-react";
+import { CalendarClock, ClipboardList, Coins, Headset, Receipt, Settings, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,11 @@ export default function ManagePage() {
   // 建單功能擴充規格書 5.6:material_costs 這個 section_key 決定料錢成本管理卡片的顯示權限。
   const { data: canManageMaterialCosts } = useAgentPermission("material_costs");
   const showMaterialCostsCard = isAdmin || canManageMaterialCosts === true;
+  // 模組 6(訂單管理)規格書 §1.4:訂單管理卡片沿用既有 orders section_key(模組 5 擴充
+  // 已用這個 section_key 判斷建單/確認/編輯/取消/完成的權限,列表頁檢視權限沿用同一個
+  // section_key,不新增權限項目;跟 RequireBookingAccess.tsx 用的判斷邏輯一致)。
+  const { data: canManageOrders } = useAgentPermission("orders");
+  const showOrdersCard = isAdmin || canManageOrders === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -81,6 +86,14 @@ export default function ManagePage() {
       description: "管理建單時可選用的料錢成本品項清單",
       icon: Coins,
       visible: showMaterialCostsCard,
+    },
+    {
+      key: "orders",
+      to: "/app/orders",
+      label: "訂單管理",
+      description: "查看與管理所有預約訂單、篩選狀態與金額",
+      icon: Receipt,
+      visible: showOrdersCard,
     },
     {
       key: "settings",

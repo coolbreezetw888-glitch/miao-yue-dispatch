@@ -4,7 +4,7 @@
 -- 就算有人繞過應用層邏輯直接寫 SQL,也要被擋下來。
 begin;
 
-select plan(15);
+select plan(17);
 
 insert into groups (id) values ('b6000000-0000-4000-8000-000000000010');
 
@@ -16,6 +16,12 @@ values ('b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-0000000
 
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes)
 values ('b6000000-0000-4000-8000-000000000030', 'b6000000-0000-4000-8000-000000000020', '約束測試服務', 100, 'primary', 30);
+
+-- 模組 6 §2.1:第二個服務項目,專門給 unit_price_snapshot/quantity 的 CHECK 約束測試使用,
+-- 避免跟上面 ⑩ 那筆已經成功寫入的 (booking_id, service_item_id) 組合撞到 unique 約束,
+-- 讓測試單純只驗證這一條 CHECK 約束本身。
+insert into service_items (id, merchant_id, name, price, item_type, duration_minutes)
+values ('b6000000-0000-4000-8000-000000000031', 'b6000000-0000-4000-8000-000000000020', '約束測試服務2', 100, 'primary', 30);
 
 -- ① 1.1:is_closed=true 但仍給 open_time/close_time,應該被擋下。
 select throws_ok(
@@ -133,21 +139,37 @@ values (
 );
 
 select throws_ok(
-  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
-    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', -1)$$,
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', -1, 100)$$,
   '23514', NULL,
   '建單功能擴充 2.1:duration_minutes_snapshot 不能是負數,被 CHECK 約束擋下'
 );
 
 -- ⑩ 建單功能擴充 2.1:同一筆預約不能重複選同一個服務項目(unique(booking_id, service_item_id))。
-insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
-values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30);
+insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30, 100);
 
 select throws_ok(
-  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
-    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30)$$,
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000030', 30, 100)$$,
   '23505', NULL,
   '建單功能擴充 2.1:同一筆預約不能重複選同一個服務項目(unique 約束)'
+);
+
+-- ⑩a 模組 6 §2.1:unit_price_snapshot 不能是負數。
+select throws_ok(
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000031', 30, -1)$$,
+  '23514', NULL,
+  '模組 6 §2.1:unit_price_snapshot 不能是負數,被 CHECK 約束擋下'
+);
+
+-- ⑩b 模組 6 §2.1:quantity 必須 >= 1。
+select throws_ok(
+  $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot, quantity)
+    values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000031', 30, 100, 0)$$,
+  '23514', NULL,
+  '模組 6 §2.1:quantity 必須 >= 1,被 CHECK 約束擋下'
 );
 
 -- ⑪ 建單功能擴充 2.2:同一人不能在同一筆預約裡被加派兩次助手(unique(booking_id, staff_id))。

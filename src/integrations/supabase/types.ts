@@ -95,21 +95,27 @@ export type Database = {
           created_at: string
           duration_minutes_snapshot: number
           id: string
+          quantity: number
           service_item_id: string
+          unit_price_snapshot: number
         }
         Insert: {
           booking_id: string
           created_at?: string
           duration_minutes_snapshot: number
           id?: string
+          quantity?: number
           service_item_id: string
+          unit_price_snapshot: number
         }
         Update: {
           booking_id?: string
           created_at?: string
           duration_minutes_snapshot?: number
           id?: string
+          quantity?: number
           service_item_id?: string
+          unit_price_snapshot?: number
         }
         Relationships: [
           {
@@ -136,21 +142,34 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         Insert: {
@@ -160,21 +179,34 @@ export type Database = {
           created_at?: string
           created_by_role: string
           created_by_user_id?: string | null
+          custom_total_amount?: number | null
+          custom_total_amount_enabled?: boolean
           customer_address?: string | null
           customer_email?: string | null
           customer_name: string
           customer_notes?: string | null
           customer_phone: string
+          discount_amount_snapshot?: number
+          discount_enabled?: boolean
+          discount_mode?: string | null
+          discount_value?: number | null
           end_at: string
+          final_amount_snapshot?: number
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
           merchant_id: string
           notes?: string | null
+          payment_method?: string | null
           source?: string
           staff_id: string
           start_at: string
           status?: string
+          subtotal_amount_snapshot?: number
+          tax_amount_snapshot?: number
+          tax_enabled?: boolean
+          tax_mode_snapshot?: string | null
+          tax_value_snapshot?: number | null
           updated_at?: string
         }
         Update: {
@@ -184,21 +216,34 @@ export type Database = {
           created_at?: string
           created_by_role?: string
           created_by_user_id?: string | null
+          custom_total_amount?: number | null
+          custom_total_amount_enabled?: boolean
           customer_address?: string | null
           customer_email?: string | null
           customer_name?: string
           customer_notes?: string | null
           customer_phone?: string
+          discount_amount_snapshot?: number
+          discount_enabled?: boolean
+          discount_mode?: string | null
+          discount_value?: number | null
           end_at?: string
+          final_amount_snapshot?: number
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
           merchant_id?: string
           notes?: string | null
+          payment_method?: string | null
           source?: string
           staff_id?: string
           start_at?: string
           status?: string
+          subtotal_amount_snapshot?: number
+          tax_amount_snapshot?: number
+          tax_enabled?: boolean
+          tax_mode_snapshot?: string | null
+          tax_value_snapshot?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -637,6 +682,38 @@ export type Database = {
           },
         ]
       }
+      merchant_tax_settings: {
+        Row: {
+          created_at: string
+          merchant_id: string
+          tax_mode: string
+          tax_value: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          merchant_id: string
+          tax_mode?: string
+          tax_value?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          merchant_id?: string
+          tax_mode?: string
+          tax_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_tax_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchants: {
         Row: {
           address: string | null
@@ -867,21 +944,34 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         SetofOptions: {
@@ -900,21 +990,34 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         SetofOptions: {
@@ -933,21 +1036,34 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         SetofOptions: {
@@ -960,17 +1076,26 @@ export type Database = {
       create_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
+          p_custom_total_amount?: number
+          p_custom_total_amount_enabled?: boolean
           p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
           p_customer_notes?: string
           p_customer_phone: string
+          p_discount_enabled?: boolean
+          p_discount_mode?: string
+          p_discount_value?: number
           p_material_cost_item_ids?: string[]
           p_merchant_id: string
           p_notes?: string
-          p_service_item_ids: string[]
+          p_payment_method?: string
+          p_service_items: Json
           p_staff_id: string
           p_start_at: string
+          p_tax_enabled?: boolean
+          p_tax_mode?: string
+          p_tax_value?: number
         }
         Returns: {
           cancelled_at: string | null
@@ -979,21 +1104,34 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         SetofOptions: {
@@ -1030,6 +1168,22 @@ export type Database = {
         Returns: {
           display_name: string
           user_id: string
+        }[]
+      }
+      get_customer_related_bookings: {
+        Args: {
+          p_customer_phone: string
+          p_exclude_booking_id?: string
+          p_limit?: number
+          p_merchant_id: string
+        }
+        Returns: {
+          end_at: string
+          final_amount_snapshot: number
+          id: string
+          service_item_names: string[]
+          start_at: string
+          status: string
         }[]
       }
       get_merchant_admin_users: {
@@ -1101,16 +1255,25 @@ export type Database = {
         Args: {
           p_assistant_staff_ids?: string[]
           p_booking_id: string
+          p_custom_total_amount?: number
+          p_custom_total_amount_enabled?: boolean
           p_customer_address?: string
           p_customer_email?: string
           p_customer_name: string
           p_customer_notes?: string
           p_customer_phone: string
+          p_discount_enabled?: boolean
+          p_discount_mode?: string
+          p_discount_value?: number
           p_material_cost_item_ids?: string[]
           p_notes?: string
-          p_service_item_ids: string[]
+          p_payment_method?: string
+          p_service_items: Json
           p_staff_id: string
           p_start_at: string
+          p_tax_enabled?: boolean
+          p_tax_mode?: string
+          p_tax_value?: number
         }
         Returns: {
           cancelled_at: string | null
@@ -1119,21 +1282,80 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
           customer_address: string | null
           customer_email: string | null
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
           end_at: string
+          final_amount_snapshot: number
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
+          payment_method: string | null
           source: string
           staff_id: string
           start_at: string
           status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_booking_payment_method: {
+        Args: { p_booking_id: string; p_payment_method?: string }
+        Returns: {
+          cancelled_at: string | null
+          cancelled_reason: string | null
+          completed_at: string | null
+          created_at: string
+          created_by_role: string
+          created_by_user_id: string | null
+          custom_total_amount: number | null
+          custom_total_amount_enabled: boolean
+          customer_address: string | null
+          customer_email: string | null
+          customer_name: string
+          customer_notes: string | null
+          customer_phone: string
+          discount_amount_snapshot: number
+          discount_enabled: boolean
+          discount_mode: string | null
+          discount_value: number | null
+          end_at: string
+          final_amount_snapshot: number
+          id: string
+          last_modified_at: string | null
+          last_modified_by_user_id: string | null
+          merchant_id: string
+          notes: string | null
+          payment_method: string | null
+          source: string
+          staff_id: string
+          start_at: string
+          status: string
+          subtotal_amount_snapshot: number
+          tax_amount_snapshot: number
+          tax_enabled: boolean
+          tax_mode_snapshot: string | null
+          tax_value_snapshot: number | null
           updated_at: string
         }
         SetofOptions: {

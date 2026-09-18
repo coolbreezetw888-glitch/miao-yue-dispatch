@@ -59,7 +59,7 @@ select pg_temp.test_set_auth('ba000000-0000-4000-8000-000000000001');
 select throws_ok(
   $$select create_booking(
     'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
-    array['ba000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶一', '0911100001'
   )$$,
   'P0001', NULL,
@@ -71,7 +71,7 @@ select throws_ok(
   format(
     $$select create_booking(
       'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
-      array['ba000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '   '
     )$$
   ),
@@ -82,7 +82,7 @@ select throws_ok(
 -- ③ 到府派工商家:有填地址,建單應該成功,且地址正確存入(btrim 過)。
 select id from create_booking(
   'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
-  array['ba000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '  台北市中正區忠孝東路一段1號  '
 ) \gset dispatch_
 
@@ -96,7 +96,7 @@ select is(
 select lives_ok(
   $$select create_booking(
     'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
-    array['ba000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶二', '0911100002'
   )$$,
   '規格書第二節:到店服務商家建單不填地址,不受影響,建立成功'
@@ -105,7 +105,7 @@ select lives_ok(
 -- ⑤ 到店服務商家:那筆預約的 customer_address 應該是 null(沒有被塞進奇怪的預設值)。
 select id from create_booking(
   'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
-  array['ba000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 11:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
   '客戶三', '0911100003'
 ) \gset beauty_
 
@@ -120,7 +120,7 @@ select throws_ok(
   format(
     $$select update_booking(
       '%s', 'ba000000-0000-4000-8000-000000000040',
-      array['ba000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], ''
     )$$,
     :'dispatch_id'::text
@@ -134,7 +134,7 @@ select lives_ok(
   format(
     $$select update_booking(
       '%s', 'ba000000-0000-4000-8000-000000000040',
-      array['ba000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+      jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '台北市大安區'
     )$$,
     :'dispatch_id'::text

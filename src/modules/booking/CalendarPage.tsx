@@ -10,18 +10,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -36,6 +24,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -54,19 +43,19 @@ import { useMerchantStaffList } from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 
 import {
-  cancelBooking,
-  completeBooking,
-  confirmBooking,
   createBooking,
   getBooking,
   updateBooking,
   MATERIAL_COST_ENABLED_FEATURE_KEY,
+  type BookingServiceItemSelectionInput,
 } from "./api";
+import { BookingDetailDialog } from "./BookingDetailDialog";
 import {
   useMerchantBookings,
   useMerchantBusinessHours,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
+  useMerchantTaxSettings,
 } from "./context";
 import {
   addDays,
@@ -75,7 +64,6 @@ import {
   buildTaipeiIso,
   getTaipeiNow,
   isoToTaipeiDateKey,
-  isoToTaipeiDateTimeWithSeconds,
   isoToTaipeiTime,
   minutesToTime,
   startOfMonth,
@@ -83,8 +71,15 @@ import {
   timeToMinutes,
   toDateKey,
 } from "./dateUtils";
+import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
-import { BOOKING_STATUS_LABELS, type BookingStatus, type DayScheduleOwnBooking } from "./types";
+import {
+  AMOUNT_ADJUSTMENT_MODE_LABELS,
+  PAYMENT_METHOD_OPTIONS,
+  type AmountAdjustmentMode,
+  type BookingStatus,
+  type DayScheduleOwnBooking,
+} from "./types";
 
 const SLOT_MINUTES = 30;
 const SLOT_PX = 30;
@@ -216,7 +211,9 @@ interface BookingFormPrefill {
   time?: string;
 }
 
-function BookingFormDialog({
+// 模組 6(訂單管理)§1.1:訂單管理頁(OrdersPage.tsx)點開一筆訂單的詳情後,一樣需要能編輯,
+// 所以這顆建單/編輯共用表單也 export 出來給它複用,不重做一份幾乎一樣的表單。
+export function BookingFormDialog({
   merchantId,
   industryType,
   open,
@@ -275,13 +272,44 @@ function BookingFormDialog({
   const [customerNotes, setCustomerNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // 每次開啟時重設表單:新建模式依 prefill,編輯模式等 editingDetail 載入後帶入既有值。
+  // 模組 6(訂單管理)§4.1/4.2:每個已勾選服務項目的數量/單價(字串狀態,方便控制輸入框,
+  // 送出時再轉數字)。key 是 service_item_id。
+  const [itemQuantities, setItemQuantities] = useState<Record<string, string>>({});
+  const [itemUnitPrices, setItemUnitPrices] = useState<Record<string, string>>({});
+
+  // §4.4 自訂總金額開關。
+  const [customTotalAmountEnabled, setCustomTotalAmountEnabled] = useState(false);
+  const [customTotalAmount, setCustomTotalAmount] = useState("");
+  // §4.5 折扣開關(固定金額/百分比二選一)。
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountMode, setDiscountMode] = useState<AmountAdjustmentMode>("fixed");
+  const [discountValue, setDiscountValue] = useState("");
+  // §4.6 稅金開關:模式固定依商家目前 merchant_tax_settings.tax_mode 決定(客服不能在表單裡改),
+  // 數字預設帶入商家設定,可個別調整。編輯既有訂單時改成沿用這筆訂單既有的快照
+  // (§2.4:編輯表單一律用既有快照值預先帶入,不重新查詢 merchant_tax_settings 的目前設定)。
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
+  const [taxValue, setTaxValue] = useState("");
+  // §3.2/裁決 Q10:付款方式,這次只有「現場付款」一個暫時選項,留空代表「尚未設定」。
+  const [paymentMethodOnSite, setPaymentMethodOnSite] = useState(false);
+
+  const { data: merchantTaxSettings } = useMerchantTaxSettings(merchantId);
+
+  // 每次開啟時重設表單:新建模式依 prefill(金額相關欄位一律回到「全部關閉」,稅金數字預設帶入
+  // 商家目前設定,這是「建立當下」唯一允許讀取即時資料當作預設值的地方,§2.4 第 2 點);
+  // 編輯模式等 editingDetail 載入後帶入既有的金額快照值,不重新查詢商家目前設定。
   useEffect(() => {
     if (!open) return;
     if (isEdit) {
       if (!editingDetail) return; // 還在載入中,等資料回來再帶入
       setStaffId(editingDetail.staff_id);
       setServiceItemIds(editingDetail.serviceItems.map((i) => i.id));
+      setItemQuantities(
+        Object.fromEntries(editingDetail.serviceItems.map((i) => [i.id, String(i.quantity)])),
+      );
+      setItemUnitPrices(
+        Object.fromEntries(editingDetail.serviceItems.map((i) => [i.id, String(i.unitPriceSnapshot)])),
+      );
       setAssistantStaffIds(editingDetail.assistants.map((a) => a.staffId));
       setMaterialCostItemIds(editingDetail.materialCosts.map((c) => c.materialCostItemId));
       setDateKey(isoToTaipeiDateKey(editingDetail.start_at));
@@ -292,9 +320,35 @@ function BookingFormDialog({
       setCustomerAddress(editingDetail.customer_address ?? "");
       setNotes(editingDetail.notes ?? "");
       setCustomerNotes(editingDetail.customer_notes ?? "");
+      setCustomTotalAmountEnabled(editingDetail.custom_total_amount_enabled);
+      setCustomTotalAmount(
+        editingDetail.custom_total_amount !== null ? String(editingDetail.custom_total_amount) : "",
+      );
+      setDiscountEnabled(editingDetail.discount_enabled);
+      setDiscountMode((editingDetail.discount_mode as AmountAdjustmentMode | null) ?? "fixed");
+      setDiscountValue(editingDetail.discount_value !== null ? String(editingDetail.discount_value) : "");
+      setTaxEnabled(editingDetail.tax_enabled);
+      // 這筆訂單從沒開過稅金時沒有既有快照(null),此時 fallback 商家目前設定當預設值,
+      // 純粹是「第一次在這筆訂單上開啟稅金」的合理預設,不影響已經存在的快照(§2.4 的精神:
+      // 不覆寫既有值,只在「原本沒有值」時才需要提供一個起始點)。
+      setTaxMode(
+        (editingDetail.tax_mode_snapshot as AmountAdjustmentMode | null) ??
+          merchantTaxSettings?.taxMode ??
+          "percentage",
+      );
+      setTaxValue(
+        editingDetail.tax_value_snapshot !== null
+          ? String(editingDetail.tax_value_snapshot)
+          : merchantTaxSettings
+            ? String(merchantTaxSettings.taxValue)
+            : "",
+      );
+      setPaymentMethodOnSite(editingDetail.payment_method === "on_site");
     } else {
       setStaffId(prefill.staffId ?? "");
       setServiceItemIds([]);
+      setItemQuantities({});
+      setItemUnitPrices({});
       setAssistantStaffIds([]);
       setMaterialCostItemIds([]);
       setDateKey(prefill.dateKey ?? toDateKey(getTaipeiNow()));
@@ -305,16 +359,65 @@ function BookingFormDialog({
       setCustomerAddress("");
       setNotes("");
       setCustomerNotes("");
+      setCustomTotalAmountEnabled(false);
+      setCustomTotalAmount("");
+      setDiscountEnabled(false);
+      setDiscountMode("fixed");
+      setDiscountValue("");
+      setTaxEnabled(false);
+      setTaxMode(merchantTaxSettings?.taxMode ?? "percentage");
+      setTaxValue(merchantTaxSettings ? String(merchantTaxSettings.taxValue) : "");
+      setPaymentMethodOnSite(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEdit, editingDetail]);
+  }, [open, isEdit, editingDetail, merchantTaxSettings]);
 
+  // 模組 6 §2.2 新公式:每個服務項目的工時貢獻 = duration_minutes × quantity(這次不實作自訂工時
+  // 開關,留給下一批獨立處理,見規格書 §4.3)。
   const totalDurationMinutes = useMemo(() => {
     return serviceItemIds.reduce((sum, id) => {
       const item = (serviceItems ?? []).find((s) => s.id === id);
-      return sum + (item?.duration_minutes ?? 0);
+      const quantity = Number(itemQuantities[id] ?? "1") || 1;
+      return sum + (item?.duration_minutes ?? 0) * quantity;
     }, 0);
-  }, [serviceItemIds, serviceItems]);
+  }, [serviceItemIds, serviceItems, itemQuantities]);
+
+  // §2.3 步驟 1 的「逐項小計」= Σ(unit_price × quantity)。
+  const itemsSubtotal = useMemo(() => {
+    return serviceItemIds.reduce((sum, id) => {
+      const quantity = Number(itemQuantities[id] ?? "1") || 0;
+      const unitPrice = Number(itemUnitPrices[id] ?? "0") || 0;
+      return sum + quantity * unitPrice;
+    }, 0);
+  }, [serviceItemIds, itemQuantities, itemUnitPrices]);
+
+  // §4.8 金額即時預覽:跟後端 private.calculate_booking_amount 相同公式,體驗層預覽,
+  // 真正落地金額由後端重算(規則 2.2)。
+  const amountPreview = useMemo(
+    () =>
+      calculateBookingAmountPreview({
+        itemsSubtotal,
+        customTotalAmountEnabled,
+        customTotalAmount: customTotalAmount.trim() ? Number(customTotalAmount) : null,
+        discountEnabled,
+        discountMode,
+        discountValue: discountValue.trim() ? Number(discountValue) : null,
+        taxEnabled,
+        taxMode,
+        taxValue: taxValue.trim() ? Number(taxValue) : null,
+      }),
+    [
+      itemsSubtotal,
+      customTotalAmountEnabled,
+      customTotalAmount,
+      discountEnabled,
+      discountMode,
+      discountValue,
+      taxEnabled,
+      taxMode,
+      taxValue,
+    ],
+  );
 
   const materialCostTotal = useMemo(() => {
     return materialCostItemIds.reduce((sum, id) => {
@@ -325,6 +428,29 @@ function BookingFormDialog({
 
   function toggleInArray(current: string[], id: string): string[] {
     return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+  }
+
+  /** 服務項目勾選/取消勾選:勾選時初始化數量=1、單價=service_items.price 當下的即時值
+   * (§4.2:這是「建立當下」唯一允許讀取即時資料當作預設值的地方,客服可以手動修改);
+   * 取消勾選時把對應的數量/單價從狀態裡移除,避免殘留舊值造成混淆。 */
+  function toggleServiceItem(itemId: string, defaultPrice: number) {
+    setServiceItemIds((prev) => toggleInArray(prev, itemId));
+    setItemQuantities((prev) => {
+      if (itemId in prev) {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      }
+      return { ...prev, [itemId]: "1" };
+    });
+    setItemUnitPrices((prev) => {
+      if (itemId in prev) {
+        const next = { ...prev };
+        delete next[itemId];
+        return next;
+      }
+      return { ...prev, [itemId]: String(defaultPrice) };
+    });
   }
 
   async function handleSubmit() {
@@ -352,12 +478,22 @@ function BookingFormDialog({
       toast.error("請填寫客戶地址");
       return;
     }
+    if (amountPreview.error) {
+      // §4.8:金額預覽算出來的錯誤(例如折扣超過小計),體驗層先擋一次,避免明知道會被後端
+      // 擋下還讓客服白跑一趟(真正的邊界仍在後端 create_booking/update_booking)。
+      toast.error(amountPreview.error);
+      return;
+    }
 
     setSaving(true);
     try {
       const shared = {
         staffId,
-        serviceItemIds,
+        serviceItems: serviceItemIds.map<BookingServiceItemSelectionInput>((id) => ({
+          serviceItemId: id,
+          quantity: Number(itemQuantities[id] ?? "1") || 1,
+          unitPrice: Number(itemUnitPrices[id] ?? "0") || 0,
+        })),
         startAt: buildTaipeiIso(dateKey, time),
         customerName,
         customerPhone,
@@ -367,6 +503,15 @@ function BookingFormDialog({
         customerNotes: customerNotes.trim() ? customerNotes.trim() : null,
         assistantStaffIds,
         materialCostItemIds,
+        customTotalAmountEnabled,
+        customTotalAmount: customTotalAmountEnabled && customTotalAmount.trim() ? Number(customTotalAmount) : null,
+        discountEnabled,
+        discountMode: discountEnabled ? discountMode : null,
+        discountValue: discountEnabled && discountValue.trim() ? Number(discountValue) : null,
+        taxEnabled,
+        taxMode: taxEnabled ? taxMode : null,
+        taxValue: taxEnabled && taxValue.trim() ? Number(taxValue) : null,
+        paymentMethod: paymentMethodOnSite ? "on_site" : null,
       };
 
       if (isEdit && editingBookingId) {
@@ -443,29 +588,61 @@ function BookingFormDialog({
             </div>
           </div>
 
-          {/* 建單功能擴充 2.1/5.1 第 1 點:服務項目改多選,即時顯示工時加總。 */}
+          {/* 建單功能擴充 2.1/5.1 第 1 點,模組 6 §4.1/4.2:服務項目改多選,每項可調整數量
+              (預設 1,最小 1,整數)跟單價(預設帶入 service_items.price,可手動修改),
+              即時顯示工時加總(§2.2:duration_minutes × quantity)。 */}
           <div>
             <Label>服務項目(可多選) *</Label>
-            <div className="mt-2 max-h-40 space-y-1.5 overflow-y-auto rounded-md border border-border p-2">
+            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-md border border-border p-2">
               {(serviceItems ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">目前沒有上架中的服務項目。</p>
               ) : (
-                (serviceItems ?? []).map((item) => (
-                  <label
-                    key={item.id}
-                    className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={serviceItemIds.includes(item.id)}
-                      onCheckedChange={() =>
-                        setServiceItemIds((prev) => toggleInArray(prev, item.id))
-                      }
-                    />
-                    <span>
-                      {item.name}({item.duration_minutes} 分鐘)
-                    </span>
-                  </label>
-                ))
+                (serviceItems ?? []).map((item) => {
+                  const checked = serviceItemIds.includes(item.id);
+                  return (
+                    <div key={item.id} className="rounded px-1 py-1 hover:bg-muted/50">
+                      <label className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggleServiceItem(item.id, Number(item.price))}
+                        />
+                        <span>
+                          {item.name}({item.duration_minutes} 分鐘・預設 {formatAmount(Number(item.price))})
+                        </span>
+                      </label>
+                      {checked ? (
+                        <div className="ml-6 mt-1.5 flex flex-wrap items-center gap-3 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground">數量</span>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={1}
+                              className="h-8 w-16"
+                              value={itemQuantities[item.id] ?? "1"}
+                              onChange={(e) =>
+                                setItemQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground">單價</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="h-8 w-24"
+                              value={itemUnitPrices[item.id] ?? String(item.price)}
+                              onChange={(e) =>
+                                setItemUnitPrices((prev) => ({ ...prev, [item.id]: e.target.value }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })
               )}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -543,6 +720,109 @@ function BookingFormDialog({
               ) : null}
             </div>
           ) : null}
+
+          {/* 模組 6(訂單管理)§4.4~4.8:金額彈性三個開關(自訂總金額/折扣/稅金)+ 付款方式 +
+              即時金額預覽。不含 §4.3 自訂工時開關(留給下一批獨立處理)。 */}
+          <div className="space-y-3 rounded-md border border-border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>自訂總金額</Label>
+                <p className="text-[11px] text-muted-foreground">開啟後用輸入的總金額取代逐項小計。</p>
+              </div>
+              <Switch checked={customTotalAmountEnabled} onCheckedChange={setCustomTotalAmountEnabled} />
+            </div>
+            {customTotalAmountEnabled ? (
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="輸入這筆訂單的總金額"
+                value={customTotalAmount}
+                onChange={(e) => setCustomTotalAmount(e.target.value)}
+              />
+            ) : null}
+
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+              <div>
+                <Label>折扣優惠</Label>
+                <p className="text-[11px] text-muted-foreground">固定金額或百分比二選一。</p>
+              </div>
+              <Switch checked={discountEnabled} onCheckedChange={setDiscountEnabled} />
+            </div>
+            {discountEnabled ? (
+              <div className="flex gap-2">
+                <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as AmountAdjustmentMode)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
+                    <SelectItem value="percentage">{AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min={0}
+                  max={discountMode === "percentage" ? 100 : undefined}
+                  step="0.01"
+                  placeholder={discountMode === "percentage" ? "0~100 的數字" : "折扣金額"}
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                />
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+              <div>
+                <Label>稅金</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  模式固定依商家設定(目前:{AMOUNT_ADJUSTMENT_MODE_LABELS[taxMode]}),數字可個別調整。
+                </p>
+              </div>
+              <Switch checked={taxEnabled} onCheckedChange={setTaxEnabled} />
+            </div>
+            {taxEnabled ? (
+              <Input
+                type="number"
+                min={0}
+                max={taxMode === "percentage" ? 100 : undefined}
+                step="0.01"
+                placeholder={taxMode === "percentage" ? "稅率(0~100 的數字)" : "稅額"}
+                value={taxValue}
+                onChange={(e) => setTaxValue(e.target.value)}
+              />
+            ) : null}
+
+            <label className="flex items-center gap-2 border-t border-border pt-3 text-sm">
+              <Checkbox checked={paymentMethodOnSite} onCheckedChange={(v) => setPaymentMethodOnSite(v === true)} />
+              <span>付款方式:{PAYMENT_METHOD_OPTIONS["on_site"]}</span>
+            </label>
+
+            {/* §4.8 金額即時預覽,體驗層,真正落地金額由後端重算(規則 2.2)。 */}
+            <div className="space-y-1 rounded-md bg-muted/40 p-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">小計</span>
+                <span>{formatAmount(amountPreview.subtotalAmount)}</span>
+              </div>
+              {discountEnabled ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">折扣</span>
+                  <span>-{formatAmount(amountPreview.discountAmount)}</span>
+                </div>
+              ) : null}
+              {taxEnabled ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">稅金</span>
+                  <span>+{formatAmount(amountPreview.taxAmount)}</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between border-t border-border pt-1 font-semibold text-foreground">
+                <span>最終金額</span>
+                <span>{formatAmount(amountPreview.finalAmount)}</span>
+              </div>
+              {amountPreview.error ? <p className="text-warn">{amountPreview.error}</p> : null}
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -624,303 +904,10 @@ function BookingFormDialog({
 }
 
 // ---------------------------------------------------------------------------
-// 5.2:預約詳情 + 確認/標記完成/編輯/取消操作。改成用 getBooking(id) 抓完整詳情
-// (含服務項目/助手/料錢成本清單),不再只依賴行事曆格線傳進來的簡化資料。
+// 5.2:預約詳情 + 確認/標記完成/編輯/取消操作。這顆彈窗已經抽成獨立檔案
+// BookingDetailDialog.tsx(模組 6/訂單管理 §1.1 要求「沿用既有元件,不重做」,讓訂單管理頁
+// 也能直接複用同一顆彈窗),這裡只保留 import,不再重複定義。
 // ---------------------------------------------------------------------------
-function bookingStatusBadgeVariant(status: BookingStatus): "default" | "secondary" | "outline" {
-  if (status === "completed") return "secondary";
-  if (status === "cancelled") return "outline";
-  return "default";
-}
-
-function BookingDetailDialog({
-  bookingId,
-  staffNameById,
-  open,
-  onOpenChange,
-  onChanged,
-  onEdit,
-}: {
-  bookingId: string | null;
-  staffNameById: Map<string, string>;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onChanged: () => void;
-  onEdit: (bookingId: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const { data: booking, isLoading } = useQuery({
-    queryKey: ["booking-module", "booking-detail", bookingId],
-    queryFn: () => getBooking(bookingId as string),
-    enabled: open && Boolean(bookingId),
-  });
-
-  useEffect(() => {
-    if (open) setReason("");
-  }, [open, bookingId]);
-
-  async function handleConfirm() {
-    if (!booking) return;
-    setBusy(true);
-    try {
-      await confirmBooking(booking.id);
-      toast.success("已確認訂單");
-      onOpenChange(false);
-      onChanged();
-    } catch (err) {
-      toast.error("操作失敗", { description: getErrorMessage(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleComplete() {
-    if (!booking) return;
-    setBusy(true);
-    try {
-      await completeBooking(booking.id);
-      toast.success("已標記完成");
-      onOpenChange(false);
-      onChanged();
-    } catch (err) {
-      toast.error("操作失敗", { description: getErrorMessage(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleCancel() {
-    if (!booking) return;
-    setBusy(true);
-    try {
-      await cancelBooking(booking.id, reason.trim() ? reason.trim() : null);
-      toast.success("已取消預約");
-      onOpenChange(false);
-      onChanged();
-    } catch (err) {
-      toast.error("操作失敗", { description: getErrorMessage(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!bookingId) return null;
-
-  // 5.2 第 3 點:操作按鈕依狀態調整。
-  const showConfirm = booking?.status === "pending_confirmation";
-  const showComplete = booking?.status === "accepted";
-  const showEditAndCancel =
-    booking?.status === "pending_confirmation" || booking?.status === "accepted";
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* 手機版容器寬度溢出修正:長文字換行後內容可能變得比較高(尤其手機直向、視窗高度不到
-          700px 時),補上 max-h-[85vh] overflow-y-auto(比照下面 BookingFormDialog 既有的做法),
-          避免底部 DialogFooter 的按鈕列被推到畫面高度以外、完全點不到、也無法捲動看見。 */}
-      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>預約詳情</DialogTitle>
-        </DialogHeader>
-
-        {/* 預約詳情資訊擴充與建單備註分類第四節:操作按鈕從彈窗最下方搬到標題下方、
-            資訊列之上,純版面位置調整,按鈕本身的顯示條件/點擊行為完全不變(原本在下方
-            DialogFooter 的那一段程式碼原封不動搬過來,只是位置換了)。 */}
-        {booking && (showConfirm || showComplete || showEditAndCancel) ? (
-          <div className="flex flex-wrap items-center gap-2 sm:justify-between">
-            {showEditAndCancel ? (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button type="button" variant="outline" disabled={busy}>
-                    取消預約
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>確定要取消這筆預約嗎?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      取消後這個時段會恢復可預約,可以填寫取消原因(選填)。
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <Textarea
-                    placeholder="取消原因(選填)"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    rows={2}
-                  />
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>再想想</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleCancel}>確定取消</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : null}
-            <div className="flex gap-2">
-              {showEditAndCancel ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => onEdit(booking.id)}
-                >
-                  編輯
-                </Button>
-              ) : null}
-              {showConfirm ? (
-                <Button type="button" onClick={handleConfirm} disabled={busy}>
-                  確認訂單
-                </Button>
-              ) : null}
-              {showComplete ? (
-                <Button type="button" onClick={handleComplete} disabled={busy}>
-                  標記完成
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {isLoading || !booking ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          // min-w-0:DialogContent 本身是 `display: grid`,這個 div 是它的直接子元素(grid item),
-          // grid item 預設 `min-width: auto` 跟 flex item 一樣,不加這個會讓整個內容區塊(以及
-          // 下面每一列 flex 資訊列)被撐寬到超出對話框、超出手機螢幕,即使每一列自己內部已經有
-          // min-w-0/break-words 也沒用——因為撐開的是這一層,不是內層那些 flex 列。
-          <div className="min-w-0 space-y-3 text-sm">
-            {/* 預約詳情資訊擴充與建單備註分類第二節:「狀態」改名成「訂單狀態」。 */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">訂單狀態</span>
-              <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
-                {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
-              </Badge>
-            </div>
-            {/* 第三節 3.1:建單時間,顯示既有的 created_at,格式補上秒數。 */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">建單時間</span>
-              <span className="font-medium text-foreground">
-                {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
-              </span>
-            </div>
-            {/* 第三節 3.2:預約客服,createdByName 由 getBooking 透過 get_booking_actor_names
-                轉成可讀姓名,一定有值(每筆預約都有 created_by_user_id)。 */}
-            <div className="flex items-start justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">預約客服</span>
-              <span className="min-w-0 break-words text-right font-medium text-foreground">
-                {booking.createdByName}
-              </span>
-            </div>
-            {/* 第三節 3.3:最後修改,lastModifiedByName 是 null 代表從未被
-                confirm_booking/update_booking/cancel_booking/complete_booking 異動過,
-                這一列不顯示(比照客戶地址「有值才顯示」的慣例)。 */}
-            {booking.lastModifiedByName && booking.last_modified_at ? (
-              <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-muted-foreground">最後修改</span>
-                <span className="min-w-0 break-words text-right font-medium text-foreground">
-                  {booking.lastModifiedByName} ・ {isoToTaipeiDateTimeWithSeconds(booking.last_modified_at)}
-                </span>
-              </div>
-            ) : null}
-            {/* 手機版容器寬度溢出修正:比照 MerchantAdminList.tsx 已驗證有效的做法——右側值
-                的 <span> 加上 min-w-0 break-words,遇到長文字(長姓名/長地址/長 email 組合字串)
-                時願意縮小並自然換行,不會撐開整個 flex 容器導致 DialogContent 超出手機螢幕寬度。
-                items-center 改成 items-start,避免換行後垂直置中看起來奇怪。 */}
-            <div className="flex items-start justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">服務人員</span>
-              <span className="min-w-0 break-words text-right font-medium text-foreground">
-                {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
-              </span>
-            </div>
-            {booking.assistants.length > 0 ? (
-              <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-muted-foreground">助手</span>
-                <span className="min-w-0 break-words text-right font-medium text-foreground">
-                  {booking.assistants.map((a) => a.staffName).join("、")}
-                </span>
-              </div>
-            ) : null}
-            {/* 建單表單細節修正第五節:每項服務項目旁邊顯示金額,下方加總「服務金額小計」。
-                這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的價格快照
-                (快照策略保留給未來模組 6 通盤設計,見 types.ts BookingDetailServiceItem 註解)。
-                已下架/已刪除的服務項目 price 是 null,顯示「—」,不要顯示 0。 */}
-            <div>
-              <span className="text-muted-foreground">服務項目</span>
-              <ul className="mt-1 space-y-0.5">
-                {booking.serviceItems.map((i) => (
-                  <li key={i.id} className="flex items-start justify-between gap-3 text-foreground">
-                    <span className="min-w-0 break-words">{i.name}</span>
-                    <span className="shrink-0">{i.price === null ? "—" : `$${Number(i.price).toFixed(0)}`}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
-                <span className="text-muted-foreground">服務金額小計</span>
-                <span className="font-medium text-foreground">
-                  $
-                  {booking.serviceItems
-                    .reduce((sum, i) => sum + (i.price === null ? 0 : Number(i.price)), 0)
-                    .toFixed(0)}
-                </span>
-              </div>
-            </div>
-            {/* 預約詳情資訊擴充與建單備註分類第二節:「時間」改名成「預約時間」。 */}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">預約時間</span>
-              <span className="font-medium text-foreground">
-                {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
-              </span>
-            </div>
-            {/* 第二節:「客戶」改名成「客戶姓名」,顯示邏輯不變(姓名+電話)。 */}
-            <div className="flex items-start justify-between gap-3">
-              <span className="shrink-0 text-muted-foreground">客戶姓名</span>
-              <span className="min-w-0 break-words text-right font-medium text-foreground">
-                {booking.customer_name} ・ {booking.customer_phone}
-              </span>
-            </div>
-            {/* 建單表單細節修正第二節第 5 點:有值才顯示地址,沒有就不顯示這個欄位。 */}
-            {booking.customer_address ? (
-              <div className="flex items-start justify-between gap-3">
-                <span className="shrink-0 text-muted-foreground">客戶地址</span>
-                <span className="min-w-0 break-words text-right font-medium text-foreground">
-                  {booking.customer_address}
-                </span>
-              </div>
-            ) : null}
-            {/* 第一節/第二節:新增「客戶備註」,顯示 customer_notes,有值才顯示,比照客戶地址的
-                fallback 邏輯。 */}
-            {booking.customer_notes ? (
-              <div>
-                <span className="text-muted-foreground">客戶備註</span>
-                <p className="mt-1 text-foreground">{booking.customer_notes}</p>
-              </div>
-            ) : null}
-            {booking.materialCosts.length > 0 ? (
-              <div>
-                <span className="text-muted-foreground">料錢成本</span>
-                <ul className="mt-1 space-y-0.5">
-                  {booking.materialCosts.map((c) => (
-                    <li key={c.materialCostItemId} className="break-words text-foreground">
-                      {c.name} ・ ${c.amountSnapshot.toFixed(0)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {/* 第二節:「備註」改名成「內部備註」,顯示邏輯不變(notes 有值才顯示)。 */}
-            {booking.notes ? (
-              <div>
-                <span className="text-muted-foreground">內部備註</span>
-                <p className="mt-1 text-foreground">{booking.notes}</p>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // 1.3:排程色塊視覺——依狀態決定色塊樣式,待確認/已確認/已完成三種可區分。
 // ---------------------------------------------------------------------------

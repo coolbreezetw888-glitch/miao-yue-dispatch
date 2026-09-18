@@ -12,19 +12,28 @@ import {
   confirmBooking as apiConfirmBooking,
   createBooking as apiCreateBooking,
   updateBooking as apiUpdateBooking,
+  updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
+  fetchBookingAmountSummary,
   fetchMerchantBookings,
   fetchMerchantBusinessHours,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
+  fetchMerchantTaxSettings,
   fetchStaffAvailabilityWindows,
   getBooking,
+  getCustomerRelatedBookings as apiGetCustomerRelatedBookings,
+  upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
+  type BookingAmountSummary,
   type CreateBookingInput,
   type MerchantBookingsFilters,
   type UpdateBookingInput,
+  type UpsertMerchantTaxSettingsInput,
 } from "./api";
 import type {
+  AmountAdjustmentMode,
   Booking,
   BookingDetail,
+  CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
@@ -118,4 +127,53 @@ export async function cancelBooking(bookingId: string, reason?: string | null): 
 
 export async function completeBooking(bookingId: string): Promise<Booking> {
   return apiCompleteBooking(bookingId);
+}
+
+/** 模組 6(訂單管理)§6.2 對外介面:單獨更新付款方式。 */
+export async function updateBookingPaymentMethod(
+  bookingId: string,
+  paymentMethod: string | null,
+): Promise<Booking> {
+  return apiUpdateBookingPaymentMethod(bookingId, paymentMethod);
+}
+
+/** 模組 6 §2.1/§4.7 對外介面:商家整體稅金設定,查無資料時 fallback 成預設值
+ * (DEFAULT_MERCHANT_TAX_SETTINGS,見 types.ts)。 */
+export function useMerchantTaxSettings(
+  merchantId: string | null | undefined,
+): UseQueryResult<{ taxMode: AmountAdjustmentMode; taxValue: number }> {
+  return useQuery({
+    queryKey: ["booking-module", "merchant-tax-settings", merchantId],
+    queryFn: () => fetchMerchantTaxSettings(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export async function upsertMerchantTaxSettings(
+  merchantId: string,
+  input: UpsertMerchantTaxSettingsInput,
+): Promise<void> {
+  return apiUpsertMerchantTaxSettings(merchantId, input);
+}
+
+/** 模組 6 §3.3/§6.3 對外介面:相關訂單查詢,供預約詳情頁「相關訂單」按鈕使用,也保留給之後
+ * 其他模組(如模組 10 會員與紅利)複用。 */
+export async function getCustomerRelatedBookings(
+  merchantId: string,
+  customerPhone: string,
+  excludeBookingId?: string | null,
+): Promise<CustomerRelatedBooking[]> {
+  return apiGetCustomerRelatedBookings(merchantId, customerPhone, excludeBookingId);
+}
+
+/** 模組 6 §6.1 對外介面:直接取得單筆訂單的金額 breakdown,供模組 8/12 之後複用,
+ * 不用重新查三張關聯表自己加總。 */
+export function useBookingAmountSummary(
+  bookingId: string | null | undefined,
+): UseQueryResult<BookingAmountSummary | null> {
+  return useQuery({
+    queryKey: ["booking-module", "booking-amount-summary", bookingId],
+    queryFn: () => fetchBookingAmountSummary(bookingId as string),
+    enabled: Boolean(bookingId),
+  });
 }

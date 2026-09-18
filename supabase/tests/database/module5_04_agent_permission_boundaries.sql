@@ -97,7 +97,7 @@ select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000002');
 select throws_ok(
   $$select create_booking(
     'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
-    array['b4000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶', '0966000001'
   )$$,
   '42501', null,
@@ -192,7 +192,7 @@ select pg_temp.test_clear_auth();
 select throws_ok(
   $$select create_booking(
     'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
-    array['b4000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+    jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶', '0966000002'
   )$$,
   '42501', null,
@@ -206,7 +206,7 @@ select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000004');
 
 select id, status from create_booking(
   'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
-  array['b4000000-0000-4000-8000-000000000030']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶', '0966000003'
 ) \gset orders_agent_
 

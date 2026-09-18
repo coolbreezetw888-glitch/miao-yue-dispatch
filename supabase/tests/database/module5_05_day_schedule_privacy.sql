@@ -73,15 +73,15 @@ insert into bookings (
   '二店的秘密客戶', '0988000000', 'manual', 'admin', 'accepted'
 );
 
-insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
-values ('b5000000-0000-4000-8000-000000000091', 'b5000000-0000-4000-8000-000000000032', 60);
+insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+values ('b5000000-0000-4000-8000-000000000091', 'b5000000-0000-4000-8000-000000000032', 60, 100);
 
 -- 一店也幫 A 師傅(一店)建一筆本店預約 10:00-11:00(在時段內)。
 select pg_temp.test_set_auth('b5000000-0000-4000-8000-000000000001');
 
 select id, status from create_booking(
   'b5000000-0000-4000-8000-000000000021', 'b5000000-0000-4000-8000-000000000041',
-  array['b5000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b5000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '一店的客戶', '0966000000'
 ) \gset own_
 

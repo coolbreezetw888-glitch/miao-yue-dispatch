@@ -10,13 +10,16 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import type {
+  AmountAdjustmentMode,
   Booking,
   BookingDetail,
+  CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
   StaffAvailabilityWindow,
 } from "./types";
+import { DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
 
 // =========================================================================
 // 3.2:商家整體營業時間讀寫(規則 2.1)。RLS 要求 private.can_manage_business_hours。
@@ -119,13 +122,52 @@ export const MATERIAL_COST_ENABLED_FEATURE_KEY = "material_cost_enabled";
 // 3.3/3.4/3.5,建單功能擴充 4.1/4.8/4.9:建立/確認/編輯/取消/標記完成預約。
 // =========================================================================
 
-/** 建單功能擴充 4.1:create_booking 破壞性簽章變更——serviceItemId 改成 serviceItemIds(多選,
- * 至少 1 個),新增 assistantStaffIds(助手清單,決策記錄 2)、materialCostItemIds(料錢成本品項,
- * 決策記錄 4)。 */
-export interface CreateBookingInput {
+/** 模組 6(訂單管理)§4.1/4.2:每個已勾選服務項目要攜帶的資訊——選了幾份(quantity)、
+ * 這筆訂單裡的單價(unitPrice,預設帶入 service_items.price,客服可手動修改)。
+ *
+ * **型別設計選擇(規格書沒有規定確切型別,由 engineer 判斷)**:改成物件陣列(對應資料庫
+ * create_booking/update_booking 的 p_service_items jsonb 參數),取代原本單純的
+ * serviceItemIds: string[]。沒有採用「三個平行陣列(ids/quantities/prices)」的做法,理由是
+ * 平行陣列容易因為排序不一致而讓某個服務項目誤套用到另一個項目的數量/單價,是一個型別系統
+ * 完全擋不下來的資料錯位風險;物件陣列每個元素自帶完整資訊,不存在這個問題。 */
+export interface BookingServiceItemSelectionInput {
+  serviceItemId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+/** 模組 6 §4.4~4.6:整筆訂單層級的金額彈性三個開關(自訂總金額/折扣/稅金)。
+ * 這三組欄位在 CreateBookingInput/UpdateBookingInput 共用同一份定義,用 interface 混入。
+ * 不含 §4.3 自訂工時開關(留給下一批獨立處理)。 */
+export interface BookingAmountAdjustmentInput {
+  customTotalAmountEnabled?: boolean;
+  customTotalAmount?: number | null;
+  discountEnabled?: boolean;
+  discountMode?: AmountAdjustmentMode | null;
+  discountValue?: number | null;
+  taxEnabled?: boolean;
+  taxMode?: AmountAdjustmentMode | null;
+  taxValue?: number | null;
+  /** 模組 6 §3.2/裁決 Q10:付款方式,見 types.ts PAYMENT_METHOD_OPTIONS。 */
+  paymentMethod?: string | null;
+}
+
+function buildServiceItemsJsonb(items: BookingServiceItemSelectionInput[]) {
+  return items.map((item) => ({
+    service_item_id: item.serviceItemId,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+  }));
+}
+
+/** 建單功能擴充 4.1:create_booking 破壞性簽章變更——serviceItemId 改成 serviceItems(多選,
+ * 至少 1 個,模組 6 §4.1/4.2 再擴充成攜帶數量/單價的物件陣列),新增 assistantStaffIds
+ * (助手清單,決策記錄 2)、materialCostItemIds(料錢成本品項,決策記錄 4)、金額彈性三開關
+ * (模組 6 §4.4~4.6)。 */
+export interface CreateBookingInput extends BookingAmountAdjustmentInput {
   merchantId: string;
   staffId: string;
-  serviceItemIds: string[];
+  serviceItems: BookingServiceItemSelectionInput[];
   startAt: string; // ISO 字串(含時區),對應 timestamptz
   customerName: string;
   customerPhone: string;
@@ -146,7 +188,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
   const { data, error } = await supabase.rpc("create_booking", {
     p_merchant_id: input.merchantId,
     p_staff_id: input.staffId,
-    p_service_item_ids: input.serviceItemIds,
+    p_service_items: buildServiceItemsJsonb(input.serviceItems),
     p_start_at: input.startAt,
     p_customer_name: input.customerName,
     p_customer_phone: input.customerPhone,
@@ -157,6 +199,19 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
     ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
+    p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
+    ...(input.customTotalAmount !== null && input.customTotalAmount !== undefined
+      ? { p_custom_total_amount: input.customTotalAmount }
+      : {}),
+    p_discount_enabled: input.discountEnabled ?? false,
+    ...(input.discountMode ? { p_discount_mode: input.discountMode } : {}),
+    ...(input.discountValue !== null && input.discountValue !== undefined
+      ? { p_discount_value: input.discountValue }
+      : {}),
+    p_tax_enabled: input.taxEnabled ?? false,
+    ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
+    ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
+    ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -164,10 +219,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
 
 /** 建單功能擴充 4.9/決策記錄 6(新增):編輯已建立的預約,欄位範圍跟 CreateBookingInput 相同,
  * 多一個 bookingId 指定要編輯哪一筆。 */
-export interface UpdateBookingInput {
+export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
   bookingId: string;
   staffId: string;
-  serviceItemIds: string[];
+  serviceItems: BookingServiceItemSelectionInput[];
   startAt: string;
   customerName: string;
   customerPhone: string;
@@ -185,7 +240,7 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
   const { data, error } = await supabase.rpc("update_booking", {
     p_booking_id: input.bookingId,
     p_staff_id: input.staffId,
-    p_service_item_ids: input.serviceItemIds,
+    p_service_items: buildServiceItemsJsonb(input.serviceItems),
     p_start_at: input.startAt,
     p_customer_name: input.customerName,
     p_customer_phone: input.customerPhone,
@@ -195,6 +250,32 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     p_material_cost_item_ids: input.materialCostItemIds ?? [],
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
     ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
+    p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
+    ...(input.customTotalAmount !== null && input.customTotalAmount !== undefined
+      ? { p_custom_total_amount: input.customTotalAmount }
+      : {}),
+    p_discount_enabled: input.discountEnabled ?? false,
+    ...(input.discountMode ? { p_discount_mode: input.discountMode } : {}),
+    ...(input.discountValue !== null && input.discountValue !== undefined
+      ? { p_discount_value: input.discountValue }
+      : {}),
+    p_tax_enabled: input.taxEnabled ?? false,
+    ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
+    ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
+    ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
+  });
+  if (error) throw error;
+  return data as Booking;
+}
+
+/** 模組 6 §3.2/§6.2:單獨更新付款方式,不需要傳服務項目/金額等其餘欄位。 */
+export async function updateBookingPaymentMethod(
+  bookingId: string,
+  paymentMethod: string | null,
+): Promise<Booking> {
+  const { data, error } = await supabase.rpc("update_booking_payment_method", {
+    p_booking_id: bookingId,
+    ...(paymentMethod ? { p_payment_method: paymentMethod } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -249,6 +330,10 @@ export interface MerchantBookingsFilters {
   endAt?: string; // ISO,不含此時間之後(<)
   status?: string[];
   staffId?: string;
+  /** 模組 6(訂單管理)§1.2:客戶關鍵字搜尋(姓名或電話模糊比對),既有 fetchMerchantBookings
+   * 沒有的新篩選條件。客服可能只記得姓名或只記得電話其中一項,所以同時比對兩個欄位
+   * (PostgREST `.or(...)` 疊加 ilike,對應 SQL 的「姓名 ILIKE 或 電話 ILIKE」)。 */
+  customerKeyword?: string;
 }
 
 export async function fetchMerchantBookings(
@@ -265,6 +350,12 @@ export async function fetchMerchantBookings(
   if (filters.endAt) query = query.lt("start_at", filters.endAt);
   if (filters.status && filters.status.length > 0) query = query.in("status", filters.status);
   if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+  if (filters.customerKeyword && filters.customerKeyword.trim()) {
+    // PostgREST 的 .or() 逗號是分隔子條件的語法字元,關鍵字裡如果剛好含有逗號會被誤判成多條件,
+    // 這裡先跳脫掉,避免客服搜尋字串裡有逗號時查詢語法出錯或條件被拆散。
+    const escaped = filters.customerKeyword.trim().replace(/,/g, "\\,");
+    query = query.or(`customer_name.ilike.%${escaped}%,customer_phone.ilike.%${escaped}%`);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
@@ -272,14 +363,16 @@ export async function fetchMerchantBookings(
 }
 
 /** 建單功能擴充 4.3:單筆預約詳情擴充,除了 bookings 主體欄位,一併回傳服務項目清單
- * (名稱+工時快照)、助手清單(姓名)、料錢成本清單(名稱+金額快照)。供 5.2 預約詳情彈窗顯示完整內容,
- * 也供 5.3 編輯表單帶入預設值。三張關聯表分開查詢(不用 PostgREST 巢狀 embed),邏輯簡單直接,
- * 也避免依賴 schema cache 對巢狀關聯的自動推斷。
+ * (名稱+工時快照+模組 6 的數量/金額快照)、助手清單(姓名)、料錢成本清單(名稱+金額快照)。
+ * 供 5.2 預約詳情彈窗顯示完整內容,也供 5.3 編輯表單帶入預設值。三張關聯表分開查詢
+ * (不用 PostgREST 巢狀 embed),邏輯簡單直接,也避免依賴 schema cache 對巢狀關聯的自動推斷。
  *
- * 建單表單細節修正第五節:service_items 的 join 多帶一個 price 欄位。**這是查詢當下的即時金額,
- * 不是建立/編輯當下鎖定的價格快照**——如果服務項目之後改價,舊預約顯示的金額會跟著變動。金額快照
- * 策略明確保留給未來模組 6(訂單管理)通盤設計,這裡刻意不做,不要被誤以為這裡顯示的金額有被鎖定。
- * 服務項目已下架/已刪除時 price 回傳 null(fallback 顯示「—」,不要顯示 0)。 */
+ * 模組 6(訂單管理)§3.1 取代原本的即時查價顯示:service_items 的 join 只用來取名稱/狀態,
+ * **金額一律讀 booking_service_items.quantity/unit_price_snapshot 這兩個快照欄位**,不再讀
+ * service_items.price 的即時值——這是本次刻意的行為變更(舊版註解曾經明講「這是即時金額,不是
+ * 快照」,金額快照策略已經在這次模組 6 通盤設計完成,不要被舊註解誤導)。服務項目已下架/已刪除
+ * 時名稱 fallback 成「(已刪除的服務項目)」,金額不受影響(快照本來就不依賴 service_items 目前
+ * 是否存在)。 */
 export async function getBooking(id: string): Promise<BookingDetail | null> {
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
@@ -292,7 +385,7 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   const [serviceItemsRes, assistantsRes, materialCostsRes] = await Promise.all([
     supabase
       .from("booking_service_items")
-      .select("service_item_id, service_items(name, price, status)")
+      .select("service_item_id, quantity, unit_price_snapshot, service_items(name)")
       .eq("booking_id", id),
     supabase
       .from("booking_assistants")
@@ -334,7 +427,9 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
 
   type ServiceItemJoinRow = {
     service_item_id: string;
-    service_items: { name: string; price: number; status: string } | null;
+    quantity: number;
+    unit_price_snapshot: number;
+    service_items: { name: string } | null;
   };
   type AssistantJoinRow = { staff_id: string; merchant_staff: { name: string } | null };
   type MaterialCostJoinRow = {
@@ -346,17 +441,14 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   return {
     ...(booking as Booking),
     serviceItems: ((serviceItemsRes.data ?? []) as ServiceItemJoinRow[]).map((row) => {
-      // service_items 的 SELECT RLS 政策(service_items_select)只檢查管理權限,不排除
-      // status='removed' 的列,所以「整列被刪除」(row.service_items 為 null)跟「已下架但
-      // 資料列還在」(status !== 'active') 是兩種不同情況,都要視為「查不到目前有效的價格」。
-      // 名稱則刻意不比照下架 fallback:下架品項概念上不是「不存在」,只是「不能再被選用於新
-      // 預約」,繼續顯示它原本的真實名稱對使用者比較有意義;只有金額(規格書明確要求)才 fallback
-      // 成「—」,避免顯示 0 讓人誤以為是免費,或直接報錯。
-      const isRemoved = !row.service_items || row.service_items.status !== "active";
+      // 模組 6 §3.1:名稱沿用既有 fallback 慣例(下架/刪除品項繼續顯示真實名稱,對使用者比較
+      // 有意義);金額一律讀快照欄位,不受服務項目是否還存在/是否改價影響。
       return {
         id: row.service_item_id,
         name: row.service_items?.name ?? "(已刪除的服務項目)",
-        price: isRemoved ? null : row.service_items!.price,
+        quantity: row.quantity,
+        unitPriceSnapshot: row.unit_price_snapshot,
+        lineTotal: row.quantity * row.unit_price_snapshot,
       };
     }),
     assistants: ((assistantsRes.data ?? []) as AssistantJoinRow[]).map((row) => ({
@@ -465,3 +557,106 @@ export async function reactivateMaterialCostItem(itemId: string): Promise<void> 
 
 // 型別工具,供未來需要局部更新 bookings 欄位的模組(例如模組 6)參考既有慣例,這次本模組不使用。
 export type BookingUpdate = TablesUpdate<"bookings">;
+
+// =========================================================================
+// 模組 6(訂單管理)§2.1/§4.7:商家整體稅金設定讀寫,RLS 要求 private.can_manage_business_hours。
+// 查無資料時前端/後端一律 fallback 成 DEFAULT_MERCHANT_TAX_SETTINGS(裁決 Q5)。
+// =========================================================================
+
+/** 回傳某商家目前的稅金設定;查無資料(還沒特別設定過)時 fallback 成預設值,不回傳 null,
+ * 讓呼叫端不用每次都自己判斷「有沒有這筆資料」。 */
+export async function fetchMerchantTaxSettings(
+  merchantId: string,
+): Promise<{ taxMode: AmountAdjustmentMode; taxValue: number }> {
+  const { data, error } = await supabase
+    .from("merchant_tax_settings")
+    .select("tax_mode, tax_value")
+    .eq("merchant_id", merchantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { ...DEFAULT_MERCHANT_TAX_SETTINGS };
+  return { taxMode: data.tax_mode as AmountAdjustmentMode, taxValue: Number(data.tax_value) };
+}
+
+export interface UpsertMerchantTaxSettingsInput {
+  taxMode: AmountAdjustmentMode;
+  taxValue: number;
+}
+
+/** §4.7 商家稅金設定畫面用:沒有既有列時新增,已有則更新(upsert on primary key merchant_id)。 */
+export async function upsertMerchantTaxSettings(
+  merchantId: string,
+  input: UpsertMerchantTaxSettingsInput,
+): Promise<void> {
+  const { error } = await supabase.from("merchant_tax_settings").upsert(
+    { merchant_id: merchantId, tax_mode: input.taxMode, tax_value: input.taxValue },
+    { onConflict: "merchant_id" },
+  );
+  if (error) throw error;
+}
+
+// =========================================================================
+// 模組 6 §3.3/§6.3:相關訂單查詢——同一位客戶(電話正規化後相同)在這間商家底下的歷史訂單清單,
+// 供預約詳情頁的「相關訂單」按鈕使用,也保留給之後其他模組(如模組 10 會員與紅利)複用。
+// =========================================================================
+export async function getCustomerRelatedBookings(
+  merchantId: string,
+  customerPhone: string,
+  excludeBookingId?: string | null,
+): Promise<CustomerRelatedBooking[]> {
+  const { data, error } = await supabase.rpc("get_customer_related_bookings", {
+    p_merchant_id: merchantId,
+    p_customer_phone: customerPhone,
+    ...(excludeBookingId ? { p_exclude_booking_id: excludeBookingId } : {}),
+  });
+  if (error) throw error;
+  return ((data ?? []) as {
+    id: string;
+    start_at: string;
+    end_at: string;
+    status: string;
+    final_amount_snapshot: number;
+    service_item_names: string[] | null;
+  }[]).map((row) => ({
+    id: row.id,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    status: row.status as CustomerRelatedBooking["status"],
+    finalAmountSnapshot: row.final_amount_snapshot,
+    serviceItemNames: row.service_item_names ?? [],
+  }));
+}
+
+// =========================================================================
+// 模組 6 §6.1:訂單金額查詢對外介面——直接取得「這筆訂單最終金額」的查詢窗口(讀取
+// final_amount_snapshot 等 breakdown 欄位),供模組 8(薪資與帳務)、模組 12(報表匯出)之後
+// 直接複用,不用重新查三張關聯表自己加總。
+// =========================================================================
+export interface BookingAmountSummary {
+  id: string;
+  subtotalAmountSnapshot: number;
+  discountAmountSnapshot: number;
+  taxAmountSnapshot: number;
+  finalAmountSnapshot: number;
+  paymentMethod: string | null;
+}
+
+export async function fetchBookingAmountSummary(bookingId: string): Promise<BookingAmountSummary | null> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id, subtotal_amount_snapshot, discount_amount_snapshot, tax_amount_snapshot, final_amount_snapshot, payment_method",
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: data.id,
+    subtotalAmountSnapshot: data.subtotal_amount_snapshot,
+    discountAmountSnapshot: data.discount_amount_snapshot,
+    taxAmountSnapshot: data.tax_amount_snapshot,
+    finalAmountSnapshot: data.final_amount_snapshot,
+    paymentMethod: data.payment_method,
+  };
+}

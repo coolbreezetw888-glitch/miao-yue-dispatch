@@ -57,7 +57,7 @@ select pg_temp.test_set_auth('ba000000-0000-4000-8000-000000000001');
 
 select id from create_booking(
   'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
-  array['ba000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0966000001', null, null,
   array['ba000000-0000-4000-8000-000000000042']::uuid[]
 ) \gset booking_
@@ -65,8 +65,8 @@ select id from create_booking(
 -- ① 規則 3.2:booking_service_items 沒有 INSERT 政策,直接 INSERT 應該被擋下(RLS,42501)。
 select throws_ok(
   format(
-    $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot)
-      values ('%s', 'ba000000-0000-4000-8000-000000000031', 30)$$,
+    $$insert into booking_service_items (booking_id, service_item_id, duration_minutes_snapshot, unit_price_snapshot)
+      values ('%s', 'ba000000-0000-4000-8000-000000000031', 30, 100)$$,
     :'booking_id'::text
   ),
   '42501', null,

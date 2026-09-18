@@ -79,7 +79,7 @@ select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000001');
 
 select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
-  array['bc000000-0000-4000-8000-000000000041']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲'
 ) \gset booking1_
 
@@ -129,7 +129,7 @@ select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000002');
 
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
-  array['bc000000-0000-4000-8000-000000000041']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲(改過)'
 );
 
@@ -148,7 +148,7 @@ select is(
 -- ⑧ update_booking 傳 p_customer_notes = null,客戶備註可以被清空成 null(不是被擋下或報錯)。
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
-  array['bc000000-0000-4000-8000-000000000041']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, null
 );
 
@@ -168,7 +168,7 @@ select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000001');
 
 select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
-  array['bc000000-0000-4000-8000-000000000041']::uuid[], '2026-09-22 11:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
   '客戶乙', '0988000002'
 ) \gset booking2_
 
@@ -191,7 +191,7 @@ select isnt(
 -- =========================================================================
 select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
-  array['bc000000-0000-4000-8000-000000000041']::uuid[], '2026-09-22 12:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 12:00:00+08',
   '客戶丙', '0988000003'
 ) \gset booking3_
 

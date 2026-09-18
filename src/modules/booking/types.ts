@@ -12,6 +12,38 @@ export type BookingServiceItem = Tables<"booking_service_items">;
 export type BookingAssistant = Tables<"booking_assistants">;
 export type MaterialCostItem = Tables<"material_cost_items">;
 export type BookingMaterialCost = Tables<"booking_material_costs">;
+/** 模組 6(訂單管理)§2.1:商家整體稅金模式統一設定,一商家一列,查無資料時前端/後端一律
+ * fallback 成 DEFAULT_MERCHANT_TAX_SETTINGS(裁決 Q5)。 */
+export type MerchantTaxSettings = Tables<"merchant_tax_settings">;
+
+/** 模組 6 §2.1 裁決 Q4/Q5:折扣/稅金都是「固定金額」或「百分比」二選一。 */
+export type AmountAdjustmentMode = "fixed" | "percentage";
+
+export const AMOUNT_ADJUSTMENT_MODE_LABELS: Record<AmountAdjustmentMode, string> = {
+  fixed: "固定金額",
+  percentage: "百分比",
+};
+
+/** 模組 6 §2.1:merchant_tax_settings 查無資料時,前端/後端一律套用這組預設值
+ * (tax_mode='percentage'、tax_value=5.00)。 */
+export const DEFAULT_MERCHANT_TAX_SETTINGS: { taxMode: AmountAdjustmentMode; taxValue: number } = {
+  taxMode: "percentage",
+  taxValue: 5.0,
+};
+
+/** 模組 6 §3.2/裁決 Q10:付款方式這次只提供一個暫時選項「現場付款」當標記用,不做任何金流邏輯。
+ * 用穩定的代碼值(不直接拿中文字串當資料庫值),方便之後模組 9 擴充選項時不用改資料庫裡已經存在的值。 */
+export const PAYMENT_METHOD_OPTIONS: Record<string, string> = {
+  on_site: "現場付款",
+};
+
+/** 把 bookings.payment_method 的原始值轉成畫面顯示文字。null/空字串顯示「尚未設定」;
+ * 萬一資料庫裡存了一個目前對照表沒有的值(例如以後模組 9 新增過的選項,或手動塞的舊資料),
+ * 直接顯示原始值,不要讓畫面空白或報錯。 */
+export function getPaymentMethodLabel(value: string | null | undefined): string {
+  if (!value) return "尚未設定";
+  return PAYMENT_METHOD_OPTIONS[value] ?? value;
+}
 
 /** 規則 2.9,建單功能擴充決策記錄 5 更新:六個狀態值,這次會真的用到
  * pending_confirmation/accepted/completed/cancelled 四種(pending_confirmation 是這次擴充新增的
@@ -98,15 +130,27 @@ export interface BookingDetailAssistant {
   staffName: string;
 }
 
-/** 建單表單細節修正規格書第五節:預約詳情用的服務項目,比 DayScheduleServiceItemRef 多一個
- * price 欄位。**這是查詢當下 service_items.price 的即時值,不是建立/編輯當下鎖定的金額快照**
- * ——之後服務項目改價,舊預約顯示的金額會跟著變動,不是像 booking_service_items 的
- * duration_minutes_snapshot 那樣寫死。金額快照策略明確保留給未來模組 6(訂單管理)通盤設計,
- * 這裡刻意不做,避免變成之後模組 6 的絆腳石或要推翻重做。
- * price 是 null 代表這個服務項目已經下架/被刪除,查不到目前的價格(fallback 顯示「—」,
- * 不要顯示 0,那看起來像「免費」,會誤導使用者)。 */
+/** 模組 6(訂單管理)§3.1:取代原本的即時查價顯示(BookingDetailServiceItem.price 曾經是
+ * 查詢當下 service_items.price 的即時值,不是金額快照——這個舊行為已經被取代)。現在一律讀
+ * booking_service_items 的 quantity/unit_price_snapshot 這兩個金額快照欄位,不論
+ * service_items.price 之後怎麼改,這裡顯示的數字永遠鎖定建立/編輯當下的值。
+ * name 的下架/刪除 fallback 邏輯不變(見 api.ts getBooking 的說明:繼續顯示真實名稱,只有金額
+ * 相關欄位才需要 fallback,而这裡的金額欄位是快照,不受下架影響,不需要 fallback)。 */
 export interface BookingDetailServiceItem extends DayScheduleServiceItemRef {
-  price: number | null;
+  quantity: number;
+  unitPriceSnapshot: number;
+  /** 方便顯示用的小計 = unitPriceSnapshot × quantity,不是另外存的欄位。 */
+  lineTotal: number;
+}
+
+/** 模組 6 §3.3/§6.3:相關訂單清單裡的一筆訂單摘要,由 getCustomerRelatedBookings 回傳。 */
+export interface CustomerRelatedBooking {
+  id: string;
+  startAt: string;
+  endAt: string;
+  status: BookingStatus;
+  finalAmountSnapshot: number;
+  serviceItemNames: string[];
 }
 
 export interface BookingDetailMaterialCost {

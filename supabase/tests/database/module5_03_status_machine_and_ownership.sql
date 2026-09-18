@@ -56,7 +56,7 @@ select pg_temp.test_set_auth('b3000000-0000-4000-8000-000000000001');
 -- 建立第一筆預約(狀態應直接是 pending_confirmation,決策記錄 5),用 \gset 把 id/status 存成 psql 變數。
 select id, status from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
-  array['b3000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 10:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0955000001'
 ) \gset first_
 
@@ -136,7 +136,7 @@ select throws_ok(
 --    合法轉換(這是這次擴充放寬的行為,原本只有 accepted 能取消)。
 select id, status from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
-  array['b3000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 14:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
   '客戶乙', '0955000002'
 ) \gset second_
 
@@ -164,7 +164,7 @@ select throws_ok(
 --    (第三筆預約:先確認再取消)。
 select id from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
-  array['b3000000-0000-4000-8000-000000000031']::uuid[], '2026-09-22 16:00:00+08',
+  jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:00:00+08',
   '客戶丙', '0955000003'
 ) \gset third_
 
