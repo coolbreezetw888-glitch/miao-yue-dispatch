@@ -142,6 +142,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -179,6 +181,8 @@ export type Database = {
           created_at?: string
           created_by_role: string
           created_by_user_id?: string | null
+          custom_duration_enabled?: boolean
+          custom_duration_minutes?: number | null
           custom_total_amount?: number | null
           custom_total_amount_enabled?: boolean
           customer_address?: string | null
@@ -216,6 +220,8 @@ export type Database = {
           created_at?: string
           created_by_role?: string
           created_by_user_id?: string | null
+          custom_duration_enabled?: boolean
+          custom_duration_minutes?: number | null
           custom_total_amount?: number | null
           custom_total_amount_enabled?: boolean
           customer_address?: string | null
@@ -886,6 +892,44 @@ export type Database = {
           },
         ]
       }
+      staff_availability_overrides: {
+        Row: {
+          created_at: string
+          id: string
+          is_available: boolean
+          override_date: string
+          slot_start_time: string
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_available: boolean
+          override_date: string
+          slot_start_time: string
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_available?: boolean
+          override_date?: string
+          slot_start_time?: string
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_availability_overrides_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_availability_windows: {
         Row: {
           created_at: string
@@ -944,6 +988,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -981,6 +1027,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      clear_staff_day_override: {
+        Args: {
+          p_end_time: string
+          p_override_date: string
+          p_staff_id: string
+          p_start_time: string
+        }
+        Returns: undefined
+      }
       complete_booking: {
         Args: { p_booking_id: string }
         Returns: {
@@ -990,6 +1045,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -1036,6 +1093,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -1076,6 +1135,8 @@ export type Database = {
       create_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
+          p_custom_duration_enabled?: boolean
+          p_custom_duration_minutes?: number
           p_custom_total_amount?: number
           p_custom_total_amount_enabled?: boolean
           p_customer_address?: string
@@ -1104,6 +1165,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -1250,11 +1313,23 @@ export type Database = {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
       }
+      set_staff_day_override: {
+        Args: {
+          p_end_time: string
+          p_is_available: boolean
+          p_override_date: string
+          p_staff_id: string
+          p_start_time: string
+        }
+        Returns: number
+      }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
       update_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
           p_booking_id: string
+          p_custom_duration_enabled?: boolean
+          p_custom_duration_minutes?: number
           p_custom_total_amount?: number
           p_custom_total_amount_enabled?: boolean
           p_customer_address?: string
@@ -1282,6 +1357,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null
@@ -1328,6 +1405,8 @@ export type Database = {
           created_at: string
           created_by_role: string
           created_by_user_id: string | null
+          custom_duration_enabled: boolean
+          custom_duration_minutes: number | null
           custom_total_amount: number | null
           custom_total_amount_enabled: boolean
           customer_address: string | null

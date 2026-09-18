@@ -421,6 +421,13 @@ export function BookingDetailDialog({
                   <span className="text-muted-foreground">預約時間</span>
                   <span className="font-medium text-foreground">
                     {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
+                    {/* 模組 6 §3.1/§4.3:自訂工時開啟時,工時旁邊註明,避免管理員誤以為是逐項
+                        加總算出來的。 */}
+                    {booking.custom_duration_enabled ? (
+                      <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                        (已套用自訂工時 {booking.custom_duration_minutes} 分鐘)
+                      </span>
+                    ) : null}
                   </span>
                 </div>
                 <div className="flex items-start justify-between gap-3">

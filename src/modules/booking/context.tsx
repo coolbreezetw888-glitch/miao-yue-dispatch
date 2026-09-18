@@ -8,9 +8,11 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import {
   cancelBooking as apiCancelBooking,
+  clearStaffDayOverride as apiClearStaffDayOverride,
   completeBooking as apiCompleteBooking,
   confirmBooking as apiConfirmBooking,
   createBooking as apiCreateBooking,
+  setStaffDayOverride as apiSetStaffDayOverride,
   updateBooking as apiUpdateBooking,
   updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
   fetchBookingAmountSummary,
@@ -164,6 +166,28 @@ export async function getCustomerRelatedBookings(
   excludeBookingId?: string | null,
 ): Promise<CustomerRelatedBooking[]> {
   return apiGetCustomerRelatedBookings(merchantId, customerPhone, excludeBookingId);
+}
+
+/** 模組 6 §5.2/§6.4 對外介面:設定單日例外(開啟/關閉時段),供行事曆介面使用,也保留給之後
+ * 模組 7(排班與休假管理)參考。回傳受影響的既有預約筆數(§5.2 第 4 點,只提示不阻擋)。 */
+export async function setStaffDayOverride(
+  staffId: string,
+  overrideDate: string,
+  startTime: string,
+  endTime: string,
+  isAvailable: boolean,
+): Promise<number> {
+  return apiSetStaffDayOverride(staffId, overrideDate, startTime, endTime, isAvailable);
+}
+
+/** 模組 6 §5.2/§6.4 對外介面:清除單日例外,恢復成回歸每週固定模板的狀態。 */
+export async function clearStaffDayOverride(
+  staffId: string,
+  overrideDate: string,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  return apiClearStaffDayOverride(staffId, overrideDate, startTime, endTime);
 }
 
 /** 模組 6 §6.1 對外介面:直接取得單筆訂單的金額 breakdown,供模組 8/12 之後複用,

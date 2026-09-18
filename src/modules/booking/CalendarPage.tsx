@@ -33,13 +33,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag } from "@/modules/merchant/api";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
-import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import { useAgentPermission, useCurrentMerchantRole, useMerchantStaffList } from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 
 import {
@@ -51,6 +57,8 @@ import {
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import {
+  clearStaffDayOverride,
+  setStaffDayOverride,
   useMerchantBookings,
   useMerchantBusinessHours,
   useMerchantDaySchedule,
@@ -277,6 +285,11 @@ export function BookingFormDialog({
   const [itemQuantities, setItemQuantities] = useState<Record<string, string>>({});
   const [itemUnitPrices, setItemUnitPrices] = useState<Record<string, string>>({});
 
+  // §4.3 自訂工時開關(裁決 Q3 方向一):開啟後 end_at 直接改用這裡輸入的總服務時長計算,
+  // 會真的影響排程佔用與衝突檢查邊界(含第五節單日例外第三層),不是只影響前端顯示。
+  const [customDurationEnabled, setCustomDurationEnabled] = useState(false);
+  const [customDurationMinutes, setCustomDurationMinutes] = useState("");
+
   // §4.4 自訂總金額開關。
   const [customTotalAmountEnabled, setCustomTotalAmountEnabled] = useState(false);
   const [customTotalAmount, setCustomTotalAmount] = useState("");
@@ -344,6 +357,11 @@ export function BookingFormDialog({
             : "",
       );
       setPaymentMethodOnSite(editingDetail.payment_method === "on_site");
+      // §4.3/§2.4:編輯表單一律用既有快照值預先帶入,不重新計算。
+      setCustomDurationEnabled(editingDetail.custom_duration_enabled);
+      setCustomDurationMinutes(
+        editingDetail.custom_duration_minutes !== null ? String(editingDetail.custom_duration_minutes) : "",
+      );
     } else {
       setStaffId(prefill.staffId ?? "");
       setServiceItemIds([]);
@@ -368,19 +386,27 @@ export function BookingFormDialog({
       setTaxMode(merchantTaxSettings?.taxMode ?? "percentage");
       setTaxValue(merchantTaxSettings ? String(merchantTaxSettings.taxValue) : "");
       setPaymentMethodOnSite(false);
+      setCustomDurationEnabled(false);
+      setCustomDurationMinutes("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit, editingDetail, merchantTaxSettings]);
 
-  // 模組 6 §2.2 新公式:每個服務項目的工時貢獻 = duration_minutes × quantity(這次不實作自訂工時
-  // 開關,留給下一批獨立處理,見規格書 §4.3)。
-  const totalDurationMinutes = useMemo(() => {
+  // 模組 6 §2.2 新公式:每個服務項目的工時貢獻 = duration_minutes × quantity。
+  const itemsTotalDurationMinutes = useMemo(() => {
     return serviceItemIds.reduce((sum, id) => {
       const item = (serviceItems ?? []).find((s) => s.id === id);
       const quantity = Number(itemQuantities[id] ?? "1") || 1;
       return sum + (item?.duration_minutes ?? 0) * quantity;
     }, 0);
   }, [serviceItemIds, serviceItems, itemQuantities]);
+
+  // §4.3(裁決 Q3 方向一):自訂工時開啟時,實際用來排時段/顯示的總工時直接改用自訂值,
+  // 取代逐項加總結果——這裡只是「顯示用/日期時間選擇器用」的體驗層計算,真正落地的 end_at
+  // 由後端 create_booking/update_booking 依同一套規則重算(§4.3 第 2 點)。
+  const totalDurationMinutes = customDurationEnabled
+    ? Number(customDurationMinutes) || 0
+    : itemsTotalDurationMinutes;
 
   // §2.3 步驟 1 的「逐項小計」= Σ(unit_price × quantity)。
   const itemsSubtotal = useMemo(() => {
@@ -484,6 +510,12 @@ export function BookingFormDialog({
       toast.error(amountPreview.error);
       return;
     }
+    if (customDurationEnabled && (!customDurationMinutes.trim() || Number(customDurationMinutes) <= 0)) {
+      // §4.3 邊界情況:開啟自訂工時但沒有填(或填了 <=0)的總服務時長,體驗層先擋一次,
+      // 真正的邊界仍在後端 private.validate_booking_selection。
+      toast.error("已開啟自訂工時,請輸入大於 0 的總服務時長(分鐘)");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -512,6 +544,12 @@ export function BookingFormDialog({
         taxMode: taxEnabled ? taxMode : null,
         taxValue: taxEnabled && taxValue.trim() ? Number(taxValue) : null,
         paymentMethod: paymentMethodOnSite ? "on_site" : null,
+        // §4.3 邊界情況:關閉時 customDurationMinutes 一律傳 null,避免留著舊值造成混淆
+        // (後端 create_booking/update_booking 也會在關閉時一律存 null,這裡是雙重保險)。
+        customDurationEnabled,
+        customDurationMinutes: customDurationEnabled && customDurationMinutes.trim()
+          ? Number(customDurationMinutes)
+          : null,
       };
 
       if (isEdit && editingBookingId) {
@@ -646,8 +684,34 @@ export function BookingFormDialog({
               )}
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              已選 {serviceItemIds.length} 項,總工時 {totalDurationMinutes} 分鐘。
+              已選 {serviceItemIds.length} 項,逐項加總工時 {itemsTotalDurationMinutes} 分鐘
+              {customDurationEnabled ? "(已套用自訂工時,實際採用下方輸入的總服務時長)" : ""}。
             </p>
+          </div>
+
+          {/* 模組 6(訂單管理)§4.3(裁決 Q3 方向一):自訂工時開關。關閉時沿用上方逐項加總的工時
+              計算 end_at;開啟後改用這裡輸入的總服務時長,會真的影響排程佔用與衝突檢查邊界
+              (含單日例外第三層),不是只影響畫面顯示。 */}
+          <div className="space-y-2 rounded-md border border-border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label>自訂工時</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  開啟後用輸入的總服務時長取代逐項加總,實際佔用的時段跟衝突檢查都會依這個值計算。
+                </p>
+              </div>
+              <Switch checked={customDurationEnabled} onCheckedChange={setCustomDurationEnabled} />
+            </div>
+            {customDurationEnabled ? (
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                placeholder="輸入這筆訂單的總服務時長(分鐘)"
+                value={customDurationMinutes}
+                onChange={(e) => setCustomDurationMinutes(e.target.value)}
+              />
+            ) : null}
           </div>
 
           {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
@@ -918,6 +982,156 @@ function bookingBlockClasses(status: BookingStatus): string {
 }
 
 // ---------------------------------------------------------------------------
+// 模組 6(訂單管理)§5.5:開啟/關閉時段對話框。時段點擊選單裡的「開啟/關閉時段」選項觸發,
+// 服務人員/日期由點擊的那一格帶入(不可改),時間範圍(半小時為單位)/開啟或關閉可以調整。
+// 權限歸在 business_hours(§5.4),不是 orders——由呼叫端(CalendarPageInner)只在授權時才顯示
+// 這個選項,這裡不重複做權限判斷(真正的邊界仍在後端 set_staff_day_override 的 RLS/權限檢查)。
+// ---------------------------------------------------------------------------
+interface DayOverridePrefill {
+  staffId: string;
+  staffName: string;
+  dateKey: string;
+  startTime: string;
+  endTime: string;
+  /** 建議的開啟/關閉方向:預設跟目前顯示狀態相反(目前可預約就建議關閉,反之建議開啟),
+   * 客服仍然可以自己改成另一個方向。 */
+  suggestedIsAvailable: boolean;
+}
+
+function DayOverrideDialog({
+  open,
+  onOpenChange,
+  prefill,
+  slotOptions,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  prefill: DayOverridePrefill | null;
+  /** 這一天商家營業時間內的半小時格線起點清單(HH:mm),給起訖時間下拉選單使用。 */
+  slotOptions: string[];
+  onSaved: () => void;
+}) {
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [isAvailable, setIsAvailable] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open || !prefill) return;
+    setStartTime(prefill.startTime);
+    setEndTime(prefill.endTime);
+    setIsAvailable(prefill.suggestedIsAvailable);
+  }, [open, prefill]);
+
+  // 結束時間的候選清單:所有晚於目前起始時間的半小時格線起點,再加上最後一格的終點
+  // (slotOptions 本身只是格線「起點」清單,終點要再往後推 30 分鐘)。
+  const endTimeOptions = useMemo(() => {
+    if (!startTime) return [];
+    const startMin = timeToMinutes(startTime);
+    const candidateEnds = slotOptions
+      .map((t) => timeToMinutes(t) + SLOT_MINUTES)
+      .filter((m) => m > startMin);
+    return Array.from(new Set(candidateEnds)).sort((a, b) => a - b).map((m) => minutesToTime(m));
+  }, [startTime, slotOptions]);
+
+  async function handleSubmit() {
+    if (!prefill) return;
+    if (!startTime || !endTime) {
+      toast.error("請選擇時間範圍");
+      return;
+    }
+    setSaving(true);
+    try {
+      const conflictCount = await setStaffDayOverride(
+        prefill.staffId,
+        prefill.dateKey,
+        startTime,
+        endTime,
+        isAvailable,
+      );
+      if (conflictCount > 0) {
+        // §5.2 第 4 點:不阻擋操作,只提示既有預約筆數,不做自動取消/自動通知。
+        toast.warning(
+          `已設定完成,但這個時段目前還有 ${conflictCount} 筆既有預約,系統不會自動取消或搬移,請自行確認是否需要另外處理。`,
+        );
+      } else {
+        toast.success(isAvailable ? "已開啟這個時段" : "已關閉這個時段");
+      }
+      onOpenChange(false);
+      onSaved();
+    } catch (err) {
+      toast.error("設定失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>開啟/關閉時段</DialogTitle>
+          <DialogDescription>
+            {prefill ? `${prefill.staffName} ・ ${formatDisplayDateTime(prefill.dateKey, prefill.startTime)}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>開始時間</Label>
+              <Select value={startTime} onValueChange={setStartTime}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {slotOptions.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>結束時間</Label>
+              <Select value={endTime} onValueChange={setEndTime}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {endTimeOptions.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
+            <div>
+              <Label>{isAvailable ? "開啟這個時段" : "關閉這個時段"}</Label>
+              <p className="text-[11px] text-muted-foreground">
+                {isAvailable
+                  ? "平常公休/沒排時段的那天臨時加班,讓這個時段變成可預約。"
+                  : "師傅臨時請假,讓這個時段變成不可預約。"}
+              </p>
+            </div>
+            <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" disabled={saving} onClick={handleSubmit}>
+            {saving ? "儲存中⋯" : "確定"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4.3:主頁面
 // ---------------------------------------------------------------------------
 function CalendarPageInner() {
@@ -925,6 +1139,14 @@ function CalendarPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
   const { data: staffList } = useMerchantStaffList(merchantId);
+
+  // 模組 6(訂單管理)§5.4:「開啟/關閉時段」的權限歸在 business_hours,不是 orders(建立訂單
+  // 沿用既有頁面層級的 orders 權限,這裡不用另外判斷)。同一個時段點擊選單裡,兩個選項各自依
+  // 不同的權限判斷顯示/隱藏,不能誤植成同一把鑰匙(§5.5 第 1 點)。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const { data: canManageBusinessHoursPermission } = useAgentPermission("business_hours");
+  const canManageDayOverride =
+    merchantRole === "admin" || (merchantRole === "agent" && canManageBusinessHoursPermission === true);
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -978,6 +1200,9 @@ function CalendarPageInner() {
   const [formPrefill, setFormPrefill] = useState<BookingFormPrefill>({});
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
+  // 模組 6 §5.5:開啟/關閉時段對話框的開關狀態與帶入的預設值。
+  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false);
+  const [overridePrefill, setOverridePrefill] = useState<DayOverridePrefill | null>(null);
 
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ["booking-module"] });
@@ -994,6 +1219,21 @@ function CalendarPageInner() {
     setEditingBookingId(bookingId);
     setFormPrefill({});
     setFormOpen(true);
+  }
+
+  function openOverrideDialog(prefill: DayOverridePrefill) {
+    setOverridePrefill(prefill);
+    setOverrideDialogOpen(true);
+  }
+
+  async function handleClearOverride(staffId: string, startTime: string, endTime: string) {
+    try {
+      await clearStaffDayOverride(staffId, selectedDateKey, startTime, endTime);
+      toast.success("已清除例外,恢復成預設狀態");
+      refetchAll();
+    } catch (err) {
+      toast.error("清除失敗", { description: getErrorMessage(err) });
+    }
   }
 
   const businessHours = schedule?.business_hours;
@@ -1182,7 +1422,10 @@ function CalendarPageInner() {
                   {s.staff_name}
                 </div>
                 <div className="relative" style={{ height: gridTotalPx }}>
-                  {/* 背景格線:依可預約時段/跨店占用著色,可點擊的空白格用來開啟建單表單。 */}
+                  {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:
+                      每格先看有沒有落在某個 availability_overrides 區間內,有則採用該區間的
+                      is_available 值決定顯示狀態,沒有則沿用既有的商家營業時間∩服務人員時段判斷
+                      (available_windows,第一層∩第二層,後端算好的結果)。 */}
                   {slots.map((slot, i) => {
                     const slotStartMin = timeToMinutes(slot.start);
                     const slotEndMin = timeToMinutes(slot.end);
@@ -1193,16 +1436,14 @@ function CalendarPageInner() {
                         timeToMinutes(w.end_time) >= slotEndMin,
                     );
 
-                    if (!inWindow) {
-                      return (
-                        <div
-                          key={slot.start}
-                          className="absolute inset-x-0 border-b border-border bg-muted/40"
-                          style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                          aria-label="不可預約"
-                        />
-                      );
-                    }
+                    const matchedOverride = s.availability_overrides.find(
+                      (o) =>
+                        timeToMinutes(o.start_time) <= slotStartMin &&
+                        timeToMinutes(o.end_time) >= slotEndMin,
+                    );
+                    const isOverride = Boolean(matchedOverride);
+                    // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
+                    const finalAvailable = matchedOverride ? matchedOverride.is_available : inWindow;
 
                     const foreignBusy = s.foreign_bookings.some((b) => {
                       const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
@@ -1222,21 +1463,93 @@ function CalendarPageInner() {
                       );
                     }
 
+                    // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
+                    // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
+                    if (!finalAvailable && !canManageDayOverride) {
+                      return (
+                        <div
+                          key={slot.start}
+                          className="absolute inset-x-0 border-b border-border bg-muted/40"
+                          style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                          aria-label="不可預約"
+                        />
+                      );
+                    }
+
+                    // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
+                    // 管理員一眼看出這是臨時調整過的,不是預設狀態。
+                    const cellClassName = finalAvailable
+                      ? isOverride
+                        ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
+                        : "bg-background hover:bg-brand-soft/40"
+                      : isOverride
+                        ? "bg-destructive/10 ring-1 ring-inset ring-destructive/40 hover:bg-destructive/15"
+                        : "bg-muted/40 hover:bg-muted/60";
+
                     return (
-                      <button
-                        key={slot.start}
-                        type="button"
-                        onClick={() =>
-                          openCreateForm({
-                            staffId: s.staff_id,
-                            dateKey: selectedDateKey,
-                            time: slot.start,
-                          })
-                        }
-                        className="absolute inset-x-0 border-b border-border bg-background hover:bg-brand-soft/40"
-                        style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                        aria-label="可預約"
-                      />
+                      <DropdownMenu key={slot.start}>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
+                              cellClassName,
+                            )}
+                            style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                            aria-label={finalAvailable ? "可預約" : "不可預約"}
+                          >
+                            {isOverride ? (finalAvailable ? "例外開啟" : "例外關閉") : ""}
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {/* §5.5 第 1 點:「建立訂單」依既有 orders 權限判斷(頁面層級已限定),
+                              只有這一格實際可預約時才提供。 */}
+                          {finalAvailable ? (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                openCreateForm({
+                                  staffId: s.staff_id,
+                                  dateKey: selectedDateKey,
+                                  time: slot.start,
+                                })
+                              }
+                            >
+                              建立訂單
+                            </DropdownMenuItem>
+                          ) : null}
+                          {/* §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,
+                              跟上面的「建立訂單」是不同的權限鑰匙。 */}
+                          {canManageDayOverride ? (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                openOverrideDialog({
+                                  staffId: s.staff_id,
+                                  staffName: s.staff_name,
+                                  dateKey: selectedDateKey,
+                                  startTime: slot.start,
+                                  endTime: slot.end,
+                                  suggestedIsAvailable: !finalAvailable,
+                                })
+                              }
+                            >
+                              開啟/關閉時段
+                            </DropdownMenuItem>
+                          ) : null}
+                          {canManageDayOverride && isOverride && matchedOverride ? (
+                            <DropdownMenuItem
+                              onClick={() =>
+                                handleClearOverride(
+                                  s.staff_id,
+                                  matchedOverride.start_time,
+                                  matchedOverride.end_time,
+                                )
+                              }
+                            >
+                              清除例外(恢復預設)
+                            </DropdownMenuItem>
+                          ) : null}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     );
                   })}
 
@@ -1293,6 +1606,14 @@ function CalendarPageInner() {
         }}
         onChanged={refetchAll}
         onEdit={openEditForm}
+      />
+
+      <DayOverrideDialog
+        open={overrideDialogOpen}
+        onOpenChange={setOverrideDialogOpen}
+        prefill={overridePrefill}
+        slotOptions={slots.map((slot) => slot.start)}
+        onSaved={refetchAll}
       />
     </main>
   );

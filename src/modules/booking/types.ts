@@ -7,6 +7,8 @@ import type { Tables } from "@/integrations/supabase/types";
 
 export type MerchantBusinessHours = Tables<"merchant_business_hours">;
 export type StaffAvailabilityWindow = Tables<"staff_availability_windows">;
+/** 模組 6(訂單管理)§5.1:單日例外(開啟/關閉時段),半小時為單位,只影響「特定那一天」。 */
+export type StaffAvailabilityOverride = Tables<"staff_availability_overrides">;
 export type Booking = Tables<"bookings">;
 export type BookingServiceItem = Tables<"booking_service_items">;
 export type BookingAssistant = Tables<"booking_assistants">;
@@ -76,6 +78,13 @@ export interface DayScheduleAvailableWindow {
   end_time: string;
 }
 
+/** 模組 6 §5.5 第 3 點:get_merchant_day_schedule 回傳的單日例外區間(合併相鄰同值半小時格子)。 */
+export interface DayScheduleAvailabilityOverride {
+  start_time: string;
+  end_time: string;
+  is_available: boolean;
+}
+
 /** 建單功能擴充 2.1:取代原本單一 service_item_id/service_item_name 字串。 */
 export interface DayScheduleServiceItemRef {
   id: string;
@@ -107,6 +116,10 @@ export interface DayScheduleStaffBlock {
   staff_name: string;
   no_time_slot_limit: boolean;
   available_windows: DayScheduleAvailableWindow[];
+  /** 模組 6 §5.5 第 3 點(新增):這位服務人員這一天的單日例外設定,前端疊加規則(§5.3):
+   * 落在某個區間內就採用該區間的 is_available 值,沒有落在任何區間就沿用 available_windows
+   * 既有的判斷,不要漏接這個疊加順序。 */
+  availability_overrides: DayScheduleAvailabilityOverride[];
   bookings: DayScheduleOwnBooking[];
   foreign_bookings: DayScheduleForeignBooking[];
 }

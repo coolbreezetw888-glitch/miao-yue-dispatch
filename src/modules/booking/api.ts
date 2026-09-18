@@ -150,6 +150,12 @@ export interface BookingAmountAdjustmentInput {
   taxValue?: number | null;
   /** 模組 6 §3.2/裁決 Q10:付款方式,見 types.ts PAYMENT_METHOD_OPTIONS。 */
   paymentMethod?: string | null;
+  /** 模組 6 §4.3 裁決 Q3(方向一):整筆訂單層級的自訂工時開關。關閉時沿用 §2.2 逐項加總計算
+   * end_at;開啟後 end_at 直接改用 customDurationMinutes 計算,會真的影響排程佔用與衝突檢查邊界
+   * (含單日例外第三層)。關閉時 customDurationMinutes 應該是 null/undefined,後端也會在關閉時
+   * 一律存 null,避免留著舊值造成混淆。 */
+  customDurationEnabled?: boolean;
+  customDurationMinutes?: number | null;
 }
 
 function buildServiceItemsJsonb(items: BookingServiceItemSelectionInput[]) {
@@ -212,6 +218,10 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
     ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
     ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
+    p_custom_duration_enabled: input.customDurationEnabled ?? false,
+    ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
+      ? { p_custom_duration_minutes: input.customDurationMinutes }
+      : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -263,6 +273,10 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
     ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
     ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
+    p_custom_duration_enabled: input.customDurationEnabled ?? false,
+    ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
+      ? { p_custom_duration_minutes: input.customDurationMinutes }
+      : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -320,6 +334,50 @@ export async function fetchMerchantDaySchedule(
   });
   if (error) throw error;
   return data as unknown as MerchantDaySchedule;
+}
+
+// =========================================================================
+// 模組 6(訂單管理)§5.2/§6.4:單日例外設定/清除,包一層呼叫 set_staff_day_override/
+// clear_staff_day_override。權限歸在 business_hours(§5.4),不是 orders,RLS 由資料庫函式自己
+// 把關,這裡不做前端權限判斷(前端只依 useAgentPermission('business_hours') 決定要不要顯示
+// 這個入口,見 CalendarPage.tsx)。
+// =========================================================================
+
+/** 模組 6 §5.2/§6.4:設定單日例外(開啟/關閉時段),半小時為單位。回傳受影響的既有預約筆數
+ * (只有關閉時可能 > 0,開啟時一律是 0),供呼叫端提示客服「這個時段還有 N 筆既有預約,系統不會
+ * 自動取消或搬移」——不阻擋操作本身,單純回報數字(§5.2 第 4 點)。 */
+export async function setStaffDayOverride(
+  staffId: string,
+  overrideDate: string, // 'YYYY-MM-DD'
+  startTime: string, // 'HH:mm'
+  endTime: string, // 'HH:mm'
+  isAvailable: boolean,
+): Promise<number> {
+  const { data, error } = await supabase.rpc("set_staff_day_override", {
+    p_staff_id: staffId,
+    p_override_date: overrideDate,
+    p_start_time: startTime,
+    p_end_time: endTime,
+    p_is_available: isAvailable,
+  });
+  if (error) throw error;
+  return data as number;
+}
+
+/** 模組 6 §5.2/§6.4:清除單日例外,恢復成「沒有例外,回歸每週固定模板」的狀態。 */
+export async function clearStaffDayOverride(
+  staffId: string,
+  overrideDate: string,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("clear_staff_day_override", {
+    p_staff_id: staffId,
+    p_override_date: overrideDate,
+    p_start_time: startTime,
+    p_end_time: endTime,
+  });
+  if (error) throw error;
 }
 
 // =========================================================================
