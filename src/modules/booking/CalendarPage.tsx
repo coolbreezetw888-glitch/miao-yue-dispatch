@@ -13,13 +13,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -45,7 +44,11 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag } from "@/modules/merchant/api";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
-import { useAgentPermission, useCurrentMerchantRole, useMerchantStaffList } from "@/modules/staff-agent/context";
+import {
+  useAgentPermission,
+  useCurrentMerchantRole,
+  useMerchantStaffList,
+} from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 
 import {
@@ -63,8 +66,11 @@ import {
   useMerchantBusinessHours,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
+  useMerchantPaymentMethodSettings,
   useMerchantTaxSettings,
 } from "./context";
+// 建單與訂單管理介面優化 §1:拿掉 DayOverrideDialog 互動流程,不再需要 timeToMinutes/minutesToTime
+// 之外的「選時間範圍」相關計算——這兩支仍然給 BookingDateTimeField/背景格線切格使用,繼續 import。
 import {
   addDays,
   addMonths,
@@ -83,14 +89,22 @@ import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
+  bookingBlockClasses,
+  DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS,
+  getTaxModeHelperText,
+  PAYMENT_METHOD_CODES,
   PAYMENT_METHOD_OPTIONS,
   type AmountAdjustmentMode,
   type BookingStatus,
   type DayScheduleOwnBooking,
+  type PaymentMethodCode,
 } from "./types";
 
 const SLOT_MINUTES = 30;
 const SLOT_PX = 30;
+
+/** 建單與訂單管理介面優化 §3:付款方式下拉選單的「(未選擇/尚未設定)」sentinel 值。 */
+const PAYMENT_METHOD_UNSET = "__unset__";
 
 type CalendarViewMode = "week" | "month";
 
@@ -244,6 +258,10 @@ export function BookingFormDialog({
   const { data: materialCostItems } = useMerchantMaterialCostItems(merchantId);
   const { data: materialCostEnabled } = useMaterialCostEnabled(merchantId);
   const { data: businessHours } = useMerchantBusinessHours(merchantId);
+  // 模組 9(支付方式)§2.1:建單表單下拉選單只列出商家實際開放(套用 fallback 後)的選項,
+  // 選項清單全平台統一,不因產業類型增減(§2.2)。查詢還沒回來時先用 fallback 預設值渲染
+  // (只有現場付款),避免下拉選單短暫閃過空清單。
+  const { data: paymentMethodSettings } = useMerchantPaymentMethodSettings(merchantId);
 
   // 建單表單細節修正第二節第 2/3 點:依商家 industry_type 判斷客戶地址是否必填。
   const requiresCustomerAddress = INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[industryType];
@@ -303,8 +321,23 @@ export function BookingFormDialog({
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
   const [taxValue, setTaxValue] = useState("");
-  // §3.2/裁決 Q10:付款方式,這次只有「現場付款」一個暫時選項,留空代表「尚未設定」。
-  const [paymentMethodOnSite, setPaymentMethodOnSite] = useState(false);
+  // §3.2/裁決 Q10、模組 9(支付方式)§2.1:付款方式下拉選單,留空代表「尚未設定」。
+  // 建單與訂單管理介面優化 §3:改成下拉選單(比照服務人員欄位樣式),用 PAYMENT_METHOD_UNSET
+  // 這個 sentinel 值代表「(未選擇/尚未設定)」,Radix Select 不支援空字串當作選項值。
+  const [paymentMethodValue, setPaymentMethodValue] = useState<string>(PAYMENT_METHOD_UNSET);
+
+  // 模組 9 §2.1:下拉選單依商家設定動態列出開放的選項(套用 fallback)。編輯模式下,即使商家後來
+  // 把這筆訂單原本使用的付款方式關掉,仍把該選項一併附加進清單,避免編輯畫面顯示空白讓客服誤以為
+  // 需要重新選擇(舊訂單不受商家事後關閉選項影響,呼應 §2.1 邊界情況的精神)。
+  const enabledPaymentMethodCodes = useMemo(() => {
+    const effective = paymentMethodSettings ?? DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS;
+    const codes = PAYMENT_METHOD_CODES.filter((code) => effective[code]);
+    const isKnownCode = (PAYMENT_METHOD_CODES as readonly string[]).includes(paymentMethodValue);
+    if (isKnownCode && !codes.includes(paymentMethodValue as PaymentMethodCode)) {
+      return [...codes, paymentMethodValue as PaymentMethodCode];
+    }
+    return codes;
+  }, [paymentMethodSettings, paymentMethodValue]);
 
   const { data: merchantTaxSettings } = useMerchantTaxSettings(merchantId);
 
@@ -321,7 +354,9 @@ export function BookingFormDialog({
         Object.fromEntries(editingDetail.serviceItems.map((i) => [i.id, String(i.quantity)])),
       );
       setItemUnitPrices(
-        Object.fromEntries(editingDetail.serviceItems.map((i) => [i.id, String(i.unitPriceSnapshot)])),
+        Object.fromEntries(
+          editingDetail.serviceItems.map((i) => [i.id, String(i.unitPriceSnapshot)]),
+        ),
       );
       setAssistantStaffIds(editingDetail.assistants.map((a) => a.staffId));
       setMaterialCostItemIds(editingDetail.materialCosts.map((c) => c.materialCostItemId));
@@ -339,7 +374,9 @@ export function BookingFormDialog({
       );
       setDiscountEnabled(editingDetail.discount_enabled);
       setDiscountMode((editingDetail.discount_mode as AmountAdjustmentMode | null) ?? "fixed");
-      setDiscountValue(editingDetail.discount_value !== null ? String(editingDetail.discount_value) : "");
+      setDiscountValue(
+        editingDetail.discount_value !== null ? String(editingDetail.discount_value) : "",
+      );
       setTaxEnabled(editingDetail.tax_enabled);
       // 這筆訂單從沒開過稅金時沒有既有快照(null),此時 fallback 商家目前設定當預設值,
       // 純粹是「第一次在這筆訂單上開啟稅金」的合理預設,不影響已經存在的快照(§2.4 的精神:
@@ -356,11 +393,20 @@ export function BookingFormDialog({
             ? String(merchantTaxSettings.taxValue)
             : "",
       );
-      setPaymentMethodOnSite(editingDetail.payment_method === "on_site");
+      // 模組 9 §2.1 邊界情況:編輯既有訂單時,即使商家事後把這筆訂單原本的付款方式關掉,
+      // 這裡仍要沿用既有值(不強制清空成「未選擇」)——舊訂單顯示/編輯不受商家事後關閉選項影響。
+      setPaymentMethodValue(
+        editingDetail.payment_method &&
+          (PAYMENT_METHOD_CODES as readonly string[]).includes(editingDetail.payment_method)
+          ? editingDetail.payment_method
+          : PAYMENT_METHOD_UNSET,
+      );
       // §4.3/§2.4:編輯表單一律用既有快照值預先帶入,不重新計算。
       setCustomDurationEnabled(editingDetail.custom_duration_enabled);
       setCustomDurationMinutes(
-        editingDetail.custom_duration_minutes !== null ? String(editingDetail.custom_duration_minutes) : "",
+        editingDetail.custom_duration_minutes !== null
+          ? String(editingDetail.custom_duration_minutes)
+          : "",
       );
     } else {
       setStaffId(prefill.staffId ?? "");
@@ -385,7 +431,7 @@ export function BookingFormDialog({
       setTaxEnabled(false);
       setTaxMode(merchantTaxSettings?.taxMode ?? "percentage");
       setTaxValue(merchantTaxSettings ? String(merchantTaxSettings.taxValue) : "");
-      setPaymentMethodOnSite(false);
+      setPaymentMethodValue(PAYMENT_METHOD_UNSET);
       setCustomDurationEnabled(false);
       setCustomDurationMinutes("");
     }
@@ -510,7 +556,10 @@ export function BookingFormDialog({
       toast.error(amountPreview.error);
       return;
     }
-    if (customDurationEnabled && (!customDurationMinutes.trim() || Number(customDurationMinutes) <= 0)) {
+    if (
+      customDurationEnabled &&
+      (!customDurationMinutes.trim() || Number(customDurationMinutes) <= 0)
+    ) {
       // §4.3 邊界情況:開啟自訂工時但沒有填(或填了 <=0)的總服務時長,體驗層先擋一次,
       // 真正的邊界仍在後端 private.validate_booking_selection。
       toast.error("已開啟自訂工時,請輸入大於 0 的總服務時長(分鐘)");
@@ -536,20 +585,22 @@ export function BookingFormDialog({
         assistantStaffIds,
         materialCostItemIds,
         customTotalAmountEnabled,
-        customTotalAmount: customTotalAmountEnabled && customTotalAmount.trim() ? Number(customTotalAmount) : null,
+        customTotalAmount:
+          customTotalAmountEnabled && customTotalAmount.trim() ? Number(customTotalAmount) : null,
         discountEnabled,
         discountMode: discountEnabled ? discountMode : null,
         discountValue: discountEnabled && discountValue.trim() ? Number(discountValue) : null,
         taxEnabled,
         taxMode: taxEnabled ? taxMode : null,
         taxValue: taxEnabled && taxValue.trim() ? Number(taxValue) : null,
-        paymentMethod: paymentMethodOnSite ? "on_site" : null,
+        paymentMethod: paymentMethodValue === PAYMENT_METHOD_UNSET ? null : paymentMethodValue,
         // §4.3 邊界情況:關閉時 customDurationMinutes 一律傳 null,避免留著舊值造成混淆
         // (後端 create_booking/update_booking 也會在關閉時一律存 null,這裡是雙重保險)。
         customDurationEnabled,
-        customDurationMinutes: customDurationEnabled && customDurationMinutes.trim()
-          ? Number(customDurationMinutes)
-          : null,
+        customDurationMinutes:
+          customDurationEnabled && customDurationMinutes.trim()
+            ? Number(customDurationMinutes)
+            : null,
       };
 
       if (isEdit && editingBookingId) {
@@ -571,20 +622,28 @@ export function BookingFormDialog({
 
   const assistantCandidates = (staffList ?? []).filter((s) => s.id !== staffId);
 
+  // 建單與訂單管理介面優化 §5:改用 Sheet(側邊為 bottom)取代 Dialog,呈現成從底部滑出、
+  // 佔滿寬度跟大部分高度的樣式,不要有明顯的四周留白。SheetContent 預設是
+  // "gap-4 ... p-6"(見 sheet.tsx),這裡整個覆寫成 flex 直欄:標題列(shrink-0)/
+  // 可捲動內容區(flex-1 overflow-y-auto)/固定在底部的送出按鈕列(shrink-0),
+  // 讓「建立預約」「儲存變更」這個送出按鈕永遠固定顯示在畫面最下方,不用捲到最底才看得到。
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "編輯預約" : "新增預約"}</DialogTitle>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="flex h-[92vh] max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-xl p-0"
+      >
+        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
+          <SheetTitle>{isEdit ? "編輯預約" : "新增預約"}</SheetTitle>
           {!isEdit ? (
-            <DialogDescription>建立後狀態是「待確認」,需要再次確認才會正式成立。</DialogDescription>
+            <SheetDescription>建立後狀態是「待確認」,需要再次確認才會正式成立。</SheetDescription>
           ) : null}
-        </DialogHeader>
+        </SheetHeader>
 
-        {/* min-w-0:同樣的原因,DialogContent 是 grid,這個 div 是它的直接子元素(grid item),
-            預設 min-width:auto 會被裡面過長的文字(例如服務人員下拉選單目前選中的長姓名)撐寬,
-            進而撐寬整個對話框超出手機螢幕,見 BookingDetailDialog 那邊同一個修法的說明。 */}
-        <div className="min-w-0 space-y-4">
+        {/* min-w-0:同樣的原因,這個可捲動內容區是 flex 容器的子項,預設 min-width:auto 會被
+            裡面過長的文字(例如服務人員下拉選單目前選中的長姓名)撐寬,進而撐寬整個彈窗超出
+            手機螢幕,見 BookingDetailDialog 那邊同一個修法的說明。 */}
+        <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>服務人員 *</Label>
@@ -645,7 +704,8 @@ export function BookingFormDialog({
                           onCheckedChange={() => toggleServiceItem(item.id, Number(item.price))}
                         />
                         <span>
-                          {item.name}({item.duration_minutes} 分鐘・預設 {formatAmount(Number(item.price))})
+                          {item.name}({item.duration_minutes} 分鐘・預設{" "}
+                          {formatAmount(Number(item.price))})
                         </span>
                       </label>
                       {checked ? (
@@ -659,7 +719,10 @@ export function BookingFormDialog({
                               className="h-8 w-16"
                               value={itemQuantities[item.id] ?? "1"}
                               onChange={(e) =>
-                                setItemQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                setItemQuantities((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
                               }
                             />
                           </div>
@@ -672,7 +735,10 @@ export function BookingFormDialog({
                               className="h-8 w-24"
                               value={itemUnitPrices[item.id] ?? String(item.price)}
                               onChange={(e) =>
-                                setItemUnitPrices((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                setItemUnitPrices((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
                               }
                             />
                           </div>
@@ -720,7 +786,9 @@ export function BookingFormDialog({
           <div>
             <Label>助手(可留空,可多選)</Label>
             {!staffId ? (
-              <p className="mt-2 text-[11px] text-muted-foreground">請先選擇服務人員,才能指派助手。</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                請先選擇服務人員,才能指派助手。
+              </p>
             ) : null}
             <div
               className={cn(
@@ -791,9 +859,14 @@ export function BookingFormDialog({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Label>自訂總金額</Label>
-                <p className="text-[11px] text-muted-foreground">開啟後用輸入的總金額取代逐項小計。</p>
+                <p className="text-[11px] text-muted-foreground">
+                  開啟後用輸入的總金額取代逐項小計。
+                </p>
               </div>
-              <Switch checked={customTotalAmountEnabled} onCheckedChange={setCustomTotalAmountEnabled} />
+              <Switch
+                checked={customTotalAmountEnabled}
+                onCheckedChange={setCustomTotalAmountEnabled}
+              />
             </div>
             {customTotalAmountEnabled ? (
               <Input
@@ -815,13 +888,18 @@ export function BookingFormDialog({
             </div>
             {discountEnabled ? (
               <div className="flex gap-2">
-                <Select value={discountMode} onValueChange={(v) => setDiscountMode(v as AmountAdjustmentMode)}>
+                <Select
+                  value={discountMode}
+                  onValueChange={(v) => setDiscountMode(v as AmountAdjustmentMode)}
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
-                    <SelectItem value="percentage">{AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}</SelectItem>
+                    <SelectItem value="percentage">
+                      {AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Input
@@ -839,28 +917,58 @@ export function BookingFormDialog({
             <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
               <div>
                 <Label>稅金</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  模式固定依商家設定(目前:{AMOUNT_ADJUSTMENT_MODE_LABELS[taxMode]}),數字可個別調整。
-                </p>
+                {/* 建單與訂單管理介面優化 §2:文字依商家目前稅金模式(比例/固定金額)切換,
+                    不能寫死成只有百分比的版本;純顯示文字調整,tax_mode 判斷邏輯不變。 */}
+                <p className="text-[11px] text-muted-foreground">{getTaxModeHelperText(taxMode)}</p>
               </div>
               <Switch checked={taxEnabled} onCheckedChange={setTaxEnabled} />
             </div>
             {taxEnabled ? (
-              <Input
-                type="number"
-                min={0}
-                max={taxMode === "percentage" ? 100 : undefined}
-                step="0.01"
-                placeholder={taxMode === "percentage" ? "稅率(0~100 的數字)" : "稅額"}
-                value={taxValue}
-                onChange={(e) => setTaxValue(e.target.value)}
-              />
+              <div className="relative">
+                {taxMode === "fixed" ? (
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    $
+                  </span>
+                ) : null}
+                <Input
+                  type="number"
+                  min={0}
+                  max={taxMode === "percentage" ? 100 : undefined}
+                  step="0.01"
+                  placeholder={taxMode === "percentage" ? "稅率(0~100 的數字)" : "稅額"}
+                  value={taxValue}
+                  onChange={(e) => setTaxValue(e.target.value)}
+                  className={cn(taxMode === "fixed" ? "pl-7" : "pr-8")}
+                />
+                {/* §2 第 1 點:比例模式時在輸入框旁明確標示「%」,避免使用者誤以為是輸入金額。 */}
+                {taxMode === "percentage" ? (
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                    %
+                  </span>
+                ) : null}
+              </div>
             ) : null}
 
-            <label className="flex items-center gap-2 border-t border-border pt-3 text-sm">
-              <Checkbox checked={paymentMethodOnSite} onCheckedChange={(v) => setPaymentMethodOnSite(v === true)} />
-              <span>付款方式:{PAYMENT_METHOD_OPTIONS["on_site"]}</span>
-            </label>
+            {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)§2.1/§3.2:付款方式下拉選單,比照
+                「服務人員」欄位樣式(Label + mt-2 間距的 Select)。選項依商家目前開放的設定動態
+                列出(enabledPaymentMethodCodes,已套用查無資料時的 fallback),「(未選擇/尚未設定)」
+                永遠存在,即使商家把所有選項都關掉也不擋單(§2.1 邊界情況)。 */}
+            <div className="border-t border-border pt-3">
+              <Label>付款方式</Label>
+              <Select value={paymentMethodValue} onValueChange={setPaymentMethodValue}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PAYMENT_METHOD_UNSET}>(未選擇/尚未設定)</SelectItem>
+                  {enabledPaymentMethodCodes.map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {PAYMENT_METHOD_OPTIONS[code]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* §4.8 金額即時預覽,體驗層,真正落地金額由後端重算(規則 2.2)。 */}
             <div className="space-y-1 rounded-md bg-muted/40 p-2.5 text-xs">
@@ -934,12 +1042,14 @@ export function BookingFormDialog({
             {/* 預約詳情資訊擴充與建單備註分類第一節:備註分成「內部備註」(既有 notes 欄位,
                 商家內部看、客戶看不到,這次只改標籤文字,欄位本身不改名)跟「客戶備註」
                 (新欄位 customer_notes,客戶看得到),兩個欄位並排顯示。 */}
+            {/* 建單與訂單管理介面優化 §4:兩個備註欄位的高度從 2 列加高到 5 列,方便編輯較長的文字,
+                兩個欄位比照辦理。 */}
             <div>
               <Label htmlFor="booking-notes">內部備註</Label>
               <Textarea
                 id="booking-notes"
                 className="mt-2"
-                rows={2}
+                rows={5}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
@@ -949,7 +1059,7 @@ export function BookingFormDialog({
               <Textarea
                 id="booking-customer-notes"
                 className="mt-2"
-                rows={2}
+                rows={5}
                 value={customerNotes}
                 onChange={(e) => setCustomerNotes(e.target.value)}
               />
@@ -957,13 +1067,15 @@ export function BookingFormDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button type="button" disabled={saving} onClick={handleSubmit}>
+        {/* §5 第 2 點:送出按鈕固定顯示在畫面最下方(這個 div 是 flex 直欄的第三個 shrink-0
+            子項,不在上面 flex-1 overflow-y-auto 的可捲動內容區裡),不用捲到最底才看得到。 */}
+        <div className="shrink-0 border-t border-border bg-background px-5 py-3">
+          <Button type="button" className="w-full" disabled={saving} onClick={handleSubmit}>
             {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -972,164 +1084,10 @@ export function BookingFormDialog({
 // BookingDetailDialog.tsx(模組 6/訂單管理 §1.1 要求「沿用既有元件,不重做」,讓訂單管理頁
 // 也能直接複用同一顆彈窗),這裡只保留 import,不再重複定義。
 // ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// 1.3:排程色塊視覺——依狀態決定色塊樣式,待確認/已確認/已完成三種可區分。
-// ---------------------------------------------------------------------------
-function bookingBlockClasses(status: BookingStatus): string {
-  if (status === "completed") return "bg-cta-soft text-cta";
-  if (status === "pending_confirmation") return "border border-warn/50 bg-warn/20 text-warn";
-  return "bg-brand-soft text-accent-foreground"; // accepted(已確認)
-}
-
-// ---------------------------------------------------------------------------
-// 模組 6(訂單管理)§5.5:開啟/關閉時段對話框。時段點擊選單裡的「開啟/關閉時段」選項觸發,
-// 服務人員/日期由點擊的那一格帶入(不可改),時間範圍(半小時為單位)/開啟或關閉可以調整。
-// 權限歸在 business_hours(§5.4),不是 orders——由呼叫端(CalendarPageInner)只在授權時才顯示
-// 這個選項,這裡不重複做權限判斷(真正的邊界仍在後端 set_staff_day_override 的 RLS/權限檢查)。
-// ---------------------------------------------------------------------------
-interface DayOverridePrefill {
-  staffId: string;
-  staffName: string;
-  dateKey: string;
-  startTime: string;
-  endTime: string;
-  /** 建議的開啟/關閉方向:預設跟目前顯示狀態相反(目前可預約就建議關閉,反之建議開啟),
-   * 客服仍然可以自己改成另一個方向。 */
-  suggestedIsAvailable: boolean;
-}
-
-function DayOverrideDialog({
-  open,
-  onOpenChange,
-  prefill,
-  slotOptions,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  prefill: DayOverridePrefill | null;
-  /** 這一天商家營業時間內的半小時格線起點清單(HH:mm),給起訖時間下拉選單使用。 */
-  slotOptions: string[];
-  onSaved: () => void;
-}) {
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open || !prefill) return;
-    setStartTime(prefill.startTime);
-    setEndTime(prefill.endTime);
-    setIsAvailable(prefill.suggestedIsAvailable);
-  }, [open, prefill]);
-
-  // 結束時間的候選清單:所有晚於目前起始時間的半小時格線起點,再加上最後一格的終點
-  // (slotOptions 本身只是格線「起點」清單,終點要再往後推 30 分鐘)。
-  const endTimeOptions = useMemo(() => {
-    if (!startTime) return [];
-    const startMin = timeToMinutes(startTime);
-    const candidateEnds = slotOptions
-      .map((t) => timeToMinutes(t) + SLOT_MINUTES)
-      .filter((m) => m > startMin);
-    return Array.from(new Set(candidateEnds)).sort((a, b) => a - b).map((m) => minutesToTime(m));
-  }, [startTime, slotOptions]);
-
-  async function handleSubmit() {
-    if (!prefill) return;
-    if (!startTime || !endTime) {
-      toast.error("請選擇時間範圍");
-      return;
-    }
-    setSaving(true);
-    try {
-      const conflictCount = await setStaffDayOverride(
-        prefill.staffId,
-        prefill.dateKey,
-        startTime,
-        endTime,
-        isAvailable,
-      );
-      if (conflictCount > 0) {
-        // §5.2 第 4 點:不阻擋操作,只提示既有預約筆數,不做自動取消/自動通知。
-        toast.warning(
-          `已設定完成,但這個時段目前還有 ${conflictCount} 筆既有預約,系統不會自動取消或搬移,請自行確認是否需要另外處理。`,
-        );
-      } else {
-        toast.success(isAvailable ? "已開啟這個時段" : "已關閉這個時段");
-      }
-      onOpenChange(false);
-      onSaved();
-    } catch (err) {
-      toast.error("設定失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>開啟/關閉時段</DialogTitle>
-          <DialogDescription>
-            {prefill ? `${prefill.staffName} ・ ${formatDisplayDateTime(prefill.dateKey, prefill.startTime)}` : ""}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>開始時間</Label>
-              <Select value={startTime} onValueChange={setStartTime}>
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {slotOptions.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>結束時間</Label>
-              <Select value={endTime} onValueChange={setEndTime}>
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {endTimeOptions.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-md border border-border p-3">
-            <div>
-              <Label>{isAvailable ? "開啟這個時段" : "關閉這個時段"}</Label>
-              <p className="text-[11px] text-muted-foreground">
-                {isAvailable
-                  ? "平常公休/沒排時段的那天臨時加班,讓這個時段變成可預約。"
-                  : "師傅臨時請假,讓這個時段變成不可預約。"}
-              </p>
-            </div>
-            <Switch checked={isAvailable} onCheckedChange={setIsAvailable} />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button type="button" disabled={saving} onClick={handleSubmit}>
-            {saving ? "儲存中⋯" : "確定"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// 1.3:排程色塊視覺(bookingBlockClasses)/建單與訂單管理介面優化 §7.5 訂單卡片色條
+// (bookingCardAccentBorderClass)這兩支「狀態 -> 樣式」的純函式,搬到 types.ts 統一管理
+// (不是 React 元件,放在只有元件的檔案裡會觸發 react-refresh/only-export-components 警告,
+// 而且 OrdersPage.tsx 也需要用到,放在 types.ts 讓兩邊都能 import,不用互相依賴對方的內部實作)。
 
 // ---------------------------------------------------------------------------
 // 4.3:主頁面
@@ -1146,7 +1104,8 @@ function CalendarPageInner() {
   const { data: merchantRole } = useCurrentMerchantRole();
   const { data: canManageBusinessHoursPermission } = useAgentPermission("business_hours");
   const canManageDayOverride =
-    merchantRole === "admin" || (merchantRole === "agent" && canManageBusinessHoursPermission === true);
+    merchantRole === "admin" ||
+    (merchantRole === "agent" && canManageBusinessHoursPermission === true);
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1200,9 +1159,6 @@ function CalendarPageInner() {
   const [formPrefill, setFormPrefill] = useState<BookingFormPrefill>({});
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
-  // 模組 6 §5.5:開啟/關閉時段對話框的開關狀態與帶入的預設值。
-  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false);
-  const [overridePrefill, setOverridePrefill] = useState<DayOverridePrefill | null>(null);
 
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ["booking-module"] });
@@ -1221,9 +1177,36 @@ function CalendarPageInner() {
     setFormOpen(true);
   }
 
-  function openOverrideDialog(prefill: DayOverridePrefill) {
-    setOverridePrefill(prefill);
-    setOverrideDialogOpen(true);
+  // 建單與訂單管理介面優化 §1:拿掉 DayOverrideDialog(選時間範圍+開關的對話框),改成點擊
+  // 選單項目直接切換,範圍固定是目前點擊的這一格半小時(不是選一段時間範圍)。方向跟目前顯示
+  // 狀態相反(目前可預約就關閉,不可預約就開啟),呼叫既有的 set_staff_day_override,不新增
+  // 任何後端邏輯。
+  async function handleToggleDayOverride(
+    staffId: string,
+    startTime: string,
+    endTime: string,
+    currentlyAvailable: boolean,
+  ) {
+    try {
+      const conflictCount = await setStaffDayOverride(
+        staffId,
+        selectedDateKey,
+        startTime,
+        endTime,
+        !currentlyAvailable,
+      );
+      if (conflictCount > 0) {
+        // §1 第 4 點:不阻擋操作,只提示既有預約筆數,不做自動取消/自動通知。
+        toast.warning(
+          `這個時段目前還有 ${conflictCount} 筆既有預約,系統不會自動取消或搬移,請自行確認是否需要另外處理。`,
+        );
+      } else {
+        toast.success(currentlyAvailable ? "已關閉這個時段" : "已開啟這個時段");
+      }
+      refetchAll();
+    } catch (err) {
+      toast.error("設定失敗", { description: getErrorMessage(err) });
+    }
   }
 
   async function handleClearOverride(staffId: string, startTime: string, endTime: string) {
@@ -1443,7 +1426,9 @@ function CalendarPageInner() {
                     );
                     const isOverride = Boolean(matchedOverride);
                     // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
-                    const finalAvailable = matchedOverride ? matchedOverride.is_available : inWindow;
+                    const finalAvailable = matchedOverride
+                      ? matchedOverride.is_available
+                      : inWindow;
 
                     const foreignBusy = s.foreign_bookings.some((b) => {
                       const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
@@ -1502,8 +1487,9 @@ function CalendarPageInner() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                          {/* §5.5 第 1 點:「建立訂單」依既有 orders 權限判斷(頁面層級已限定),
-                              只有這一格實際可預約時才提供。 */}
+                          {/* §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
+                              「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
+                              實際可預約時才提供。 */}
                           {finalAvailable ? (
                             <DropdownMenuItem
                               onClick={() =>
@@ -1514,25 +1500,25 @@ function CalendarPageInner() {
                                 })
                               }
                             >
-                              建立訂單
+                              新增預約
                             </DropdownMenuItem>
                           ) : null}
                           {/* §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,
-                              跟上面的「建立訂單」是不同的權限鑰匙。 */}
+                              跟上面的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:
+                              文字依這一格目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是
+                              目前這一格半小時,不再跳對話框選時間範圍。 */}
                           {canManageDayOverride ? (
                             <DropdownMenuItem
                               onClick={() =>
-                                openOverrideDialog({
-                                  staffId: s.staff_id,
-                                  staffName: s.staff_name,
-                                  dateKey: selectedDateKey,
-                                  startTime: slot.start,
-                                  endTime: slot.end,
-                                  suggestedIsAvailable: !finalAvailable,
-                                })
+                                handleToggleDayOverride(
+                                  s.staff_id,
+                                  slot.start,
+                                  slot.end,
+                                  finalAvailable,
+                                )
                               }
                             >
-                              開啟/關閉時段
+                              {finalAvailable ? "關閉時段" : "開啟時段"}
                             </DropdownMenuItem>
                           ) : null}
                           {canManageDayOverride && isOverride && matchedOverride ? (
@@ -1606,14 +1592,6 @@ function CalendarPageInner() {
         }}
         onChanged={refetchAll}
         onEdit={openEditForm}
-      />
-
-      <DayOverrideDialog
-        open={overrideDialogOpen}
-        onOpenChange={setOverrideDialogOpen}
-        prefill={overridePrefill}
-        slotOptions={slots.map((slot) => slot.start)}
-        onSaved={refetchAll}
       />
     </main>
   );

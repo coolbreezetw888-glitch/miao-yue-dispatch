@@ -17,9 +17,11 @@ import type {
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
+  PaymentMethodCode,
   StaffAvailabilityWindow,
 } from "./types";
-import { DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
+import { DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS, DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
+import { bookingMatchesKeyword } from "./ordersPageLogic";
 
 // =========================================================================
 // 3.2:商家整體營業時間讀寫(規則 2.1)。RLS 要求 private.can_manage_business_hours。
@@ -216,7 +218,9 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       : {}),
     p_tax_enabled: input.taxEnabled ?? false,
     ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
-    ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
+    ...(input.taxValue !== null && input.taxValue !== undefined
+      ? { p_tax_value: input.taxValue }
+      : {}),
     ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
     p_custom_duration_enabled: input.customDurationEnabled ?? false,
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
@@ -271,7 +275,9 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
       : {}),
     p_tax_enabled: input.taxEnabled ?? false,
     ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
-    ...(input.taxValue !== null && input.taxValue !== undefined ? { p_tax_value: input.taxValue } : {}),
+    ...(input.taxValue !== null && input.taxValue !== undefined
+      ? { p_tax_value: input.taxValue }
+      : {}),
     ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
     p_custom_duration_enabled: input.customDurationEnabled ?? false,
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
@@ -386,38 +392,107 @@ export async function clearStaffDayOverride(
 export interface MerchantBookingsFilters {
   startAt?: string; // ISO,含此時間之後(>=)
   endAt?: string; // ISO,不含此時間之後(<)
+  /** 建單與訂單管理介面優化 §7.3:startAt/endAt 要套用在哪個時間欄位——「依預約時間」對應
+   * start_at(既有預設行為,不帶這個參數時 fallback 這個值,不影響既有呼叫端),「依建單時間」
+   * 對應 created_at。 */
+  dateField?: "start_at" | "created_at";
   status?: string[];
   staffId?: string;
-  /** 模組 6(訂單管理)§1.2:客戶關鍵字搜尋(姓名或電話模糊比對),既有 fetchMerchantBookings
-   * 沒有的新篩選條件。客服可能只記得姓名或只記得電話其中一項,所以同時比對兩個欄位
-   * (PostgREST `.or(...)` 疊加 ilike,對應 SQL 的「姓名 ILIKE 或 電話 ILIKE」)。 */
-  customerKeyword?: string;
+  /** 建單與訂單管理介面優化 §7.2:關鍵字模糊比對範圍擴大到客戶姓名/電話/地址/預約 id(單號)/
+   * 備註(內部備註+客戶備註)。刻意不在資料庫層用 PostgREST `.or()` 疊加 ilike——id 是 uuid
+   * 型別,直接對 uuid 欄位做 ilike 需要額外的型別轉換,穩定性不如在前端比對;§7.4 本來就不做
+   * 真正分頁,符合其他篩選條件的訂單本來就會一次全部載入到前端,前端比對不會造成額外的資料量
+   * 問題。實際比對邏輯抽在 ordersPageLogic.ts 的 bookingMatchesKeyword(純函式,方便 Vitest
+   * 測試,也刻意不依賴這支檔案建立的 supabase client)。 */
+  keyword?: string;
 }
 
 export async function fetchMerchantBookings(
   merchantId: string,
   filters: MerchantBookingsFilters = {},
 ): Promise<Booking[]> {
+  const dateColumn = filters.dateField ?? "start_at";
   let query = supabase
     .from("bookings")
     .select("*")
     .eq("merchant_id", merchantId)
     .order("start_at", { ascending: true });
 
-  if (filters.startAt) query = query.gte("start_at", filters.startAt);
-  if (filters.endAt) query = query.lt("start_at", filters.endAt);
+  if (filters.startAt) query = query.gte(dateColumn, filters.startAt);
+  if (filters.endAt) query = query.lt(dateColumn, filters.endAt);
   if (filters.status && filters.status.length > 0) query = query.in("status", filters.status);
   if (filters.staffId) query = query.eq("staff_id", filters.staffId);
-  if (filters.customerKeyword && filters.customerKeyword.trim()) {
-    // PostgREST 的 .or() 逗號是分隔子條件的語法字元,關鍵字裡如果剛好含有逗號會被誤判成多條件,
-    // 這裡先跳脫掉,避免客服搜尋字串裡有逗號時查詢語法出錯或條件被拆散。
-    const escaped = filters.customerKeyword.trim().replace(/,/g, "\\,");
-    query = query.or(`customer_name.ilike.%${escaped}%,customer_phone.ilike.%${escaped}%`);
-  }
 
   const { data, error } = await query;
   if (error) throw error;
-  return (data ?? []) as Booking[];
+  const rows = (data ?? []) as Booking[];
+  if (filters.keyword && filters.keyword.trim()) {
+    return rows.filter((b) => bookingMatchesKeyword(b, filters.keyword as string));
+  }
+  return rows;
+}
+
+// ---------------------------------------------------------------------------
+// 建單與訂單管理介面優化 §7.5:訂單卡片需要顯示的兩項延伸資訊——服務項目名稱清單、建單客服姓名
+// (createdByName)。這兩項既有的 getBooking(id) 已經會算,但那是單筆查詢(內部還會多打一支
+// get_booking_actor_names RPC),訂單管理頁一次要顯示一整批訂單,不能對每一筆都各自呼叫一次
+// getBooking(N+1 查詢),所以另外做一支「批次」版本:服務項目名稱一次用 .in('booking_id', ids)
+// 查完,建單客服姓名把所有訂單的 created_by_user_id 去重後一次呼叫 get_booking_actor_names
+// (這支 RPC 本來就設計成接受一個 user id 陣列,不是新增的後端邏輯,只是換一個呼叫端組合既有
+// 查詢的方式)。
+// ---------------------------------------------------------------------------
+export interface BookingCardExtra {
+  serviceItemNames: string[];
+  createdByName: string;
+}
+
+export async function fetchBookingCardExtras(
+  merchantId: string,
+  bookings: Pick<Booking, "id" | "created_by_user_id">[],
+): Promise<Map<string, BookingCardExtra>> {
+  const result = new Map<string, BookingCardExtra>();
+  if (bookings.length === 0) return result;
+
+  const bookingIds = bookings.map((b) => b.id);
+  const actorIds = Array.from(
+    new Set(bookings.map((b) => b.created_by_user_id).filter((id): id is string => Boolean(id))),
+  );
+
+  const [serviceItemsRes, actorNamesRes] = await Promise.all([
+    supabase
+      .from("booking_service_items")
+      .select("booking_id, service_items(name)")
+      .in("booking_id", bookingIds),
+    actorIds.length > 0
+      ? supabase.rpc("get_booking_actor_names", { p_merchant_id: merchantId, p_user_ids: actorIds })
+      : Promise.resolve({ data: [] as { user_id: string; display_name: string }[], error: null }),
+  ]);
+
+  if (serviceItemsRes.error) throw serviceItemsRes.error;
+  if (actorNamesRes.error) throw actorNamesRes.error;
+
+  type ServiceItemRow = { booking_id: string; service_items: { name: string } | null };
+  const namesByBookingId = new Map<string, string[]>();
+  for (const row of (serviceItemsRes.data ?? []) as ServiceItemRow[]) {
+    const list = namesByBookingId.get(row.booking_id) ?? [];
+    list.push(row.service_items?.name ?? "(已刪除的服務項目)");
+    namesByBookingId.set(row.booking_id, list);
+  }
+
+  const actorNameById = new Map<string, string>();
+  for (const row of actorNamesRes.data ?? []) {
+    actorNameById.set(row.user_id, row.display_name);
+  }
+
+  for (const b of bookings) {
+    result.set(b.id, {
+      serviceItemNames: namesByBookingId.get(b.id) ?? [],
+      createdByName: b.created_by_user_id
+        ? (actorNameById.get(b.created_by_user_id) ?? "(已移除的人員)")
+        : "(已移除的人員)",
+    });
+  }
+  return result;
 }
 
 /** 建單功能擴充 4.3:單筆預約詳情擴充,除了 bookings 主體欄位,一併回傳服務項目清單
@@ -464,17 +539,21 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   // auth.uid()),這裡仍防禦性地過濾 null,避免舊資料或未來邊界情況造成呼叫失敗。
   const actorIds = Array.from(
     new Set(
-      [(booking as Booking).created_by_user_id, (booking as Booking).last_modified_by_user_id].filter(
-        (id): id is string => Boolean(id),
-      ),
+      [
+        (booking as Booking).created_by_user_id,
+        (booking as Booking).last_modified_by_user_id,
+      ].filter((id): id is string => Boolean(id)),
     ),
   );
   const actorNameById = new Map<string, string>();
   if (actorIds.length > 0) {
-    const { data: actorNames, error: actorNamesError } = await supabase.rpc("get_booking_actor_names", {
-      p_merchant_id: (booking as Booking).merchant_id,
-      p_user_ids: actorIds,
-    });
+    const { data: actorNames, error: actorNamesError } = await supabase.rpc(
+      "get_booking_actor_names",
+      {
+        p_merchant_id: (booking as Booking).merchant_id,
+        p_user_ids: actorIds,
+      },
+    );
     if (actorNamesError) throw actorNamesError;
     for (const row of actorNames ?? []) {
       actorNameById.set(row.user_id, row.display_name);
@@ -521,7 +600,9 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
     // 預約詳情資訊擴充與建單備註分類第三節 3.2:createdByUserId 理論上一定查得到姓名
     // (get_booking_actor_names 兩邊都查不到時 fallback「(已移除的人員)」,不會是 undefined),
     // 這裡仍保留一個保底文字,避免防禦性過濾把它排除掉的極端情況下畫面顯示空白。
-    createdByName: createdByUserId ? (actorNameById.get(createdByUserId) ?? "(已移除的人員)") : "(已移除的人員)",
+    createdByName: createdByUserId
+      ? (actorNameById.get(createdByUserId) ?? "(已移除的人員)")
+      : "(已移除的人員)",
     // 3.3:last_modified_by_user_id 是 null 時(從未被 confirm/update/cancel/complete 異動過)
     // 回傳 null,前端據此判斷「這一列不顯示」。
     lastModifiedByName: lastModifiedByUserId
@@ -646,10 +727,56 @@ export async function upsertMerchantTaxSettings(
   merchantId: string,
   input: UpsertMerchantTaxSettingsInput,
 ): Promise<void> {
-  const { error } = await supabase.from("merchant_tax_settings").upsert(
-    { merchant_id: merchantId, tax_mode: input.taxMode, tax_value: input.taxValue },
-    { onConflict: "merchant_id" },
-  );
+  const { error } = await supabase
+    .from("merchant_tax_settings")
+    .upsert(
+      { merchant_id: merchantId, tax_mode: input.taxMode, tax_value: input.taxValue },
+      { onConflict: "merchant_id" },
+    );
+  if (error) throw error;
+}
+
+// =========================================================================
+// 模組 9(支付方式)§1.3/§4:商家層級「開放哪些付款方式」設定讀寫,RLS 要求
+// private.can_manage_business_hours。查無資料時 fallback 成 DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS
+// (Q1/Q3 暫定裁決,待使用者確認)——只有 on_site 視為「查無資料仍視為開啟」的例外,其餘查無資料
+// 一律視為關閉。
+// =========================================================================
+
+/** 回傳某商家目前開放哪些付款方式,一律回傳完整 7 個代碼的開關狀態(套用 fallback),不回傳部分
+ * 清單,讓呼叫端(建單表單下拉選單、設定卡片)不用自己判斷「有沒有這筆資料」。 */
+export async function fetchMerchantPaymentMethodSettings(
+  merchantId: string,
+): Promise<Record<PaymentMethodCode, boolean>> {
+  const { data, error } = await supabase
+    .from("merchant_payment_method_settings")
+    .select("payment_method_code, enabled")
+    .eq("merchant_id", merchantId);
+  if (error) throw error;
+
+  const result: Record<PaymentMethodCode, boolean> = {
+    ...DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS,
+  };
+  for (const row of data ?? []) {
+    result[row.payment_method_code as PaymentMethodCode] = row.enabled;
+  }
+  return result;
+}
+
+/** §3.1 付款方式設定卡片用:逐項 upsert(on conflict (merchant_id, payment_method_code)),
+ * 比照 MaterialCostEnabledToggle/StrictConflictCheckToggle 的既有互動模式——勾選即生效,
+ * 不用做成整批儲存按鈕。呼叫端自行 invalidate 查詢快取(見 §3.1 說明)。 */
+export async function upsertMerchantPaymentMethodSetting(
+  merchantId: string,
+  code: PaymentMethodCode,
+  enabled: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("merchant_payment_method_settings")
+    .upsert(
+      { merchant_id: merchantId, payment_method_code: code, enabled },
+      { onConflict: "merchant_id,payment_method_code" },
+    );
   if (error) throw error;
 }
 
@@ -668,14 +795,16 @@ export async function getCustomerRelatedBookings(
     ...(excludeBookingId ? { p_exclude_booking_id: excludeBookingId } : {}),
   });
   if (error) throw error;
-  return ((data ?? []) as {
-    id: string;
-    start_at: string;
-    end_at: string;
-    status: string;
-    final_amount_snapshot: number;
-    service_item_names: string[] | null;
-  }[]).map((row) => ({
+  return (
+    (data ?? []) as {
+      id: string;
+      start_at: string;
+      end_at: string;
+      status: string;
+      final_amount_snapshot: number;
+      service_item_names: string[] | null;
+    }[]
+  ).map((row) => ({
     id: row.id,
     startAt: row.start_at,
     endAt: row.end_at,
@@ -699,7 +828,9 @@ export interface BookingAmountSummary {
   paymentMethod: string | null;
 }
 
-export async function fetchBookingAmountSummary(bookingId: string): Promise<BookingAmountSummary | null> {
+export async function fetchBookingAmountSummary(
+  bookingId: string,
+): Promise<BookingAmountSummary | null> {
   const { data, error } = await supabase
     .from("bookings")
     .select(

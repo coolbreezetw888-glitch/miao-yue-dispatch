@@ -12,6 +12,7 @@ import {
   completeBooking as apiCompleteBooking,
   confirmBooking as apiConfirmBooking,
   createBooking as apiCreateBooking,
+  fetchBookingCardExtras,
   setStaffDayOverride as apiSetStaffDayOverride,
   updateBooking as apiUpdateBooking,
   updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
@@ -20,12 +21,15 @@ import {
   fetchMerchantBusinessHours,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
+  fetchMerchantPaymentMethodSettings,
   fetchMerchantTaxSettings,
   fetchStaffAvailabilityWindows,
   getBooking,
   getCustomerRelatedBookings as apiGetCustomerRelatedBookings,
+  upsertMerchantPaymentMethodSetting as apiUpsertMerchantPaymentMethodSetting,
   upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
   type BookingAmountSummary,
+  type BookingCardExtra,
   type CreateBookingInput,
   type MerchantBookingsFilters,
   type UpdateBookingInput,
@@ -39,6 +43,7 @@ import type {
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
+  PaymentMethodCode,
   StaffAvailabilityWindow,
 } from "./types";
 
@@ -158,6 +163,27 @@ export async function upsertMerchantTaxSettings(
   return apiUpsertMerchantTaxSettings(merchantId, input);
 }
 
+/** 模組 9(支付方式)§1.3/§4 對外介面(Q1/Q3 暫定裁決,待使用者確認):商家目前開放哪些付款
+ * 方式,查無資料時 fallback 成 DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS(見 types.ts)。供建單表單
+ * 下拉選單(§2.1)、設定卡片(§3.1)使用。 */
+export function useMerchantPaymentMethodSettings(
+  merchantId: string | null | undefined,
+): UseQueryResult<Record<PaymentMethodCode, boolean>> {
+  return useQuery({
+    queryKey: ["booking-module", "merchant-payment-method-settings", merchantId],
+    queryFn: () => fetchMerchantPaymentMethodSettings(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export async function upsertMerchantPaymentMethodSetting(
+  merchantId: string,
+  code: PaymentMethodCode,
+  enabled: boolean,
+): Promise<void> {
+  return apiUpsertMerchantPaymentMethodSetting(merchantId, code, enabled);
+}
+
 /** 模組 6 §3.3/§6.3 對外介面:相關訂單查詢,供預約詳情頁「相關訂單」按鈕使用,也保留給之後
  * 其他模組(如模組 10 會員與紅利)複用。 */
 export async function getCustomerRelatedBookings(
@@ -199,5 +225,23 @@ export function useBookingAmountSummary(
     queryKey: ["booking-module", "booking-amount-summary", bookingId],
     queryFn: () => fetchBookingAmountSummary(bookingId as string),
     enabled: Boolean(bookingId),
+  });
+}
+
+/** 建單與訂單管理介面優化 §7.5 對外介面:批次取得訂單卡片需要的延伸資訊(服務項目名稱清單、
+ * 建單客服姓名),供訂單管理頁卡片列表使用,避免對列表裡每一筆訂單各自呼叫一次 getBooking
+ * (N+1 查詢)。queryKey 用訂單 id 清單(排序後)當快取鍵,清單內容不變時不會重複查詢。 */
+export function useBookingCardExtras(
+  merchantId: string | null | undefined,
+  bookings: Pick<Booking, "id" | "created_by_user_id">[],
+): UseQueryResult<Map<string, BookingCardExtra>> {
+  const bookingIdsKey = bookings
+    .map((b) => b.id)
+    .sort()
+    .join(",");
+  return useQuery({
+    queryKey: ["booking-module", "booking-card-extras", merchantId, bookingIdsKey],
+    queryFn: () => fetchBookingCardExtras(merchantId as string, bookings),
+    enabled: Boolean(merchantId) && bookings.length > 0,
   });
 }

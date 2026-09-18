@@ -557,6 +557,41 @@ export type Database = {
           },
         ]
       }
+      merchant_payment_method_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          merchant_id: string
+          payment_method_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          merchant_id: string
+          payment_method_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          merchant_id?: string
+          payment_method_code?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_payment_method_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_staff: {
         Row: {
           advance_booking_days: number | null

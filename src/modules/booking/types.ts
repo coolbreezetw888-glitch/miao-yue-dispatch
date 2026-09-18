@@ -33,18 +33,64 @@ export const DEFAULT_MERCHANT_TAX_SETTINGS: { taxMode: AmountAdjustmentMode; tax
   taxValue: 5.0,
 };
 
-/** 模組 6 §3.2/裁決 Q10:付款方式這次只提供一個暫時選項「現場付款」當標記用,不做任何金流邏輯。
- * 用穩定的代碼值(不直接拿中文字串當資料庫值),方便之後模組 9 擴充選項時不用改資料庫裡已經存在的值。 */
-export const PAYMENT_METHOD_OPTIONS: Record<string, string> = {
+/** 模組 9(支付方式)§1.1:全平台固定的 7 個付款方式代碼,產品方定義,不是商家自訂文字,
+ * 不因產業類型(到府派工/美業到店)增減(§2.2)。用穩定的代碼值存資料庫,顯示文字放對照表,
+ * 方便之後要改文案時不用動資料庫裡已經存在的值。原本模組 6 §3.2/裁決 Q10 只有 on_site 一個
+ * 暫時選項,這裡是模組 9 的正式擴充。 */
+export const PAYMENT_METHOD_CODES = [
+  "on_site",
+  "bank_transfer",
+  "atm",
+  "linepay",
+  "jkopay",
+  "credit_card",
+  "no_payment",
+] as const;
+
+export type PaymentMethodCode = (typeof PAYMENT_METHOD_CODES)[number];
+
+/** 模組 9 §1.1 對外介面:代碼 → 中文顯示文字對照表。「無支付」(no_payment)定案語意
+ * (Q2 暫定裁決,待使用者確認)是「這筆預約本來就不用收費」(保固維修/免費估價/公關招待),
+ * 跟「留空(null)=尚未設定」是兩種不同語意,顯示文字必須有清楚區隔(見下方 getPaymentMethodLabel)。 */
+export const PAYMENT_METHOD_OPTIONS: Record<PaymentMethodCode, string> = {
   on_site: "現場付款",
+  bank_transfer: "匯款",
+  atm: "ATM 轉帳",
+  linepay: "LINE Pay",
+  jkopay: "街口支付",
+  credit_card: "信用卡",
+  no_payment: "無支付",
+};
+
+/** 模組 9 §1.3/§4 對外介面(Q3 暫定裁決,待使用者確認):merchant_payment_method_settings
+ * 查無資料時的 fallback 預設值——只有現場付款預設開啟,其餘 6 項預設關閉,維持模組 6 上線至今的
+ * 實際狀態,不因這次擴充選項清單讓既有商家突然多出一堆沒設定過的選項。商家要開放其他付款方式,
+ * 必須自己到設定頁(BusinessHoursPage 的 PaymentMethodSettingsCard)勾選。 */
+export const DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS: Record<PaymentMethodCode, boolean> = {
+  on_site: true,
+  bank_transfer: false,
+  atm: false,
+  linepay: false,
+  jkopay: false,
+  credit_card: false,
+  no_payment: false,
 };
 
 /** 把 bookings.payment_method 的原始值轉成畫面顯示文字。null/空字串顯示「尚未設定」;
- * 萬一資料庫裡存了一個目前對照表沒有的值(例如以後模組 9 新增過的選項,或手動塞的舊資料),
- * 直接顯示原始值,不要讓畫面空白或報錯。 */
+ * 萬一資料庫裡存了一個目前對照表沒有的值(例如以後選項改名但沒轉舊資料,或手動塞的舊資料),
+ * 直接顯示原始值,不要讓畫面空白或報錯(模組 9 規格書 §5 邊界情況第 4 點)。 */
 export function getPaymentMethodLabel(value: string | null | undefined): string {
   if (!value) return "尚未設定";
-  return PAYMENT_METHOD_OPTIONS[value] ?? value;
+  return PAYMENT_METHOD_OPTIONS[value as PaymentMethodCode] ?? value;
+}
+
+/** 建單與訂單管理介面優化 §2:建單表單稅金說明文字,依商家目前的稅金模式(比例/固定金額)
+ * 顯示對應的文字,不能寫死成只有百分比的版本。這裡只影響顯示文字,不影響
+ * merchant_tax_settings.tax_mode 的判斷邏輯或任何資料寫入/計算邏輯。 */
+export function getTaxModeHelperText(mode: AmountAdjustmentMode): string {
+  return mode === "percentage"
+    ? "依商家設定稅率百分比,數字可個別調整。"
+    : "依商家設定稅額,金額可個別調整。";
 }
 
 /** 規則 2.9,建單功能擴充決策記錄 5 更新:六個狀態值,這次會真的用到
@@ -68,6 +114,33 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
 /** 建單功能擴充 2.4:這次還沒進入終止狀態(completed/cancelled)的兩種狀態,月檢視日期標示
  * (1.2)、行事曆色塊(1.3)都要把這兩種狀態算進「這天有預約」。 */
 export const ACTIVE_BOOKING_STATUSES: BookingStatus[] = ["pending_confirmation", "accepted"];
+
+// ---------------------------------------------------------------------------
+// 1.3:排程色塊視覺(CalendarPage.tsx)/建單與訂單管理介面優化 §7.5:訂單卡片色條
+// (OrdersPage.tsx)共用的「狀態 -> 樣式」純函式。放在這支純型別/純函式檔案(不含 React 元件),
+// 讓兩個頁面都能 import,不用互相依賴對方的內部實作,也不會觸發
+// react-refresh/only-export-components 警告(該警告只在「元件檔案」裡混雜非元件匯出時出現)。
+// ---------------------------------------------------------------------------
+
+/** 依狀態決定行事曆排程色塊的樣式,待確認/已確認/已完成/已取消四種可區分。 */
+export function bookingBlockClasses(status: BookingStatus): string {
+  if (status === "completed") return "bg-cta-soft text-cta";
+  if (status === "pending_confirmation") return "border border-warn/50 bg-warn/20 text-warn";
+  // 建單與訂單管理介面優化 §7.5:新增 cancelled 的配色(訂單管理頁卡片列表需要),沿用既有的
+  // 灰階 token(muted),不新增自訂顏色。
+  if (status === "cancelled") return "bg-muted text-muted-foreground";
+  return "bg-brand-soft text-accent-foreground"; // accepted(已確認)
+}
+
+/** 建單與訂單管理介面優化 §7.5:訂單卡片左側色條專用的邊框顏色 token,跟上面
+ * bookingBlockClasses 沿用同一套狀態配色邏輯,只是套用在 border-l(色條)而不是整塊背景色。
+ * cancelled 這次額外選用既有的灰階 token(muted-foreground),不新增自訂顏色。 */
+export function bookingCardAccentBorderClass(status: BookingStatus): string {
+  if (status === "completed") return "border-l-cta";
+  if (status === "pending_confirmation") return "border-l-warn";
+  if (status === "cancelled") return "border-l-muted-foreground/40";
+  return "border-l-brand"; // accepted(已確認)
+}
 
 /** 0=星期日...6=星期六,對應 merchant_business_hours.day_of_week /
  * staff_availability_windows.day_of_week 跟 Postgres extract(dow from ...) 的回傳值。 */
