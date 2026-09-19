@@ -25,6 +25,8 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import { LeaveDeductionRuleDialog } from "@/modules/payroll/LeaveDeductionRuleDialog";
 
 import {
   addLeaveType,
@@ -166,6 +168,13 @@ function LeaveTypesPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
 
+  // 模組 8(薪資與帳務)§4.2:「扣款規則」按鈕依 commission_settings 權限顯示,跟這個頁面本身
+  // 依 team_leave 權限顯示的守衛(RequireTeamLeaveAccess)是兩把獨立的鑰匙——能進到這個頁面
+  // 管理假別,不代表一定能設定假別的扣款規則。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const { data: canManageCommissionSettings } = useAgentPermission("commission_settings");
+  const showDeductionRuleButton = merchantRole === "admin" || canManageCommissionSettings === true;
+
   const { data: leaveTypes, isLoading } = useQuery({
     queryKey: leaveTypesQueryKey(merchantId),
     queryFn: () => fetchMerchantLeaveTypesAll(merchantId),
@@ -248,6 +257,18 @@ function LeaveTypesPageInner() {
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">
+                    {showDeductionRuleButton ? (
+                      <LeaveDeductionRuleDialog
+                        merchantId={merchantId}
+                        leaveTypeId={leaveType.id}
+                        leaveTypeName={leaveType.name}
+                        trigger={
+                          <Button variant="outline" size="sm">
+                            扣款規則
+                          </Button>
+                        }
+                      />
+                    ) : null}
                     {leaveType.status === "active" ? (
                       <>
                         <LeaveTypeFormDialog

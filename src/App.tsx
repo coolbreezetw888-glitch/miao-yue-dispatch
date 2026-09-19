@@ -29,6 +29,9 @@ import OrdersPage from "@/modules/booking/OrdersPage";
 import LeaveTypesPage from "@/modules/scheduling/LeaveTypesPage";
 import LeaveRecordsPage from "@/modules/scheduling/LeaveRecordsPage";
 import SchedulingOverviewPage from "@/modules/scheduling/SchedulingOverviewPage";
+import PayrollSettingsPage from "@/modules/payroll/PayrollSettingsPage";
+import BillingReportPage from "@/modules/payroll/BillingReportPage";
+import StaffReportPage from "@/modules/payroll/StaffReportPage";
 
 function NotFound() {
   return (
@@ -80,6 +83,9 @@ export default function App() {
           <Route path="/app/leave-types" element={<LeaveTypesPage />} />
           <Route path="/app/leave-records" element={<LeaveRecordsPage />} />
           <Route path="/app/scheduling" element={<SchedulingOverviewPage />} />
+          <Route path="/app/payroll-settings" element={<PayrollSettingsPage />} />
+          <Route path="/app/billing-report" element={<BillingReportPage />} />
+          <Route path="/app/staff-report" element={<StaffReportPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

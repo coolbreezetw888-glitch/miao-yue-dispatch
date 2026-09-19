@@ -70,6 +70,76 @@ export type Database = {
           },
         ]
       }
+      booking_commission_records: {
+        Row: {
+          booking_id: string
+          commission_amount: number
+          commission_base_amount_snapshot: number
+          commission_basis_type_snapshot: string
+          commission_rate_percentage_snapshot: number
+          computed_at: string
+          created_at: string
+          id: string
+          material_cost_deducted_snapshot: number
+          merchant_id: string
+          recalculated_at: string | null
+          staff_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          commission_amount: number
+          commission_base_amount_snapshot: number
+          commission_basis_type_snapshot: string
+          commission_rate_percentage_snapshot: number
+          computed_at?: string
+          created_at?: string
+          id?: string
+          material_cost_deducted_snapshot?: number
+          merchant_id: string
+          recalculated_at?: string | null
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          commission_amount?: number
+          commission_base_amount_snapshot?: number
+          commission_basis_type_snapshot?: string
+          commission_rate_percentage_snapshot?: number
+          computed_at?: string
+          created_at?: string
+          id?: string
+          material_cost_deducted_snapshot?: number
+          merchant_id?: string
+          recalculated_at?: string | null
+          staff_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_commission_records_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_commission_records_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_commission_records_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_material_costs: {
         Row: {
           amount_snapshot: number
@@ -343,6 +413,54 @@ export type Database = {
           industry_type?: string
         }
         Relationships: []
+      }
+      leave_type_deduction_rules: {
+        Row: {
+          created_at: string
+          deduction_mode: string
+          fixed_amount_value: number | null
+          id: string
+          leave_type_id: string
+          merchant_id: string
+          percentage_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deduction_mode?: string
+          fixed_amount_value?: number | null
+          id?: string
+          leave_type_id: string
+          merchant_id: string
+          percentage_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deduction_mode?: string
+          fixed_amount_value?: number | null
+          id?: string
+          leave_type_id?: string
+          merchant_id?: string
+          percentage_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_type_deduction_rules_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: true
+            referencedRelation: "merchant_leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_type_deduction_rules_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       material_cost_items: {
         Row: {
@@ -620,6 +738,41 @@ export type Database = {
             foreignKeyName: "merchant_leave_types_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_payroll_settings: {
+        Row: {
+          commission_basis_type: string
+          created_at: string
+          default_commission_rate_percentage: number
+          merchant_id: string
+          pay_days_per_month: number
+          updated_at: string
+        }
+        Insert: {
+          commission_basis_type?: string
+          created_at?: string
+          default_commission_rate_percentage?: number
+          merchant_id: string
+          pay_days_per_month?: number
+          updated_at?: string
+        }
+        Update: {
+          commission_basis_type?: string
+          created_at?: string
+          default_commission_rate_percentage?: number
+          merchant_id?: string
+          pay_days_per_month?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_payroll_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -1077,6 +1230,38 @@ export type Database = {
           },
         ]
       }
+      staff_commission_rates: {
+        Row: {
+          created_at: string
+          id: string
+          rate_percentage: number
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rate_percentage: number
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rate_percentage?: number
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_commission_rates_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_leave_records: {
         Row: {
           cancelled_at: string | null
@@ -1132,6 +1317,41 @@ export type Database = {
             foreignKeyName: "staff_leave_records_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_salary_settings: {
+        Row: {
+          created_at: string
+          id: string
+          monthly_base_salary: number
+          monthly_leave_quota_days: number | null
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          monthly_base_salary?: number
+          monthly_leave_quota_days?: number | null
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          monthly_base_salary?: number
+          monthly_leave_quota_days?: number | null
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_salary_settings_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
             referencedRelation: "merchant_staff"
             referencedColumns: ["id"]
           },
@@ -1277,6 +1497,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      compute_booking_commission: {
+        Args: { p_booking_id: string }
+        Returns: undefined
       }
       confirm_booking: {
         Args: { p_booking_id: string }
@@ -1485,8 +1709,20 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_merchant_billing_summary: {
+        Args: { p_merchant_id: string; p_month: number; p_year: number }
+        Returns: Json
+      }
       get_merchant_day_schedule: {
         Args: { p_date: string; p_merchant_id: string }
+        Returns: Json
+      }
+      get_staff_commission_summary: {
+        Args: { p_month: number; p_staff_id: string; p_year: number }
+        Returns: Json
+      }
+      get_staff_monthly_payroll_summary: {
+        Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
       }
       get_staff_schedule_overview: {
@@ -1533,6 +1769,30 @@ export type Database = {
           start_at: string
         }[]
       }
+      recalculate_booking_commission: {
+        Args: { p_booking_id: string; p_override_rate_percentage?: number }
+        Returns: {
+          booking_id: string
+          commission_amount: number
+          commission_base_amount_snapshot: number
+          commission_basis_type_snapshot: string
+          commission_rate_percentage_snapshot: number
+          computed_at: string
+          created_at: string
+          id: string
+          material_cost_deducted_snapshot: number
+          merchant_id: string
+          recalculated_at: string | null
+          staff_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "booking_commission_records"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_invited_merchant_agent: {
         Args: {
           p_invited_email: string
@@ -1553,11 +1813,19 @@ export type Database = {
         Args: { p_agent_id: string }
         Returns: undefined
       }
+      seed_default_leave_deduction_rules: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
       seed_default_leave_types: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
       seed_default_payment_methods: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      seed_default_payroll_settings: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }

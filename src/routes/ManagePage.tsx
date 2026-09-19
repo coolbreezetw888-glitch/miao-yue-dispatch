@@ -19,9 +19,12 @@ import {
   CalendarRange,
   ClipboardList,
   Coins,
+  FileBarChart,
   Headset,
+  Percent,
   Receipt,
   Settings,
+  TrendingUp,
   UserMinus,
   Users,
   Wallet,
@@ -68,6 +71,14 @@ export default function ManagePage() {
   const showTeamLeaveCards = isAdmin || canManageTeamLeave === true;
   const { data: canViewScheduling } = useAgentPermission("scheduling");
   const showSchedulingCard = isAdmin || canViewScheduling === true;
+  // 模組 8(薪資與帳務)§4.6:commission_settings/billing/staff_report 三把獨立鑰匙,分別決定
+  // 「抽成與薪資設定」「店家帳務報表」「師傅報表」三張卡片的顯示權限。
+  const { data: canManageCommissionSettings } = useAgentPermission("commission_settings");
+  const showPayrollSettingsCard = isAdmin || canManageCommissionSettings === true;
+  const { data: canViewBilling } = useAgentPermission("billing");
+  const showBillingReportCard = isAdmin || canViewBilling === true;
+  const { data: canViewStaffReport } = useAgentPermission("staff_report");
+  const showStaffReportCard = isAdmin || canViewStaffReport === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -149,6 +160,30 @@ export default function ManagePage() {
       description: "跨服務人員的每週時段/例外/請假總覽",
       icon: CalendarRange,
       visible: showSchedulingCard,
+    },
+    {
+      key: "payroll-settings",
+      to: "/app/payroll-settings",
+      label: "抽成與薪資設定",
+      description: "設定抽成基準/比例、月薪與月休天數",
+      icon: Percent,
+      visible: showPayrollSettingsCard,
+    },
+    {
+      key: "billing-report",
+      to: "/app/billing-report",
+      label: "店家帳務報表",
+      description: "查看月度營收、成本、抽成支出與概估毛利",
+      icon: TrendingUp,
+      visible: showBillingReportCard,
+    },
+    {
+      key: "staff-report",
+      to: "/app/staff-report",
+      label: "師傅報表",
+      description: "查看個別服務人員的抽成或薪資明細",
+      icon: FileBarChart,
+      visible: showStaffReportCard,
     },
     {
       key: "settings",

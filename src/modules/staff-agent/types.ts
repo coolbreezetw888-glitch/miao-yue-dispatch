@@ -136,7 +136,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "billing",
     label: "帳務管理",
-    description: "開放後客服可以看到並操作帳務相關資料(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以查看店家端帳務報表(對應模組 8 薪資與帳務)。這把鑰匙也「連帶」讓客服可以查看師傅報表(師傅報表檢查的權限範圍比較寬,billing 或 staff_report 任一即可),但反過來不成立——只開 staff_report 不能看帳務報表。",
   },
   {
     key: "team_leave",
@@ -152,7 +153,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "staff_report",
     label: "師傅報表",
-    description: "開放後客服可以查看師傅相關報表(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以查看個別服務人員的抽成/薪資報表(對應模組 8 薪資與帳務)。注意:重新計算已完成訂單抽成金額這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
   },
   {
     key: "scheduling",
@@ -169,7 +171,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "commission_settings",
     label: "抽成設定",
-    description: "開放後客服可以調整抽成設定(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以調整商家抽成基準/預設比例、月折算天數、按件計酬服務人員個人抽成比例覆寫、月薪制服務人員薪資設定、假別扣款規則(對應模組 8 薪資與帳務)。注意:重新計算已完成訂單抽成金額這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
   },
   {
     key: "line_notification",
