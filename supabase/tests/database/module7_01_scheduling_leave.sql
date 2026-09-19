@@ -2,7 +2,7 @@
 -- 含主腦裁示(取代規格書規則 2.7/2.8 原文):unlimited_backend_edit 不覆寫請假限制。
 begin;
 
-select plan(47);
+select plan(51);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -447,6 +447,15 @@ select throws_ok(
   '規則 2.11:無授權客服不能呼叫 get_staff_schedule_overview'
 );
 
+-- 編號 254/265 回歸驗證:完全無授權的客服(沒有 orders/team_leave/scheduling 任何一項)
+-- 仍然看不到 merchant_staff——本次修正只新增 can_manage_team_leave 這個放行條件,
+-- 不影響完全無授權客服原本就被擋下的行為。
+select is(
+  (select count(*)::int from merchant_staff where merchant_id = 'd7000000-0000-4000-8000-000000000021'),
+  0,
+  '編號 254/265 回歸驗證:完全無授權的客服仍然看不到 merchant_staff(SELECT 政策三個條件都不成立)'
+);
+
 select pg_temp.test_clear_auth();
 
 -- 被授權 team_leave 的客服:可以新增假別、可以建立/取消請假,但不能檢視排班一覽(不同的鑰匙)。
@@ -478,6 +487,34 @@ select throws_ok(
   $$select get_staff_schedule_overview('d7000000-0000-4000-8000-000000000021', '2026-09-25', '2026-09-27')$$,
   '42501', null,
   '規則 2.11:被授權 team_leave 但沒有 scheduling 的客服,不能檢視排班一覽(兩把獨立的鑰匙)'
+);
+
+-- 編號 254/265(bug 修正驗證):被授權 team_leave(沒有 orders)的客服,現在可以 SELECT 到
+-- merchant_staff——修正前這個查詢會是 0 筆,導致「登記請假」表單的服務人員下拉選單空白、
+-- 既有紀錄清單顯示不出真實姓名。
+select ok(
+  (select count(*)::int from merchant_staff where merchant_id = 'd7000000-0000-4000-8000-000000000021') > 0,
+  '編號 254/265:被授權 team_leave(沒有 orders)的客服,可以 SELECT 到 merchant_staff(修正後「登記請假」表單的服務人員下拉選單/清單姓名顯示才能正常運作)'
+);
+
+-- 編號 254/265 回歸驗證:INSERT/UPDATE 政策完全沒動,team_leave 客服依然不能寫入 merchant_staff。
+select throws_ok(
+  $$insert into merchant_staff (merchant_id, name, phone, no_time_slot_limit)
+    values ('d7000000-0000-4000-8000-000000000021', 'team_leave客服嘗試新增', null, true)$$,
+  '42501', null,
+  '編號 254/265 回歸驗證:被授權 team_leave 的客服仍然不能新增 merchant_staff(INSERT 政策維持只給 is_merchant_admin,不受本次修正影響)'
+);
+
+update merchant_staff set name = 'team_leave客服嘗試改名' where id = 'd7000000-0000-4000-8000-000000000041';
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('d7000000-0000-4000-8000-000000000001');
+
+select is(
+  (select name from merchant_staff where id = 'd7000000-0000-4000-8000-000000000041'),
+  '月薪服務人員X',
+  '編號 254/265 回歸驗證:team_leave 客服的 UPDATE 因 RLS 看不到寫入條件而 0 筆受影響,服務人員名字沒有被改到(UPDATE 政策維持只給 is_merchant_admin)'
 );
 
 select pg_temp.test_clear_auth();
