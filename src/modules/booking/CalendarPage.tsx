@@ -7,6 +7,7 @@
 // 不依賴瀏覽器本機時區(避免使用者瀏覽器時區設定不是台灣時導致算錯)。
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -1087,6 +1088,12 @@ function CalendarPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
   const { data: staffList } = useMerchantStaffList(merchantId);
+  // 模組 7(排班與休假管理)§4.4 第 3 點:排班一覽頁的儲存格會連結跳轉到
+  // /app/calendar?date=YYYY-MM-DD,這裡只在「第一次掛載」時讀取這個查詢參數決定初始日期,
+  // 之後使用者在行事曆頁面自己切換日期不受這個參數影響(不用 useSearchParams 持續同步,
+  // 避免使用者切換日期後網址列舊的 date 參數反過來把畫面拉回去)。
+  const [searchParams] = useSearchParams();
+  const initialDateParam = searchParams.get("date");
 
   // 模組 6(訂單管理)§5.4:「開啟/關閉時段」的權限歸在 business_hours,不是 orders(建立訂單
   // 沿用既有頁面層級的 orders 權限,這裡不用另外判斷)。同一個時段點擊選單裡,兩個選項各自依
@@ -1105,8 +1112,12 @@ function CalendarPageInner() {
 
   // 1.1:月/週檢視切換。
   const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
-  const [selectedDate, setSelectedDate] = useState<Date>(() => getTaipeiNow());
-  const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(getTaipeiNow()));
+  const [selectedDate, setSelectedDate] = useState<Date>(() =>
+    initialDateParam ? new Date(`${initialDateParam}T00:00:00`) : getTaipeiNow(),
+  );
+  const [monthAnchor, setMonthAnchor] = useState<Date>(() =>
+    startOfMonth(initialDateParam ? new Date(`${initialDateParam}T00:00:00`) : getTaipeiNow()),
+  );
   const selectedDateKey = toDateKey(selectedDate);
 
   const weekStart = useMemo(() => startOfWeek(selectedDate), [selectedDate]);
@@ -1274,6 +1285,7 @@ function CalendarPageInner() {
                 <button
                   key={key}
                   type="button"
+                  aria-label={`切換到 ${key}`}
                   onClick={() => setSelectedDate(d)}
                   className={cn(
                     "flex flex-col items-center gap-1 rounded-md border px-2 py-2 text-xs transition-colors",
@@ -1389,17 +1401,38 @@ function CalendarPageInner() {
             {schedule.staff.map((s) => (
               <div
                 key={s.staff_id}
+                data-testid={`staff-column-${s.staff_id}`}
                 className="relative flex-1 border-r border-border last:border-r-0"
               >
-                <div className="flex h-9 items-center justify-center border-b border-border bg-surface p-2 text-center text-xs font-medium text-foreground">
-                  {s.staff_name}
+                <div className="flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
+                  <span className="truncate">{s.staff_name}</span>
+                  {/* 模組 7(排班與休假管理)§4.5:請假整欄灰底顯示假別名稱。主腦裁示:請假一律擋下
+                      建單,不論 unlimited_backend_edit 是否開啟都沒有覆寫例外,所以這裡不需要規格書
+                      原文提到的「可透過無限制編輯覆寫」特殊標示。 */}
+                  {s.on_leave ? (
+                    <span className="truncate text-[10px] font-normal text-muted-foreground">
+                      休假:{s.on_leave.leave_type_name}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="relative" style={{ height: gridTotalPx }}>
+                  {/* 模組 7 §4.5:請假整天,整欄改成灰底不可點擊建單——不進入下面複雜的
+                      背景格線/DropdownMenu 邏輯,直接渲染一個涵蓋全高的灰底區塊。既有的預約
+                      (s.bookings)仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己
+                      判斷處理(規則 2.6:系統只警示不代為處理),但不能再新增新的預約。 */}
+                  {s.on_leave ? (
+                    <div
+                      className="absolute inset-0 bg-muted/60"
+                      aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
+                    />
+                  ) : null}
                   {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:
                       每格先看有沒有落在某個 availability_overrides 區間內,有則採用該區間的
                       is_available 值決定顯示狀態,沒有則沿用既有的商家營業時間∩服務人員時段判斷
                       (available_windows,第一層∩第二層,後端算好的結果)。 */}
-                  {slots.map((slot, i) => {
+                  {s.on_leave
+                    ? null
+                    : slots.map((slot, i) => {
                     const slotStartMin = timeToMinutes(slot.start);
                     const slotEndMin = timeToMinutes(slot.end);
 

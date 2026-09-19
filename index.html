@@ -22,6 +22,16 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
     />
+    <!-- 模組 7(排班與休假管理)§6.3:PWA 可安裝性。manifest 內容參考 public/manifest.json,
+         start_url/scope 都指到 /app(後台殼層),不是行銷首頁——安裝這個動作的使用者絕大多數
+         已經是商家/客服。iOS Safari 對標準 manifest 支援不完整,以下幾個 iOS 專屬 meta/link 標籤
+         是讓「加入主畫面」在 iOS 上正確顯示獨立視窗跟正確圖示的必要補充(見 6.2 查證結果)。 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563EB" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="秒約" />
   </head>
   <body>
     <div id="root"></div>

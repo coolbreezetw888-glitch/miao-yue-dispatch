@@ -34,6 +34,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -95,6 +96,9 @@ const EMPTY_FORM: StaffFormState = {
   googleCalendarSyncEnabled: false,
   canCreateEditOrders: false,
   canUploadConstructionPhotos: false,
+  // 模組 7(排班與休假管理)§4.1/第〇節判斷 1:預先選取「按件計酬」為預設選項,對既有資料
+  // 行為影響最小,但要求管理員明確看過再送出,不是隱藏欄位。
+  compensationType: "piece_rate",
 };
 
 function staffToFormState(staff: MerchantStaff): StaffFormState {
@@ -117,6 +121,7 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
     googleCalendarSyncEnabled: staff.google_calendar_sync_enabled,
     canCreateEditOrders: staff.can_create_edit_orders,
     canUploadConstructionPhotos: staff.can_upload_construction_photos,
+    compensationType: staff.compensation_type as "monthly_salary" | "piece_rate",
   };
 }
 
@@ -448,6 +453,32 @@ function StaffFormDialog({
                 onCheckedChange={(v) => setField("isListed", v)}
               />
             </div>
+
+            {/* 模組 7(排班與休假管理)§4.1:計酬類型單選,預設選取「按件計酬」(第〇節判斷 1)。
+                只有月薪制的服務人員才能登記請假紀錄(規則 2.2),按件計酬對應的是「調整可預約
+                時段」(既有的 staff_availability_windows/unlimited_backend_edit 機制)。 */}
+            <div className="rounded-md border border-border px-3 py-2">
+              <p className="text-sm font-medium text-foreground">計酬類型</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能)。
+              </p>
+              <RadioGroup
+                className="mt-2 grid-flow-col justify-start gap-6"
+                value={form.compensationType ?? "piece_rate"}
+                onValueChange={(v) =>
+                  setField("compensationType", v as "monthly_salary" | "piece_rate")
+                }
+              >
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <RadioGroupItem value="piece_rate" id="staff-compensation-piece-rate" />
+                  按件計酬
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground">
+                  <RadioGroupItem value="monthly_salary" id="staff-compensation-monthly-salary" />
+                  月薪制
+                </label>
+              </RadioGroup>
+            </div>
           </div>
 
           <div>
@@ -700,6 +731,9 @@ function StaffListInner() {
                       <div className="mt-0.5 flex gap-1.5">
                         <Badge variant={staff.is_listed ? "default" : "secondary"}>
                           {staff.is_listed ? "已上架" : "未上架"}
+                        </Badge>
+                        <Badge variant="outline">
+                          {staff.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬"}
                         </Badge>
                         {staff.status === "removed" ? (
                           <Badge variant="destructive">已移除</Badge>

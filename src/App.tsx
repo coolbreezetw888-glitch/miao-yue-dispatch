@@ -26,6 +26,9 @@ import CalendarPage from "@/modules/booking/CalendarPage";
 import MaterialCostsPage from "@/modules/booking/MaterialCostsPage";
 import PaymentMethodsPage from "@/modules/booking/PaymentMethodsPage";
 import OrdersPage from "@/modules/booking/OrdersPage";
+import LeaveTypesPage from "@/modules/scheduling/LeaveTypesPage";
+import LeaveRecordsPage from "@/modules/scheduling/LeaveRecordsPage";
+import SchedulingOverviewPage from "@/modules/scheduling/SchedulingOverviewPage";
 
 function NotFound() {
   return (
@@ -74,6 +77,9 @@ export default function App() {
           <Route path="/app/business-hours" element={<BusinessHoursPage />} />
           <Route path="/app/material-costs" element={<MaterialCostsPage />} />
           <Route path="/app/payment-methods" element={<PaymentMethodsPage />} />
+          <Route path="/app/leave-types" element={<LeaveTypesPage />} />
+          <Route path="/app/leave-records" element={<LeaveRecordsPage />} />
+          <Route path="/app/scheduling" element={<SchedulingOverviewPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

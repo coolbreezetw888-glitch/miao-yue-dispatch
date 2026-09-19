@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -567,6 +587,44 @@ export type Database = {
           },
         ]
       }
+      merchant_leave_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          merchant_id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          merchant_id: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          merchant_id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_leave_types_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_staff: {
         Row: {
           advance_booking_days: number | null
@@ -576,6 +634,7 @@ export type Database = {
           booking_window_min_days: number | null
           can_create_edit_orders: boolean
           can_upload_construction_photos: boolean
+          compensation_type: string
           contact_email: string | null
           created_at: string
           direct_accept_after_merchant_confirm: boolean
@@ -604,6 +663,7 @@ export type Database = {
           booking_window_min_days?: number | null
           can_create_edit_orders?: boolean
           can_upload_construction_photos?: boolean
+          compensation_type?: string
           contact_email?: string | null
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
@@ -632,6 +692,7 @@ export type Database = {
           booking_window_min_days?: number | null
           can_create_edit_orders?: boolean
           can_upload_construction_photos?: boolean
+          compensation_type?: string
           contact_email?: string | null
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
@@ -1016,6 +1077,66 @@ export type Database = {
           },
         ]
       }
+      staff_leave_records: {
+        Row: {
+          cancelled_at: string | null
+          created_at: string
+          created_by_user_id: string | null
+          end_date: string
+          id: string
+          leave_type_id: string
+          leave_type_name_snapshot: string
+          notes: string | null
+          staff_id: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          end_date: string
+          id?: string
+          leave_type_id: string
+          leave_type_name_snapshot: string
+          notes?: string | null
+          staff_id: string
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          end_date?: string
+          id?: string
+          leave_type_id?: string
+          leave_type_name_snapshot?: string
+          notes?: string | null
+          staff_id?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_leave_records_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_leave_records_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1072,6 +1193,29 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "bookings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      cancel_staff_leave: {
+        Args: { p_leave_id: string }
+        Returns: {
+          cancelled_at: string | null
+          created_at: string
+          created_by_user_id: string | null
+          end_date: string
+          id: string
+          leave_type_id: string
+          leave_type_name_snapshot: string
+          notes: string | null
+          staff_id: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_leave_records"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1277,6 +1421,36 @@ export type Database = {
         }
         Returns: string
       }
+      create_staff_leave: {
+        Args: {
+          p_confirm_despite_conflicts?: boolean
+          p_end_date: string
+          p_leave_type_id: string
+          p_notes?: string
+          p_staff_id: string
+          p_start_date: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          created_at: string
+          created_by_user_id: string | null
+          end_date: string
+          id: string
+          leave_type_id: string
+          leave_type_name_snapshot: string
+          notes: string | null
+          staff_id: string
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "staff_leave_records"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       generate_booking_slug: { Args: { p_name: string }; Returns: string }
       get_booking_actor_names: {
         Args: { p_merchant_id: string; p_user_ids: string[] }
@@ -1315,6 +1489,14 @@ export type Database = {
         Args: { p_date: string; p_merchant_id: string }
         Returns: Json
       }
+      get_staff_schedule_overview: {
+        Args: {
+          p_end_date: string
+          p_merchant_id: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined
@@ -1341,6 +1523,16 @@ export type Database = {
         Args: { p_group_id: string; p_user_email: string }
         Returns: undefined
       }
+      preview_staff_leave_conflicts: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: {
+          booking_id: string
+          customer_name: string
+          end_at: string
+          service_item_names: string[]
+          start_at: string
+        }[]
+      }
       record_invited_merchant_agent: {
         Args: {
           p_invited_email: string
@@ -1359,6 +1551,10 @@ export type Database = {
       }
       remove_merchant_agent: {
         Args: { p_agent_id: string }
+        Returns: undefined
+      }
+      seed_default_leave_types: {
+        Args: { p_merchant_id: string }
         Returns: undefined
       }
       seed_default_payment_methods: {
@@ -1642,7 +1838,11 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
 } as const
+

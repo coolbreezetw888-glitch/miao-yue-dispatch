@@ -81,6 +81,9 @@ export interface UpsertMerchantStaffInput {
   googleCalendarSyncEnabled?: boolean;
   canCreateEditOrders?: boolean;
   canUploadConstructionPhotos?: boolean;
+  /** 模組 7(排班與休假管理)§1.1/§4.1:計酬類型,'monthly_salary'(月薪制)/'piece_rate'
+   * (按件計酬)。不指定時資料庫層預設回填 'piece_rate'(第〇節判斷 1)。 */
+  compensationType?: "monthly_salary" | "piece_rate";
 }
 
 /** 3.4:回傳某商家的服務人員清單(含已移除,4.2 畫面自行依 status 篩選/標示)。 */
@@ -121,6 +124,7 @@ export async function addMerchantStaff(
       google_calendar_sync_enabled: input.googleCalendarSyncEnabled ?? false,
       can_create_edit_orders: input.canCreateEditOrders ?? false,
       can_upload_construction_photos: input.canUploadConstructionPhotos ?? false,
+      compensation_type: input.compensationType ?? "piece_rate",
     })
     .select("*")
     .single();
@@ -171,6 +175,9 @@ export async function updateMerchantStaff(
       : {}),
     ...(input.canUploadConstructionPhotos !== undefined
       ? { can_upload_construction_photos: input.canUploadConstructionPhotos }
+      : {}),
+    ...(input.compensationType !== undefined
+      ? { compensation_type: input.compensationType }
       : {}),
   };
   const { error } = await supabase.from("merchant_staff").update(payload).eq("id", staffId);

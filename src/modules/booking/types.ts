@@ -174,6 +174,14 @@ export interface DayScheduleForeignBooking {
   end_at: string;
 }
 
+/** 模組 7(排班與休假管理)§3.7:這位服務人員這一天是否整天請假。查無資料時是 null。
+ * leave_type_name 是建立請假紀錄當下的假別名稱快照,不是即時查詢的目前名稱(假別事後改名/
+ * 下架不影響這裡顯示的文字,比照模組 9 §234 付款方式名稱快照的既有教訓)。 */
+export interface DayScheduleOnLeave {
+  leave_record_id: string;
+  leave_type_name: string;
+}
+
 export interface DayScheduleStaffBlock {
   staff_id: string;
   staff_name: string;
@@ -183,6 +191,10 @@ export interface DayScheduleStaffBlock {
    * 落在某個區間內就採用該區間的 is_available 值,沒有落在任何區間就沿用 available_windows
    * 既有的判斷,不要漏接這個疊加順序。 */
   availability_overrides: DayScheduleAvailabilityOverride[];
+  /** 模組 7 §3.7(新增):不是 null 時代表這位服務人員這一天整天請假,規則 2.7(主腦裁示版本)
+   * 不論 unlimited_backend_edit 是否開啟一律擋下建單,前端(4.5)整欄改成灰底顯示、不可點擊建單,
+   * 沒有覆寫例外(取代規格書原文「unlimited_backend_edit=true 時仍可透過覆寫」的設計)。 */
+  on_leave: DayScheduleOnLeave | null;
   bookings: DayScheduleOwnBooking[];
   foreign_bookings: DayScheduleForeignBooking[];
 }

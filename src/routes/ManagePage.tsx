@@ -15,11 +15,14 @@
 import type { ComponentType } from "react";
 import {
   CalendarClock,
+  CalendarOff,
+  CalendarRange,
   ClipboardList,
   Coins,
   Headset,
   Receipt,
   Settings,
+  UserMinus,
   Users,
   Wallet,
 } from "lucide-react";
@@ -59,6 +62,12 @@ export default function ManagePage() {
   // section_key,不新增權限項目;跟 RequireBookingAccess.tsx 用的判斷邏輯一致)。
   const { data: canManageOrders } = useAgentPermission("orders");
   const showOrdersCard = isAdmin || canManageOrders === true;
+  // 模組 7(排班與休假管理)規則 2.11/§4.7:team_leave 這個 section_key 決定「假別設定」
+  // 「請假紀錄」兩張卡片的顯示權限,scheduling 是獨立的另一把鑰匙決定「排班一覽」卡片。
+  const { data: canManageTeamLeave } = useAgentPermission("team_leave");
+  const showTeamLeaveCards = isAdmin || canManageTeamLeave === true;
+  const { data: canViewScheduling } = useAgentPermission("scheduling");
+  const showSchedulingCard = isAdmin || canViewScheduling === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -116,6 +125,30 @@ export default function ManagePage() {
       description: "查看與管理所有預約訂單、篩選狀態與金額",
       icon: Receipt,
       visible: showOrdersCard,
+    },
+    {
+      key: "leave-types",
+      to: "/app/leave-types",
+      label: "假別設定",
+      description: "管理商家自訂的請假分類清單",
+      icon: CalendarOff,
+      visible: showTeamLeaveCards,
+    },
+    {
+      key: "leave-records",
+      to: "/app/leave-records",
+      label: "請假紀錄",
+      description: "登記/取消月薪制服務人員的請假",
+      icon: UserMinus,
+      visible: showTeamLeaveCards,
+    },
+    {
+      key: "scheduling",
+      to: "/app/scheduling",
+      label: "排班一覽",
+      description: "跨服務人員的每週時段/例外/請假總覽",
+      icon: CalendarRange,
+      visible: showSchedulingCard,
     },
     {
       key: "settings",

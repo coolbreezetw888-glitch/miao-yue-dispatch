@@ -296,7 +296,14 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
   const { data: booking, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: (staffMain as { id: string }).id,
-    p_service_item_ids: [(svcLong as { id: string }).id, (svcShort as { id: string }).id],
+    // create_booking 簽章在「建單功能擴充」批次(migration 20260918110200 附近)已經從
+    // p_service_item_ids(純字串陣列)改成 p_service_items(jsonb 物件陣列,每個元素帶
+    // service_item_id/quantity/unit_price),比照 src/modules/booking/api.ts 的
+    // buildServiceItemsJsonb 既有寫法,quantity 固定 1、unit_price 對應各自建立時的 price。
+    p_service_items: [
+      { service_item_id: (svcLong as { id: string }).id, quantity: 1, unit_price: 888 },
+      { service_item_id: (svcShort as { id: string }).id, quantity: 1, unit_price: 100 },
+    ],
     p_start_at: startAt,
     p_customer_name: LONG_CUSTOMER_NAME,
     p_customer_phone: LONG_PHONE_COMBO,

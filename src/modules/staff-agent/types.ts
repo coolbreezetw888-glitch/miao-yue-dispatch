@@ -141,7 +141,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "team_leave",
     label: "團隊休假",
-    description: "開放後客服可以看到並操作團隊休假安排(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以新增/編輯/下架商家自訂的假別清單,以及登記/取消月薪制服務人員的請假紀錄(對應模組 7 排班與休假管理)。「建單時因為服務人員請假被擋下」不需要這個權限,那是「訂單管理」的範圍。",
   },
   {
     key: "members",
@@ -156,7 +157,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "scheduling",
     label: "排班一覽",
-    description: "開放後客服可以查看排班總覽(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以檢視跨服務人員的每週時段/單日例外/請假彙整總覽頁(對應模組 7 排班與休假管理),是純唯讀檢視權限,跟「團隊休假」(有寫入行為)是兩把獨立的鑰匙。",
   },
   {
     key: "business_hours",

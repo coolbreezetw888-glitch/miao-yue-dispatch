@@ -36,6 +36,8 @@ import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import InstallPwaHint from "@/components/InstallPwaHint";
+import UpdateAvailableHint from "@/components/UpdateAvailableHint";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
@@ -188,6 +190,13 @@ export default function AppLayout() {
       <main className="pb-24">
         <Outlet context={outletContext} />
       </main>
+
+      {/* 模組 7(排班與休假管理)§6.5:安裝提示元件,掛在共用後台殼層(見第〇節判斷 8,
+          PWA 這次疊加在既有 /app 殼層上,不是獨立師傅端)。 */}
+      <InstallPwaHint />
+      {/* 模組 7 §6.4 修正(2026-09-20 主腦複查):新版本待套用時的提示條,掛在同一個共用殼層。
+          刻意放在畫面頂部,跟 InstallPwaHint(畫面底部)分開,避免兩個提示條同時出現時互相重疊。 */}
+      <UpdateAvailableHint />
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background">
         <div className="mx-auto flex max-w-5xl items-stretch justify-around">
