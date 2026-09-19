@@ -160,16 +160,20 @@ select throws_ok(
 
 select pg_temp.test_clear_auth();
 
--- ⑤c 被授權 orders(但沒被授權 business_hours)的客服:不能 SELECT merchant_feature_flags
---    (SELECT 政策這次一併改成比照 can_manage_business_hours,不是只開放給管理員讀,但也
---    不是任何登入者都能讀——沒被授權 business_hours 的客服一樣被擋下,RLS 篩成 0 筆/NULL)。
+-- ⑤c 2026-09-19 行為變更(SPECS-INDEX 編號 240,20260919140000_booking_related_tables_select_policy_orders_fix.sql):
+--    被授權 orders(但沒被授權 business_hours)的客服,現在「可以」SELECT 到 merchant_feature_flags
+--    ——原本這裡驗證的是「SELECT 被 RLS 擋下(0 筆/NULL)」,但品管在模組 9 驗收時發現這正是
+--    建單表單「料錢成本區塊不顯示」的既有缺口根因:建單表單要讀 material_cost_enabled 旗標
+--    判斷要不要顯示料錢成本區塊,只有 orders 權限的客服理應讀得到,不需要額外的 business_hours
+--    權限。SELECT 政策改成 can_manage_bookings(orders) or can_manage_business_hours 兩者皆可放行,
+--    INSERT/UPDATE 完全不動(仍只給 business_hours,見 ⑤b 沒有改變)。
 select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000004');
 
 select is(
   (select enabled from merchant_feature_flags
    where merchant_id = 'b4000000-0000-4000-8000-000000000020' and feature_key = 'strict_conflict_check'),
-  null,
-  '規則 1.4/2.4/2.12:被授權 orders 但沒被授權 business_hours 的客服,SELECT 被 RLS 擋下(0 筆)'
+  false,
+  '2026-09-19 行為變更(編號 240):被授權 orders 但沒被授權 business_hours 的客服,現在可以 SELECT 到 merchant_feature_flags 目前的實際值(不再被 RLS 擋下)'
 );
 
 select pg_temp.test_clear_auth();
