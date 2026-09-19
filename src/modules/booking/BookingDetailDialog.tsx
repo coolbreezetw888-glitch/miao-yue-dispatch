@@ -417,11 +417,11 @@ export function BookingDetailDialog({
                     </div>
                   </div>
 
-                  {/* 模組 6 §3.2:付款方式,沒有選擇時顯示「尚未設定」。 */}
+                  {/* 模組 9(支付方式)v2:直接顯示快照文字,沒有選擇時顯示「尚未設定」。 */}
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">付款方式</span>
                     <span className="font-medium text-foreground">
-                      {getPaymentMethodLabel(booking.payment_method)}
+                      {getPaymentMethodLabel(booking.payment_method_name_snapshot)}
                     </span>
                   </div>
 

@@ -136,6 +136,11 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
   ('c2000000-0000-4000-8000-000000000051', 'c2000000-0000-4000-8000-000000000021', '一店服務人員', null, true),
   ('c2000000-0000-4000-8000-000000000052', 'c2000000-0000-4000-8000-000000000022', '二店服務人員', null, true);
 
+-- 模組 9(支付方式)v2:update_booking_payment_method 的參數已改成 p_payment_method_id(uuid),
+-- 補一筆一店的付款方式供下面 §6.2 測試使用。
+insert into payment_methods (id, merchant_id, name) values
+  ('c2000000-0000-4000-8000-000000000091', 'c2000000-0000-4000-8000-000000000021', '現場付款');
+
 select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000001');
 
 -- 同一位客戶(0955000001)在一店有三筆訂單。
@@ -215,17 +220,17 @@ select is(
 );
 
 -- =========================================================================
--- §3.2/§6.2 update_booking_payment_method。
+-- 模組 9(支付方式)v2:update_booking_payment_method,p_payment_method_id 改成 uuid。
 -- =========================================================================
 select lives_ok(
-  format($$select update_booking_payment_method('%s', 'on_site')$$, :'booking_a_id'::text),
-  '§6.2:pending_confirmation 狀態的訂單可以設定付款方式'
+  format($$select update_booking_payment_method('%s', '%s')$$, :'booking_a_id'::text, 'c2000000-0000-4000-8000-000000000091'),
+  '模組 9 v2:pending_confirmation 狀態的訂單可以設定付款方式'
 );
 
 select is(
-  (select payment_method from bookings where id = :'booking_a_id'::uuid),
-  'on_site',
-  '§6.2:update_booking_payment_method 正確寫入付款方式'
+  (select payment_method_name_snapshot from bookings where id = :'booking_a_id'::uuid),
+  '現場付款',
+  '模組 9 v2:update_booking_payment_method 正確寫入 payment_method_id + payment_method_name_snapshot 快照'
 );
 
 -- 完成訂單後不能再改付款方式。
@@ -233,7 +238,7 @@ select confirm_booking(:'booking_a_id'::uuid);
 select complete_booking(:'booking_a_id'::uuid);
 
 select throws_ok(
-  format($$select update_booking_payment_method('%s', 'on_site')$$, :'booking_a_id'::text),
+  format($$select update_booking_payment_method('%s', '%s')$$, :'booking_a_id'::text, 'c2000000-0000-4000-8000-000000000091'),
   'P0001', null,
   '§6.2:已完成的訂單不能再修改付款方式'
 );
@@ -244,7 +249,7 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000002');
 
 select throws_ok(
-  format($$select update_booking_payment_method('%s', 'on_site')$$, :'booking_b_id'::text),
+  format($$select update_booking_payment_method('%s', '%s')$$, :'booking_b_id'::text, 'c2000000-0000-4000-8000-000000000091'),
   '42501', null,
   '§6.2:無權限的商家管理員不能修改別人商家訂單的付款方式'
 );

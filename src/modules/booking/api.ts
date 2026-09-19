@@ -17,10 +17,10 @@ import type {
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
-  PaymentMethodCode,
+  PaymentMethod,
   StaffAvailabilityWindow,
 } from "./types";
-import { DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS, DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
+import { DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
 import { bookingMatchesKeyword } from "./ordersPageLogic";
 
 // =========================================================================
@@ -150,8 +150,9 @@ export interface BookingAmountAdjustmentInput {
   taxEnabled?: boolean;
   taxMode?: AmountAdjustmentMode | null;
   taxValue?: number | null;
-  /** 模組 6 §3.2/裁決 Q10:付款方式,見 types.ts PAYMENT_METHOD_OPTIONS。 */
-  paymentMethod?: string | null;
+  /** 模組 9(支付方式)v2:指向商家自訂 payment_methods 清單的 id,取代 v1 的固定代碼文字。
+   * null 代表尚未設定。 */
+  paymentMethodId?: string | null;
   /** 模組 6 §4.3 裁決 Q3(方向一):整筆訂單層級的自訂工時開關。關閉時沿用 §2.2 逐項加總計算
    * end_at;開啟後 end_at 直接改用 customDurationMinutes 計算,會真的影響排程佔用與衝突檢查邊界
    * (含單日例外第三層)。關閉時 customDurationMinutes 應該是 null/undefined,後端也會在關閉時
@@ -221,7 +222,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.taxValue !== null && input.taxValue !== undefined
       ? { p_tax_value: input.taxValue }
       : {}),
-    ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
+    ...(input.paymentMethodId ? { p_payment_method_id: input.paymentMethodId } : {}),
     p_custom_duration_enabled: input.customDurationEnabled ?? false,
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
@@ -278,7 +279,7 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(input.taxValue !== null && input.taxValue !== undefined
       ? { p_tax_value: input.taxValue }
       : {}),
-    ...(input.paymentMethod ? { p_payment_method: input.paymentMethod } : {}),
+    ...(input.paymentMethodId ? { p_payment_method_id: input.paymentMethodId } : {}),
     p_custom_duration_enabled: input.customDurationEnabled ?? false,
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
@@ -288,14 +289,14 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
   return data as Booking;
 }
 
-/** 模組 6 §3.2/§6.2:單獨更新付款方式,不需要傳服務項目/金額等其餘欄位。 */
+/** 模組 9(支付方式)v2:單獨更新付款方式,不需要傳服務項目/金額等其餘欄位。 */
 export async function updateBookingPaymentMethod(
   bookingId: string,
-  paymentMethod: string | null,
+  paymentMethodId: string | null,
 ): Promise<Booking> {
   const { data, error } = await supabase.rpc("update_booking_payment_method", {
     p_booking_id: bookingId,
-    ...(paymentMethod ? { p_payment_method: paymentMethod } : {}),
+    ...(paymentMethodId ? { p_payment_method_id: paymentMethodId } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -737,46 +738,87 @@ export async function upsertMerchantTaxSettings(
 }
 
 // =========================================================================
-// 模組 9(支付方式)§1.3/§4:商家層級「開放哪些付款方式」設定讀寫,RLS 要求
-// private.can_manage_business_hours。查無資料時 fallback 成 DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS
-// (Q1/Q3 暫定裁決,待使用者確認)——只有 on_site 視為「查無資料仍視為開啟」的例外,其餘查無資料
-// 一律視為關閉。
+// 模組 9(支付方式)v2 §1.1/§4/§6:商家自訂付款方式清單,取代 v1 的開關式設計。
+// 唯讀查詢(fetchMerchantPaymentMethods/fetchMerchantPaymentMethodsAll)的 RLS 同時放行
+// can_manage_bookings(orders 權限)或 can_manage_payment_methods,寫入(add/update/remove/
+// reactivate)的 RLS 只允許 can_manage_payment_methods(見 migration 20260919130100 的說明)。
 // =========================================================================
 
-/** 回傳某商家目前開放哪些付款方式,一律回傳完整 7 個代碼的開關狀態(套用 fallback),不回傳部分
- * 清單,讓呼叫端(建單表單下拉選單、設定卡片)不用自己判斷「有沒有這筆資料」。 */
-export async function fetchMerchantPaymentMethodSettings(
-  merchantId: string,
-): Promise<Record<PaymentMethodCode, boolean>> {
+/** 回傳某商家目前 status='active' 的付款方式清單,供建單表單下拉選單使用(§5.2)。 */
+export async function fetchMerchantPaymentMethods(merchantId: string): Promise<PaymentMethod[]> {
   const { data, error } = await supabase
-    .from("merchant_payment_method_settings")
-    .select("payment_method_code, enabled")
-    .eq("merchant_id", merchantId);
+    .from("payment_methods")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
   if (error) throw error;
-
-  const result: Record<PaymentMethodCode, boolean> = {
-    ...DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS,
-  };
-  for (const row of data ?? []) {
-    result[row.payment_method_code as PaymentMethodCode] = row.enabled;
-  }
-  return result;
+  return (data ?? []) as PaymentMethod[];
 }
 
-/** §3.1 付款方式設定卡片用:逐項 upsert(on conflict (merchant_id, payment_method_code)),
- * 比照 MaterialCostEnabledToggle/StrictConflictCheckToggle 的既有互動模式——勾選即生效,
- * 不用做成整批儲存按鈕。呼叫端自行 invalidate 查詢快取(見 §3.1 說明)。 */
-export async function upsertMerchantPaymentMethodSetting(
+/** 回傳某商家所有付款方式(含已下架,管理頁畫面自行依 status 篩選/標示,§5.1)。 */
+export async function fetchMerchantPaymentMethodsAll(
   merchantId: string,
-  code: PaymentMethodCode,
-  enabled: boolean,
+): Promise<PaymentMethod[]> {
+  const { data, error } = await supabase
+    .from("payment_methods")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PaymentMethod[];
+}
+
+export interface UpsertPaymentMethodInput {
+  name: string;
+  description?: string | null;
+}
+
+export async function addPaymentMethod(
+  merchantId: string,
+  input: UpsertPaymentMethodInput,
+): Promise<PaymentMethod> {
+  const { data, error } = await supabase
+    .from("payment_methods")
+    .insert({
+      merchant_id: merchantId,
+      name: input.name.trim(),
+      description: input.description?.trim() ? input.description.trim() : null,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as PaymentMethod;
+}
+
+export async function updatePaymentMethod(
+  id: string,
+  input: Partial<UpsertPaymentMethodInput>,
 ): Promise<void> {
+  const payload: TablesUpdate<"payment_methods"> = {
+    ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+    ...(input.description !== undefined
+      ? { description: input.description?.trim() ? input.description.trim() : null }
+      : {}),
+  };
+  const { error } = await supabase.from("payment_methods").update(payload).eq("id", id);
+  if (error) throw error;
+}
+
+/** 軟刪除(下架),不算危險操作,比照 material_cost_items 既有慣例。 */
+export async function removePaymentMethod(id: string): Promise<void> {
   const { error } = await supabase
-    .from("merchant_payment_method_settings")
-    .upsert(
-      { merchant_id: merchantId, payment_method_code: code, enabled },
-      { onConflict: "merchant_id,payment_method_code" },
-    );
+    .from("payment_methods")
+    .update({ status: "removed" })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function reactivatePaymentMethod(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("payment_methods")
+    .update({ status: "active" })
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -825,7 +867,8 @@ export interface BookingAmountSummary {
   discountAmountSnapshot: number;
   taxAmountSnapshot: number;
   finalAmountSnapshot: number;
-  paymentMethod: string | null;
+  paymentMethodId: string | null;
+  paymentMethodNameSnapshot: string | null;
 }
 
 export async function fetchBookingAmountSummary(
@@ -834,7 +877,7 @@ export async function fetchBookingAmountSummary(
   const { data, error } = await supabase
     .from("bookings")
     .select(
-      "id, subtotal_amount_snapshot, discount_amount_snapshot, tax_amount_snapshot, final_amount_snapshot, payment_method",
+      "id, subtotal_amount_snapshot, discount_amount_snapshot, tax_amount_snapshot, final_amount_snapshot, payment_method_id, payment_method_name_snapshot",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -846,6 +889,7 @@ export async function fetchBookingAmountSummary(
     discountAmountSnapshot: data.discount_amount_snapshot,
     taxAmountSnapshot: data.tax_amount_snapshot,
     finalAmountSnapshot: data.final_amount_snapshot,
-    paymentMethod: data.payment_method,
+    paymentMethodId: data.payment_method_id,
+    paymentMethodNameSnapshot: data.payment_method_name_snapshot,
   };
 }

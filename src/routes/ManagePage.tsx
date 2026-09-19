@@ -13,7 +13,16 @@
 // (例如客服完全沒被開放任何功能),顯示空狀態文字,不是讓這個分頁籤消失或顯示空白。
 
 import type { ComponentType } from "react";
-import { CalendarClock, ClipboardList, Coins, Headset, Receipt, Settings, Users } from "lucide-react";
+import {
+  CalendarClock,
+  ClipboardList,
+  Coins,
+  Headset,
+  Receipt,
+  Settings,
+  Users,
+  Wallet,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +49,11 @@ export default function ManagePage() {
   // 建單功能擴充規格書 5.6:material_costs 這個 section_key 決定料錢成本管理卡片的顯示權限。
   const { data: canManageMaterialCosts } = useAgentPermission("material_costs");
   const showMaterialCostsCard = isAdmin || canManageMaterialCosts === true;
+  // 模組 9(支付方式)v2 規格書 §5.5:payment_methods 這個 section_key 決定付款方式管理卡片的
+  // 顯示權限。跟「建單時選擇既有付款方式」是兩件不同的事(那個只要有 orders 權限即可,不影響
+  // 這裡的顯示判斷)。
+  const { data: canManagePaymentMethods } = useAgentPermission("payment_methods");
+  const showPaymentMethodsCard = isAdmin || canManagePaymentMethods === true;
   // 模組 6(訂單管理)規格書 §1.4:訂單管理卡片沿用既有 orders section_key(模組 5 擴充
   // 已用這個 section_key 判斷建單/確認/編輯/取消/完成的權限,列表頁檢視權限沿用同一個
   // section_key,不新增權限項目;跟 RequireBookingAccess.tsx 用的判斷邏輯一致)。
@@ -86,6 +100,14 @@ export default function ManagePage() {
       description: "管理建單時可選用的料錢成本品項清單",
       icon: Coins,
       visible: showMaterialCostsCard,
+    },
+    {
+      key: "payment-methods",
+      to: "/app/payment-methods",
+      label: "付款方式管理",
+      description: "管理建單時可選用的付款方式清單",
+      icon: Wallet,
+      visible: showPaymentMethodsCard,
     },
     {
       key: "orders",

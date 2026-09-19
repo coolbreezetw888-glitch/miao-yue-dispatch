@@ -8,7 +8,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,22 +28,13 @@ import {
   MATERIAL_COST_ENABLED_FEATURE_KEY,
   STRICT_CONFLICT_CHECK_FEATURE_KEY,
 } from "./api";
-import {
-  useMerchantBusinessHours,
-  useMerchantPaymentMethodSettings,
-  useMerchantTaxSettings,
-  upsertMerchantPaymentMethodSetting,
-} from "./context";
+import { useMerchantBusinessHours, useMerchantTaxSettings } from "./context";
 import { RequireBusinessHoursAccess } from "./RequireBusinessHoursAccess";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   DAY_OF_WEEK_LABELS,
-  DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS,
-  PAYMENT_METHOD_CODES,
-  PAYMENT_METHOD_OPTIONS,
   type AmountAdjustmentMode,
   type MerchantBusinessHours,
-  type PaymentMethodCode,
 } from "./types";
 
 const businessHoursQueryKey = (merchantId: string) =>
@@ -334,64 +324,6 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
   );
 }
 
-// 模組 9(支付方式)§3.1:商家層級「開放哪些付款方式」設定卡片,比照上面 TaxSettingsCard/
-// MaterialCostEnabledToggle 的既有做法——這個頁面本身已經被 RequireBusinessHoursAccess 擋過一次,
-// 能進到這頁的人本來就有權限操作這個設定,不需要在元件內再另外判斷一次。查無任何既有列(新商家/
-// 從未設定過)時,畫面初始渲染套用 §1.3 的 fallback(現場付款打勾、其餘不打勾),不是全部不打勾
-// (useMerchantPaymentMethodSettings 已經處理過 fallback)。每個核取方塊各自獨立呼叫 API
-// (逐項 upsert),不做整批儲存按鈕——比照 MaterialCostEnabledToggle/StrictConflictCheckToggle
-// 的既有互動模式(勾選即生效)。
-function PaymentMethodSettingsCard({ merchantId }: { merchantId: string }) {
-  const queryClient = useQueryClient();
-  const queryKey = ["booking-module", "merchant-payment-method-settings", merchantId] as const;
-  const { data: settings, isLoading } = useMerchantPaymentMethodSettings(merchantId);
-  // 載入中或還沒回來時,先用 fallback 預設值渲染,避免畫面閃爍成「全部沒勾選」誤導使用者以為
-  // 現場付款也要重新勾一次才生效(§3.1 邊界情況)。
-  const effectiveSettings = settings ?? DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS;
-
-  async function handleToggle(code: PaymentMethodCode, checked: boolean) {
-    try {
-      await upsertMerchantPaymentMethodSetting(merchantId, code, checked);
-      await queryClient.invalidateQueries({ queryKey });
-      toast.success("已更新設定");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>付款方式設定</CardTitle>
-        <CardDescription>
-          勾選這間商家要開放客服在建單時選擇的付款方式。這裡只是標記客戶用什麼方式付款,
-          不會真的串接金流,不會自動收款或對帳。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          <div className="space-y-2">
-            {PAYMENT_METHOD_CODES.map((code) => (
-              <label
-                key={code}
-                className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5 text-sm text-foreground"
-              >
-                <Checkbox
-                  checked={effectiveSettings[code]}
-                  onCheckedChange={(checked) => void handleToggle(code, checked === true)}
-                />
-                {PAYMENT_METHOD_OPTIONS[code]}
-              </label>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 function BusinessHoursPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
@@ -451,7 +383,6 @@ function BusinessHoursPageInner() {
       <StrictConflictCheckToggle merchantId={merchantId} />
       <MaterialCostEnabledToggle merchantId={merchantId} />
       <TaxSettingsCard merchantId={merchantId} />
-      <PaymentMethodSettingsCard merchantId={merchantId} />
     </main>
   );
 }

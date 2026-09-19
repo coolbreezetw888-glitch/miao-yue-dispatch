@@ -14,6 +14,9 @@ export type BookingServiceItem = Tables<"booking_service_items">;
 export type BookingAssistant = Tables<"booking_assistants">;
 export type MaterialCostItem = Tables<"material_cost_items">;
 export type BookingMaterialCost = Tables<"booking_material_costs">;
+/** 模組 9(支付方式)v2:商家自訂付款方式清單,取代 v1 的固定 7 代碼設計。比照
+ * material_cost_items 的既有模式,商家自己命名,想新增幾筆都可以。 */
+export type PaymentMethod = Tables<"payment_methods">;
 /** 模組 6(訂單管理)§2.1:商家整體稅金模式統一設定,一商家一列,查無資料時前端/後端一律
  * fallback 成 DEFAULT_MERCHANT_TAX_SETTINGS(裁決 Q5)。 */
 export type MerchantTaxSettings = Tables<"merchant_tax_settings">;
@@ -33,55 +36,42 @@ export const DEFAULT_MERCHANT_TAX_SETTINGS: { taxMode: AmountAdjustmentMode; tax
   taxValue: 5.0,
 };
 
-/** 模組 9(支付方式)§1.1:全平台固定的 7 個付款方式代碼,產品方定義,不是商家自訂文字,
- * 不因產業類型(到府派工/美業到店)增減(§2.2)。用穩定的代碼值存資料庫,顯示文字放對照表,
- * 方便之後要改文案時不用動資料庫裡已經存在的值。原本模組 6 §3.2/裁決 Q10 只有 on_site 一個
- * 暫時選項,這裡是模組 9 的正式擴充。 */
-export const PAYMENT_METHOD_CODES = [
-  "on_site",
-  "bank_transfer",
-  "atm",
-  "linepay",
-  "jkopay",
-  "credit_card",
-  "no_payment",
-] as const;
+/** 模組 9(支付方式)v2 §5.3:把 bookings.payment_method_name_snapshot 轉成畫面顯示文字。
+ * null/空字串顯示「尚未設定」。這裡不做任何代碼查表(v1 才需要,因為 v1 是固定代碼;v2 商家
+ * 自訂名稱,存的就是要顯示的文字本身),直接顯示快照文字,商家事後改名/下架不影響已建立訂單的
+ * 顯示(模組 9 v2 核心要求)。 */
+export function getPaymentMethodLabel(nameSnapshot: string | null | undefined): string {
+  if (!nameSnapshot || nameSnapshot.trim() === "") return "尚未設定";
+  return nameSnapshot;
+}
 
-export type PaymentMethodCode = (typeof PAYMENT_METHOD_CODES)[number];
+/** 建單表單下拉選單顯示用的最小欄位集合(§5.2)。 */
+export interface PaymentMethodOption {
+  id: string;
+  name: string;
+}
 
-/** 模組 9 §1.1 對外介面:代碼 → 中文顯示文字對照表。「無支付」(no_payment)定案語意
- * (Q2 暫定裁決,待使用者確認)是「這筆預約本來就不用收費」(保固維修/免費估價/公關招待),
- * 跟「留空(null)=尚未設定」是兩種不同語意,顯示文字必須有清楚區隔(見下方 getPaymentMethodLabel)。 */
-export const PAYMENT_METHOD_OPTIONS: Record<PaymentMethodCode, string> = {
-  on_site: "現場付款",
-  bank_transfer: "匯款",
-  atm: "ATM 轉帳",
-  linepay: "LINE Pay",
-  jkopay: "街口支付",
-  credit_card: "信用卡",
-  no_payment: "無支付",
-};
-
-/** 模組 9 §1.3/§4 對外介面(Q3 暫定裁決,待使用者確認):merchant_payment_method_settings
- * 查無資料時的 fallback 預設值——只有現場付款預設開啟,其餘 6 項預設關閉,維持模組 6 上線至今的
- * 實際狀態,不因這次擴充選項清單讓既有商家突然多出一堆沒設定過的選項。商家要開放其他付款方式,
- * 必須自己到設定頁(BusinessHoursPage 的 PaymentMethodSettingsCard)勾選。 */
-export const DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS: Record<PaymentMethodCode, boolean> = {
-  on_site: true,
-  bank_transfer: false,
-  atm: false,
-  linepay: false,
-  jkopay: false,
-  credit_card: false,
-  no_payment: false,
-};
-
-/** 把 bookings.payment_method 的原始值轉成畫面顯示文字。null/空字串顯示「尚未設定」;
- * 萬一資料庫裡存了一個目前對照表沒有的值(例如以後選項改名但沒轉舊資料,或手動塞的舊資料),
- * 直接顯示原始值,不要讓畫面空白或報錯(模組 9 規格書 §5 邊界情況第 4 點)。 */
-export function getPaymentMethodLabel(value: string | null | undefined): string {
-  if (!value) return "尚未設定";
-  return PAYMENT_METHOD_OPTIONS[value as PaymentMethodCode] ?? value;
+/** 模組 9 v2 §5.2:建單表單付款方式下拉選單的選項組成邏輯(從 CalendarPage.tsx 抽出成純函式,
+ * 方便 Vitest 測試,不用 import supabase client)。
+ * 選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的那一筆」(即使它現在已經
+ * 下架)——理由跟後端 private.validate_booking_selection 的放行邏輯一致,前後端要一致,不能
+ * 前端讓你選、後端卻擋下。顯示文字用「快照文字」,不是重新查詢這個付款方式目前叫什麼名字——
+ * 商家可能已經改名,快照文字才是這筆訂單當初實際顯示過的內容。 */
+export function buildPaymentMethodOptions(
+  activeMethods: PaymentMethodOption[],
+  editingCurrentId: string | null | undefined,
+  editingNameSnapshot: string | null | undefined,
+): PaymentMethodOption[] {
+  if (editingCurrentId && !activeMethods.some((pm) => pm.id === editingCurrentId)) {
+    return [
+      ...activeMethods,
+      {
+        id: editingCurrentId,
+        name: `${editingNameSnapshot ?? "(已刪除的付款方式)"}(已下架)`,
+      },
+    ];
+  }
+  return activeMethods;
 }
 
 /** 建單與訂單管理介面優化 §2:建單表單稅金說明文字,依商家目前的稅金模式(比例/固定金額)

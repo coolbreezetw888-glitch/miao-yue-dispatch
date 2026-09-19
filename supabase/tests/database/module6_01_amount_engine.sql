@@ -47,6 +47,11 @@ values ('c1000000-0000-4000-8000-000000000030', 'c1000000-0000-4000-8000-0000000
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
 values ('c1000000-0000-4000-8000-000000000040', 'c1000000-0000-4000-8000-000000000020', '服務人員', null, true);
 
+-- 模組 9(支付方式)v2:payment_method 欄位已改成 payment_method_id(uuid,指向 payment_methods)+
+-- payment_method_name_snapshot(text 快照),這裡補一筆商家自訂付款方式供下面 ⑩ 的測試使用。
+insert into payment_methods (id, merchant_id, name)
+values ('c1000000-0000-4000-8000-000000000091', 'c1000000-0000-4000-8000-000000000020', '現場付款');
+
 select pg_temp.test_set_auth('c1000000-0000-4000-8000-000000000001');
 
 -- ① §2.2:quantity=2 的 60 分鐘服務項目,工時貢獻正確算成 120 分鐘(end_at = start + 120 分)。
@@ -179,11 +184,11 @@ select is(
   '§4.6/§2.3:最終金額 = 1000 - 200 + 40 = 840'
 );
 
--- ⑩ §3.2:payment_method 正常寫入/查詢,留空時是 null。
+-- ⑩ 模組 9 v2:payment_method_id/payment_method_name_snapshot 正常寫入/查詢,留空時是 null。
 select is(
-  (select payment_method from bookings where id = :'tax_id'::uuid),
-  null,
-  '§3.2:沒有傳 payment_method 時,查詢結果是 null(尚未設定)'
+  (select (payment_method_id is null and payment_method_name_snapshot is null) from bookings where id = :'tax_id'::uuid),
+  true,
+  '模組 9 v2:沒有傳 payment_method_id 時,payment_method_id/payment_method_name_snapshot 查詢結果都是 null(尚未設定)'
 );
 
 -- tax_id 那筆是 17:00-19:00(quantity 2 的 60 分鐘服務),這裡刻意排到 19:00 之後,避免時段重疊
@@ -193,13 +198,13 @@ select id from create_booking(
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 19:00:00+08', '客戶七', '0911000007',
   null, null, '{}', '{}', null, null,
-  false, null, false, null, null, false, null, null, 'on_site'
+  false, null, false, null, null, false, null, null, 'c1000000-0000-4000-8000-000000000091'
 ) \gset payment_
 
 select is(
-  (select payment_method from bookings where id = :'payment_id'::uuid),
-  'on_site',
-  '§3.2:payment_method 正常寫入/查詢(on_site)'
+  (select payment_method_name_snapshot from bookings where id = :'payment_id'::uuid),
+  '現場付款',
+  '模組 9 v2:payment_method_id/payment_method_name_snapshot 正常寫入/查詢'
 );
 
 -- ⑪ §2.4 核心情境:建立一筆訂單記錄金額 -> 修改該服務項目 service_items.price ->

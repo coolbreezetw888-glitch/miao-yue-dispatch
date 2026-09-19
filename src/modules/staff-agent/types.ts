@@ -177,7 +177,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "payment_methods",
     label: "支付方式設定",
-    description: "開放後客服可以調整支付方式設定(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以新增/編輯/下架商家自訂的付款方式清單。建單/編輯時選擇既有付款方式不需要這個權限,只要有「訂單管理」權限即可。",
   },
   {
     key: "report_export",

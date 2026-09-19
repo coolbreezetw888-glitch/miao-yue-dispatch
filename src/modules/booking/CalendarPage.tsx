@@ -66,7 +66,7 @@ import {
   useMerchantBusinessHours,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
-  useMerchantPaymentMethodSettings,
+  useMerchantPaymentMethods,
   useMerchantTaxSettings,
 } from "./context";
 // 建單與訂單管理介面優化 §1:拿掉 DayOverrideDialog 互動流程,不再需要 timeToMinutes/minutesToTime
@@ -90,14 +90,11 @@ import { RequireBookingAccess } from "./RequireBookingAccess";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   bookingBlockClasses,
-  DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS,
+  buildPaymentMethodOptions,
   getTaxModeHelperText,
-  PAYMENT_METHOD_CODES,
-  PAYMENT_METHOD_OPTIONS,
   type AmountAdjustmentMode,
   type BookingStatus,
   type DayScheduleOwnBooking,
-  type PaymentMethodCode,
 } from "./types";
 
 const SLOT_MINUTES = 30;
@@ -258,10 +255,9 @@ export function BookingFormDialog({
   const { data: materialCostItems } = useMerchantMaterialCostItems(merchantId);
   const { data: materialCostEnabled } = useMaterialCostEnabled(merchantId);
   const { data: businessHours } = useMerchantBusinessHours(merchantId);
-  // 模組 9(支付方式)§2.1:建單表單下拉選單只列出商家實際開放(套用 fallback 後)的選項,
-  // 選項清單全平台統一,不因產業類型增減(§2.2)。查詢還沒回來時先用 fallback 預設值渲染
-  // (只有現場付款),避免下拉選單短暫閃過空清單。
-  const { data: paymentMethodSettings } = useMerchantPaymentMethodSettings(merchantId);
+  // 模組 9(支付方式)v2 §5.2:建單表單下拉選單只列出商家自訂清單裡目前上架中(status='active')
+  // 的項目,商家可以自己新增/編輯/下架,不是系統固定清單。
+  const { data: paymentMethods } = useMerchantPaymentMethods(merchantId);
 
   // 建單表單細節修正第二節第 2/3 點:依商家 industry_type 判斷客戶地址是否必填。
   const requiresCustomerAddress = INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[industryType];
@@ -321,23 +317,22 @@ export function BookingFormDialog({
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
   const [taxValue, setTaxValue] = useState("");
-  // §3.2/裁決 Q10、模組 9(支付方式)§2.1:付款方式下拉選單,留空代表「尚未設定」。
-  // 建單與訂單管理介面優化 §3:改成下拉選單(比照服務人員欄位樣式),用 PAYMENT_METHOD_UNSET
-  // 這個 sentinel 值代表「(未選擇/尚未設定)」,Radix Select 不支援空字串當作選項值。
+  // 模組 9(支付方式)v2 §5.2:付款方式下拉選單,存的是 payment_methods.id(uuid 字串),留空
+  // 代表「尚未設定」。用 PAYMENT_METHOD_UNSET 這個 sentinel 值代表「(未選擇/尚未設定)」,
+  // Radix Select 不支援空字串當作選項值(沿用建單與訂單管理介面優化 §3 既有的 sentinel 寫法)。
   const [paymentMethodValue, setPaymentMethodValue] = useState<string>(PAYMENT_METHOD_UNSET);
 
-  // 模組 9 §2.1:下拉選單依商家設定動態列出開放的選項(套用 fallback)。編輯模式下,即使商家後來
-  // 把這筆訂單原本使用的付款方式關掉,仍把該選項一併附加進清單,避免編輯畫面顯示空白讓客服誤以為
-  // 需要重新選擇(舊訂單不受商家事後關閉選項影響,呼應 §2.1 邊界情況的精神)。
-  const enabledPaymentMethodCodes = useMemo(() => {
-    const effective = paymentMethodSettings ?? DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS;
-    const codes = PAYMENT_METHOD_CODES.filter((code) => effective[code]);
-    const isKnownCode = (PAYMENT_METHOD_CODES as readonly string[]).includes(paymentMethodValue);
-    if (isKnownCode && !codes.includes(paymentMethodValue as PaymentMethodCode)) {
-      return [...codes, paymentMethodValue as PaymentMethodCode];
-    }
-    return codes;
-  }, [paymentMethodSettings, paymentMethodValue]);
+  // 模組 9 v2 §5.2:下拉選單選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的
+  // 那一筆」(即使它現在已經下架),詳見 types.ts buildPaymentMethodOptions 的說明。
+  const paymentMethodOptions = useMemo(
+    () =>
+      buildPaymentMethodOptions(
+        paymentMethods ?? [],
+        isEdit ? (editingDetail?.payment_method_id ?? null) : null,
+        isEdit ? (editingDetail?.payment_method_name_snapshot ?? null) : null,
+      ),
+    [paymentMethods, isEdit, editingDetail],
+  );
 
   const { data: merchantTaxSettings } = useMerchantTaxSettings(merchantId);
 
@@ -393,14 +388,9 @@ export function BookingFormDialog({
             ? String(merchantTaxSettings.taxValue)
             : "",
       );
-      // 模組 9 §2.1 邊界情況:編輯既有訂單時,即使商家事後把這筆訂單原本的付款方式關掉,
-      // 這裡仍要沿用既有值(不強制清空成「未選擇」)——舊訂單顯示/編輯不受商家事後關閉選項影響。
-      setPaymentMethodValue(
-        editingDetail.payment_method &&
-          (PAYMENT_METHOD_CODES as readonly string[]).includes(editingDetail.payment_method)
-          ? editingDetail.payment_method
-          : PAYMENT_METHOD_UNSET,
-      );
+      // 模組 9 v2 §5.2 邊界情況:編輯既有訂單時,即使商家事後把這筆訂單原本的付款方式下架,
+      // 這裡仍要沿用既有值(不強制清空成「未選擇」)——舊訂單顯示/編輯不受商家事後下架影響。
+      setPaymentMethodValue(editingDetail.payment_method_id ?? PAYMENT_METHOD_UNSET);
       // §4.3/§2.4:編輯表單一律用既有快照值預先帶入,不重新計算。
       setCustomDurationEnabled(editingDetail.custom_duration_enabled);
       setCustomDurationMinutes(
@@ -593,7 +583,7 @@ export function BookingFormDialog({
         taxEnabled,
         taxMode: taxEnabled ? taxMode : null,
         taxValue: taxEnabled && taxValue.trim() ? Number(taxValue) : null,
-        paymentMethod: paymentMethodValue === PAYMENT_METHOD_UNSET ? null : paymentMethodValue,
+        paymentMethodId: paymentMethodValue === PAYMENT_METHOD_UNSET ? null : paymentMethodValue,
         // §4.3 邊界情況:關閉時 customDurationMinutes 一律傳 null,避免留著舊值造成混淆
         // (後端 create_booking/update_booking 也會在關閉時一律存 null,這裡是雙重保險)。
         customDurationEnabled,
@@ -949,10 +939,10 @@ export function BookingFormDialog({
               </div>
             ) : null}
 
-            {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)§2.1/§3.2:付款方式下拉選單,比照
-                「服務人員」欄位樣式(Label + mt-2 間距的 Select)。選項依商家目前開放的設定動態
-                列出(enabledPaymentMethodCodes,已套用查無資料時的 fallback),「(未選擇/尚未設定)」
-                永遠存在,即使商家把所有選項都關掉也不擋單(§2.1 邊界情況)。 */}
+            {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)v2 §5.2:付款方式下拉選單,比照
+                「服務人員」欄位樣式(Label + mt-2 間距的 Select)。選項是商家自訂清單裡目前上架中
+                的項目(paymentMethodOptions,含編輯模式下維持原值即使已下架的附加項),
+                「(未選擇/尚未設定)」永遠存在,即使商家把所有項目都下架也不擋單。 */}
             <div className="border-t border-border pt-3">
               <Label>付款方式</Label>
               <Select value={paymentMethodValue} onValueChange={setPaymentMethodValue}>
@@ -961,9 +951,9 @@ export function BookingFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={PAYMENT_METHOD_UNSET}>(未選擇/尚未設定)</SelectItem>
-                  {enabledPaymentMethodCodes.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {PAYMENT_METHOD_OPTIONS[code]}
+                  {paymentMethodOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

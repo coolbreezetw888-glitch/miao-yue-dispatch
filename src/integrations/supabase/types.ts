@@ -162,7 +162,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -201,7 +202,8 @@ export type Database = {
           last_modified_by_user_id?: string | null
           merchant_id: string
           notes?: string | null
-          payment_method?: string | null
+          payment_method_id?: string | null
+          payment_method_name_snapshot?: string | null
           source?: string
           staff_id: string
           start_at: string
@@ -240,7 +242,8 @@ export type Database = {
           last_modified_by_user_id?: string | null
           merchant_id?: string
           notes?: string | null
-          payment_method?: string | null
+          payment_method_id?: string | null
+          payment_method_name_snapshot?: string | null
           source?: string
           staff_id?: string
           start_at?: string
@@ -258,6 +261,13 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
             referencedColumns: ["id"]
           },
           {
@@ -557,41 +567,6 @@ export type Database = {
           },
         ]
       }
-      merchant_payment_method_settings: {
-        Row: {
-          created_at: string
-          enabled: boolean
-          id: string
-          merchant_id: string
-          payment_method_code: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          merchant_id: string
-          payment_method_code: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          enabled?: boolean
-          id?: string
-          merchant_id?: string
-          payment_method_code?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "merchant_payment_method_settings_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       merchant_staff: {
         Row: {
           advance_booking_days: number | null
@@ -820,6 +795,44 @@ export type Database = {
           },
         ]
       }
+      payment_methods: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          merchant_id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          merchant_id: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          merchant_id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_methods_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_admins: {
         Row: {
           created_at: string
@@ -1043,7 +1056,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -1100,7 +1114,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -1148,7 +1163,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -1185,7 +1201,7 @@ export type Database = {
           p_material_cost_item_ids?: string[]
           p_merchant_id: string
           p_notes?: string
-          p_payment_method?: string
+          p_payment_method_id?: string
           p_service_items: Json
           p_staff_id: string
           p_start_at: string
@@ -1220,7 +1236,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -1344,6 +1361,10 @@ export type Database = {
         Args: { p_agent_id: string }
         Returns: undefined
       }
+      seed_default_payment_methods: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
       set_agent_permission: {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
@@ -1377,7 +1398,7 @@ export type Database = {
           p_discount_value?: number
           p_material_cost_item_ids?: string[]
           p_notes?: string
-          p_payment_method?: string
+          p_payment_method_id?: string
           p_service_items: Json
           p_staff_id: string
           p_start_at: string
@@ -1412,7 +1433,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -1432,7 +1454,7 @@ export type Database = {
         }
       }
       update_booking_payment_method: {
-        Args: { p_booking_id: string; p_payment_method?: string }
+        Args: { p_booking_id: string; p_payment_method_id?: string }
         Returns: {
           cancelled_at: string | null
           cancelled_reason: string | null
@@ -1460,7 +1482,8 @@ export type Database = {
           last_modified_by_user_id: string | null
           merchant_id: string
           notes: string | null
-          payment_method: string | null
+          payment_method_id: string | null
+          payment_method_name_snapshot: string | null
           source: string
           staff_id: string
           start_at: string

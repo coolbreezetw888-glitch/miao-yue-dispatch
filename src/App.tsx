@@ -24,6 +24,7 @@ import ServiceItemsPage from "@/modules/service-items/ServiceItemsPage";
 import BusinessHoursPage from "@/modules/booking/BusinessHoursPage";
 import CalendarPage from "@/modules/booking/CalendarPage";
 import MaterialCostsPage from "@/modules/booking/MaterialCostsPage";
+import PaymentMethodsPage from "@/modules/booking/PaymentMethodsPage";
 import OrdersPage from "@/modules/booking/OrdersPage";
 
 function NotFound() {
@@ -72,6 +73,7 @@ export default function App() {
           <Route path="/app/service-items" element={<ServiceItemsPage />} />
           <Route path="/app/business-hours" element={<BusinessHoursPage />} />
           <Route path="/app/material-costs" element={<MaterialCostsPage />} />
+          <Route path="/app/payment-methods" element={<PaymentMethodsPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

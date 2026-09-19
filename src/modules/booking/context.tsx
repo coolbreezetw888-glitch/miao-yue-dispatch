@@ -21,12 +21,11 @@ import {
   fetchMerchantBusinessHours,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
-  fetchMerchantPaymentMethodSettings,
+  fetchMerchantPaymentMethods,
   fetchMerchantTaxSettings,
   fetchStaffAvailabilityWindows,
   getBooking,
   getCustomerRelatedBookings as apiGetCustomerRelatedBookings,
-  upsertMerchantPaymentMethodSetting as apiUpsertMerchantPaymentMethodSetting,
   upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
   type BookingAmountSummary,
   type BookingCardExtra,
@@ -43,7 +42,7 @@ import type {
   MaterialCostItem,
   MerchantBusinessHours,
   MerchantDaySchedule,
-  PaymentMethodCode,
+  PaymentMethod,
   StaffAvailabilityWindow,
 } from "./types";
 
@@ -136,12 +135,12 @@ export async function completeBooking(bookingId: string): Promise<Booking> {
   return apiCompleteBooking(bookingId);
 }
 
-/** 模組 6(訂單管理)§6.2 對外介面:單獨更新付款方式。 */
+/** 模組 9(支付方式)v2 對外介面:單獨更新付款方式。 */
 export async function updateBookingPaymentMethod(
   bookingId: string,
-  paymentMethod: string | null,
+  paymentMethodId: string | null,
 ): Promise<Booking> {
-  return apiUpdateBookingPaymentMethod(bookingId, paymentMethod);
+  return apiUpdateBookingPaymentMethod(bookingId, paymentMethodId);
 }
 
 /** 模組 6 §2.1/§4.7 對外介面:商家整體稅金設定,查無資料時 fallback 成預設值
@@ -163,25 +162,18 @@ export async function upsertMerchantTaxSettings(
   return apiUpsertMerchantTaxSettings(merchantId, input);
 }
 
-/** 模組 9(支付方式)§1.3/§4 對外介面(Q1/Q3 暫定裁決,待使用者確認):商家目前開放哪些付款
- * 方式,查無資料時 fallback 成 DEFAULT_MERCHANT_PAYMENT_METHOD_SETTINGS(見 types.ts)。供建單表單
- * 下拉選單(§2.1)、設定卡片(§3.1)使用。 */
-export function useMerchantPaymentMethodSettings(
+/** 模組 9(支付方式)v2 §6 對外介面:商家目前上架中(status='active')的付款方式清單,唯讀。
+ * 供建單表單下拉選單(§5.2)使用。管理頁(含已下架清單/CRUD)直接 import api.ts 對應函式,
+ * 不透過這裡(比照 MaterialCostsPage.tsx 直接 import fetchMerchantMaterialCostItemsAll 等函式
+ * 的既有做法,這裡的 hooks 集中放的是「唯讀查詢」)。 */
+export function useMerchantPaymentMethods(
   merchantId: string | null | undefined,
-): UseQueryResult<Record<PaymentMethodCode, boolean>> {
+): UseQueryResult<PaymentMethod[]> {
   return useQuery({
-    queryKey: ["booking-module", "merchant-payment-method-settings", merchantId],
-    queryFn: () => fetchMerchantPaymentMethodSettings(merchantId as string),
+    queryKey: ["booking-module", "merchant-payment-methods", merchantId],
+    queryFn: () => fetchMerchantPaymentMethods(merchantId as string),
     enabled: Boolean(merchantId),
   });
-}
-
-export async function upsertMerchantPaymentMethodSetting(
-  merchantId: string,
-  code: PaymentMethodCode,
-  enabled: boolean,
-): Promise<void> {
-  return apiUpsertMerchantPaymentMethodSetting(merchantId, code, enabled);
 }
 
 /** 模組 6 §3.3/§6.3 對外介面:相關訂單查詢,供預約詳情頁「相關訂單」按鈕使用,也保留給之後
