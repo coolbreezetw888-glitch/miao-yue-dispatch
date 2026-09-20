@@ -49,6 +49,7 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { addMerchantStaff } from "@/modules/staff-agent/api";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import { useMerchantMemberSettings } from "@/modules/members/api";
 
 import { importHistoricalBookingsBatch, importMembersBatch, parseErrorReport } from "./api";
 import { RequireDataImportAccess } from "./RequireDataImportAccess";
@@ -77,6 +78,12 @@ function ImportWizardPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffList } = useMerchantStaffList(merchantId);
+  // 品管(2026-09-21)打回的 bug 修正:步驟四預覽必須跟 create_member/update_member 實際會
+  // 執行的驗證邏輯一致,不能只檢查姓名——沿用模組 10 既有的 useMerchantMemberSettings(讀取
+  // merchant_member_settings.phone_required_to_create),查無資料時預設視為必填(比照
+  // DEFAULT_MERCHANT_MEMBER_SETTINGS/create_member 函式內「查無資料視為必填」的既有慣例)。
+  const { data: memberSettings } = useMerchantMemberSettings(merchantId);
+  const phoneRequiredForMembers = memberSettings?.phone_required_to_create ?? true;
 
   const [step, setStep] = useState<WizardStep>("type");
   const [importKind, setImportKind] = useState<ImportKind | null>(null);
@@ -129,6 +136,9 @@ function ImportWizardPageInner() {
   function rowLooksValid(row: Record<string, unknown>): { ok: boolean; reason?: string } {
     if (importKind === "members") {
       if (!row["name"]) return { ok: false, reason: "缺少姓名" };
+      if (phoneRequiredForMembers && !row["phone"]) {
+        return { ok: false, reason: "這個商家要求建立會員時必須填寫電話" };
+      }
       return { ok: true };
     }
     if (!row["customer_name"]) return { ok: false, reason: "缺少客戶姓名" };
@@ -357,7 +367,11 @@ function ImportWizardPageInner() {
                   {targetFields
                     .filter((f) => f.key !== "staff_name" || importKind === "historical_bookings")
                     .map((field) => (
-                      <div key={field.key} className="flex items-center gap-3">
+                      <div
+                        key={field.key}
+                        className="flex items-center gap-3"
+                        data-testid={`mapping-row-${field.key}`}
+                      >
                         <Label className="w-56 shrink-0 text-sm">
                           {field.label}
                           {field.required && <span className="text-destructive"> *</span>}
@@ -418,7 +432,7 @@ function ImportWizardPageInner() {
               </p>
             )}
             {distinctStaffNames.map((name) => (
-              <div key={name} className="flex items-center gap-3">
+              <div key={name} className="flex items-center gap-3" data-testid={`staff-mapping-${name}`}>
                 <span className="w-40 shrink-0 truncate text-sm font-medium">{name}</span>
                 {staffValueMapping[name] ? (
                   <span className="text-sm text-muted-foreground">
