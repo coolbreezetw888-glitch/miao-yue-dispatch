@@ -5,7 +5,7 @@
 -- 一之二節「既有 RLS 政策定義完全沒有變動」的回歸驗證。
 begin;
 
-select plan(41);
+select plan(48);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -46,14 +46,19 @@ insert into merchant_admins (merchant_id, user_id) values
   ('ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000001'),
   ('ea000000-0000-4000-8000-000000000022', 'ea000000-0000-4000-8000-000000000002');
 
+insert into auth.users (id, email) values
+  ('ea000000-0000-4000-8000-000000000007', 'pgtap-m10-agent-orders@test.local');
+
 insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
   ('ea000000-0000-4000-8000-000000000051', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m10-agent-none@test.local', 'active', now()),
   ('ea000000-0000-4000-8000-000000000052', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000004', '客服-members', 'pgtap-m10-agent-members@test.local', 'active', now()),
-  ('ea000000-0000-4000-8000-000000000053', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000005', '客服-member_settings', 'pgtap-m10-agent-settings@test.local', 'active', now());
+  ('ea000000-0000-4000-8000-000000000053', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000005', '客服-member_settings', 'pgtap-m10-agent-settings@test.local', 'active', now()),
+  ('ea000000-0000-4000-8000-000000000054', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000007', '客服-僅orders', 'pgtap-m10-agent-orders@test.local', 'active', now());
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ea000000-0000-4000-8000-000000000052', 'members', true),
-  ('ea000000-0000-4000-8000-000000000053', 'member_settings', true);
+  ('ea000000-0000-4000-8000-000000000053', 'member_settings', true),
+  ('ea000000-0000-4000-8000-000000000054', 'orders', true);
 
 -- =========================================================================
 -- ① §1.1:merchant_member_settings CHECK 約束 + 預設值(以 postgres 超級使用者身分測)。
@@ -378,6 +383,58 @@ select is(
   (select pg_get_expr(polqual, polrelid)::text from pg_policy where polname = 'merchant_staff_select'),
   '(private.is_merchant_admin(merchant_id) OR private.can_manage_bookings(merchant_id) OR private.can_manage_team_leave(merchant_id) OR private.can_manage_commission_settings(merchant_id) OR private.can_view_payroll_reports(merchant_id))',
   '一之二節:merchant_staff_select 政策定義完全沒有變動(本模組沒有新增任何依賴服務人員清單的功能)'
+);
+
+-- =========================================================================
+-- ⑩ SPECS-INDEX #320/324/337/343/347 回歸驗證:只有 orders 權限、沒有 members 權限的客服,
+-- 建單頁疊加的「選擇會員」欄位(§4.4)一樣能搜尋既有會員/快速建立新會員(§2.10),但管理性質
+-- 操作(編輯/下架/手動調點數)依然被擋下,確認這次修正沒有意外放寬範圍。
+-- =========================================================================
+select pg_temp.test_set_auth('ea000000-0000-4000-8000-000000000007');
+
+select is(
+  (select count(*)::int from members where id = :'member_a2_id'::uuid),
+  1,
+  '#337 回歸修正:只有 orders 權限、沒有 members 權限的客服可以 SELECT 到既有會員(members_select 政策新增 can_manage_bookings 放行)'
+);
+
+select lives_ok(
+  $$select create_member('ea000000-0000-4000-8000-000000000021', 'orders客服建立的會員', '0911000010')$$,
+  '#324/#343 回歸修正:只有 orders 權限的客服可以呼叫 create_member 成功建立新會員(建單頁「找不到?建立新會員」)'
+);
+
+select id from create_member('ea000000-0000-4000-8000-000000000021', 'orders客服建立的會員2', '0911000011') \gset member_orders_created_
+
+select is(
+  (select merchant_id from members where id = :'member_orders_created_id'::uuid),
+  'ea000000-0000-4000-8000-000000000021'::uuid,
+  '#324:orders 權限客服建立的會員正確歸屬到當下操作的商家'
+);
+
+select throws_ok(
+  format($$select update_member('%s', '改名測試', null, null, null, null)$$, (:'member_orders_created_id')),
+  '42501', null,
+  '#320 範圍確認:只有 orders 權限的客服呼叫 update_member 依然被擋下(編輯會員是管理性質操作,規格書 §2.10 沒有一併放寬)'
+);
+
+select throws_ok(
+  format($$select deactivate_member('%s')$$, (:'member_orders_created_id')),
+  '42501', null,
+  '#320 範圍確認:只有 orders 權限的客服呼叫 deactivate_member 依然被擋下'
+);
+
+select throws_ok(
+  format($$select adjust_member_points('%s', 10, '測試')$$, (:'member_orders_created_id')),
+  '42501', null,
+  '#320 範圍確認:只有 orders 權限的客服呼叫 adjust_member_points 依然被擋下(規則 2.6,唯一只限商家管理員,不透過任何 section_key 開放)'
+);
+
+select pg_temp.test_clear_auth();
+
+select is(
+  (select pg_get_expr(polqual, polrelid)::text from pg_policy where polname = 'members_select'),
+  '(private.can_manage_members(merchant_id) OR private.can_manage_bookings(merchant_id))',
+  '#337:members_select 政策定義正確套用這次修正(新增 can_manage_bookings 放行,其餘不變)'
 );
 
 select * from finish();
