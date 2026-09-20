@@ -2,7 +2,7 @@
 -- 核心必測:規則 2.4(抽成快照建立後不自動重算)、規則 2.6(手動重算僅限管理員)。
 begin;
 
-select plan(73);
+select plan(77);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -911,7 +911,58 @@ select throws_ok(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ⑩ §3.12:新商家建立時自動種入預設薪資設定與假別扣款規則。
+-- ⑩ SPECS-INDEX #299/#302 回歸修正(20260920130000_merchant_staff_select_policy_payroll_fix.sql):
+-- 「抽成與薪資設定頁」(/app/payroll-settings)跟「師傅報表頁」(/app/staff-report)的服務人員
+-- 清單/下拉選單都是透過 useMerchantStaffList 讀 merchant_staff(merchant_id + status=active)。
+-- 這兩個頁面的路由守衛明確允許 commission_settings/billing/staff_report 三把鑰匙其中之一的客服
+-- 進入,但 merchant_staff_select 政策原本只有 is_merchant_admin/can_manage_bookings/
+-- can_manage_team_leave 三種身分放行,導致這三種客服打開頁面時清單永遠是空的(即使商家確實有
+-- 在職服務人員)。修法是在政策裡加上 can_manage_commission_settings/can_view_payroll_reports
+-- 兩個條件(各自內部已涵蓋 is_merchant_admin)。無授權客服(agent-none)維持讀不到,確保這次放寬
+-- 沒有波及完全沒被開通任何權限的客服。
+-- =========================================================================
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000004');
+
+select is(
+  (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
+  7,
+  '§299 回歸修正:被授權 commission_settings(沒有 orders/team_leave)的客服現在能讀到 A 店在職服務人員清單(抽成與薪資設定頁用)'
+);
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000005');
+
+select is(
+  (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
+  7,
+  '§302 回歸修正:被授權 billing(can_view_payroll_reports 涵蓋)的客服現在能讀到 A 店在職服務人員清單(師傅報表頁下拉選單用)'
+);
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000006');
+
+select is(
+  (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
+  7,
+  '§302 回歸修正:被授權 staff_report 的客服現在能讀到 A 店在職服務人員清單(師傅報表頁下拉選單用)'
+);
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000003');
+
+select is(
+  (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
+  0,
+  '對照組:完全沒被開通任何權限的客服(agent-none)這次修正後仍然讀不到服務人員清單,確認放寬範圍沒有波及無授權客服'
+);
+
+select pg_temp.test_clear_auth();
+
+-- =========================================================================
+-- ⑪ §3.12:新商家建立時自動種入預設薪資設定與假別扣款規則。
 -- =========================================================================
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
