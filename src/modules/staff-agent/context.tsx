@@ -8,13 +8,16 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { amIMerchantAdmin, fetchMyAgentRow } from "./api";
+import { amIMerchantAdmin, fetchMyAgentRow, fetchMyStaffRow } from "./api";
 import type { MerchantAgent, MerchantRole, MerchantStaff } from "./types";
 
-/** 5.1 對外介面:回傳目前使用者在指定商家的角色('admin' | 'agent' | null)。
- * 判斷順序:先問 am_i_merchant_admin(是就是 admin,管理員角色優先),不是的話再查自己是否有
- * 一筆 status='active' 的 merchant_agents 紀錄(是就是 agent),兩者都不是則為 null
- * (代表這個人跟這間店完全無關,理論上不會發生在已經能存取到這間商家的情境下)。 */
+/** 5.1 對外介面:回傳目前使用者在指定商家的角色('admin' | 'agent' | 'staff' | null)。
+ * 判斷順序(模組 14 服務人員端規格書規則 2.10 擴充):先問 am_i_merchant_admin(是就是 admin,
+ * 管理員角色優先),不是的話再查自己是否有一筆 status='active' 的 merchant_agents 紀錄
+ * (是就是 agent),都不是的話再查自己是否有一筆 status='active' 且 login_status='active' 的
+ * merchant_staff 紀錄(是就是 staff),都不是則為 null(代表這個人跟這間店完全無關,理論上不會
+ * 發生在已經能存取到這間商家的情境下)。同一個人身兼多重角色時,一律顯示較高權限角色對應的完整
+ * 既有介面,不會被限縮成服務人員的受限視角(規則 2.10 理由)。 */
 export function useMerchantRole(
   merchantId: string | null | undefined,
 ): UseQueryResult<MerchantRole> {
@@ -29,6 +32,11 @@ export function useMerchantRole(
 
       const agentRow = await fetchMyAgentRow(merchantId as string, user.id);
       if (agentRow && agentRow.status === "active") return "agent";
+
+      const staffRow = await fetchMyStaffRow(merchantId as string, user.id);
+      if (staffRow && staffRow.status === "active" && staffRow.login_status === "active") {
+        return "staff";
+      }
 
       return null;
     },

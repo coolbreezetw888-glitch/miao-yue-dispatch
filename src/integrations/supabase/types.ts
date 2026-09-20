@@ -478,6 +478,158 @@ export type Database = {
           },
         ]
       }
+      line_binding_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by_user_id: string | null
+          expires_at: string
+          id: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          used_at: string | null
+          used_by_line_user_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at: string
+          id?: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          used_at?: string | null
+          used_by_line_user_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at?: string
+          id?: string
+          merchant_id?: string
+          target_id?: string
+          target_type?: string
+          used_at?: string | null
+          used_by_line_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_binding_codes_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_notification_log: {
+        Row: {
+          attempted_at: string
+          booking_id: string | null
+          created_by_user_id: string | null
+          error_detail: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          rendered_message: string | null
+          skip_reason: string | null
+          staff_leave_record_id: string | null
+          status: string
+          target_id: string | null
+          target_line_user_id: string | null
+          target_type: string
+        }
+        Insert: {
+          attempted_at?: string
+          booking_id?: string | null
+          created_by_user_id?: string | null
+          error_detail?: string | null
+          event_type: string
+          id?: string
+          merchant_id: string
+          rendered_message?: string | null
+          skip_reason?: string | null
+          staff_leave_record_id?: string | null
+          status: string
+          target_id?: string | null
+          target_line_user_id?: string | null
+          target_type: string
+        }
+        Update: {
+          attempted_at?: string
+          booking_id?: string | null
+          created_by_user_id?: string | null
+          error_detail?: string | null
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          rendered_message?: string | null
+          skip_reason?: string | null
+          staff_leave_record_id?: string | null
+          status?: string
+          target_id?: string | null
+          target_line_user_id?: string | null
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_notification_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_notification_log_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_notification_log_staff_leave_record_id_fkey"
+            columns: ["staff_leave_record_id"]
+            isOneToOne: false
+            referencedRelation: "staff_leave_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_webhook_events: {
+        Row: {
+          line_event_type: string | null
+          merchant_id: string | null
+          note: string | null
+          processed_at: string
+          webhook_event_id: string
+        }
+        Insert: {
+          line_event_type?: string | null
+          merchant_id?: string | null
+          note?: string | null
+          processed_at?: string
+          webhook_event_id: string
+        }
+        Update: {
+          line_event_type?: string | null
+          merchant_id?: string | null
+          note?: string | null
+          processed_at?: string
+          webhook_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_webhook_events_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       material_cost_items: {
         Row: {
           amount: number
@@ -512,6 +664,77 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_point_transactions: {
+        Row: {
+          balance_after: number
+          booking_id: string | null
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          member_id: string
+          merchant_id: string
+          note: string | null
+          points_delta: number
+          related_member_id: string | null
+          transaction_type: string
+        }
+        Insert: {
+          balance_after: number
+          booking_id?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          member_id: string
+          merchant_id: string
+          note?: string | null
+          points_delta: number
+          related_member_id?: string | null
+          transaction_type: string
+        }
+        Update: {
+          balance_after?: number
+          booking_id?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          member_id?: string
+          merchant_id?: string
+          note?: string | null
+          points_delta?: number
+          related_member_id?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_point_transactions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_related_member_id_fkey"
+            columns: ["related_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]
@@ -597,77 +820,6 @@ export type Database = {
           {
             foreignKeyName: "members_referred_by_member_id_fkey"
             columns: ["referred_by_member_id"]
-            isOneToOne: false
-            referencedRelation: "members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      member_point_transactions: {
-        Row: {
-          balance_after: number
-          booking_id: string | null
-          created_at: string
-          created_by_user_id: string | null
-          id: string
-          member_id: string
-          merchant_id: string
-          note: string | null
-          points_delta: number
-          related_member_id: string | null
-          transaction_type: string
-        }
-        Insert: {
-          balance_after: number
-          booking_id?: string | null
-          created_at?: string
-          created_by_user_id?: string | null
-          id?: string
-          member_id: string
-          merchant_id: string
-          note?: string | null
-          points_delta: number
-          related_member_id?: string | null
-          transaction_type: string
-        }
-        Update: {
-          balance_after?: number
-          booking_id?: string | null
-          created_at?: string
-          created_by_user_id?: string | null
-          id?: string
-          member_id?: string
-          merchant_id?: string
-          note?: string | null
-          points_delta?: number
-          related_member_id?: string | null
-          transaction_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "member_point_transactions_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_point_transactions_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_point_transactions_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "member_point_transactions_related_member_id_fkey"
-            columns: ["related_member_id"]
             isOneToOne: false
             referencedRelation: "members"
             referencedColumns: ["id"]
@@ -1039,6 +1191,109 @@ export type Database = {
           },
         ]
       }
+      merchant_line_configs: {
+        Row: {
+          channel_access_token: string
+          channel_id: string
+          channel_secret: string
+          created_at: string
+          display_name: string | null
+          is_connected: boolean
+          last_test_result: string | null
+          last_tested_at: string | null
+          line_bot_basic_id: string | null
+          line_bot_user_id: string | null
+          merchant_id: string
+          updated_at: string
+        }
+        Insert: {
+          channel_access_token: string
+          channel_id: string
+          channel_secret: string
+          created_at?: string
+          display_name?: string | null
+          is_connected?: boolean
+          last_test_result?: string | null
+          last_tested_at?: string | null
+          line_bot_basic_id?: string | null
+          line_bot_user_id?: string | null
+          merchant_id: string
+          updated_at?: string
+        }
+        Update: {
+          channel_access_token?: string
+          channel_id?: string
+          channel_secret?: string
+          created_at?: string
+          display_name?: string | null
+          is_connected?: boolean
+          last_test_result?: string | null
+          last_tested_at?: string | null
+          line_bot_basic_id?: string | null
+          line_bot_user_id?: string | null
+          merchant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_line_configs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_line_event_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          message_template: string
+          notify_admin: boolean
+          notify_agent: boolean
+          notify_member: boolean
+          notify_staff: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          event_type: string
+          id?: string
+          merchant_id: string
+          message_template?: string
+          notify_admin?: boolean
+          notify_agent?: boolean
+          notify_member?: boolean
+          notify_staff?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          message_template?: string
+          notify_admin?: boolean
+          notify_agent?: boolean
+          notify_member?: boolean
+          notify_staff?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_line_event_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_member_settings: {
         Row: {
           birthday_bonus_points: number
@@ -1131,9 +1386,13 @@ export type Database = {
           google_calendar_sync_enabled: boolean
           id: string
           intro: string | null
+          invited_login_email: string | null
           is_listed: boolean
           line_bound: boolean
           line_user_id: string | null
+          login_activated_at: string | null
+          login_invited_at: string | null
+          login_status: string
           merchant_id: string
           name: string
           nickname: string | null
@@ -1160,9 +1419,13 @@ export type Database = {
           google_calendar_sync_enabled?: boolean
           id?: string
           intro?: string | null
+          invited_login_email?: string | null
           is_listed?: boolean
           line_bound?: boolean
           line_user_id?: string | null
+          login_activated_at?: string | null
+          login_invited_at?: string | null
+          login_status?: string
           merchant_id: string
           name: string
           nickname?: string | null
@@ -1189,9 +1452,13 @@ export type Database = {
           google_calendar_sync_enabled?: boolean
           id?: string
           intro?: string | null
+          invited_login_email?: string | null
           is_listed?: boolean
           line_bound?: boolean
           line_user_id?: string | null
+          login_activated_at?: string | null
+          login_invited_at?: string | null
+          login_status?: string
           merchant_id?: string
           name?: string
           nickname?: string | null
@@ -1209,6 +1476,41 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_staff_permissions: {
+        Row: {
+          created_at: string
+          granted: boolean
+          id: string
+          section_key: string
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          granted?: boolean
+          id?: string
+          section_key: string
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          granted?: boolean
+          id?: string
+          section_key?: string
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_staff_permissions_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
             referencedColumns: ["id"]
           },
         ]
@@ -1694,268 +1996,11 @@ export type Database = {
           },
         ]
       }
-      line_binding_codes: {
-        Row: {
-          code: string
-          created_at: string
-          created_by_user_id: string | null
-          expires_at: string
-          id: string
-          merchant_id: string
-          target_id: string
-          target_type: string
-          used_at: string | null
-          used_by_line_user_id: string | null
-        }
-        Insert: {
-          code: string
-          created_at?: string
-          created_by_user_id?: string | null
-          expires_at: string
-          id?: string
-          merchant_id: string
-          target_id: string
-          target_type: string
-          used_at?: string | null
-          used_by_line_user_id?: string | null
-        }
-        Update: {
-          code?: string
-          created_at?: string
-          created_by_user_id?: string | null
-          expires_at?: string
-          id?: string
-          merchant_id?: string
-          target_id?: string
-          target_type?: string
-          used_at?: string | null
-          used_by_line_user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "line_binding_codes_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      line_notification_log: {
-        Row: {
-          attempted_at: string
-          booking_id: string | null
-          created_by_user_id: string | null
-          error_detail: string | null
-          event_type: string
-          id: string
-          merchant_id: string
-          rendered_message: string | null
-          skip_reason: string | null
-          staff_leave_record_id: string | null
-          status: string
-          target_id: string | null
-          target_line_user_id: string | null
-          target_type: string
-        }
-        Insert: {
-          attempted_at?: string
-          booking_id?: string | null
-          created_by_user_id?: string | null
-          error_detail?: string | null
-          event_type: string
-          id?: string
-          merchant_id: string
-          rendered_message?: string | null
-          skip_reason?: string | null
-          staff_leave_record_id?: string | null
-          status: string
-          target_id?: string | null
-          target_line_user_id?: string | null
-          target_type: string
-        }
-        Update: {
-          attempted_at?: string
-          booking_id?: string | null
-          created_by_user_id?: string | null
-          error_detail?: string | null
-          event_type?: string
-          id?: string
-          merchant_id?: string
-          rendered_message?: string | null
-          skip_reason?: string | null
-          staff_leave_record_id?: string | null
-          status?: string
-          target_id?: string | null
-          target_line_user_id?: string | null
-          target_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "line_notification_log_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "line_notification_log_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "line_notification_log_staff_leave_record_id_fkey"
-            columns: ["staff_leave_record_id"]
-            isOneToOne: false
-            referencedRelation: "staff_leave_records"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      line_webhook_events: {
-        Row: {
-          line_event_type: string | null
-          merchant_id: string | null
-          note: string | null
-          processed_at: string
-          webhook_event_id: string
-        }
-        Insert: {
-          line_event_type?: string | null
-          merchant_id?: string | null
-          note?: string | null
-          processed_at?: string
-          webhook_event_id: string
-        }
-        Update: {
-          line_event_type?: string | null
-          merchant_id?: string | null
-          note?: string | null
-          processed_at?: string
-          webhook_event_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "line_webhook_events_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      merchant_line_configs: {
-        Row: {
-          channel_access_token: string
-          channel_id: string
-          channel_secret: string
-          created_at: string
-          display_name: string | null
-          is_connected: boolean
-          last_test_result: string | null
-          last_tested_at: string | null
-          line_bot_basic_id: string | null
-          line_bot_user_id: string | null
-          merchant_id: string
-          updated_at: string
-        }
-        Insert: {
-          channel_access_token: string
-          channel_id: string
-          channel_secret: string
-          created_at?: string
-          display_name?: string | null
-          is_connected?: boolean
-          last_test_result?: string | null
-          last_tested_at?: string | null
-          line_bot_basic_id?: string | null
-          line_bot_user_id?: string | null
-          merchant_id: string
-          updated_at?: string
-        }
-        Update: {
-          channel_access_token?: string
-          channel_id?: string
-          channel_secret?: string
-          created_at?: string
-          display_name?: string | null
-          is_connected?: boolean
-          last_test_result?: string | null
-          last_tested_at?: string | null
-          line_bot_basic_id?: string | null
-          line_bot_user_id?: string | null
-          merchant_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "merchant_line_configs_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: true
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      merchant_line_event_settings: {
-        Row: {
-          created_at: string
-          enabled: boolean
-          event_type: string
-          id: string
-          merchant_id: string
-          message_template: string
-          notify_admin: boolean
-          notify_agent: boolean
-          notify_member: boolean
-          notify_staff: boolean
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          enabled?: boolean
-          event_type: string
-          id?: string
-          merchant_id: string
-          message_template?: string
-          notify_admin?: boolean
-          notify_agent?: boolean
-          notify_member?: boolean
-          notify_staff?: boolean
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          enabled?: boolean
-          event_type?: string
-          id?: string
-          merchant_id?: string
-          message_template?: string
-          notify_admin?: boolean
-          notify_agent?: boolean
-          notify_member?: boolean
-          notify_staff?: boolean
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "merchant_line_event_settings_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      am_i_merchant_admin: { Args: { p_merchant_id: string }; Returns: boolean }
-      am_i_platform_admin: { Args: never; Returns: boolean }
       adjust_member_points: {
         Args: { p_member_id: string; p_note: string; p_points_delta: number }
         Returns: {
@@ -1965,6 +2010,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -1979,10 +2026,22 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
+      am_i_merchant_admin: { Args: { p_merchant_id: string }; Returns: boolean }
+      am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
         Returns: undefined
+      }
+      can_dispatch_line_notification: {
+        Args: { p_event_type: string; p_merchant_id: string }
+        Returns: boolean
       }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
@@ -2011,10 +2070,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2092,10 +2154,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2115,6 +2180,10 @@ export type Database = {
         }
       }
       compute_booking_commission: {
+        Args: { p_booking_id: string }
+        Returns: undefined
+      }
+      compute_member_loyalty_points: {
         Args: { p_booking_id: string }
         Returns: undefined
       }
@@ -2145,10 +2214,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2167,6 +2239,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      consume_line_binding_code: {
+        Args: { p_code: string; p_line_user_id: string; p_merchant_id: string }
+        Returns: Json
+      }
       create_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
@@ -2183,7 +2259,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_material_cost_item_ids?: string[]
-          p_member_id?: string | null
+          p_member_id?: string
           p_merchant_id: string
           p_notes?: string
           p_payment_method_id?: string
@@ -2219,10 +2295,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2268,6 +2347,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -2281,6 +2362,12 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       create_merchant_in_group: {
@@ -2324,7 +2411,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      generate_booking_slug: { Args: { p_name: string }; Returns: string }
       deactivate_member: {
         Args: { p_member_id: string }
         Returns: {
@@ -2334,6 +2420,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -2348,6 +2436,45 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      disconnect_merchant_line: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      generate_booking_slug: { Args: { p_name: string }; Returns: string }
+      generate_member_line_binding_code: {
+        Args: { p_member_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_own_admin_line_binding_code: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_own_agent_line_binding_code: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_staff_line_binding_code: {
+        Args: { p_staff_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
       }
       get_booking_actor_names: {
         Args: { p_merchant_id: string; p_user_ids: string[] }
@@ -2372,19 +2499,49 @@ export type Database = {
           status: string
         }[]
       }
+      get_line_notification_log: {
+        Args: {
+          p_event_type?: string
+          p_limit?: number
+          p_merchant_id: string
+          p_offset?: number
+        }
+        Returns: {
+          attempted_at: string
+          booking_id: string | null
+          created_by_user_id: string | null
+          error_detail: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          rendered_message: string | null
+          skip_reason: string | null
+          staff_leave_record_id: string | null
+          status: string
+          target_id: string | null
+          target_line_user_id: string | null
+          target_type: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "line_notification_log"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_member_point_history: {
         Args: { p_member_id: string }
         Returns: {
           balance_after: number
-          booking_id: string | null
-          booking_start_at: string | null
+          booking_id: string
+          booking_start_at: string
           created_at: string
-          created_by_user_id: string | null
+          created_by_user_id: string
           id: string
-          note: string | null
+          note: string
           points_delta: number
-          related_member_id: string | null
-          related_member_name: string | null
+          related_member_id: string
+          related_member_name: string
           transaction_type: string
         }[]
       }
@@ -2394,14 +2551,14 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          referral_rewarded_at: string | null
+          referral_rewarded_at: string
           status: string
         }[]
       }
       get_member_related_bookings: {
         Args: { p_member_id: string }
         Returns: {
-          earned_points: number | null
+          earned_points: number
           final_amount_snapshot: number
           id: string
           service_item_names: string[]
@@ -2421,26 +2578,6 @@ export type Database = {
       }
       get_merchant_billing_summary: {
         Args: { p_merchant_id: string; p_month: number; p_year: number }
-        Returns: Json
-      }
-      get_merchant_day_schedule: {
-        Args: { p_date: string; p_merchant_id: string }
-        Returns: Json
-      }
-      get_staff_commission_summary: {
-        Args: { p_month: number; p_staff_id: string; p_year: number }
-        Returns: Json
-      }
-      get_staff_monthly_payroll_summary: {
-        Args: { p_month: number; p_staff_id: string; p_year: number }
-        Returns: Json
-      }
-      get_staff_schedule_overview: {
-        Args: {
-          p_end_date: string
-          p_merchant_id: string
-          p_start_date: string
-        }
         Returns: Json
       }
       get_merchant_bulk_operations: {
@@ -2464,7 +2601,76 @@ export type Database = {
           total_rows: number
           write_mode: string | null
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "merchant_bulk_operations"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
+      get_merchant_day_schedule: {
+        Args: { p_date: string; p_merchant_id: string }
+        Returns: Json
+      }
+      get_merchant_line_config_status: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      get_my_booking_schedule: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: Json
+      }
+      get_staff_commission_summary: {
+        Args: { p_month: number; p_staff_id: string; p_year: number }
+        Returns: Json
+      }
+      get_staff_monthly_payroll_summary: {
+        Args: { p_month: number; p_staff_id: string; p_year: number }
+        Returns: Json
+      }
+      get_staff_schedule_overview: {
+        Args: {
+          p_end_date: string
+          p_merchant_id: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
+      grant_pending_birthday_bonuses: {
+        Args: { p_merchant_id: string }
+        Returns: number
+      }
+      import_historical_bookings_batch: {
+        Args: { p_merchant_id: string; p_rows: Json }
+        Returns: string
+      }
+      import_members_batch: {
+        Args: { p_merchant_id: string; p_rows: Json; p_write_mode: string }
+        Returns: string
+      }
+      invite_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
+      mark_agent_active_if_self: { Args: never; Returns: undefined }
+      mark_staff_login_active_if_self: { Args: never; Returns: undefined }
+      platform_add_merchant_admin: {
+        Args: { p_merchant_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      platform_export_merchant_members_snapshot: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      platform_get_merchant_admin_counts: {
+        Args: never
+        Returns: {
+          admin_count: number
+          merchant_id: string
+        }[]
+      }
+      platform_get_user_email: { Args: { p_user_id: string }; Returns: string }
       platform_list_merchant_bulk_operations: {
         Args: { p_merchant_id: string }
         Returns: {
@@ -2486,53 +2692,13 @@ export type Database = {
           total_rows: number
           write_mode: string | null
         }[]
-      }
-      import_members_batch: {
-        Args: { p_merchant_id: string; p_rows: Json; p_write_mode: string }
-        Returns: string
-      }
-      import_historical_bookings_batch: {
-        Args: { p_merchant_id: string; p_rows: Json }
-        Returns: string
-      }
-      rollback_bulk_operation: {
-        Args: { p_operation_id: string }
-        Returns: Json
-      }
-      transfer_members_to_merchant: {
-        Args: {
-          p_member_ids: string[]
-          p_source_merchant_id: string
-          p_target_merchant_id: string
+        SetofOptions: {
+          from: "*"
+          to: "merchant_bulk_operations"
+          isOneToOne: false
+          isSetofReturn: true
         }
-        Returns: string
       }
-      grant_pending_birthday_bonuses: {
-        Args: { p_merchant_id: string }
-        Returns: number
-      }
-      invite_merchant_admin: {
-        Args: { p_merchant_id: string; p_user_email: string }
-        Returns: undefined
-      }
-      lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
-      mark_agent_active_if_self: { Args: never; Returns: undefined }
-      platform_add_merchant_admin: {
-        Args: { p_merchant_id: string; p_user_email: string }
-        Returns: undefined
-      }
-      platform_export_merchant_members_snapshot: {
-        Args: { p_merchant_id: string }
-        Returns: Json
-      }
-      platform_get_merchant_admin_counts: {
-        Args: never
-        Returns: {
-          admin_count: number
-          merchant_id: string
-        }[]
-      }
-      platform_get_user_email: { Args: { p_user_id: string }; Returns: string }
       platform_purge_merchant_members_and_points: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -2544,6 +2710,10 @@ export type Database = {
       platform_set_group_admin: {
         Args: { p_group_id: string; p_user_email: string }
         Returns: undefined
+      }
+      preview_line_notification_targets: {
+        Args: { p_booking_id: string; p_event_type: string }
+        Returns: Json
       }
       preview_staff_leave_conflicts: {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
@@ -2564,6 +2734,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -2577,6 +2749,12 @@ export type Database = {
           status: string
           updated_at: string
           user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       recalculate_booking_commission: {
@@ -2615,6 +2793,15 @@ export type Database = {
         }
         Returns: string
       }
+      record_invited_staff_login: {
+        Args: {
+          p_invited_login_email: string
+          p_login_status: string
+          p_staff_id: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       redeem_member_points: {
         Args: { p_member_id: string; p_note: string; p_points: number }
         Returns: {
@@ -2624,6 +2811,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -2638,6 +2827,12 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       remove_merchant_admin: {
         Args: { p_merchant_id: string; p_user_id: string }
@@ -2647,11 +2842,36 @@ export type Database = {
         Args: { p_agent_id: string }
         Returns: undefined
       }
+      render_booking_notification_variables: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
+      render_staff_leave_notification_variables: {
+        Args: { p_staff_leave_record_id: string }
+        Returns: Json
+      }
+      resolve_line_notification_targets: {
+        Args: {
+          p_booking_id?: string
+          p_event_type: string
+          p_merchant_id: string
+          p_staff_leave_record_id?: string
+        }
+        Returns: Json
+      }
+      rollback_bulk_operation: {
+        Args: { p_operation_id: string }
+        Returns: Json
+      }
       seed_default_leave_deduction_rules: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
       seed_default_leave_types: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      seed_default_line_event_settings: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
@@ -2667,6 +2887,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
+      seed_default_staff_permissions: {
+        Args: { p_staff_id: string }
+        Returns: undefined
+      }
       set_agent_permission: {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
@@ -2680,6 +2904,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -2694,6 +2920,21 @@ export type Database = {
           updated_at: string
           user_id: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_merchant_line_credentials: {
+        Args: {
+          p_channel_access_token: string
+          p_channel_id: string
+          p_channel_secret: string
+          p_merchant_id: string
+        }
+        Returns: undefined
       }
       set_staff_day_override: {
         Args: {
@@ -2705,7 +2946,27 @@ export type Database = {
         }
         Returns: number
       }
+      set_staff_permission: {
+        Args: { p_granted: boolean; p_section_key: string; p_staff_id: string }
+        Returns: undefined
+      }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
+      storage_path_self_staff_id: {
+        Args: { p_object_name: string }
+        Returns: string
+      }
+      transfer_members_to_merchant: {
+        Args: {
+          p_member_ids: string[]
+          p_source_merchant_id: string
+          p_target_merchant_id: string
+        }
+        Returns: string
+      }
+      unbind_line_account: {
+        Args: { p_target_id: string; p_target_type: string }
+        Returns: undefined
+      }
       update_booking: {
         Args: {
           p_assistant_staff_ids?: string[]
@@ -2723,7 +2984,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_material_cost_item_ids?: string[]
-          p_member_id?: string | null
+          p_member_id?: string
           p_notes?: string
           p_payment_method_id?: string
           p_service_items: Json
@@ -2758,10 +3019,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2778,37 +3042,6 @@ export type Database = {
           to: "bookings"
           isOneToOne: true
           isSetofReturn: false
-        }
-      }
-      update_member: {
-        Args: {
-          p_birthday: string | null
-          p_email: string | null
-          p_member_id: string
-          p_name: string
-          p_notes: string | null
-          p_phone: string | null
-        }
-        Returns: {
-          birthday: string | null
-          created_at: string
-          created_by_user_id: string | null
-          email: string | null
-          id: string
-          last_birthday_bonus_year: number | null
-          merchant_id: string
-          name: string
-          notes: string | null
-          phone: string | null
-          phone_verified: boolean
-          phone_verified_at: string | null
-          points_balance: number
-          referral_code: string
-          referral_rewarded_at: string | null
-          referred_by_member_id: string | null
-          status: string
-          updated_at: string
-          user_id: string | null
         }
       }
       update_booking_payment_method: {
@@ -2838,10 +3071,13 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -2859,75 +3095,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      update_my_admin_profile: {
-        Args: {
-          p_display_name: string
-          p_job_title: string
-          p_merchant_id: string
-        }
-        Returns: undefined
-      }
-      update_my_agent_profile: {
-        Args: { p_job_title: string; p_merchant_id: string; p_nickname: string }
-        Returns: undefined
-      }
-      set_merchant_line_credentials: {
-        Args: {
-          p_channel_access_token: string
-          p_channel_id: string
-          p_channel_secret: string
-          p_merchant_id: string
-        }
-        Returns: undefined
-      }
-      get_merchant_line_config_status: {
-        Args: { p_merchant_id: string }
-        Returns: Json
-      }
-      disconnect_merchant_line: {
-        Args: { p_merchant_id: string }
-        Returns: undefined
-      }
-      generate_own_admin_line_binding_code: {
-        Args: { p_merchant_id: string }
-        Returns: {
-          code: string
-          expires_at: string
-        }[]
-      }
-      generate_own_agent_line_binding_code: {
-        Args: { p_merchant_id: string }
-        Returns: {
-          code: string
-          expires_at: string
-        }[]
-      }
-      generate_staff_line_binding_code: {
-        Args: { p_staff_id: string }
-        Returns: {
-          code: string
-          expires_at: string
-        }[]
-      }
-      generate_member_line_binding_code: {
-        Args: { p_member_id: string }
-        Returns: {
-          code: string
-          expires_at: string
-        }[]
-      }
-      consume_line_binding_code: {
-        Args: { p_code: string; p_line_user_id: string; p_merchant_id: string }
-        Returns: Json
-      }
-      unbind_line_account: {
-        Args: { p_target_id: string; p_target_type: string }
-        Returns: undefined
-      }
-      seed_default_line_event_settings: {
-        Args: { p_merchant_id: string }
-        Returns: undefined
       }
       update_line_event_setting: {
         Args: {
@@ -2960,56 +3127,68 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      resolve_line_notification_targets: {
+      update_member: {
         Args: {
-          p_booking_id?: string
-          p_event_type: string
-          p_merchant_id: string
-          p_staff_leave_record_id?: string
-        }
-        Returns: Json
-      }
-      preview_line_notification_targets: {
-        Args: { p_booking_id: string; p_event_type: string }
-        Returns: Json
-      }
-      render_booking_notification_variables: {
-        Args: { p_booking_id: string }
-        Returns: Json
-      }
-      can_dispatch_line_notification: {
-        Args: { p_event_type: string; p_merchant_id: string }
-        Returns: boolean
-      }
-      get_line_notification_log: {
-        Args: {
-          p_event_type?: string
-          p_limit?: number
-          p_merchant_id: string
-          p_offset?: number
+          p_birthday: string
+          p_email: string
+          p_member_id: string
+          p_name: string
+          p_notes: string
+          p_phone: string
         }
         Returns: {
-          attempted_at: string
-          booking_id: string | null
+          birthday: string | null
+          created_at: string
           created_by_user_id: string | null
-          error_detail: string | null
-          event_type: string
+          email: string | null
           id: string
+          last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
-          rendered_message: string | null
-          skip_reason: string | null
-          staff_leave_record_id: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
           status: string
-          target_id: string | null
-          target_line_user_id: string | null
-          target_type: string
-        }[]
+          updated_at: string
+          user_id: string | null
+        }
         SetofOptions: {
           from: "*"
-          to: "line_notification_log"
-          isOneToOne: false
-          isSetofReturn: true
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
         }
+      }
+      update_my_admin_profile: {
+        Args: {
+          p_display_name: string
+          p_job_title: string
+          p_merchant_id: string
+        }
+        Returns: undefined
+      }
+      update_my_agent_profile: {
+        Args: { p_job_title: string; p_merchant_id: string; p_nickname: string }
+        Returns: undefined
+      }
+      update_my_staff_profile: {
+        Args: {
+          p_avatar_url: string
+          p_contact_email: string
+          p_intro: string
+          p_name: string
+          p_nickname: string
+          p_phone: string
+          p_staff_id: string
+        }
+        Returns: undefined
       }
     }
     Enums: {

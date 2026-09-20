@@ -32,7 +32,11 @@ import { buildCsvContent, downloadCsv } from "./csvExport";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
 
-function PieceRateStaffReport({
+// 模組 14(服務人員端)規格書 4.5:這兩個版面元件直接被 MyPayrollPage.tsx 複用(export 出去),
+// 介面設計上 staffId 本來就是外部傳入的 prop,不耦合「怎麼決定 staffId」這件事本身——管理員版本
+// (下面 StaffReportPage)呼叫時自己選 staffId,自助版本呼叫時鎖定自己的 staffId,兩者共用同一套
+// 渲染邏輯與計算結果,不會日後各自修改產生數字不一致的風險。
+export function PieceRateStaffReport({
   staffId,
   staffName,
   year,
@@ -117,7 +121,7 @@ function PieceRateStaffReport({
   );
 }
 
-function MonthlySalaryStaffReport({
+export function MonthlySalaryStaffReport({
   staffId,
   staffName,
   year,

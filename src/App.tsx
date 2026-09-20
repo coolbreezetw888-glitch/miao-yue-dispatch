@@ -20,6 +20,10 @@ import StaffListPage from "@/modules/staff-agent/StaffListPage";
 import AgentListPage from "@/modules/staff-agent/AgentListPage";
 import AgentPermissionsPage from "@/modules/staff-agent/AgentPermissionsPage";
 import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePage";
+import StaffInviteCompletePage from "@/modules/staff-portal/StaffInviteCompletePage";
+import MyAvailabilityPage from "@/modules/staff-portal/MyAvailabilityPage";
+import MyPayrollPage from "@/modules/staff-portal/MyPayrollPage";
+import StaffPermissionsPage from "@/modules/staff-agent/StaffPermissionsPage";
 import ServiceItemsPage from "@/modules/service-items/ServiceItemsPage";
 import BusinessHoursPage from "@/modules/booking/BusinessHoursPage";
 import CalendarPage from "@/modules/booking/CalendarPage";
@@ -74,7 +78,8 @@ export default function App() {
         {/* 後台導覽外殼(跨模組共用外殼):/app/* 底下的路由統一套用 AppLayout(品牌列 +
             底部 3 個分頁籤:首頁/功能/行事曆),取代原本每個 /app/* 路由各自平行、各自手刻
             頂端列的寫法。例外(維持獨立全螢幕流程,不套外殼,見規格書「例外」一節):
-            /app/onboarding、/app/agent-invite-complete。/app/new-merchant 這個獨立表單流程
+            /app/onboarding、/app/agent-invite-complete、/app/staff-invite-complete(模組 14
+            服務人員端規格書 4.8,完全比照 agent-invite-complete 的既有做法)。/app/new-merchant 這個獨立表單流程
             也維持現狀不套外殼(規格書明講「細節不強制,由工程師視畫面觀感決定」)。
             /app/settings 沒有另外的權限守衛包裝,行為跟改版前一致(沿用既有 MerchantSettingsPage,
             「功能」分頁籤的卡片本身已經只對 isAdmin 顯示這個入口)。 */}
@@ -85,8 +90,11 @@ export default function App() {
           <Route path="/app/calendar" element={<CalendarPage />} />
           <Route path="/app/orders" element={<OrdersPage />} />
           <Route path="/app/staff" element={<StaffListPage />} />
+          <Route path="/app/staff/:staffId/permissions" element={<StaffPermissionsPage />} />
           <Route path="/app/agents" element={<AgentListPage />} />
           <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
+          <Route path="/app/my-availability" element={<MyAvailabilityPage />} />
+          <Route path="/app/my-payroll" element={<MyPayrollPage />} />
           <Route path="/app/service-items" element={<ServiceItemsPage />} />
           <Route path="/app/business-hours" element={<BusinessHoursPage />} />
           <Route path="/app/material-costs" element={<MaterialCostsPage />} />
@@ -112,6 +120,7 @@ export default function App() {
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
         <Route path="/app/agent-invite-complete" element={<AgentInviteCompletePage />} />
+        <Route path="/app/staff-invite-complete" element={<StaffInviteCompletePage />} />
         <Route
           path="/platform-admin"
           element={

@@ -123,13 +123,18 @@ export interface UpdateMemberInput {
 }
 
 export async function updateMember(memberId: string, input: UpdateMemberInput): Promise<Member> {
+  // `as string` 在下面四個欄位只是安撫型別檢查,不影響實際送出的值:supabase gen types 對
+  // update_member 這幾個參數推導成 `string`(不含 null),但用 pg_get_function_arguments 對照
+  // 正式環境確認過,函式簽章就是一般的 text 參數,沒有 not null 限制,完全接受 null——這是型別
+  // 產生工具目前版本的已知落差,不是真的資料庫限制。繼續照常送出 null(不是空字串),保留「使用者
+  // 故意清空這個欄位」的語意,不跟「沒有填」混在一起。
   const { data, error } = await supabase.rpc("update_member", {
     p_member_id: memberId,
     p_name: input.name,
-    p_phone: input.phone ?? null,
-    p_email: input.email ?? null,
-    p_birthday: input.birthday ?? null,
-    p_notes: input.notes ?? null,
+    p_phone: (input.phone ?? null) as string,
+    p_email: (input.email ?? null) as string,
+    p_birthday: (input.birthday ?? null) as string,
+    p_notes: (input.notes ?? null) as string,
   });
   if (error) throw error;
   return data as Member;

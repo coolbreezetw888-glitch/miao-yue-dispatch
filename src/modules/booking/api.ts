@@ -306,7 +306,15 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     // 因為 update_booking 沒有收到這個參數時會採用預設值 null,把既有的會員連結清空——呼叫端
     // (CalendarPage.tsx 的編輯表單)已經在開啟編輯時把既有 member_id 帶入表單初始狀態,這裡
     // 一律透傳,確保「沒有異動會員欄位」的正常編輯不會意外清空連結。
-    p_member_id: input.memberId ?? null,
+    //
+    // `as string` 這裡只是安撫型別檢查,不影響實際送出的值:supabase gen types 對這支函式的
+    // p_member_id 參數推導成 `string`(不含 null),但資料庫端 p_member_id 這個 text 參數本來就
+    // 完全接受 null(用 pg_get_function_arguments 對照正式環境確認過,函式簽章沒有 not null
+    // 限制),這是型別產生工具目前版本的已知落差,不是真的資料庫限制——繼續照常送出 null,不能
+    // 改成空字串或省略,否則會員清空的行為會跟前後端約定的語意不一致。專案這裡開了
+    // exactOptionalPropertyTypes,所以要斷言成 `string`(不含 undefined),不是 `string | undefined`,
+    // 否則會多一個「屬性存在但值是 undefined」跟宣告型別衝突的新錯誤。
+    p_member_id: (input.memberId ?? null) as string,
   });
   if (error) throw error;
   return data as Booking;

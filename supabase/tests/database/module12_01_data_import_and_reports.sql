@@ -689,8 +689,8 @@ select is(
 
 select is(
   (select pg_get_expr(polqual, polrelid)::text from pg_policy where polname = 'merchant_staff_select'),
-  '(private.is_merchant_admin(merchant_id) OR private.can_manage_bookings(merchant_id) OR private.can_manage_team_leave(merchant_id) OR private.can_manage_commission_settings(merchant_id) OR private.can_view_payroll_reports(merchant_id))',
-  '一之二節:merchant_staff_select 政策定義完全沒有變動'
+  '(private.is_merchant_admin(merchant_id) OR private.can_manage_bookings(merchant_id) OR private.can_manage_team_leave(merchant_id) OR private.can_manage_commission_settings(merchant_id) OR private.can_view_payroll_reports(merchant_id) OR (user_id = auth.uid()))',
+  '一之二節:merchant_staff_select 政策定義本模組沒有變動(2026-09-21 模組 14 服務人員端規格書 3.3 疊加了 or user_id = auth.uid() 分支,這裡的期望值已同步更新,不是本模組造成的變動)'
 );
 
 -- 新增兩張表的 RLS：沒有 INSERT/UPDATE/DELETE 政策，一般角色直接寫入被擋下。

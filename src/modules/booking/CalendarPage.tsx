@@ -89,6 +89,9 @@ import {
 } from "./dateUtils";
 import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
+// 模組 14(服務人員端)規格書 4.3:role==='staff' 時渲染服務人員自助行事曆,不渲染下面給
+// 管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
+import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   bookingBlockClasses,
@@ -1639,10 +1642,36 @@ function CalendarPageInner() {
   );
 }
 
-export default function CalendarPage() {
+// 模組 14(服務人員端)規格書 4.3:服務人員登入後看到的是簡化版自助行事曆
+// (src/modules/staff-portal/MyCalendarPage.tsx),不是下面給管理員/客服看的
+// CalendarPageInner——這裡刻意不套用 RequireBookingAccess(那個守衛只認 admin/agent,
+// 服務人員一律會被導回 /app),角色判斷放在 RequireBookingAccess 之外先做分流。
+function CalendarPageRoleGate() {
+  const { data: role, isLoading } = useCurrentMerchantRole();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface">
+        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      </div>
+    );
+  }
+
+  if (role === "staff") {
+    return (
+      <main className="mx-auto max-w-3xl px-5 py-12">
+        <MyCalendarPage />
+      </main>
+    );
+  }
+
   return (
     <RequireBookingAccess>
       <CalendarPageInner />
     </RequireBookingAccess>
   );
+}
+
+export default function CalendarPage() {
+  return <CalendarPageRoleGate />;
 }

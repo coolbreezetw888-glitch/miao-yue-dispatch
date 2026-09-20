@@ -12,6 +12,7 @@
 
 import { Link } from "react-router-dom";
 import { useEffect, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -35,6 +36,10 @@ import type { IndustryType } from "@/modules/merchant/types";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { updateMyAgentProfile } from "@/modules/staff-agent/api";
 import { useCurrentMerchantRole, useMyAgentProfile } from "@/modules/staff-agent/context";
+// 模組 14(服務人員端)規格書 4.1:role==='staff' 時顯示服務人員版本的個人資料卡片,
+// 這是本檔案唯一一處依賴模組 14 的地方。
+import { EditMyStaffProfileDialog } from "@/modules/staff-portal/EditMyStaffProfileDialog";
+import { useActiveMyStaffRecord, useMyStaffPermission } from "@/modules/staff-portal/context";
 
 import { useAppLayoutContext } from "./AppLayout";
 
@@ -150,9 +155,18 @@ export default function HomePage() {
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
   const isAgent = merchantRole === "agent";
+  const isStaff = merchantRole === "staff";
 
   const adminProfileQuery = useMyAdminProfile(merchantId, userId, isAdmin);
   const agentProfileQuery = useMyAgentProfile(merchantId, userId, isAgent);
+  const { data: staffRow } = useActiveMyStaffRecord(isStaff ? merchantId : null);
+  const { data: canEditStaffProfile } = useMyStaffPermission("staff_profile_edit");
+  const queryClient = useQueryClient();
+  function refetchStaffProfile() {
+    void queryClient.invalidateQueries({
+      queryKey: ["staff-portal-module", "my-staff-record", merchantId],
+    });
+  }
 
   // 卡片顯示用的「有 fallback 文字」版本:兩者都沒填時顯示 email 的 @ 前半段/依角色判斷的通用文字。
   const emailPrefix = emailNamePrefix(email);
@@ -188,29 +202,76 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-12 w-12">
-            <AvatarFallback className="bg-brand-soft text-lg font-semibold text-brand">
-              {displayName.slice(0, 1)}
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="text-lg font-semibold text-foreground">{displayName}</p>
-            <p className="text-sm text-muted-foreground">{jobTitle}</p>
+      {isStaff && staffRow ? (
+        // 模組 14 規格書 4.1:服務人員版本的個人資料卡片(姓名/暱稱/電話/對外聯絡 email/簡介/
+        // 頭像),不顯示上面管理員/客服版本的卡片內容。「編輯」依 staff_profile_edit 權限決定
+        // 是否顯示(規則 2.8:檢視自己的資料永遠可以,編輯需要額外開通)。
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-12 w-12">
+              {staffRow.avatar_url ? (
+                <img
+                  src={staffRow.avatar_url}
+                  alt={staffRow.name}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                <AvatarFallback className="bg-brand-soft text-lg font-semibold text-brand">
+                  {staffRow.name.slice(0, 1)}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div>
+              <p className="text-lg font-semibold text-foreground">
+                {staffRow.name}
+                {staffRow.nickname ? `(${staffRow.nickname})` : ""}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {[staffRow.phone, staffRow.contact_email].filter(Boolean).join(" ・ ") || "服務人員"}
+              </p>
+              {staffRow.intro ? (
+                <p className="mt-1 text-sm text-muted-foreground">{staffRow.intro}</p>
+              ) : null}
+            </div>
           </div>
+          {canEditStaffProfile ? (
+            <EditMyStaffProfileDialog
+              merchantId={merchantId as string}
+              staff={staffRow}
+              trigger={
+                <Button variant="outline" size="sm">
+                  編輯個人資料
+                </Button>
+              }
+              onSaved={refetchStaffProfile}
+            />
+          ) : null}
         </div>
-        {merchantId && (isAdmin || isAgent) ? (
-          <EditProfileDialog
-            role={isAdmin ? "admin" : "agent"}
-            merchantId={merchantId}
-            nameLabel={isAdmin ? "姓名/暱稱" : "暱稱"}
-            currentName={rawName}
-            currentJobTitle={rawJobTitle}
-            onSaved={refetchProfile}
-          />
-        ) : null}
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-12 w-12">
+              <AvatarFallback className="bg-brand-soft text-lg font-semibold text-brand">
+                {displayName.slice(0, 1)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-lg font-semibold text-foreground">{displayName}</p>
+              <p className="text-sm text-muted-foreground">{jobTitle}</p>
+            </div>
+          </div>
+          {merchantId && (isAdmin || isAgent) ? (
+            <EditProfileDialog
+              role={isAdmin ? "admin" : "agent"}
+              merchantId={merchantId}
+              nameLabel={isAdmin ? "姓名/暱稱" : "暱稱"}
+              currentName={rawName}
+              currentJobTitle={rawJobTitle}
+              onSaved={refetchProfile}
+            />
+          ) : null}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-border bg-card p-8">
         {currentMerchant ? (

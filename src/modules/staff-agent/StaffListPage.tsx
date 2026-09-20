@@ -50,6 +50,10 @@ import { addStaffAvailabilityWindow, removeStaffAvailabilityWindow } from "@/mod
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
 import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 import { StaffLineBindingSection } from "@/modules/line-notifications/StaffLineBindingSection";
+// 模組 14(服務人員端)規格書 4.7 第 1/2 點:邀請服務人員登入的入口,直接呼叫模組 14 對外暴露的
+// Edge Function 包裝(inviteMerchantStaff)。這是本檔案唯一一處依賴模組 14 的地方,方向是
+// 「模組 3 既有畫面疊加模組 14 的功能」,規格書 4.7 明講要在這個既有檔案上擴充,不是另起新檔案。
+import { inviteMerchantStaff } from "@/modules/staff-portal/api";
 
 import {
   addMerchantStaff,
@@ -67,8 +71,10 @@ import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
 import {
   STAFF_BOOLEAN_PERMISSION_FIELDS,
+  STAFF_LOGIN_STATUS_LABELS,
   STAFF_NUMBER_PERMISSION_FIELDS,
   type MerchantStaff,
+  type StaffLoginStatus,
 } from "./types";
 
 const staffListQueryKey = (merchantId: string) =>
@@ -641,6 +647,102 @@ function toCamel<K extends keyof StaffFormState>(key: string): K {
   return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) as K;
 }
 
+function loginStatusBadgeVariant(
+  loginStatus: StaffLoginStatus,
+): "default" | "secondary" | "outline" {
+  if (loginStatus === "active") return "default";
+  if (loginStatus === "invited") return "secondary";
+  return "outline";
+}
+
+// 模組 14(服務人員端)規格書 4.7 第 2 點:邀請服務人員登入的小 Dialog。可以預先帶入既有的
+// contact_email 當預設值,但允許改成不同的 email。送出後的提示文字區分「邀請信已寄出」跟
+// 「這個 email 已經有秒約帳號,已直接開通登入」兩種情境文案(比照模組 3 §4.3 的既有精神)。
+function InviteStaffLoginDialog({
+  merchantId,
+  staff,
+  onInvited,
+}: {
+  merchantId: string;
+  staff: MerchantStaff;
+  onInvited: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [loginEmail, setLoginEmail] = useState(staff.contact_email ?? "");
+  const [inviting, setInviting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setLoginEmail(staff.contact_email ?? "");
+    }
+  }, [open, staff.contact_email]);
+
+  async function handleInvite(e: FormEvent) {
+    e.preventDefault();
+    if (!loginEmail.trim()) return;
+    setInviting(true);
+    try {
+      const result = await inviteMerchantStaff({
+        merchantId,
+        staffId: staff.id,
+        loginEmail,
+      });
+      setOpen(false);
+      onInvited();
+      if (result.alreadyHadAccount) {
+        toast.success("已直接開通登入", {
+          description: "這個 email 已經有秒約帳號,已直接開通登入,對方下次登入就能看到這間店。",
+        });
+      } else {
+        toast.success("邀請信已寄出", {
+          description: "請提醒對方檢查信箱(含垃圾郵件夾),點連結設定密碼後即可登入。",
+        });
+      }
+    } catch (err) {
+      toast.error("邀請失敗", { description: getErrorMessage(err) });
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          邀請登入
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>邀請「{staff.name}」開通登入</DialogTitle>
+          <DialogDescription>
+            對方會收到一封邀請信,點連結設定密碼後即可用手機登入;如果這個 email
+            已經有秒約帳號,會直接開通登入。
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleInvite} className="space-y-4">
+          <div>
+            <Label htmlFor={`staff-login-email-${staff.id}`}>登入 Email *</Label>
+            <Input
+              id={`staff-login-email-${staff.id}`}
+              type="email"
+              className="mt-2"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              required
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={inviting || !loginEmail.trim()}>
+              {inviting ? "送出中⋯" : "送出邀請"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
@@ -740,6 +842,10 @@ function StaffListInner() {
                         <Badge variant="outline">
                           {staff.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬"}
                         </Badge>
+                        {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態徽章。 */}
+                        <Badge variant={loginStatusBadgeVariant(staff.login_status as StaffLoginStatus)}>
+                          {STAFF_LOGIN_STATUS_LABELS[staff.login_status as StaffLoginStatus]}
+                        </Badge>
                         {staff.status === "removed" ? (
                           <Badge variant="destructive">已移除</Badge>
                         ) : null}
@@ -749,6 +855,20 @@ function StaffListInner() {
                   <div className="flex shrink-0 gap-2">
                     {staff.status === "active" ? (
                       <>
+                        {/* 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請按鈕。
+                            第 3 點(服務人員權限入口)留待該模組後續階段實作,這裡先不加。 */}
+                        {staff.login_status === "not_invited" ? (
+                          <InviteStaffLoginDialog
+                            merchantId={merchantId}
+                            staff={staff}
+                            onInvited={refetch}
+                          />
+                        ) : null}
+                        {staff.login_status === "active" ? (
+                          <Button variant="outline" size="sm" asChild>
+                            <Link to={`/app/staff/${staff.id}/permissions`}>服務人員權限</Link>
+                          </Button>
+                        ) : null}
                         <StaffFormDialog
                           merchantId={merchantId}
                           staff={staff}

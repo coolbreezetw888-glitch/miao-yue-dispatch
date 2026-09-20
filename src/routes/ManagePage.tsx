@@ -43,6 +43,10 @@ import { Link } from "react-router-dom";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentMerchantRole, useAgentPermission } from "@/modules/staff-agent/context";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
+// 模組 14(服務人員端)規格書 4.2:role==='staff' 時渲染完全獨立的卡片清單,這是本檔案唯一
+// 一處依賴模組 14 的地方。
+import { useActiveMyStaffRecord, useMyStaffPermission } from "@/modules/staff-portal/context";
+import { useCurrentMerchant } from "@/modules/merchant/context";
 
 interface FunctionCardDef {
   key: string;
@@ -53,9 +57,79 @@ interface FunctionCardDef {
   visible: boolean;
 }
 
+/** 模組 14(服務人員端)規格書 4.2:服務人員版本的「功能」分頁籤,只有兩張卡片,完全獨立於
+ * 下面 ManagePage 主體的 cards 陣列(不是併入同一個清單)。 */
+function StaffManagePage() {
+  const { merchant } = useCurrentMerchant();
+  const merchantId = merchant?.id ?? null;
+  const { data: staffRow } = useActiveMyStaffRecord(merchantId);
+  const { data: canSelfManageAvailability } = useMyStaffPermission("staff_availability_self_manage");
+  const { data: canViewPayroll } = useMyStaffPermission("staff_payroll_view");
+
+  // 規則 2.2:月薪制服務人員即使被開通權限也不顯示這張卡片,避免點進去才發現不能用。
+  const showAvailabilityCard =
+    canSelfManageAvailability === true && staffRow?.compensation_type === "piece_rate";
+  const showPayrollCard = canViewPayroll === true;
+
+  const staffCards: FunctionCardDef[] = [
+    {
+      key: "my-availability",
+      to: "/app/my-availability",
+      label: "我的休假設定",
+      description: "設定每週固定接單時段、標記臨時休假(僅按件計酬服務人員)",
+      icon: CalendarOff,
+      visible: showAvailabilityCard,
+    },
+    {
+      key: "my-payroll",
+      to: "/app/my-payroll",
+      label: "我的薪資報表",
+      description: "查看自己每個月的抽成明細或薪資扣款明細",
+      icon: FileBarChart,
+      visible: showPayrollCard,
+    },
+  ];
+  const visibleStaffCards = staffCards.filter((card) => card.visible);
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">功能</h1>
+        <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>
+      </div>
+
+      {visibleStaffCards.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+          目前沒有開放給你的功能,請聯絡商家管理員開通權限。
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {visibleStaffCards.map((card) => {
+            const Icon = card.icon;
+            return (
+              <Link key={card.key} to={card.to}>
+                <Card className="h-full transition-colors hover:border-brand hover:bg-brand-soft/40">
+                  <CardHeader className="items-center gap-3 text-center">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
+                      <Icon className="h-6 w-6" />
+                    </span>
+                    <CardTitle className="text-base">{card.label}</CardTitle>
+                    <CardDescription className="text-xs">{card.description}</CardDescription>
+                  </CardHeader>
+                </Card>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ManagePage() {
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
+  const isStaff = merchantRole === "staff";
   // 模組 4 規格書 4.3/2.5 既有邏輯:商家管理員一律顯示,客服則透過這支 hook 判斷。
   const { data: canManageServiceItems } = useAgentPermission("service_items");
   const showServiceItemsCard = isAdmin || canManageServiceItems === true;
@@ -103,6 +177,13 @@ export default function ManagePage() {
   // 不透過 section_key 開放客服)；「報表匯出中心」沿用一般客服權限開關模式(report_export，規則 2.9)。
   const { data: canExportReports } = useAgentPermission("report_export");
   const showReportExportCard = isAdmin || canExportReports === true;
+
+  // 模組 14 規格書 4.2:服務人員登入後看到完全獨立的卡片清單(StaffManagePage),不會看到
+  // 下面任何管理員/客服導向的卡片。放在這裡(所有 useAgentPermission hook 呼叫完之後)提早
+  // return,不影響上面 hooks 呼叫順序的一致性(StaffManagePage 是獨立元件,有自己的 hooks)。
+  if (isStaff) {
+    return <StaffManagePage />;
+  }
 
   const cards: FunctionCardDef[] = [
     {

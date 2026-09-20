@@ -402,6 +402,26 @@ export async function fetchMyAgentRow(
 }
 
 // =========================================================================
+// 模組 14(服務人員端)規格書 5.1/規則 2.10:角色判斷用的小工具查詢——回傳目前登入者在某商家
+// 「自己的」服務人員紀錄(若有)。比照上面 fetchMyAgentRow 的既有精神,單純查詢 merchant_staff
+// (RLS 已透過 3.3 疊加允許 user_id = auth.uid() 讀自己那一列,不限制 status/login_status,
+// 讓被移除的服務人員仍能讀到「自己被移除了」的誠實狀態——規則判斷交給呼叫端自行檢查)。
+// =========================================================================
+export async function fetchMyStaffRow(
+  merchantId: string,
+  userId: string,
+): Promise<MerchantStaff | null> {
+  const { data, error } = await supabase
+    .from("merchant_staff")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as MerchantStaff | null) ?? null;
+}
+
+// =========================================================================
 // 對應規格書「首頁外殼與主題色優化」1.2/1.3:首頁個人資料卡片(客服這一半)。
 // =========================================================================
 

@@ -18,8 +18,20 @@ export const AGENT_STATUS_LABELS: Record<AgentStatus, string> = {
   removed: "已移除",
 };
 
-/** 5.1 對外介面:目前使用者在某間商家的角色。 */
-export type MerchantRole = "admin" | "agent" | null;
+/** 5.1 對外介面:目前使用者在某間商家的角色。
+ * 模組 14(服務人員端)規格書規則 2.10 擴充新增 'staff' 這個值——判斷順序:admin > agent > staff,
+ * 同一人身兼多重角色時一律顯示較高權限角色對應的完整既有介面,不會被限縮成服務人員視角。 */
+export type MerchantRole = "admin" | "agent" | "staff" | null;
+
+/** 模組 14(服務人員端)規格書 1.1/規則 2.1:服務人員登入身份進度,跟 StaffStatus(是否仍是
+ * 有效服務人員名錄項目)完全脫鉤獨立記錄,兩者互不影響。 */
+export type StaffLoginStatus = "not_invited" | "invited" | "active";
+
+export const STAFF_LOGIN_STATUS_LABELS: Record<StaffLoginStatus, string> = {
+  not_invited: "尚未開通",
+  invited: "邀請信已寄出",
+  active: "已開通登入",
+};
 
 /** 1.1.1 權限功能開關欄位,對應規格表「服務人員-權限功能」逐條(白話文字給 4.2 畫面使用)。 */
 export interface StaffPermissionFieldDef {
