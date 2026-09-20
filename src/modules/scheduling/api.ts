@@ -9,6 +9,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
+import { dispatchLineNotification } from "@/modules/line-notifications/api";
 import type {
   MerchantLeaveType,
   StaffLeaveConflictBooking,
@@ -155,6 +156,11 @@ export interface CreateStaffLeaveInput {
   endDate: string;
   notes?: string | null;
   confirmDespiteConflicts?: boolean;
+  /** 模組 11(LINE 通知)§3.11:登記請假的既有 mutation 函式沒有 merchant_id 這個既有欄位
+   * (staff_leave_records 只有 staff_id),疊加 dispatchLineNotification 需要 merchant_id,
+   * 由呼叫端(目前只有 src/modules/scheduling/LeaveRecordsPage.tsx 這一處)一併帶入——呼叫端
+   * 本來就已經知道目前操作中的商家 id(useCurrentMerchant()),不需要額外查詢。 */
+  merchantId: string;
 }
 
 /** §3.3:建立一筆請假紀錄(規則 2.2/2.5/2.6 逐項檢查皆在後端函式完成)。 */
@@ -168,7 +174,15 @@ export async function createStaffLeave(input: CreateStaffLeaveInput): Promise<St
     p_confirm_despite_conflicts: input.confirmDespiteConflicts ?? false,
   });
   if (error) throw error;
-  return data as StaffLeaveRecord;
+  const record = data as StaffLeaveRecord;
+  // 模組 11(LINE 通知)§3.11(對應判斷 1):RPC 呼叫成功之後,額外(不等待、吞掉錯誤)疊加
+  // dispatchLineNotification,絕對不能 await、不能讓錯誤往外拋,不影響這裡原本的登記請假成功結果。
+  dispatchLineNotification({
+    merchantId: input.merchantId,
+    staffLeaveRecordId: record.id,
+    eventType: "staff_leave_created",
+  });
+  return record;
 }
 
 /** §3.5:取消一筆請假紀錄(軟刪除,規則 2.9/2.10)。 */

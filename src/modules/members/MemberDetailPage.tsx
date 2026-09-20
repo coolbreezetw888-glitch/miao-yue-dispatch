@@ -24,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
 
 import {
   adjustMemberPoints,
@@ -437,6 +438,17 @@ function MemberDetailInner() {
               <p className="mt-1 whitespace-pre-wrap text-foreground">{member.notes}</p>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+
+      {/* 模組 11(LINE 通知)§4.7:會員詳情頁疊加「LINE 綁定」區塊,歸在既有 members 權限底下
+          (第〇節判斷 3/5),不是本模組新增的權限項目。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>LINE 綁定</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MemberLineBindingSection memberId={member.id} />
         </CardContent>
       </Card>
 

@@ -171,6 +171,7 @@ function CreateLeaveDialog({
         endDate,
         notes: notes.trim() ? notes : null,
         confirmDespiteConflicts,
+        merchantId,
       });
       toast.success("已登記請假");
       setOpen(false);

@@ -49,6 +49,7 @@ import { UNCATEGORIZED_LABEL, type ServiceItem } from "@/modules/service-items/t
 import { addStaffAvailabilityWindow, removeStaffAvailabilityWindow } from "@/modules/booking/api";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
 import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
+import { StaffLineBindingSection } from "@/modules/line-notifications/StaffLineBindingSection";
 
 import {
   addMerchantStaff,
@@ -619,6 +620,10 @@ function StaffFormDialog({
               ))}
             </div>
           </div>
+
+          {/* 模組 11(LINE 通知)§4.6:服務人員詳情/編輯頁疊加「LINE 綁定」區塊,只有編輯既有
+              服務人員(已經有 staff.id)時才顯示,新增流程還沒有 id 可以綁定。 */}
+          {isEdit && staff ? <StaffLineBindingSection staffId={staff.id} /> : null}
 
           <DialogFooter>
             <Button type="submit" disabled={saving}>

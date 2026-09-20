@@ -36,6 +36,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import { ConfirmBookingLineDialog } from "@/modules/line-notifications/ConfirmBookingLineDialog";
+import { dispatchLineNotification, usePendingLineNotificationPreview } from "@/modules/line-notifications/api";
+import type { PendingLineNotificationTarget } from "@/modules/line-notifications/types";
 
 import {
   cancelBooking,
@@ -175,18 +178,57 @@ export function BookingDetailDialog({
     enabled: open && showRelated && Boolean(booking),
   });
 
-  async function handleConfirm() {
+  // 模組 11(LINE 通知)規則 2.5/§4.8:確認訂單前先預覽會不會通知任何人——沒有目標就直接確認,
+  // 有目標才彈出 Yes/No 對話框,兩個選項都會執行 confirm_booking(),差別只在於「是」之後才呼叫
+  // dispatchLineNotification。
+  const { refetch: refetchLinePreview } = usePendingLineNotificationPreview(
+    booking?.id,
+    "booking_confirmed",
+  );
+  const [showLineDialog, setShowLineDialog] = useState(false);
+  const [lineDialogTargets, setLineDialogTargets] = useState<PendingLineNotificationTarget[]>([]);
+
+  async function doConfirm(shouldNotify: boolean) {
     if (!booking) return;
     setBusy(true);
     try {
       await confirmBooking(booking.id);
+      if (shouldNotify) {
+        dispatchLineNotification({
+          merchantId: booking.merchant_id,
+          bookingId: booking.id,
+          eventType: "booking_confirmed",
+        });
+      }
       toast.success("已確認訂單");
+      setShowLineDialog(false);
       onOpenChange(false);
       onChanged();
     } catch (err) {
       toast.error("操作失敗", { description: getErrorMessage(err) });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleConfirm() {
+    if (!booking) return;
+    setBusy(true);
+    try {
+      const { data: preview } = await refetchLinePreview();
+      if (preview?.hasAnyTarget) {
+        setLineDialogTargets(preview.targets);
+        setShowLineDialog(true);
+        setBusy(false);
+        return;
+      }
+      await doConfirm(false);
+    } catch (err) {
+      // 規則 2.5 的預覽本身失敗不應該擋住確認訂單這個核心業務操作——退回成「視為沒有通知對象」
+      // 直接確認,不彈窗(這是本模組沒有明文規定、由 engineer 補上的保守假設,已在回報中提出
+      // 請主腦/使用者確認是否認同這個 fallback 行為)。
+      console.error("[preview_line_notification_targets] 呼叫失敗,略過通知彈窗", err);
+      await doConfirm(false);
     }
   }
 
@@ -238,6 +280,7 @@ export function BookingDetailDialog({
   // 講的「送出按鈕」,維持原本位置,不強制搬到底部)。取消預約的二次確認 AlertDialog 維持原樣
   // 不用改(§5 第 3 點),巢狀在下面 showEditAndCancel 區塊裡,原封不動搬過來。
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
@@ -525,5 +568,17 @@ export function BookingDetailDialog({
         </div>
       </SheetContent>
     </Sheet>
+
+    {/* 模組 11(LINE 通知)§4.8/規則 2.5:有實際會被通知的對象時才顯示,兩個選項都會執行
+        confirm_booking(),差別只在於要不要額外呼叫 dispatchLineNotification。刻意放在 Sheet
+        外層(獨立的 Radix AlertDialog root),避免巢狀在同一個 Sheet root 底下互相干擾。 */}
+    <ConfirmBookingLineDialog
+      open={showLineDialog}
+      targets={lineDialogTargets}
+      busy={busy}
+      onOpenChange={setShowLineDialog}
+      onChoice={(shouldNotify) => void doConfirm(shouldNotify)}
+    />
+    </>
   );
 }

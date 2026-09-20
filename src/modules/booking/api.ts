@@ -9,6 +9,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
+import { dispatchLineNotification } from "@/modules/line-notifications/api";
 import type {
   AmountAdjustmentMode,
   Booking,
@@ -233,7 +234,16 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.memberId ? { p_member_id: input.memberId } : {}),
   });
   if (error) throw error;
-  return data as Booking;
+  const booking = data as Booking;
+  // 模組 11(LINE 通知)§3.11(對應判斷 1):RPC 呼叫成功、拿到結果之後,額外(不等待、吞掉錯誤)
+  // 疊加一行 dispatchLineNotification 呼叫,絕對不能 await、不能讓錯誤往外拋,不影響這裡原本
+  // 的建單成功結果。
+  dispatchLineNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_created",
+  });
+  return booking;
 }
 
 /** 建單功能擴充 4.9/決策記錄 6(新增):編輯已建立的預約,欄位範圍跟 CreateBookingInput 相同,
@@ -330,7 +340,14 @@ export async function cancelBooking(bookingId: string, reason?: string | null): 
     ...(reason ? { p_reason: reason } : {}),
   });
   if (error) throw error;
-  return data as Booking;
+  const booking = data as Booking;
+  // 模組 11(LINE 通知)§3.11:同 createBooking,不等待、吞掉錯誤。
+  dispatchLineNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_cancelled",
+  });
+  return booking;
 }
 
 export async function completeBooking(bookingId: string): Promise<Booking> {
@@ -338,7 +355,14 @@ export async function completeBooking(bookingId: string): Promise<Booking> {
     p_booking_id: bookingId,
   });
   if (error) throw error;
-  return data as Booking;
+  const booking = data as Booking;
+  // 模組 11(LINE 通知)§3.11:同 createBooking,不等待、吞掉錯誤。
+  dispatchLineNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_completed",
+  });
+  return booking;
 }
 
 // =========================================================================

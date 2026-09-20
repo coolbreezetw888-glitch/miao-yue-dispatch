@@ -14,6 +14,7 @@
 
 import type { ComponentType } from "react";
 import {
+  Bell,
   CalendarClock,
   CalendarOff,
   CalendarRange,
@@ -22,6 +23,9 @@ import {
   FileBarChart,
   Gift,
   Headset,
+  History,
+  Megaphone,
+  MessageCircle,
   Percent,
   Receipt,
   Settings,
@@ -35,6 +39,7 @@ import { Link } from "react-router-dom";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCurrentMerchantRole, useAgentPermission } from "@/modules/staff-agent/context";
+import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
 
 interface FunctionCardDef {
   key: string;
@@ -87,6 +92,10 @@ export default function ManagePage() {
   const showMembersCard = isAdmin || canManageMembers === true;
   const { data: canManageMemberSettings } = useAgentPermission("member_settings");
   const showMemberSettingsCard = isAdmin || canManageMemberSettings === true;
+  // 模組 11(LINE 通知)§4.10:line_notification 這把鑰匙決定「LINE 通知設定」「LINE 發送記錄」
+  // 兩張卡片的顯示權限;「LINE 串接設定」「行銷再通知」永遠只給商家管理員(規則 2.1/2.6)。
+  const { data: canManageLineNotification } = useAgentPermission("line_notification");
+  const showLineNotificationCards = isAdmin || canManageLineNotification === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -210,6 +219,38 @@ export default function ManagePage() {
       visible: showMemberSettingsCard,
     },
     {
+      key: "line-settings",
+      to: "/app/line-settings",
+      label: "LINE 串接設定",
+      description: "串接商家自己的 LINE 官方帳號憑證、測試連線",
+      icon: MessageCircle,
+      visible: isAdmin,
+    },
+    {
+      key: "line-events",
+      to: "/app/line-events",
+      label: "LINE 通知設定",
+      description: "設定每類事件要不要通知、通知誰、文案內容",
+      icon: Bell,
+      visible: showLineNotificationCards,
+    },
+    {
+      key: "line-logs",
+      to: "/app/line-logs",
+      label: "LINE 發送記錄",
+      description: "查看每一次 LINE 通知的成功/失敗/跳過記錄",
+      icon: History,
+      visible: showLineNotificationCards,
+    },
+    {
+      key: "line-marketing",
+      to: "/app/line-marketing",
+      label: "行銷再通知",
+      description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
+      icon: Megaphone,
+      visible: isAdmin,
+    },
+    {
       key: "settings",
       to: "/app/settings",
       label: "商家設定",
@@ -227,6 +268,11 @@ export default function ManagePage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">功能</h1>
         <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>
       </div>
+
+      {/* 模組 11(LINE 通知)§4.5:「我的 LINE 綁定」個人設定區塊,商家管理員/客服都會經過這個
+          頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上
+          不會發生)或還沒有選定商家時回傳 null。 */}
+      <MyLineBindingCard />
 
       {visibleCards.length === 0 ? (
         <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">

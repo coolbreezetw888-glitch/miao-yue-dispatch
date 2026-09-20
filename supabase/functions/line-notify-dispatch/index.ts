@@ -9,9 +9,16 @@
 //      (跟 3.10 preview_line_notification_targets 共用同一份判斷邏輯,不重寫一次)。
 //   3. 沒有任何目標(not_configured/event_disabled)→ 直接回 200,不寫入 line_notification_log。
 //      有目標(即使全部落在 skipped)→ 正常依規則 2.4 寫入對應 skip_reason 的記錄。
-//   4. 有實際會發送的目標 → 呼叫 render_booking_notification_variables 取得變數(booking 事件),
-//      用範本(merchant_line_event_settings.message_template)做字串替換,對每個目標呼叫
-//      LINE push API,依回應寫入 line_notification_log。
+//   4. 有實際會發送的目標 → 依 booking_id 呼叫 render_booking_notification_variables 或依
+//      staff_leave_record_id 呼叫 render_staff_leave_notification_variables 取得變數,用範本
+//      (merchant_line_event_settings.message_template)做字串替換,對每個目標呼叫 LINE push
+//      API,依回應寫入 line_notification_log。
+//
+// bug fix(SPECS-INDEX 385):staff_leave_created 事件傳的是 staff_leave_record_id(沒有
+// booking_id),原本這裡只在 body.booking_id 有值時才取變數,導致 staff_leave_created 的變數
+// 永遠是空物件 {},文案裡的 {{staff_name}}/{{booking_date}} 沒有被替換、原樣送給收訊人看到。
+// 修法見 resolveNotificationVariables:依實際傳入的是 booking_id 還是 staff_leave_record_id,
+// 呼叫對應的變數組裝函式(20260920160600 migration 新增 render_staff_leave_notification_variables)。
 //
 // 本模組最重要的邊界原則(對應規則 2.4 第 4 點):前端呼叫這支函式一律用「不等待、吞掉錯誤」的
 // 方式(見 src/modules/line-notifications/api.ts dispatchLineNotification),即使這支函式
@@ -116,6 +123,51 @@ export async function pushLineMessage(
       errorDetail: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/** 呼叫 RPC 拿變數用的最小介面,方便測試時傳入假的 client(不需要整個 supabase-js SupabaseClient)。 */
+export interface RpcClient {
+  rpc(
+    fn: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: unknown }>;
+}
+
+/**
+ * bug fix(SPECS-INDEX 385):依實際傳入的是 booking_id 還是 staff_leave_record_id,呼叫對應的
+ * 變數組裝函式。booking 事件呼叫 render_booking_notification_variables(3.9),staff_leave_created
+ * 呼叫 render_staff_leave_notification_variables(20260920160600 migration)。兩者都沒有
+ * (理論上不該發生)則維持空物件。任何一邊呼叫失敗都只記 log、回傳空物件,不往外拋(對應規則
+ * 2.4 第 4 點——變數組裝失敗不該影響通知/原本業務操作的其餘流程)。
+ */
+export async function resolveNotificationVariables(
+  adminClient: RpcClient,
+  bookingId: string | null | undefined,
+  staffLeaveRecordId: string | null | undefined,
+): Promise<Record<string, string>> {
+  if (bookingId) {
+    const { data, error } = await adminClient.rpc("render_booking_notification_variables", {
+      p_booking_id: bookingId,
+    });
+    if (error) {
+      console.error("[line-notify-dispatch] render_booking_notification_variables 失敗", error);
+      return {};
+    }
+    return (data as Record<string, string>) ?? {};
+  }
+
+  if (staffLeaveRecordId) {
+    const { data, error } = await adminClient.rpc("render_staff_leave_notification_variables", {
+      p_staff_leave_record_id: staffLeaveRecordId,
+    });
+    if (error) {
+      console.error("[line-notify-dispatch] render_staff_leave_notification_variables 失敗", error);
+      return {};
+    }
+    return (data as Record<string, string>) ?? {};
+  }
+
+  return {};
 }
 
 /**
@@ -237,18 +289,11 @@ async function handleRequest(req: Request): Promise<Response> {
     .eq("event_type", eventType)
     .maybeSingle();
 
-  let variables: Record<string, string> = {};
-  if (body.booking_id) {
-    const { data: vars, error: varsError } = await adminClient.rpc(
-      "render_booking_notification_variables",
-      { p_booking_id: body.booking_id },
-    );
-    if (varsError) {
-      console.error("[line-notify-dispatch] render_booking_notification_variables 失敗", varsError);
-    } else {
-      variables = (vars as Record<string, string>) ?? {};
-    }
-  }
+  const variables = await resolveNotificationVariables(
+    adminClient,
+    body.booking_id,
+    body.staff_leave_record_id,
+  );
 
   const messageTemplate = (settingsRow?.message_template as string) ?? "";
   const renderedMessage = renderMessageTemplate(messageTemplate, variables);

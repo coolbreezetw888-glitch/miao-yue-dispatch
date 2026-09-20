@@ -35,6 +35,10 @@ import StaffReportPage from "@/modules/payroll/StaffReportPage";
 import MembersListPage from "@/modules/members/MembersListPage";
 import MemberDetailPage from "@/modules/members/MemberDetailPage";
 import MemberSettingsPage from "@/modules/members/MemberSettingsPage";
+import LineSettingsPage from "@/modules/line-notifications/LineSettingsPage";
+import LineEventSettingsPage from "@/modules/line-notifications/LineEventSettingsPage";
+import LineLogsPage from "@/modules/line-notifications/LineLogsPage";
+import LineMarketingPage from "@/modules/line-notifications/LineMarketingPage";
 
 function NotFound() {
   return (
@@ -92,6 +96,10 @@ export default function App() {
           <Route path="/app/members" element={<MembersListPage />} />
           <Route path="/app/members/:id" element={<MemberDetailPage />} />
           <Route path="/app/member-settings" element={<MemberSettingsPage />} />
+          <Route path="/app/line-settings" element={<LineSettingsPage />} />
+          <Route path="/app/line-events" element={<LineEventSettingsPage />} />
+          <Route path="/app/line-logs" element={<LineLogsPage />} />
+          <Route path="/app/line-marketing" element={<LineMarketingPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
