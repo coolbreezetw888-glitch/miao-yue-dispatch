@@ -521,6 +521,8 @@ export type Database = {
           email: string | null
           id: string
           last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           notes: string | null
@@ -542,6 +544,8 @@ export type Database = {
           email?: string | null
           id?: string
           last_birthday_bonus_year?: number | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id: string
           name: string
           notes?: string | null
@@ -563,6 +567,8 @@ export type Database = {
           email?: string | null
           id?: string
           last_birthday_bonus_year?: number | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id?: string
           name?: string
           notes?: string | null
@@ -671,6 +677,8 @@ export type Database = {
           display_name: string | null
           id: string
           job_title: string | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           user_id: string
         }
@@ -679,6 +687,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           job_title?: string | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id: string
           user_id: string
         }
@@ -687,6 +697,8 @@ export type Database = {
           display_name?: string | null
           id?: string
           job_title?: string | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id?: string
           user_id?: string
         }
@@ -744,6 +756,8 @@ export type Database = {
           invited_at: string
           invited_email: string
           job_title: string | null
+          line_bound: boolean
+          line_user_id: string | null
           merchant_id: string
           name: string
           nickname: string | null
@@ -760,6 +774,8 @@ export type Database = {
           invited_at?: string
           invited_email: string
           job_title?: string | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id: string
           name: string
           nickname?: string | null
@@ -776,6 +792,8 @@ export type Database = {
           invited_at?: string
           invited_email?: string
           job_title?: string | null
+          line_bound?: boolean
+          line_user_id?: string | null
           merchant_id?: string
           name?: string
           nickname?: string | null
@@ -1559,6 +1577,261 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: true
             referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_binding_codes: {
+        Row: {
+          code: string
+          created_at: string
+          created_by_user_id: string | null
+          expires_at: string
+          id: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          used_at: string | null
+          used_by_line_user_id: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at: string
+          id?: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          used_at?: string | null
+          used_by_line_user_id?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at?: string
+          id?: string
+          merchant_id?: string
+          target_id?: string
+          target_type?: string
+          used_at?: string | null
+          used_by_line_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_binding_codes_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_notification_log: {
+        Row: {
+          attempted_at: string
+          booking_id: string | null
+          created_by_user_id: string | null
+          error_detail: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          rendered_message: string | null
+          skip_reason: string | null
+          staff_leave_record_id: string | null
+          status: string
+          target_id: string | null
+          target_line_user_id: string | null
+          target_type: string
+        }
+        Insert: {
+          attempted_at?: string
+          booking_id?: string | null
+          created_by_user_id?: string | null
+          error_detail?: string | null
+          event_type: string
+          id?: string
+          merchant_id: string
+          rendered_message?: string | null
+          skip_reason?: string | null
+          staff_leave_record_id?: string | null
+          status: string
+          target_id?: string | null
+          target_line_user_id?: string | null
+          target_type: string
+        }
+        Update: {
+          attempted_at?: string
+          booking_id?: string | null
+          created_by_user_id?: string | null
+          error_detail?: string | null
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          rendered_message?: string | null
+          skip_reason?: string | null
+          staff_leave_record_id?: string | null
+          status?: string
+          target_id?: string | null
+          target_line_user_id?: string | null
+          target_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_notification_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_notification_log_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "line_notification_log_staff_leave_record_id_fkey"
+            columns: ["staff_leave_record_id"]
+            isOneToOne: false
+            referencedRelation: "staff_leave_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      line_webhook_events: {
+        Row: {
+          line_event_type: string | null
+          merchant_id: string | null
+          note: string | null
+          processed_at: string
+          webhook_event_id: string
+        }
+        Insert: {
+          line_event_type?: string | null
+          merchant_id?: string | null
+          note?: string | null
+          processed_at?: string
+          webhook_event_id: string
+        }
+        Update: {
+          line_event_type?: string | null
+          merchant_id?: string | null
+          note?: string | null
+          processed_at?: string
+          webhook_event_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "line_webhook_events_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_line_configs: {
+        Row: {
+          channel_access_token: string
+          channel_id: string
+          channel_secret: string
+          created_at: string
+          display_name: string | null
+          is_connected: boolean
+          last_test_result: string | null
+          last_tested_at: string | null
+          line_bot_basic_id: string | null
+          line_bot_user_id: string | null
+          merchant_id: string
+          updated_at: string
+        }
+        Insert: {
+          channel_access_token: string
+          channel_id: string
+          channel_secret: string
+          created_at?: string
+          display_name?: string | null
+          is_connected?: boolean
+          last_test_result?: string | null
+          last_tested_at?: string | null
+          line_bot_basic_id?: string | null
+          line_bot_user_id?: string | null
+          merchant_id: string
+          updated_at?: string
+        }
+        Update: {
+          channel_access_token?: string
+          channel_id?: string
+          channel_secret?: string
+          created_at?: string
+          display_name?: string | null
+          is_connected?: boolean
+          last_test_result?: string | null
+          last_tested_at?: string | null
+          line_bot_basic_id?: string | null
+          line_bot_user_id?: string | null
+          merchant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_line_configs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_line_event_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          message_template: string
+          notify_admin: boolean
+          notify_agent: boolean
+          notify_member: boolean
+          notify_staff: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          event_type: string
+          id?: string
+          merchant_id: string
+          message_template?: string
+          notify_admin?: boolean
+          notify_agent?: boolean
+          notify_member?: boolean
+          notify_staff?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          message_template?: string
+          notify_admin?: boolean
+          notify_agent?: boolean
+          notify_member?: boolean
+          notify_staff?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_line_event_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
         ]
@@ -2421,6 +2694,145 @@ export type Database = {
       update_my_agent_profile: {
         Args: { p_job_title: string; p_merchant_id: string; p_nickname: string }
         Returns: undefined
+      }
+      set_merchant_line_credentials: {
+        Args: {
+          p_channel_access_token: string
+          p_channel_id: string
+          p_channel_secret: string
+          p_merchant_id: string
+        }
+        Returns: undefined
+      }
+      get_merchant_line_config_status: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      disconnect_merchant_line: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      generate_own_admin_line_binding_code: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_own_agent_line_binding_code: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_staff_line_binding_code: {
+        Args: { p_staff_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      generate_member_line_binding_code: {
+        Args: { p_member_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
+      consume_line_binding_code: {
+        Args: { p_code: string; p_line_user_id: string; p_merchant_id: string }
+        Returns: Json
+      }
+      unbind_line_account: {
+        Args: { p_target_id: string; p_target_type: string }
+        Returns: undefined
+      }
+      seed_default_line_event_settings: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      update_line_event_setting: {
+        Args: {
+          p_enabled: boolean
+          p_event_type: string
+          p_merchant_id: string
+          p_message_template: string
+          p_notify_admin: boolean
+          p_notify_agent: boolean
+          p_notify_member: boolean
+          p_notify_staff: boolean
+        }
+        Returns: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          message_template: string
+          notify_admin: boolean
+          notify_agent: boolean
+          notify_member: boolean
+          notify_staff: boolean
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "merchant_line_event_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      resolve_line_notification_targets: {
+        Args: {
+          p_booking_id?: string
+          p_event_type: string
+          p_merchant_id: string
+          p_staff_leave_record_id?: string
+        }
+        Returns: Json
+      }
+      preview_line_notification_targets: {
+        Args: { p_booking_id: string; p_event_type: string }
+        Returns: Json
+      }
+      render_booking_notification_variables: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
+      can_dispatch_line_notification: {
+        Args: { p_event_type: string; p_merchant_id: string }
+        Returns: boolean
+      }
+      get_line_notification_log: {
+        Args: {
+          p_event_type?: string
+          p_limit?: number
+          p_merchant_id: string
+          p_offset?: number
+        }
+        Returns: {
+          attempted_at: string
+          booking_id: string | null
+          created_by_user_id: string | null
+          error_detail: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          rendered_message: string | null
+          skip_reason: string | null
+          staff_leave_record_id: string | null
+          status: string
+          target_id: string | null
+          target_line_user_id: string | null
+          target_type: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "line_notification_log"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
     }
     Enums: {
