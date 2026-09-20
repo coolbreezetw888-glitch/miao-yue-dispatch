@@ -191,6 +191,9 @@ export interface CreateBookingInput extends BookingAmountAdjustmentInput {
   /** 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到的備註),跟既有的 notes
    * (內部備註,商家內部看、客戶看不到)分開存放。 */
   customerNotes?: string | null;
+  /** 模組 10(會員與紅利)§3.6/§4.4:選填,連結這筆訂單到哪位會員。null/undefined 代表訪客
+   * 訂單,不做任何電話比對或自動連結(判斷 8)。 */
+  memberId?: string | null;
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -227,6 +230,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
       : {}),
+    ...(input.memberId ? { p_member_id: input.memberId } : {}),
   });
   if (error) throw error;
   return data as Booking;
@@ -249,6 +253,10 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
   customerAddress?: string | null;
   /** 預約詳情資訊擴充與建單備註分類第一節:同 CreateBookingInput.customerNotes。 */
   customerNotes?: string | null;
+  /** 模組 10(會員與紅利)§3.6/§4.4:同 CreateBookingInput.memberId。⚠️ 呼叫端每次都要帶入
+   * 目前的 member_id(即使不變更),否則後端會把它清空成 null——編輯表單已在開啟時把既有
+   * member_id 帶入初始狀態,確保正常編輯流程不會意外清空會員連結(對應判斷 9)。 */
+  memberId?: string | null;
 }
 
 export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
@@ -284,6 +292,11 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
       : {}),
+    // 模組 10(會員與紅利)§3.6:這裡刻意「一律」帶上 p_member_id(不是像其他欄位那樣有值才帶),
+    // 因為 update_booking 沒有收到這個參數時會採用預設值 null,把既有的會員連結清空——呼叫端
+    // (CalendarPage.tsx 的編輯表單)已經在開啟編輯時把既有 member_id 帶入表單初始狀態,這裡
+    // 一律透傳,確保「沒有異動會員欄位」的正常編輯不會意外清空連結。
+    p_member_id: input.memberId ?? null,
   });
   if (error) throw error;
   return data as Booking;

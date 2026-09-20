@@ -1,0 +1,161 @@
+// 模組 10(會員與紅利)規格書 §7/§8 明確要求的 Playwright 測試:
+//   1. 會員管理列表頁(§4.1):建立會員 → 清單正確顯示;下架後預設篩選看不到,重新上架後恢復。
+//   2. 會員詳情頁(§4.2):登記兌換點數後,餘額與異動歷史正確更新;手動調整只有管理員看得到
+//      入口;相關訂單/推薦名單正確顯示 fixture 資料。
+//   3. 建單表單疊加 MemberPickerField(§4.4):在「新增預約」表單裡搜尋既有會員、選中後欄位
+//      正確顯示選中結果。
+//   4. 訂單詳情頁會員連結(§4.5):有 members 權限的管理員在訂單詳情頁看到會員姓名是可點擊連結。
+//
+// 範圍說明(已在回報時一併提出):3.6/3.7/3.8「選擇既有會員完成訂單後正確核發點數」這條核心
+// 業務邏輯,已經由 supabase/tests/database/module10_02_booking_overlay_and_loyalty.sql 的 30
+// 條 pgTAP 斷言完整覆蓋(呼叫的是跟前端完全相同的 create_booking/complete_booking RPC)——這裡
+// 用 fixture 直接呼叫同一組 RPC 準備好「已連結會員並完成」的訂單,Playwright 只驗證畫面渲染
+// 正確,不重覆走一次完整的行事曆日期/時段/服務人員 UI 操作(那部分風險/效益比不划算,這個
+// codebase 目前也沒有任何既有 e2e 測試會這樣做,連 mobile-overflow.spec.ts 都只驗證「新增預約」
+// 對話框能開啟,沒有實際送出過)。
+import { expect, test } from "@playwright/test";
+
+import {
+  EXISTING_MEMBER_NAME_PREFIX,
+  INITIAL_POINTS_BALANCE,
+  injectMembersFixtureSession,
+  POINTS_EARN_RATE,
+  setupMembersFixture,
+  teardownMembersFixture,
+  type MembersFixture,
+} from "./support/members-fixture";
+
+const LOAD_TIMEOUT = 20_000;
+
+test.describe.configure({ mode: "serial", timeout: 60_000 });
+
+let fixture: MembersFixture;
+let setupFailed = false;
+
+test.beforeAll(async () => {
+  try {
+    fixture = await setupMembersFixture();
+  } catch (err) {
+    setupFailed = true;
+    console.error("[members] 建立測試 fixture 失敗:", err);
+    throw err;
+  }
+});
+
+test.afterAll(async () => {
+  if (setupFailed || !fixture) return;
+  const actions = await teardownMembersFixture(fixture);
+  console.log("[members] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"));
+});
+
+test.beforeEach(async ({ page }) => {
+  await injectMembersFixtureSession(page, fixture);
+
+  // 已知既有問題(跟這次修正主題無關,e2e/mobile-overflow.spec.ts 開頭同一段說明已記錄):
+  // 全新瀏覽器 session 第一次深連結到受保護頁面時,有機會在 currentMerchantId 還沒被
+  // context.tsx 的 fallback effect 寫進 localStorage 前,就先讀到 merchant === null 而被
+  // Require*Access 誤判導回 /app。先訪問一次 /app 讓「目前操作中商家」正確寫進 localStorage。
+  await page.goto("/app");
+  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+test("會員管理列表頁(§4.1):建立會員、下架後預設篩選看不到、重新上架後恢復", async ({ page }) => {
+  await page.goto("/app/members");
+  await expect(page.getByRole("heading", { name: "會員管理" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // fixture 既有會員應該出現在清單裡。
+  await expect(page.getByText(fixture.existingMemberName)).toBeVisible();
+
+  const newMemberName = `E2E新建會員${fixture.runId}`;
+  await page.getByRole("button", { name: "新增會員" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel("姓名 *").fill(newMemberName);
+  await page.getByLabel(/^電話/).fill("0955888100");
+  await page.getByRole("dialog").getByRole("button", { name: "建立" }).click();
+
+  await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  // 下架這位新建會員,預設篩選(上架中)應該看不到。
+  const newMemberRow = page.locator("li", { hasText: newMemberName });
+  await newMemberRow.getByRole("button", { name: "下架" }).click();
+  await page.getByRole("button", { name: "確定下架" }).click();
+
+  await expect(page.getByText(newMemberName)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+
+  // 切換到「已下架」篩選,應該看得到,並可以重新上架恢復。
+  await page.getByRole("button", { name: "已下架", exact: true }).click();
+  await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const removedRow = page.locator("li", { hasText: newMemberName });
+  await removedRow.getByRole("button", { name: "恢復" }).click();
+
+  await page.getByRole("button", { name: "上架中", exact: true }).click();
+  await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+test("會員詳情頁(§4.2):登記兌換點數更新餘額與歷史,手動調整僅管理員可見,相關訂單/推薦名單正確顯示", async ({
+  page,
+}) => {
+  await page.goto(`/app/members/${fixture.existingMemberId}`);
+  await expect(page.getByRole("heading", { name: fixture.existingMemberName })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 點數區塊(大字餘額顯示,用 CSS class 精準定位,避免跟兌換 Dialog 說明文字裡也帶餘額數字
+  // 的段落搞混):初始餘額 = fixture 手動灌點(INITIAL_POINTS_BALANCE)+ fixture 已完成訂單
+  // 自動核發的消費點數(BOOKING_SUBTOTAL / POINTS_EARN_RATE = 10 點,規則 2.1/3.7)。
+  const expectedEarnedPoints = 1000 / POINTS_EARN_RATE;
+  const initialBalance = INITIAL_POINTS_BALANCE + expectedEarnedPoints;
+  const balanceDisplay = page.locator("p.text-3xl");
+  await expect(balanceDisplay).toHaveText(`${initialBalance} 點`);
+
+  // 規則 2.6:登入身分是商家管理員(fixture 用 create_group_and_merchant 建立),應該看得到
+  // 「手動調整」按鈕。
+  await expect(page.getByRole("button", { name: "手動調整" })).toBeVisible();
+
+  // 登記兌換 10 點,餘額應該減少 10,且歷史多一筆 redeem 紀錄。
+  await page.getByRole("button", { name: "登記兌換" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel("兌換點數 *").fill("10");
+  await page.getByLabel("用途說明 *").fill("e2e 測試兌換一次免費加值服務");
+  await page.getByRole("dialog").getByRole("button", { name: "確認兌換" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+
+  const expectedBalance = initialBalance - 10;
+  await expect(balanceDisplay).toHaveText(`${expectedBalance} 點`, { timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("兌換使用")).toBeVisible();
+  await expect(page.getByText("e2e 測試兌換一次免費加值服務")).toBeVisible();
+
+  // 相關訂單:fixture 已連結並完成的那筆訂單應該出現,顯示已核發的點數。
+  await expect(page.getByText(`已核發 ${expectedEarnedPoints} 點`)).toBeVisible();
+
+  // 推薦名單:fixture 的被推薦會員應該出現。
+  await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
+});
+
+test("建單表單疊加 MemberPickerField(§4.4)+ 訂單詳情頁會員連結(§4.5)", async ({ page }) => {
+  // §4.4:在「新增預約」表單裡搜尋既有會員、選中後欄位正確顯示選中結果。
+  await page.goto("/app/calendar");
+  await page.getByRole("button", { name: "新增預約" }).click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "新增預約" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  const memberSearchInput = page.getByPlaceholder("輸入姓名/電話搜尋既有會員(選填)");
+  await memberSearchInput.fill(EXISTING_MEMBER_NAME_PREFIX);
+  await page.getByRole("button", { name: new RegExp(fixture.existingMemberName) }).click();
+
+  // 選中後欄位改成顯示選中的會員姓名 + 「清除」按鈕(不再是搜尋輸入框)。
+  await expect(page.getByText(fixture.existingMemberName).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "清除" })).toBeVisible();
+
+  // §4.5:訂單詳情頁——fixture 已完成的訂單連結到 existingMember,管理員應該看到可點擊連結。
+  await page.goto("/app/orders");
+  await page.getByRole("button", { name: /0955888099/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  const memberLink = page.getByRole("link", { name: fixture.existingMemberName });
+  await expect(memberLink).toBeVisible();
+  await expect(memberLink).toHaveAttribute("href", `/app/members/${fixture.existingMemberId}`);
+});

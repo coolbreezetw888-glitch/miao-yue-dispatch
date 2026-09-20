@@ -32,6 +32,9 @@ import SchedulingOverviewPage from "@/modules/scheduling/SchedulingOverviewPage"
 import PayrollSettingsPage from "@/modules/payroll/PayrollSettingsPage";
 import BillingReportPage from "@/modules/payroll/BillingReportPage";
 import StaffReportPage from "@/modules/payroll/StaffReportPage";
+import MembersListPage from "@/modules/members/MembersListPage";
+import MemberDetailPage from "@/modules/members/MemberDetailPage";
+import MemberSettingsPage from "@/modules/members/MemberSettingsPage";
 
 function NotFound() {
   return (
@@ -86,6 +89,9 @@ export default function App() {
           <Route path="/app/payroll-settings" element={<PayrollSettingsPage />} />
           <Route path="/app/billing-report" element={<BillingReportPage />} />
           <Route path="/app/staff-report" element={<StaffReportPage />} />
+          <Route path="/app/members" element={<MembersListPage />} />
+          <Route path="/app/members/:id" element={<MemberDetailPage />} />
+          <Route path="/app/member-settings" element={<MemberSettingsPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />

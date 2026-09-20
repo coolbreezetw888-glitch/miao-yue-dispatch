@@ -148,7 +148,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "members",
     label: "會員管理",
-    description: "開放後客服可以看到並操作會員資料(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以新增/編輯/下架會員資料、標記電話已驗證、查看點數異動歷史、登記兌換點數(對應模組 10 會員與紅利)。注意:手動調整會員點數這個敏感操作永遠只有商家管理員能做,不受這個開關影響。建單時選擇/快速建立會員不需要這個權限,只要有「訂單管理」權限即可。",
   },
   {
     key: "staff_report",
@@ -196,14 +197,10 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     description: "開放後客服可以執行資料匯入(此功能尚未開發,先設定值)。",
   },
   {
-    key: "member_system",
+    key: "member_settings",
     label: "會員系統設定",
-    description: "開放後客服可以調整會員系統設定(此功能尚未開發,先設定值)。",
-  },
-  {
-    key: "member_bonus",
-    label: "會員紅利設定",
-    description: "開放後客服可以調整會員紅利設定(此功能尚未開發,先設定值)。",
+    description:
+      "開放後客服可以調整會員系統設定:電話驗證政策、消費點數比例、推薦獎勵點數、生日贈點(對應模組 10 會員與紅利)。這把鑰匙涵蓋規劃階段原本設想的「會員系統設定」跟「會員紅利設定」兩塊,實作時合併成單一開關,不再拆成兩把。",
   },
   {
     key: "material_costs",

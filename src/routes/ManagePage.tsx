@@ -20,12 +20,14 @@ import {
   ClipboardList,
   Coins,
   FileBarChart,
+  Gift,
   Headset,
   Percent,
   Receipt,
   Settings,
   TrendingUp,
   UserMinus,
+  UserRound,
   Users,
   Wallet,
 } from "lucide-react";
@@ -79,6 +81,12 @@ export default function ManagePage() {
   const showBillingReportCard = isAdmin || canViewBilling === true;
   const { data: canViewStaffReport } = useAgentPermission("staff_report");
   const showStaffReportCard = isAdmin || canViewStaffReport === true;
+  // 模組 10(會員與紅利)§4.7:members/member_settings 兩把獨立鑰匙,分別決定「會員管理」
+  // 「會員系統設定」兩張卡片的顯示權限。
+  const { data: canManageMembers } = useAgentPermission("members");
+  const showMembersCard = isAdmin || canManageMembers === true;
+  const { data: canManageMemberSettings } = useAgentPermission("member_settings");
+  const showMemberSettingsCard = isAdmin || canManageMemberSettings === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -184,6 +192,22 @@ export default function ManagePage() {
       description: "查看個別服務人員的抽成或薪資明細",
       icon: FileBarChart,
       visible: showStaffReportCard,
+    },
+    {
+      key: "members",
+      to: "/app/members",
+      label: "會員管理",
+      description: "管理會員資料、紅利點數、推薦名單",
+      icon: UserRound,
+      visible: showMembersCard,
+    },
+    {
+      key: "member-settings",
+      to: "/app/member-settings",
+      label: "會員系統設定",
+      description: "設定電話驗證政策、消費點數比例、推薦與生日獎勵",
+      icon: Gift,
+      visible: showMemberSettingsCard,
     },
     {
       key: "settings",

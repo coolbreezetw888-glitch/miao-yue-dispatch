@@ -250,6 +250,8 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_id: string | null
+          member_name_snapshot: string | null
           merchant_id: string
           notes: string | null
           payment_method_id: string | null
@@ -290,6 +292,8 @@ export type Database = {
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
+          member_id?: string | null
+          member_name_snapshot?: string | null
           merchant_id: string
           notes?: string | null
           payment_method_id?: string | null
@@ -330,6 +334,8 @@ export type Database = {
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
+          member_id?: string | null
+          member_name_snapshot?: string | null
           merchant_id?: string
           notes?: string | null
           payment_method_id?: string | null
@@ -346,6 +352,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bookings_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bookings_merchant_id_fkey"
             columns: ["merchant_id"]
@@ -496,6 +509,158 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      members: {
+        Row: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          birthday?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          email?: string | null
+          id?: string
+          last_birthday_bonus_year?: number | null
+          merchant_id: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          phone_verified?: boolean
+          phone_verified_at?: string | null
+          points_balance?: number
+          referral_code: string
+          referral_rewarded_at?: string | null
+          referred_by_member_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          birthday?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          email?: string | null
+          id?: string
+          last_birthday_bonus_year?: number | null
+          merchant_id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          phone_verified?: boolean
+          phone_verified_at?: string | null
+          points_balance?: number
+          referral_code?: string
+          referral_rewarded_at?: string | null
+          referred_by_member_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "members_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "members_referred_by_member_id_fkey"
+            columns: ["referred_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_point_transactions: {
+        Row: {
+          balance_after: number
+          booking_id: string | null
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          member_id: string
+          merchant_id: string
+          note: string | null
+          points_delta: number
+          related_member_id: string | null
+          transaction_type: string
+        }
+        Insert: {
+          balance_after: number
+          booking_id?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          member_id: string
+          merchant_id: string
+          note?: string | null
+          points_delta: number
+          related_member_id?: string | null
+          transaction_type: string
+        }
+        Update: {
+          balance_after?: number
+          booking_id?: string | null
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          member_id?: string
+          merchant_id?: string
+          note?: string | null
+          points_delta?: number
+          related_member_id?: string | null
+          transaction_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_point_transactions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_point_transactions_related_member_id_fkey"
+            columns: ["related_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]
@@ -738,6 +903,47 @@ export type Database = {
             foreignKeyName: "merchant_leave_types_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_member_settings: {
+        Row: {
+          birthday_bonus_points: number
+          created_at: string
+          merchant_id: string
+          phone_required_to_create: boolean
+          points_earn_rate: number
+          referral_bonus_points: number
+          require_verified_phone_for_rewards: boolean
+          updated_at: string
+        }
+        Insert: {
+          birthday_bonus_points?: number
+          created_at?: string
+          merchant_id: string
+          phone_required_to_create?: boolean
+          points_earn_rate?: number
+          referral_bonus_points?: number
+          require_verified_phone_for_rewards?: boolean
+          updated_at?: string
+        }
+        Update: {
+          birthday_bonus_points?: number
+          created_at?: string
+          merchant_id?: string
+          phone_required_to_create?: boolean
+          points_earn_rate?: number
+          referral_bonus_points?: number
+          require_verified_phone_for_rewards?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_member_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -1364,6 +1570,30 @@ export type Database = {
     Functions: {
       am_i_merchant_admin: { Args: { p_merchant_id: string }; Returns: boolean }
       am_i_platform_admin: { Args: never; Returns: boolean }
+      adjust_member_points: {
+        Args: { p_member_id: string; p_note: string; p_points_delta: number }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+      }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -1567,6 +1797,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_material_cost_item_ids?: string[]
+          p_member_id?: string | null
           p_merchant_id: string
           p_notes?: string
           p_payment_method_id?: string
@@ -1634,6 +1865,38 @@ export type Database = {
         }
         Returns: string
       }
+      create_member: {
+        Args: {
+          p_birthday?: string
+          p_email?: string
+          p_merchant_id: string
+          p_name: string
+          p_notes?: string
+          p_phone?: string
+          p_referred_by_member_id?: string
+        }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+      }
       create_merchant_in_group: {
         Args: {
           p_address?: string
@@ -1676,6 +1939,30 @@ export type Database = {
         }
       }
       generate_booking_slug: { Args: { p_name: string }; Returns: string }
+      deactivate_member: {
+        Args: { p_member_id: string }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+      }
       get_booking_actor_names: {
         Args: { p_merchant_id: string; p_user_ids: string[] }
         Returns: {
@@ -1692,6 +1979,43 @@ export type Database = {
         }
         Returns: {
           end_at: string
+          final_amount_snapshot: number
+          id: string
+          service_item_names: string[]
+          start_at: string
+          status: string
+        }[]
+      }
+      get_member_point_history: {
+        Args: { p_member_id: string }
+        Returns: {
+          balance_after: number
+          booking_id: string | null
+          booking_start_at: string | null
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          note: string | null
+          points_delta: number
+          related_member_id: string | null
+          related_member_name: string | null
+          transaction_type: string
+        }[]
+      }
+      get_member_referrals: {
+        Args: { p_member_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          name: string
+          referral_rewarded_at: string | null
+          status: string
+        }[]
+      }
+      get_member_related_bookings: {
+        Args: { p_member_id: string }
+        Returns: {
+          earned_points: number | null
           final_amount_snapshot: number
           id: string
           service_item_names: string[]
@@ -1733,6 +2057,10 @@ export type Database = {
         }
         Returns: Json
       }
+      grant_pending_birthday_bonuses: {
+        Args: { p_merchant_id: string }
+        Returns: number
+      }
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined
@@ -1743,6 +2071,10 @@ export type Database = {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined
       }
+      platform_export_merchant_members_snapshot: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
       platform_get_merchant_admin_counts: {
         Args: never
         Returns: {
@@ -1751,6 +2083,10 @@ export type Database = {
         }[]
       }
       platform_get_user_email: { Args: { p_user_id: string }; Returns: string }
+      platform_purge_merchant_members_and_points: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
       platform_remove_merchant_admin: {
         Args: { p_merchant_id: string; p_user_id: string }
         Returns: undefined
@@ -1768,6 +2104,30 @@ export type Database = {
           service_item_names: string[]
           start_at: string
         }[]
+      }
+      reactivate_member: {
+        Args: { p_member_id: string }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
       }
       recalculate_booking_commission: {
         Args: { p_booking_id: string; p_override_rate_percentage?: number }
@@ -1805,6 +2165,30 @@ export type Database = {
         }
         Returns: string
       }
+      redeem_member_points: {
+        Args: { p_member_id: string; p_note: string; p_points: number }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+      }
       remove_merchant_admin: {
         Args: { p_merchant_id: string; p_user_id: string }
         Returns: undefined
@@ -1821,6 +2205,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
+      seed_default_member_settings: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
       seed_default_payment_methods: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -1832,6 +2220,30 @@ export type Database = {
       set_agent_permission: {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
+      }
+      set_member_phone_verified: {
+        Args: { p_member_id: string; p_verified: boolean }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
       }
       set_staff_day_override: {
         Args: {
@@ -1861,6 +2273,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_material_cost_item_ids?: string[]
+          p_member_id?: string | null
           p_notes?: string
           p_payment_method_id?: string
           p_service_items: Json
@@ -1915,6 +2328,37 @@ export type Database = {
           to: "bookings"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      update_member: {
+        Args: {
+          p_birthday: string | null
+          p_email: string | null
+          p_member_id: string
+          p_name: string
+          p_notes: string | null
+          p_phone: string | null
+        }
+        Returns: {
+          birthday: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          last_birthday_bonus_year: number | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          updated_at: string
+          user_id: string | null
         }
       }
       update_booking_payment_method: {

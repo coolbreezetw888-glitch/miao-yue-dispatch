@@ -51,6 +51,7 @@ import {
   useMerchantStaffList,
 } from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
+import { MemberPickerField, type SelectedMember } from "@/modules/members/MemberPickerField";
 
 import {
   createBooking,
@@ -293,6 +294,9 @@ export function BookingFormDialog({
   // 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到),跟上面的 notes(內部備註,
   // 商家內部看、客戶看不到)分開存放,對應 bookings.customer_notes。
   const [customerNotes, setCustomerNotes] = useState("");
+  // 模組 10(會員與紅利)§4.4:選填的會員連結,不選就是訪客訂單。編輯模式下用既有的
+  // member_id/member_name_snapshot 帶入初始值,避免正常編輯流程意外清空既有連結(判斷 9)。
+  const [member, setMember] = useState<SelectedMember | null>(null);
   const [saving, setSaving] = useState(false);
 
   // 模組 6(訂單管理)§4.1/4.2:每個已勾選服務項目的數量/單價(字串狀態,方便控制輸入框,
@@ -364,6 +368,11 @@ export function BookingFormDialog({
       setCustomerAddress(editingDetail.customer_address ?? "");
       setNotes(editingDetail.notes ?? "");
       setCustomerNotes(editingDetail.customer_notes ?? "");
+      setMember(
+        editingDetail.member_id && editingDetail.member_name_snapshot
+          ? { id: editingDetail.member_id, name: editingDetail.member_name_snapshot }
+          : null,
+      );
       setCustomTotalAmountEnabled(editingDetail.custom_total_amount_enabled);
       setCustomTotalAmount(
         editingDetail.custom_total_amount !== null ? String(editingDetail.custom_total_amount) : "",
@@ -414,6 +423,7 @@ export function BookingFormDialog({
       setCustomerAddress("");
       setNotes("");
       setCustomerNotes("");
+      setMember(null);
       setCustomTotalAmountEnabled(false);
       setCustomTotalAmount("");
       setDiscountEnabled(false);
@@ -573,6 +583,7 @@ export function BookingFormDialog({
         customerAddress: customerAddress.trim() ? customerAddress.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
         customerNotes: customerNotes.trim() ? customerNotes.trim() : null,
+        memberId: member?.id ?? null,
         assistantStaffIds,
         materialCostItemIds,
         customTotalAmountEnabled,
@@ -1015,6 +1026,14 @@ export function BookingFormDialog({
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
               />
+            </div>
+            {/* 模組 10(會員與紅利)§4.4:選填的會員連結,歸在既有的 orders 權限底下(規則 2.10),
+                不選就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
+            <div className="sm:col-span-2">
+              <Label>會員(選填)</Label>
+              <div className="mt-2">
+                <MemberPickerField merchantId={merchantId} value={member} onChange={setMember} />
+              </div>
             </div>
             {/* 建單表單細節修正第二節:只有 industry_type 需要地址的產業(見
                 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才顯示這個欄位並標記必填,不需要地址的產業

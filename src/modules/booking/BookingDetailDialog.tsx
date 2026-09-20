@@ -13,8 +13,11 @@
 // 其餘既有邏輯(狀態徽章、確認/完成/編輯/取消按鈕、建立/修改追蹤資訊列)原封不動搬過來,不變動行為。
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+
+import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
   AlertDialog,
@@ -151,6 +154,13 @@ export function BookingDetailDialog({
     queryFn: () => getBooking(viewingBookingId as string),
     enabled: open && Boolean(viewingBookingId),
   });
+
+  // 模組 10(會員與紅利)§4.5:判斷目前使用者是否也擁有 members 權限,決定會員姓名要不要做成
+  // 可點擊連結。這裡完全不需要額外的權限檢查/API 呼叫(一之二節方向一)——member_name_snapshot
+  // 已經隨著 bookings_select 政策一起讀到,純粹是前端顯示層的判斷。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const { data: canManageMembers } = useAgentPermission("members");
+  const canViewMemberProfile = merchantRole === "admin" || canManageMembers === true;
 
   const { data: relatedBookings, isLoading: relatedLoading } = useQuery({
     queryKey: [
@@ -444,6 +454,25 @@ export function BookingDetailDialog({
                       {booking.customer_name} ・ {booking.customer_phone}
                     </span>
                   </div>
+                  {/* 模組 10(會員與紅利)§4.5:member_name_snapshot 有值才顯示這個區塊。有
+                      members 權限(或管理員)才做成可點擊連結,否則只顯示純文字。 */}
+                  {booking.member_name_snapshot ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="shrink-0 text-muted-foreground">會員</span>
+                      {canViewMemberProfile && booking.member_id ? (
+                        <Link
+                          to={`/app/members/${booking.member_id}`}
+                          className="min-w-0 break-words text-right font-medium text-brand hover:underline"
+                        >
+                          {booking.member_name_snapshot}
+                        </Link>
+                      ) : (
+                        <span className="min-w-0 break-words text-right font-medium text-foreground">
+                          {booking.member_name_snapshot}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
                   {booking.customer_address ? (
                     <div className="flex items-start justify-between gap-3">
                       <span className="shrink-0 text-muted-foreground">客戶地址</span>
