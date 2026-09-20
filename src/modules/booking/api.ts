@@ -443,27 +443,55 @@ export interface MerchantBookingsFilters {
    * 問題。實際比對邏輯抽在 ordersPageLogic.ts 的 bookingMatchesKeyword(純函式,方便 Vitest
    * 測試,也刻意不依賴這支檔案建立的 supabase client)。 */
   keyword?: string;
+  /** 模組 12(資料匯入與報表匯出)§3.9/§6:報表匯出中心需要「這段期間全部資料、不分頁」，但
+   * PostgREST 有 db.max_rows 上限(這個專案設定 1000，見 supabase/config.toml)，單一查詢即使不
+   * 帶 .range() 也只會回傳最多 1000 筆。這個選填參數為 true 時，改成用 .range() 分頁迴圈把所有
+   * 符合條件的資料抓完再合併回傳；不帶這個參數(既有呼叫端)完全不受影響，行為維持一次查詢、
+   * 最多 1000 筆的既有上限。 */
+  unpaged?: boolean;
 }
+
+const POSTGREST_PAGE_SIZE = 1000;
 
 export async function fetchMerchantBookings(
   merchantId: string,
   filters: MerchantBookingsFilters = {},
 ): Promise<Booking[]> {
   const dateColumn = filters.dateField ?? "start_at";
-  let query = supabase
-    .from("bookings")
-    .select("*")
-    .eq("merchant_id", merchantId)
-    .order("start_at", { ascending: true });
 
-  if (filters.startAt) query = query.gte(dateColumn, filters.startAt);
-  if (filters.endAt) query = query.lt(dateColumn, filters.endAt);
-  if (filters.status && filters.status.length > 0) query = query.in("status", filters.status);
-  if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+  function buildQuery() {
+    let query = supabase
+      .from("bookings")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .order("start_at", { ascending: true });
 
-  const { data, error } = await query;
-  if (error) throw error;
-  const rows = (data ?? []) as Booking[];
+    if (filters.startAt) query = query.gte(dateColumn, filters.startAt);
+    if (filters.endAt) query = query.lt(dateColumn, filters.endAt);
+    if (filters.status && filters.status.length > 0) query = query.in("status", filters.status);
+    if (filters.staffId) query = query.eq("staff_id", filters.staffId);
+    return query;
+  }
+
+  let rows: Booking[];
+  if (filters.unpaged) {
+    const pages: Booking[] = [];
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await buildQuery().range(offset, offset + POSTGREST_PAGE_SIZE - 1);
+      if (error) throw error;
+      const page = (data ?? []) as Booking[];
+      pages.push(...page);
+      if (page.length < POSTGREST_PAGE_SIZE) break;
+      offset += POSTGREST_PAGE_SIZE;
+    }
+    rows = pages;
+  } else {
+    const { data, error } = await buildQuery();
+    if (error) throw error;
+    rows = (data ?? []) as Booking[];
+  }
+
   if (filters.keyword && filters.keyword.trim()) {
     return rows.filter((b) => bookingMatchesKeyword(b, filters.keyword as string));
   }
@@ -794,9 +822,7 @@ export async function fetchMerchantPaymentMethods(merchantId: string): Promise<P
 }
 
 /** 回傳某商家所有付款方式(含已下架,管理頁畫面自行依 status 篩選/標示,§5.1)。 */
-export async function fetchMerchantPaymentMethodsAll(
-  merchantId: string,
-): Promise<PaymentMethod[]> {
+export async function fetchMerchantPaymentMethodsAll(merchantId: string): Promise<PaymentMethod[]> {
   const { data, error } = await supabase
     .from("payment_methods")
     .select("*")

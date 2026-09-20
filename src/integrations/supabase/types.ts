@@ -256,6 +256,7 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          service_description_snapshot: string | null
           source: string
           staff_id: string
           start_at: string
@@ -298,6 +299,7 @@ export type Database = {
           notes?: string | null
           payment_method_id?: string | null
           payment_method_name_snapshot?: string | null
+          service_description_snapshot?: string | null
           source?: string
           staff_id: string
           start_at: string
@@ -340,6 +342,7 @@ export type Database = {
           notes?: string | null
           payment_method_id?: string | null
           payment_method_name_snapshot?: string | null
+          service_description_snapshot?: string | null
           source?: string
           staff_id?: string
           start_at?: string
@@ -806,6 +809,116 @@ export type Database = {
           {
             foreignKeyName: "merchant_agents_merchant_id_fkey"
             columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_bulk_operation_items: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string
+          entity_table: string
+          id: string
+          operation_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id: string
+          entity_table: string
+          id?: string
+          operation_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_table?: string
+          id?: string
+          operation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_bulk_operation_items_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_bulk_operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_bulk_operations: {
+        Row: {
+          column_mapping: Json | null
+          created_at: string
+          created_by_user_id: string | null
+          error_report: Json
+          failed_rows: number
+          id: string
+          merchant_id: string
+          operation_type: string
+          pre_operation_snapshot: Json
+          related_merchant_id: string | null
+          rolled_back_at: string | null
+          rolled_back_by_user_id: string | null
+          skipped_duplicate_rows: number
+          status: string
+          success_rows: number
+          total_rows: number
+          write_mode: string | null
+        }
+        Insert: {
+          column_mapping?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_report?: Json
+          failed_rows?: number
+          id?: string
+          merchant_id: string
+          operation_type: string
+          pre_operation_snapshot?: Json
+          related_merchant_id?: string | null
+          rolled_back_at?: string | null
+          rolled_back_by_user_id?: string | null
+          skipped_duplicate_rows?: number
+          status?: string
+          success_rows?: number
+          total_rows?: number
+          write_mode?: string | null
+        }
+        Update: {
+          column_mapping?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_report?: Json
+          failed_rows?: number
+          id?: string
+          merchant_id?: string
+          operation_type?: string
+          pre_operation_snapshot?: Json
+          related_merchant_id?: string | null
+          rolled_back_at?: string | null
+          rolled_back_by_user_id?: string | null
+          skipped_duplicate_rows?: number
+          status?: string
+          success_rows?: number
+          total_rows?: number
+          write_mode?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_bulk_operations_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "merchant_bulk_operations_related_merchant_id_fkey"
+            columns: ["related_merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
             referencedColumns: ["id"]
@@ -2329,6 +2442,70 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
+      }
+      get_merchant_bulk_operations: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          column_mapping: Json | null
+          created_at: string
+          created_by_user_id: string | null
+          error_report: Json
+          failed_rows: number
+          id: string
+          merchant_id: string
+          operation_type: string
+          pre_operation_snapshot: Json
+          related_merchant_id: string | null
+          rolled_back_at: string | null
+          rolled_back_by_user_id: string | null
+          skipped_duplicate_rows: number
+          status: string
+          success_rows: number
+          total_rows: number
+          write_mode: string | null
+        }[]
+      }
+      platform_list_merchant_bulk_operations: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          column_mapping: Json | null
+          created_at: string
+          created_by_user_id: string | null
+          error_report: Json
+          failed_rows: number
+          id: string
+          merchant_id: string
+          operation_type: string
+          pre_operation_snapshot: Json
+          related_merchant_id: string | null
+          rolled_back_at: string | null
+          rolled_back_by_user_id: string | null
+          skipped_duplicate_rows: number
+          status: string
+          success_rows: number
+          total_rows: number
+          write_mode: string | null
+        }[]
+      }
+      import_members_batch: {
+        Args: { p_merchant_id: string; p_rows: Json; p_write_mode: string }
+        Returns: string
+      }
+      import_historical_bookings_batch: {
+        Args: { p_merchant_id: string; p_rows: Json }
+        Returns: string
+      }
+      rollback_bulk_operation: {
+        Args: { p_operation_id: string }
+        Returns: Json
+      }
+      transfer_members_to_merchant: {
+        Args: {
+          p_member_ids: string[]
+          p_source_merchant_id: string
+          p_target_merchant_id: string
+        }
+        Returns: string
       }
       grant_pending_birthday_bonuses: {
         Args: { p_merchant_id: string }

@@ -160,24 +160,59 @@ export async function setMemberPhoneVerified(memberId: string, verified: boolean
 /** §5.1 對外介面:唯讀搜尋清單,供 4.1 會員管理列表頁 + 4.4 MemberPickerField 使用,也保留給
  * 之後任何需要「選擇/建立會員」入口的模組直接複用。search 為空字串時回傳全部(依狀態篩選由
  * 呼叫端自行處理)。 */
+const POSTGREST_PAGE_SIZE = 1000;
+
 export async function fetchMerchantMembersList(
   merchantId: string,
   search?: string,
+  /** 模組 12(資料匯入與報表匯出)§3.9/§6:報表匯出中心需要「全部會員、不分頁」，但 PostgREST
+   * 有 db.max_rows 上限(這個專案設定 1000，見 supabase/config.toml)。為 true 時改用 .range()
+   * 分頁迴圈抓完所有符合條件的資料再合併回傳；不帶這個參數(既有呼叫端)行為完全不變。 */
+  unpaged?: boolean,
 ): Promise<MemberSummary[]> {
-  let query = supabase
-    .from("members")
-    .select("id, name, phone, referral_code, points_balance, status")
-    .eq("merchant_id", merchantId)
-    .order("created_at", { ascending: false });
+  function buildQuery() {
+    let query = supabase
+      .from("members")
+      .select("id, name, phone, referral_code, points_balance, status")
+      .eq("merchant_id", merchantId)
+      .order("created_at", { ascending: false });
 
-  if (search && search.trim()) {
-    const term = search.trim();
-    query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%,referral_code.ilike.%${term}%`);
+    if (search && search.trim()) {
+      const term = search.trim();
+      query = query.or(`name.ilike.%${term}%,phone.ilike.%${term}%,referral_code.ilike.%${term}%`);
+    }
+    return query;
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data ?? []).map((row) => ({
+  let data: {
+    id: string;
+    name: string;
+    phone: string | null;
+    referral_code: string;
+    points_balance: number;
+    status: string;
+  }[];
+  if (unpaged) {
+    const pages: typeof data = [];
+    let offset = 0;
+    for (;;) {
+      const { data: page, error } = await buildQuery().range(
+        offset,
+        offset + POSTGREST_PAGE_SIZE - 1,
+      );
+      if (error) throw error;
+      pages.push(...(page ?? []));
+      if (!page || page.length < POSTGREST_PAGE_SIZE) break;
+      offset += POSTGREST_PAGE_SIZE;
+    }
+    data = pages;
+  } else {
+    const { data: rows, error } = await buildQuery();
+    if (error) throw error;
+    data = rows ?? [];
+  }
+
+  return data.map((row) => ({
     id: row.id,
     name: row.name,
     phone: row.phone,
@@ -190,10 +225,11 @@ export async function fetchMerchantMembersList(
 export function useMerchantMembersList(
   merchantId: string | null | undefined,
   search: string,
+  unpaged?: boolean,
 ): UseQueryResult<MemberSummary[]> {
   return useQuery({
-    queryKey: ["members-module", "members-list", merchantId, search],
-    queryFn: () => fetchMerchantMembersList(merchantId as string, search),
+    queryKey: ["members-module", "members-list", merchantId, search, unpaged ?? false],
+    queryFn: () => fetchMerchantMembersList(merchantId as string, search, unpaged),
     enabled: Boolean(merchantId),
   });
 }
@@ -282,7 +318,9 @@ interface RawMemberPointHistoryRow {
   created_at: string;
 }
 
-export async function fetchMemberPointHistory(memberId: string): Promise<MemberPointHistoryEntry[]> {
+export async function fetchMemberPointHistory(
+  memberId: string,
+): Promise<MemberPointHistoryEntry[]> {
   const { data, error } = await supabase.rpc("get_member_point_history", { p_member_id: memberId });
   if (error) throw error;
   return ((data ?? []) as unknown as RawMemberPointHistoryRow[]).map((row) => ({
@@ -323,7 +361,9 @@ interface RawMemberRelatedBookingRow {
   earned_points: number | null;
 }
 
-export async function fetchMemberRelatedBookings(memberId: string): Promise<MemberRelatedBooking[]> {
+export async function fetchMemberRelatedBookings(
+  memberId: string,
+): Promise<MemberRelatedBooking[]> {
   const { data, error } = await supabase.rpc("get_member_related_bookings", {
     p_member_id: memberId,
   });

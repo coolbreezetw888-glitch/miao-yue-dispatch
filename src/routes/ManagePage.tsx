@@ -14,12 +14,14 @@
 
 import type { ComponentType } from "react";
 import {
+  ArrowLeftRight,
   Bell,
   CalendarClock,
   CalendarOff,
   CalendarRange,
   ClipboardList,
   Coins,
+  Download,
   FileBarChart,
   Gift,
   Headset,
@@ -30,6 +32,7 @@ import {
   Receipt,
   Settings,
   TrendingUp,
+  Upload,
   UserMinus,
   UserRound,
   Users,
@@ -96,6 +99,10 @@ export default function ManagePage() {
   // 兩張卡片的顯示權限;「LINE 串接設定」「行銷再通知」永遠只給商家管理員(規則 2.1/2.6)。
   const { data: canManageLineNotification } = useAgentPermission("line_notification");
   const showLineNotificationCards = isAdmin || canManageLineNotification === true;
+  // 模組 12(資料匯入與報表匯出)§4.6:「資料匯入」「產業轉移」永遠只給商家管理員(規則 2.1/2.10，
+  // 不透過 section_key 開放客服)；「報表匯出中心」沿用一般客服權限開關模式(report_export，規則 2.9)。
+  const { data: canExportReports } = useAgentPermission("report_export");
+  const showReportExportCard = isAdmin || canExportReports === true;
 
   const cards: FunctionCardDef[] = [
     {
@@ -248,6 +255,30 @@ export default function ManagePage() {
       label: "行銷再通知",
       description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
       icon: Megaphone,
+      visible: isAdmin,
+    },
+    {
+      key: "data-import",
+      to: "/app/data-import",
+      label: "資料匯入",
+      description: "把舊系統的會員/歷史訂單資料匯入到秒約(含匯入紀錄與一鍵復原)",
+      icon: Upload,
+      visible: isAdmin,
+    },
+    {
+      key: "reports",
+      to: "/app/reports",
+      label: "報表匯出中心",
+      description: "統一匯出訂單/會員/抽成/請假四種報表 CSV",
+      icon: Download,
+      visible: showReportExportCard,
+    },
+    {
+      key: "industry-transfer",
+      to: "/app/industry-transfer",
+      label: "產業轉移",
+      description: "建立新產業的分店，並選擇性把會員與紅利點數搬過去",
+      icon: ArrowLeftRight,
       visible: isAdmin,
     },
     {

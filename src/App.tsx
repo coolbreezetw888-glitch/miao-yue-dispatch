@@ -39,6 +39,10 @@ import LineSettingsPage from "@/modules/line-notifications/LineSettingsPage";
 import LineEventSettingsPage from "@/modules/line-notifications/LineEventSettingsPage";
 import LineLogsPage from "@/modules/line-notifications/LineLogsPage";
 import LineMarketingPage from "@/modules/line-notifications/LineMarketingPage";
+import ImportWizardPage from "@/modules/data-tools/ImportWizardPage";
+import ImportHistoryPage from "@/modules/data-tools/ImportHistoryPage";
+import ReportExportCenterPage from "@/modules/data-tools/ReportExportCenterPage";
+import IndustryTransferWizardPage from "@/modules/data-tools/IndustryTransferWizardPage";
 
 function NotFound() {
   return (
@@ -100,6 +104,10 @@ export default function App() {
           <Route path="/app/line-events" element={<LineEventSettingsPage />} />
           <Route path="/app/line-logs" element={<LineLogsPage />} />
           <Route path="/app/line-marketing" element={<LineMarketingPage />} />
+          <Route path="/app/data-import" element={<ImportWizardPage />} />
+          <Route path="/app/data-import/history" element={<ImportHistoryPage />} />
+          <Route path="/app/reports" element={<ReportExportCenterPage />} />
+          <Route path="/app/industry-transfer" element={<IndustryTransferWizardPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
