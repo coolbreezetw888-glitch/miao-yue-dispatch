@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -60,6 +61,7 @@ import {
   addStaffServiceItem,
   fetchMerchantStaff,
   fetchStaffServiceItemIds,
+  hardDeleteMerchantStaff,
   reactivateMerchantStaff,
   removeMerchantStaff,
   removeStaffServiceItem,
@@ -69,6 +71,12 @@ import {
 } from "./api";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
+import {
+  countStaffByFilter,
+  matchesStaffListFilter,
+  STAFF_LIST_FILTER_TABS,
+  type StaffListFilter,
+} from "./staffListLogic";
 import {
   STAFF_BOOLEAN_PERMISSION_FIELDS,
   STAFF_LOGIN_STATUS_LABELS,
@@ -760,11 +768,19 @@ function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
+  const [listFilter, setListFilter] = useState<StaffListFilter>("all");
 
   const { data: staffList, isLoading } = useQuery({
     queryKey: staffListQueryKey(merchantId),
     queryFn: () => fetchMerchantStaff(merchantId),
   });
+
+  const filterCounts = useMemo(() => countStaffByFilter(staffList ?? []), [staffList]);
+
+  const filteredStaffList = useMemo(
+    () => (staffList ?? []).filter((staff) => matchesStaffListFilter(staff, listFilter)),
+    [staffList, listFilter],
+  );
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: staffListQueryKey(merchantId) });
@@ -787,6 +803,19 @@ function StaffListInner() {
       toast.success("已重新上架這位服務人員");
     } catch (err) {
       toast.error("操作失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  // 對應規格書「服務人員管理優化與硬刪除」§3.4:失敗時(通常是有歷史紀錄牽連,或不是
+  // removed 狀態)用 getErrorMessage() 顯示資料庫端回傳的完整中文說明(已包含具體筆數),
+  // 不要被截斷或改寫成通用文字。
+  async function handleHardDelete(staffId: string) {
+    try {
+      await hardDeleteMerchantStaff(staffId);
+      await refetch();
+      toast.success("已真正刪除");
+    } catch (err) {
+      toast.error("無法真正刪除", { description: getErrorMessage(err) });
     }
   }
 
@@ -815,7 +844,23 @@ function StaffListInner() {
       <Card>
         <CardHeader>
           <CardTitle>人員名單</CardTitle>
-          <CardDescription>包含已上架與未上架的服務人員</CardDescription>
+          <CardDescription>包含已上架、未上架與已移除的服務人員,可用下方分類篩選</CardDescription>
+          {staffList && staffList.length > 0 ? (
+            <Tabs
+              value={listFilter}
+              onValueChange={(v) => setListFilter(v as StaffListFilter)}
+              className="pt-2"
+            >
+              <TabsList>
+                {STAFF_LIST_FILTER_TABS.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {tab.label}
+                    {tab.value === "all" ? "" : ` (${filterCounts[tab.value]})`}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : null}
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -824,9 +869,11 @@ function StaffListInner() {
             <p className="text-sm text-muted-foreground">
               目前還沒有任何服務人員,點右上角新增一位。
             </p>
+          ) : filteredStaffList.length === 0 ? (
+            <p className="text-sm text-muted-foreground">這個分類目前沒有服務人員。</p>
           ) : (
             <ul className="space-y-2">
-              {staffList.map((staff) => (
+              {filteredStaffList.map((staff) => (
                 <li
                   key={staff.id}
                   className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
@@ -915,13 +962,43 @@ function StaffListInner() {
                         </AlertDialog>
                       </>
                     ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleReactivate(staff.id)}
-                      >
-                        恢復
-                      </Button>
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReactivate(staff.id)}
+                        >
+                          恢復
+                        </Button>
+                        {/* 對應規格書「服務人員管理優化與硬刪除」§3.4:只在「已移除」狀態旁顯示,
+                            用 variant="destructive" 讓視覺上明顯跟「恢復」不同,避免手滑點錯。 */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="destructive" size="sm">
+                              真正刪除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>確定要真正刪除「{staff.name}」嗎?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
+                                抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
+                                並告訴你原因,這個人會維持「已移除」狀態。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleHardDelete(staff.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                確定真正刪除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
                     )}
                   </div>
                 </li>

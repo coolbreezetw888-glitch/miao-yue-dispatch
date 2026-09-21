@@ -2640,6 +2640,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: number
       }
+      hard_delete_merchant_staff: {
+        Args: { p_staff_id: string }
+        Returns: undefined
+      }
       import_historical_bookings_batch: {
         Args: { p_merchant_id: string; p_rows: Json }
         Returns: string

@@ -201,6 +201,17 @@ export async function reactivateMerchantStaff(staffId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** 對應規格書「服務人員管理優化與硬刪除」§3.3/§3.4:真正刪除(硬刪除)一位服務人員。
+ * 只能對 status='removed' 的服務人員操作,且資料庫端會檢查四張歷史事實表(訂單/助手身份訂單/
+ * 請假紀錄/抽成紀錄)完全沒有牽連才會真的執行,否則回傳清楚列出筆數的中文錯誤訊息(用既有的
+ * getErrorMessage() 顯示,不要被截斷或改寫成通用文字)。 */
+export async function hardDeleteMerchantStaff(staffId: string): Promise<void> {
+  const { error } = await supabase.rpc("hard_delete_merchant_staff", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+}
+
 /** 頭像上傳格式/大小驗證,前端送出前先擋下,不要送到 Storage 才失敗(比照模組 1 LogoUploader)。 */
 export function validateAvatarFile(file: File): string | null {
   if (

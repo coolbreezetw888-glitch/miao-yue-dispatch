@@ -18,6 +18,12 @@
 //
 // 金鑰安全(呼應開發流程紀錄第九章):SUPABASE_SERVICE_ROLE_KEY 只從 Supabase 專案的 Edge
 // Function 環境變數讀取,不寫死在程式碼裡,也絕對不會回傳給前端。
+//
+// 2026-09-21 修正(對應規格書「服務人員管理優化與硬刪除」§1.2.3):整個處理邏輯包進
+// try/catch,任何沒被預期到的例外(網路逾時、回傳格式意外改變等)一律回傳結構化的 JSON
+// 500 錯誤,不會讓 Deno runtime 預設的非 JSON 錯誤格式害前端 `context.clone().json()`
+// 解析失敗、只看到 Supabase SDK 的通用包裝訊息。這一層是保底,不取代已知失敗分支原本就有的
+// 明確錯誤訊息(見規格書 §1.2.3 邊界情況)。
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -55,6 +61,15 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  try {
+    return await handleInviteMerchantStaff(req);
+  } catch (err) {
+    console.error("[invite-merchant-staff] 未預期的例外", err);
+    return jsonResponse({ error: "系統發生非預期錯誤,請稍後再試或聯絡系統管理員" }, 500);
+  }
+});
+
+async function handleInviteMerchantStaff(req: Request): Promise<Response> {
   if (req.method !== "POST") {
     return jsonResponse({ error: "只接受 POST 請求" }, 405);
   }
@@ -192,4 +207,4 @@ Deno.serve(async (req: Request) => {
     },
     200,
   );
-});
+}
