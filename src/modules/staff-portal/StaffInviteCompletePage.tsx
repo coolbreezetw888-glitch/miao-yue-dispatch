@@ -8,6 +8,26 @@
 //      的服務人員紀錄轉為 active。
 //   4. 導去 /app,這時候 merchants_select 已經能看到這間商家,AppLayout 不會誤導去 Onboarding,
 //      後續就是一般服務人員登入後台的流程。
+//
+// 2026-09-21 使用者人工測試回報問題 3 修正:第 4 步原本直接 navigate("/app"),沒有先讓
+// 「目前使用者能存取哪些商家」這份 react-query 快取重新抓一次。這份快取(src/modules/merchant/
+// context.tsx 的 CurrentMerchantProvider)包在 <App> 最外層,整個 SPA 只掛載一次、不會因為
+// 從這頁換到 /app 而重新 mount——使用者一進到這頁,session 剛從邀請連結的網址建立,
+// CurrentMerchantProvider 立刻用這個 session 打了一次「我能存取哪些商家」的查詢,但那個當下
+// login_status 還是 invited(還沒設定密碼),所以查回來合法地是「0 間商家」,react-query 把
+// 這個 0 筆結果快取起來。等這裡呼叫完 mark_staff_login_active_if_self() 把 login_status
+// 改成 active,直接 navigate("/app") 並不會讓那份已經快取住的「0 筆」自動變新,AppLayout 讀到
+// 的還是舊的 0 筆,就誤判成「沒有任何商家」導去 /app/onboarding,顯示出「開始使用秒約」的
+// 建立商家表單——不是 Supabase Auth 轉址設定的問題,也不是資料庫權限的問題(用真實帳號實測
+// 過,mark_staff_login_active_if_self 呼叫後資料庫裡 login_status 確實變成 active,直接用
+// 這個使用者的 JWT 呼叫 REST API 查 merchants 也查得到這間商家,純粹是前端快取沒有在這個時間點
+// 重新抓)。修法完全比照既有 src/modules/merchant/OnboardingPage.tsx 建店成功後的既有寫法:
+// 呼叫 useRefetchAccessibleMerchants() 拿到的函式會回傳 react-query invalidateQueries 的
+// promise,await 它讓快取真正重新抓完、確認新商家已經在清單裡,才 navigate("/app")。
+//
+// 對應調整:同一個 bug 理論上也存在於 src/modules/staff-agent/AgentInviteCompletePage.tsx
+// (客服邀請完成頁,同樣的模式、同樣沒有呼叫 refetch)——已用同樣的方式實際重現一次並確認症狀
+// 完全相同,但這次任務只要求修服務人員這條、客服那條回報給主腦即可,這裡刻意不動。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -19,12 +39,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
+import { useRefetchAccessibleMerchants } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { markStaffLoginActiveIfSelf } from "./api";
 
 export default function StaffInviteCompletePage() {
   const navigate = useNavigate();
+  const refetchAccessibleMerchants = useRefetchAccessibleMerchants();
   const [status, setStatus] = useState<"checking" | "ready" | "invalid">("checking");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -59,6 +81,10 @@ export default function StaffInviteCompletePage() {
       if (updateError) throw updateError;
 
       await markStaffLoginActiveIfSelf();
+      // 修正問題 3:先讓「目前使用者能存取哪些商家」的快取重新抓完(此時 login_status 已經是
+      // active,查得到這間商家了),再導去 /app,避免 AppLayout 讀到邀請連結剛載入頁面時
+      // 快取住的舊值(那個當下 login_status 還是 invited,查回來合法地是 0 間商家)。
+      await refetchAccessibleMerchants();
 
       toast.success("密碼設定完成,歡迎加入!");
       navigate("/app", { replace: true });

@@ -388,7 +388,13 @@ function StaffFormDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "編輯服務人員" : "新增服務人員"}</DialogTitle>
           <DialogDescription>
-            服務人員這次不開放登入帳號,只是商家維護的一份人員名錄。
+            {/* 模組 14(服務人員端)上線後,原本這裡「服務人員這次不開放登入帳號」的說明文字已經過時
+                (服務人員現在可以自己登入)——2026-09-21 使用者人工測試回報問題 1 修正:這裡只負責
+                建立/編輯基本資料,登入帳號要等這裡儲存完成後,回到人員清單按「邀請登入」才會真的
+                開通(見 4.7 第 2 點的 InviteStaffLoginDialog)。 */}
+            {isEdit
+              ? "這裡只會更新基本資料,不會影響登入帳號——登入帳號的開通/權限,請到人員清單使用「邀請登入」或「服務人員權限」。"
+              : "這裡先建立基本資料,登入帳號要在儲存完成後,回到人員清單裡按「邀請登入」才會真的開通。"}
           </DialogDescription>
         </DialogHeader>
 
@@ -434,6 +440,13 @@ function StaffFormDialog({
                   value={form.contactEmail ?? ""}
                   onChange={(e) => setField("contactEmail", e.target.value)}
                 />
+                {/* 2026-09-21 使用者人工測試回報問題 2 修正:這欄位(contact_email)容易被誤會成
+                    登入帳號的 email——這裡只是顯示給客戶看的聯絡資訊,登入帳號是完全分開的另一件事
+                    (見 4.7 第 2 點,登入 email 在「邀請登入」Dialog 裡另外輸入,雖然預設會帶入這欄
+                    的值當作起始值,但送出前可以改成不同的 email)。不改欄位名稱/資料結構,只加說明。 */}
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  顯示給客戶看的聯絡信箱,不是登入帳號。登入帳號要在儲存完成後,另外用「邀請登入」設定。
+                </p>
               </div>
             </div>
 

@@ -7,6 +7,22 @@
 //   4. 導去 /app,後續就是一般客服登入後台的流程。
 // 這個路由本身不在規格書第四節(4.1-4.5)逐條列出,是 3.8 描述的流程必須存在的轉場頁,
 // 已在回報中向主腦/使用者說明(見規格書 3.5/3.8 沒有明講這頁要長什麼樣子,這是工程師依流程需要補上的頁面)。
+//
+// 2026-09-21 主腦要求比照模組 14 服務人員端問題 3 的修法一併修正(同一個 bug,同一種程式碼模式):
+// 第 4 步原本直接 navigate("/app"),沒有先讓「目前使用者能存取哪些商家」這份 react-query 快取
+// 重新抓一次。這份快取(src/modules/merchant/context.tsx 的 CurrentMerchantProvider)包在
+// <App> 最外層,整個 SPA 只掛載一次、不會因為從這頁換到 /app 而重新 mount——使用者一進到這頁,
+// session 剛從邀請連結的網址建立,CurrentMerchantProvider 立刻用這個 session 打了一次「我能存取
+// 哪些商家」的查詢,但那個當下客服的 status 還是 invited(還沒設定密碼),所以查回來合法地是
+// 「0 間商家」,react-query 把這個 0 筆結果快取起來。等這裡呼叫完 mark_agent_active_if_self()
+// 把 status 改成 active,直接 navigate("/app") 並不會讓那份已經快取住的「0 筆」自動變新,
+// AppLayout 讀到的還是舊的 0 筆,就誤判成「沒有任何商家」導去 /app/onboarding——已用本機完整
+// Supabase stack(gotrue+mailpit+edge-runtime)實際重現一次真實邀請流程(建測試商家+客服帳號、
+// 走 invite-merchant-agent、Mailpit 收信、瀏覽器點連結設密碼)確認症狀,跟服務人員那條完全一樣。
+// 修法完全比照既有 src/modules/merchant/OnboardingPage.tsx 建店成功後的既有寫法,以及
+// src/modules/staff-portal/StaffInviteCompletePage.tsx 問題 3 的修正:呼叫
+// useRefetchAccessibleMerchants() 拿到的函式會回傳 react-query invalidateQueries 的 promise,
+// await 它讓快取真正重新抓完、確認這間商家已經在清單裡,才 navigate("/app")。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -18,12 +34,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
+import { useRefetchAccessibleMerchants } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { markAgentActiveIfSelf } from "./api";
 
 export default function AgentInviteCompletePage() {
   const navigate = useNavigate();
+  const refetchAccessibleMerchants = useRefetchAccessibleMerchants();
   const [status, setStatus] = useState<"checking" | "ready" | "invalid">("checking");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -58,6 +76,10 @@ export default function AgentInviteCompletePage() {
       if (updateError) throw updateError;
 
       await markAgentActiveIfSelf();
+      // 修正(比照模組 14 服務人員端問題 3):先讓「目前使用者能存取哪些商家」的快取重新抓完
+      // (此時 status 已經是 active,查得到這間商家了),再導去 /app,避免 AppLayout 讀到
+      // 邀請連結剛載入頁面時快取住的舊值(那個當下 status 還是 invited,查回來合法地是 0 間商家)。
+      await refetchAccessibleMerchants();
 
       toast.success("密碼設定完成,歡迎加入!");
       navigate("/app", { replace: true });
