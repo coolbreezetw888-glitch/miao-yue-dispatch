@@ -52,6 +52,9 @@ import { applyThemeColorToDocument, resolveMerchantThemeColor } from "@/modules/
 export interface AppLayoutContext {
   email: string | null;
   userId: string | null;
+  /** 對應規格書(帳號登入安全性優化)2.5.1:目前登入者自己有沒有一筆 Supabase 原生的待驗證新
+   * 信箱(auth.users.new_email)。三種角色共用,不用各自重新呼叫一次 getVerifiedUser()。 */
+  newEmail: string | null;
   onSignOut: () => void;
 }
 
@@ -100,6 +103,7 @@ export default function AppLayout() {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
   const { merchants, isLoading: merchantsLoading } = useGroupMerchants();
@@ -118,6 +122,7 @@ export default function AppLayout() {
       }
       setEmail(user.email ?? null);
       setUserId(user.id);
+      setNewEmail(user.new_email ?? null);
       setAuthChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -125,6 +130,7 @@ export default function AppLayout() {
       else {
         setEmail(session.user.email ?? null);
         setUserId(session.user.id);
+        setNewEmail(session.user.new_email ?? null);
       }
     });
     return () => {
@@ -171,7 +177,7 @@ export default function AppLayout() {
     );
   }
 
-  const outletContext: AppLayoutContext = { email, userId, onSignOut: handleSignOut };
+  const outletContext: AppLayoutContext = { email, userId, newEmail, onSignOut: handleSignOut };
 
   return (
     <div className="min-h-screen bg-surface font-sans antialiased">

@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -916,6 +896,9 @@ export type Database = {
           merchant_id: string
           name: string
           nickname: string | null
+          pending_admin_login_email: string | null
+          pending_admin_login_email_requested_at: string | null
+          pending_admin_login_email_requested_by: string | null
           phone: string | null
           status: string
           updated_at: string
@@ -934,6 +917,9 @@ export type Database = {
           merchant_id: string
           name: string
           nickname?: string | null
+          pending_admin_login_email?: string | null
+          pending_admin_login_email_requested_at?: string | null
+          pending_admin_login_email_requested_by?: string | null
           phone?: string | null
           status?: string
           updated_at?: string
@@ -952,6 +938,9 @@ export type Database = {
           merchant_id?: string
           name?: string
           nickname?: string | null
+          pending_admin_login_email?: string | null
+          pending_admin_login_email_requested_at?: string | null
+          pending_admin_login_email_requested_by?: string | null
           phone?: string | null
           status?: string
           updated_at?: string
@@ -1397,6 +1386,9 @@ export type Database = {
           name: string
           nickname: string | null
           no_time_slot_limit: boolean
+          pending_admin_login_email: string | null
+          pending_admin_login_email_requested_at: string | null
+          pending_admin_login_email_requested_by: string | null
           phone: string | null
           show_member_info: boolean
           status: string
@@ -1430,6 +1422,9 @@ export type Database = {
           name: string
           nickname?: string | null
           no_time_slot_limit?: boolean
+          pending_admin_login_email?: string | null
+          pending_admin_login_email_requested_at?: string | null
+          pending_admin_login_email_requested_by?: string | null
           phone?: string | null
           show_member_info?: boolean
           status?: string
@@ -1463,6 +1458,9 @@ export type Database = {
           name?: string
           nickname?: string | null
           no_time_slot_limit?: boolean
+          pending_admin_login_email?: string | null
+          pending_admin_login_email_requested_at?: string | null
+          pending_admin_login_email_requested_by?: string | null
           phone?: string | null
           show_member_info?: boolean
           status?: string
@@ -2118,6 +2116,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      clear_agent_pending_login_email: {
+        Args: { p_agent_id: string }
+        Returns: undefined
+      }
       clear_staff_day_override: {
         Args: {
           p_end_time: string
@@ -2125,6 +2127,10 @@ export type Database = {
           p_staff_id: string
           p_start_time: string
         }
+        Returns: undefined
+      }
+      clear_staff_pending_login_email: {
+        Args: { p_staff_id: string }
         Returns: undefined
       }
       complete_booking: {
@@ -2476,6 +2482,15 @@ export type Database = {
           expires_at: string
         }[]
       }
+      get_agent_login_email_status: {
+        Args: { p_agent_id: string }
+        Returns: {
+          current_login_email: string
+          pending_admin_suggested_email: string
+          pending_confirmation_email: string
+          pending_confirmation_sent_at: string
+        }[]
+      }
       get_booking_actor_names: {
         Args: { p_merchant_id: string; p_user_ids: string[] }
         Returns: {
@@ -2623,6 +2638,15 @@ export type Database = {
       get_staff_commission_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
+      }
+      get_staff_login_email_status: {
+        Args: { p_staff_id: string }
+        Returns: {
+          current_login_email: string
+          pending_admin_suggested_email: string
+          pending_confirmation_email: string
+          pending_confirmation_sent_at: string
+        }[]
       }
       get_staff_monthly_payroll_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
@@ -2853,6 +2877,14 @@ export type Database = {
       render_staff_leave_notification_variables: {
         Args: { p_staff_leave_record_id: string }
         Returns: Json
+      }
+      request_agent_login_email_change: {
+        Args: { p_agent_id: string; p_new_email: string }
+        Returns: undefined
+      }
+      request_staff_login_email_change: {
+        Args: { p_new_email: string; p_staff_id: string }
+        Returns: undefined
       }
       resolve_line_notification_targets: {
         Args: {
@@ -3322,11 +3354,7 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
 } as const
-

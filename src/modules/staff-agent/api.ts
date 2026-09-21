@@ -451,3 +451,93 @@ export async function updateMyAgentProfile(
   });
   if (error) throw error;
 }
+
+// =========================================================================
+// 對應規格書(帳號登入安全性優化)2.4.1/2.4.2/2.4.3:登入信箱變更機制,服務人員/客服共用一套
+// 型別跟包裝函式(兩邊的資料庫函式參數/回傳形狀完全一致,差在 p_staff_id/p_agent_id 這個參數
+// 名稱,這裡各自包一層,呼叫端不需要在意底層是哪一支 RPC)。
+// =========================================================================
+
+/** 2.4.3 回傳形狀,管理員查詢某位服務人員/客服目前實際的登入信箱與兩種待驗證狀態(規則 2.3.3)。 */
+export interface LoginEmailStatus {
+  /** 目前真正的登入 email(即時查 auth.users),還沒開通登入的人是 null。 */
+  currentLoginEmail: string | null;
+  /** 管理員建議的新信箱,本人還沒按套用。 */
+  pendingAdminSuggestedEmail: string | null;
+  /** 本人已經按套用,Supabase 原生的待驗證新信箱(auth.users.new_email)。 */
+  pendingConfirmationEmail: string | null;
+  /** 上面那筆待驗證信件的寄出時間(auth.users.email_change_sent_at)。 */
+  pendingConfirmationSentAt: string | null;
+}
+
+function toLoginEmailStatus(row: {
+  current_login_email: string | null;
+  pending_admin_suggested_email: string | null;
+  pending_confirmation_email: string | null;
+  pending_confirmation_sent_at: string | null;
+}): LoginEmailStatus {
+  return {
+    currentLoginEmail: row.current_login_email,
+    pendingAdminSuggestedEmail: row.pending_admin_suggested_email,
+    pendingConfirmationEmail: row.pending_confirmation_email,
+    pendingConfirmationSentAt: row.pending_confirmation_sent_at,
+  };
+}
+
+/** 2.4.1:商家管理員建議服務人員的新登入信箱(只寫入 pending 欄位,不寄出任何信件,規則 2.3.1)。 */
+export async function requestStaffLoginEmailChange(
+  staffId: string,
+  newEmail: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("request_staff_login_email_change", {
+    p_staff_id: staffId,
+    p_new_email: newEmail,
+  });
+  if (error) throw error;
+}
+
+/** 2.4.1:商家管理員建議客服的新登入信箱,設計理由完全比照 requestStaffLoginEmailChange。 */
+export async function requestAgentLoginEmailChange(
+  agentId: string,
+  newEmail: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("request_agent_login_email_change", {
+    p_agent_id: agentId,
+    p_new_email: newEmail,
+  });
+  if (error) throw error;
+}
+
+/** 2.4.2:管理員撤回建議,或服務人員本人套用/忽略建議後清除這筆紀錄。 */
+export async function clearStaffPendingLoginEmail(staffId: string): Promise<void> {
+  const { error } = await supabase.rpc("clear_staff_pending_login_email", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+}
+
+/** 2.4.2:客服版本,設計理由完全比照 clearStaffPendingLoginEmail。 */
+export async function clearAgentPendingLoginEmail(agentId: string): Promise<void> {
+  const { error } = await supabase.rpc("clear_agent_pending_login_email", {
+    p_agent_id: agentId,
+  });
+  if (error) throw error;
+}
+
+/** 2.4.3:管理員查詢某位服務人員目前的登入信箱狀態(人員管理頁 2.5.3 用)。 */
+export async function fetchStaffLoginEmailStatus(staffId: string): Promise<LoginEmailStatus> {
+  const { data, error } = await supabase
+    .rpc("get_staff_login_email_status", { p_staff_id: staffId })
+    .single();
+  if (error) throw error;
+  return toLoginEmailStatus(data);
+}
+
+/** 2.4.3:客服版本,設計理由完全比照 fetchStaffLoginEmailStatus。 */
+export async function fetchAgentLoginEmailStatus(agentId: string): Promise<LoginEmailStatus> {
+  const { data, error } = await supabase
+    .rpc("get_agent_login_email_status", { p_agent_id: agentId })
+    .single();
+  if (error) throw error;
+  return toLoginEmailStatus(data);
+}

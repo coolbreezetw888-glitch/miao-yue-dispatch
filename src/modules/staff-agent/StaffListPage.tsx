@@ -59,16 +59,23 @@ import { inviteMerchantStaff } from "@/modules/staff-portal/api";
 import {
   addMerchantStaff,
   addStaffServiceItem,
+  clearStaffPendingLoginEmail,
   fetchMerchantStaff,
   fetchStaffServiceItemIds,
   hardDeleteMerchantStaff,
   reactivateMerchantStaff,
   removeMerchantStaff,
   removeStaffServiceItem,
+  requestStaffLoginEmailChange,
   updateMerchantStaff,
   uploadStaffAvatar,
   type UpsertMerchantStaffInput,
 } from "./api";
+import {
+  AdminSuggestLoginEmailDialog,
+  LoginEmailStatusDisplay,
+} from "./AdminLoginEmailManager";
+import { useStaffLoginEmailStatus } from "./context";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
 import {
@@ -764,6 +771,41 @@ function InviteStaffLoginDialog({
   );
 }
 
+// 對應規格書(帳號登入安全性優化)2.5.3:已開通登入的服務人員旁,顯示目前登入信箱狀態
+// (2.4.3)+「修改登入信箱」入口(2.4.1/2.4.2)。只在 staff.login_status === 'active' 時
+// 由呼叫端渲染這個元件(未開通登入的人不能設定登入信箱建議,見 2.4.1 邊界情況)。
+function StaffLoginEmailManagement({ staff }: { staff: MerchantStaff }) {
+  const queryClient = useQueryClient();
+  const statusQuery = useStaffLoginEmailStatus(staff.id, true);
+  const statusQueryKey = ["staff-agent-module", "staff-login-email-status", staff.id] as const;
+
+  async function refetchStatus() {
+    await queryClient.invalidateQueries({ queryKey: statusQueryKey });
+  }
+
+  async function handleSubmit(newEmail: string) {
+    await requestStaffLoginEmailChange(staff.id, newEmail);
+    await refetchStatus();
+  }
+
+  async function handleWithdraw() {
+    await clearStaffPendingLoginEmail(staff.id);
+    await refetchStatus();
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <LoginEmailStatusDisplay statusQuery={statusQuery} />
+      <AdminSuggestLoginEmailDialog
+        personLabel={staff.name}
+        currentSuggestion={statusQuery.data?.pendingAdminSuggestedEmail}
+        onSubmit={handleSubmit}
+        onWithdraw={handleWithdraw}
+      />
+    </div>
+  );
+}
+
 function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
@@ -910,6 +952,11 @@ function StaffListInner() {
                           <Badge variant="destructive">已移除</Badge>
                         ) : null}
                       </div>
+                      {/* 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
+                          狀態與修改入口。 */}
+                      {staff.login_status === "active" ? (
+                        <StaffLoginEmailManagement staff={staff} />
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex shrink-0 gap-2">

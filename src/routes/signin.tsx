@@ -35,7 +35,15 @@ export default function SignIn() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // §1.2(低優先度防禦性補強):跟邀請寫入流程(invite-merchant-staff/invite-merchant-agent
+    // 寫入時已經是 rawEmail.trim().toLowerCase())的正規化方式保持一致。這不是這次事故的成因
+    // (已在規劃階段用本機完整 Supabase stack + 真實瀏覽器重現排除),但這個防護依賴瀏覽器
+    // <input type="email"> 的自動清理機制,不是這個系統自己的邏輯保證,補上這一行是零風險、
+    // 低成本的防禦性補強。
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
     setLoading(false);
     if (error) {
       toast.error("登入失敗", { description: error.message });
@@ -72,6 +80,12 @@ export default function SignIn() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
           />
+          {/* §3.3:登入畫面新增「忘記密碼?」連結,導向 /forgot-password。 */}
+          <p className="mt-2 text-right text-sm">
+            <Link to="/forgot-password" className="text-muted-foreground hover:underline">
+              忘記密碼？
+            </Link>
+          </p>
         </div>
         <Button type="submit" variant="cta" size="lg" className="w-full" disabled={loading}>
           {loading ? "登入中⋯" : "登入"}

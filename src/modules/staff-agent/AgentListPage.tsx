@@ -26,9 +26,20 @@ import { Label } from "@/components/ui/label";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
-import { fetchMerchantAgents, inviteMerchantAgent, removeMerchantAgent } from "./api";
+import {
+  clearAgentPendingLoginEmail,
+  fetchMerchantAgents,
+  inviteMerchantAgent,
+  removeMerchantAgent,
+  requestAgentLoginEmailChange,
+} from "./api";
+import {
+  AdminSuggestLoginEmailDialog,
+  LoginEmailStatusDisplay,
+} from "./AdminLoginEmailManager";
+import { useAgentLoginEmailStatus } from "./context";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
-import { AGENT_STATUS_LABELS, type AgentStatus } from "./types";
+import { AGENT_STATUS_LABELS, type AgentStatus, type MerchantAgent } from "./types";
 
 const agentListQueryKey = (merchantId: string) =>
   ["staff-agent-module", "agent-admin-list", merchantId] as const;
@@ -37,6 +48,41 @@ function statusBadgeVariant(status: AgentStatus): "default" | "secondary" | "des
   if (status === "active") return "default";
   if (status === "invited") return "secondary";
   return "destructive";
+}
+
+// 對應規格書(帳號登入安全性優化)2.5.3:已開通登入(status='active')的客服旁,顯示目前
+// 登入信箱狀態(2.4.3)+「修改登入信箱」入口(2.4.1/2.4.2),設計理由完全比照
+// StaffListPage.tsx 的 StaffLoginEmailManagement。
+function AgentLoginEmailManagement({ agent }: { agent: MerchantAgent }) {
+  const queryClient = useQueryClient();
+  const statusQuery = useAgentLoginEmailStatus(agent.id, true);
+  const statusQueryKey = ["staff-agent-module", "agent-login-email-status", agent.id] as const;
+
+  async function refetchStatus() {
+    await queryClient.invalidateQueries({ queryKey: statusQueryKey });
+  }
+
+  async function handleSubmit(newEmail: string) {
+    await requestAgentLoginEmailChange(agent.id, newEmail);
+    await refetchStatus();
+  }
+
+  async function handleWithdraw() {
+    await clearAgentPendingLoginEmail(agent.id);
+    await refetchStatus();
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <LoginEmailStatusDisplay statusQuery={statusQuery} />
+      <AdminSuggestLoginEmailDialog
+        personLabel={agent.name}
+        currentSuggestion={statusQuery.data?.pendingAdminSuggestedEmail}
+        onSubmit={handleSubmit}
+        onWithdraw={handleWithdraw}
+      />
+    </div>
+  );
 }
 
 function AgentListInner() {
@@ -191,6 +237,11 @@ function AgentListInner() {
                       {agent.nickname ? `(${agent.nickname})` : ""}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{agent.invited_email}</p>
+                    {/* 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
+                        狀態與修改入口。 */}
+                    {agent.status === "active" ? (
+                      <AgentLoginEmailManagement agent={agent} />
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge variant={statusBadgeVariant(agent.status as AgentStatus)}>

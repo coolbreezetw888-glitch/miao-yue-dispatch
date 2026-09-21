@@ -21,6 +21,9 @@ import AgentListPage from "@/modules/staff-agent/AgentListPage";
 import AgentPermissionsPage from "@/modules/staff-agent/AgentPermissionsPage";
 import AgentInviteCompletePage from "@/modules/staff-agent/AgentInviteCompletePage";
 import StaffInviteCompletePage from "@/modules/staff-portal/StaffInviteCompletePage";
+import EmailChangeConfirmedPage from "@/modules/auth/EmailChangeConfirmedPage";
+import ResetPasswordPage from "@/modules/auth/ResetPasswordPage";
+import ForgotPassword from "@/routes/forgot-password";
 import MyAvailabilityPage from "@/modules/staff-portal/MyAvailabilityPage";
 import MyPayrollPage from "@/modules/staff-portal/MyPayrollPage";
 import StaffPermissionsPage from "@/modules/staff-agent/StaffPermissionsPage";
@@ -121,6 +124,11 @@ export default function App() {
         <Route path="/app/new-merchant" element={<NewMerchantPage />} />
         <Route path="/app/agent-invite-complete" element={<AgentInviteCompletePage />} />
         <Route path="/app/staff-invite-complete" element={<StaffInviteCompletePage />} />
+        {/* 對應規格書(帳號登入安全性優化)2.4.4/3.2.2:登入信箱變更確認頁、忘記密碼重設頁,
+            比照 /app/agent-invite-complete 的既有做法,刻意放在 <AppLayout> 巢狀路由之外
+            (獨立全螢幕流程,不套用商家切換器/底部分頁籤外殼)。 */}
+        <Route path="/app/email-change-confirmed" element={<EmailChangeConfirmedPage />} />
+        <Route path="/app/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/platform-admin"
           element={
@@ -147,6 +155,9 @@ export default function App() {
         />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        {/* 對應規格書(帳號登入安全性優化)3.2.1:忘記密碼申請頁,公開頁面,跟 /signin、/signup
+            同層級,不需要登入狀態。 */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<NotFound />} />

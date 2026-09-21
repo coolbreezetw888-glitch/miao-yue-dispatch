@@ -8,7 +8,14 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { amIMerchantAdmin, fetchMyAgentRow, fetchMyStaffRow } from "./api";
+import {
+  amIMerchantAdmin,
+  fetchAgentLoginEmailStatus,
+  fetchMyAgentRow,
+  fetchMyStaffRow,
+  fetchStaffLoginEmailStatus,
+  type LoginEmailStatus,
+} from "./api";
 import type { MerchantAgent, MerchantRole, MerchantStaff } from "./types";
 
 /** 5.1 對外介面:回傳目前使用者在指定商家的角色('admin' | 'agent' | 'staff' | null)。
@@ -134,5 +141,34 @@ export function useMerchantAgentList(
       return (data ?? []) as MerchantAgent[];
     },
     enabled: Boolean(merchantId),
+  });
+}
+
+// =========================================================================
+// 對應規格書(帳號登入安全性優化)2.4.3/2.5.3:管理員視角查詢某位服務人員/客服目前實際的
+// 登入信箱狀態,給人員管理頁的登入信箱欄位/徽章用。只在已開通登入時才需要查(呼叫端自行控制
+// enabled),避免對還沒開通登入的人白跑一趟(get_staff_login_email_status 內部也會擋下)。
+// =========================================================================
+export function useStaffLoginEmailStatus(
+  staffId: string | null | undefined,
+  enabled: boolean,
+): UseQueryResult<LoginEmailStatus> {
+  return useQuery({
+    queryKey: ["staff-agent-module", "staff-login-email-status", staffId],
+    queryFn: () => fetchStaffLoginEmailStatus(staffId as string),
+    enabled: enabled && Boolean(staffId),
+    staleTime: 15_000,
+  });
+}
+
+export function useAgentLoginEmailStatus(
+  agentId: string | null | undefined,
+  enabled: boolean,
+): UseQueryResult<LoginEmailStatus> {
+  return useQuery({
+    queryKey: ["staff-agent-module", "agent-login-email-status", agentId],
+    queryFn: () => fetchAgentLoginEmailStatus(agentId as string),
+    enabled: enabled && Boolean(agentId),
+    staleTime: 15_000,
   });
 }
