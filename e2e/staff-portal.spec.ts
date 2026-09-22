@@ -54,12 +54,14 @@ test("4.1:服務人員登入後首頁顯示自己的個人資料卡片,看不到
   await expect(page.getByRole("link", { name: "新增分店" })).toHaveCount(0);
 });
 
-test("4.2:服務人員的「功能」分頁籤只看到我的休假設定/我的薪資報表兩張卡片", async ({ page }) => {
+test("4.2:服務人員的「功能」分頁籤只看到休假設定/薪資報表兩張卡片", async ({ page }) => {
   await page.goto("/app/manage");
   await expect(page.getByRole("heading", { name: "功能" })).toBeVisible({ timeout: LOAD_TIMEOUT });
 
-  await expect(page.getByText("我的休假設定")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByText("我的薪資報表")).toBeVisible();
+  // 模組 14 v2 §10.3.5/§10.4.6:卡片文字從「我的休假設定」/「我的薪資報表」改名成
+  // 「休假設定」/「薪資報表」(ManagePage.tsx 對應調整),這裡同步更新斷言文字。
+  await expect(page.getByText("休假設定")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("薪資報表")).toBeVisible();
 
   // 不會看到任何管理員/客服導向的卡片。
   await expect(page.getByText("服務人員", { exact: true })).toHaveCount(0);
@@ -77,7 +79,7 @@ test("4.3:服務人員的行事曆是簡化版自助月曆,不是管理員跨服
   await expect(page.getByRole("button", { name: "新增預約" })).toHaveCount(0);
 });
 
-test("4.4:我的休假設定頁新增每週固定時段,自己看得到,也正確反映在既有管理員服務人員管理頁", async ({
+test("4.4:休假設定頁新增每週固定時段,自己看得到,也正確反映在既有管理員服務人員管理頁", async ({
   page,
   browser,
 }: {
@@ -85,7 +87,8 @@ test("4.4:我的休假設定頁新增每週固定時段,自己看得到,也正�
   browser: Browser;
 }) => {
   await page.goto("/app/my-availability");
-  await expect(page.getByRole("heading", { name: "我的休假設定" })).toBeVisible({
+  // 模組 14 v2 §10.3.5:頁面標題從「我的休假設定」改成「休假設定」。
+  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 

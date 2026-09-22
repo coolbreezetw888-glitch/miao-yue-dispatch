@@ -5,7 +5,7 @@
 
 begin;
 
-select plan(22);
+select plan(29);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -186,6 +186,98 @@ select is(
   (select count(*)::int from staff_availability_overrides where staff_id = 'e1430000-0000-4000-8000-000000000040' and override_date = '2026-12-02'),
   2,
   '10.3.1 回歸測試:09:00-10:00 正確展開成 2 個半小時格,沒有因為改成分鐘數運算而算錯一般情況'
+);
+
+select pg_temp.test_clear_auth();
+
+-- =========================================================================
+-- SPECS-INDEX 編號 485(核心必測,品管打回重做修正):get_merchant_day_schedule 合併
+-- staff_availability_overrides 的 grp_end 計算修正(20260922120300_fix_get_merchant_day_
+-- schedule_24h_boundary.sql)。服務人員標記「整天排休」後(set_staff_day_override 涵蓋
+-- 00:00~24:00 全部 48 格),商家管理員視角看到的合併結果必須是 start=00:00/end=24:00 的
+-- 單一區間——修正前的真實 bug:原本用 `max(slot_start_time) + interval '30 minutes'` 算
+-- grp_end,最後一格是 23:30 時,PostgreSQL 的 time 型別加法在跨過 24:00:00 時會回捲成
+-- 00:00:00(不會進位),導致合併結果變成 start=00:00/end=00:00 的零寬度區間,前端
+-- CalendarPage.tsx 的 matchedOverride 比對邏輯永遠比對不到,整天排休因此在商家管理員視角
+-- 完全「消失」(格線顯示成可預約、下拉選單顯示「新增預約」而不是「例外關閉」)。
+-- =========================================================================
+select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000002'); -- X 自己標記整天排休
+
+select is(
+  (select set_staff_day_override('e1430000-0000-4000-8000-000000000040'::uuid, '2026-12-03'::date, '00:00'::time, '24:00'::time, false)),
+  0,
+  '485 fixture:X 標記 2026-12-03 整天排休,無既有預約衝突'
+);
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000001'); -- 商家管理員視角
+
+select is(
+  jsonb_array_length(
+    (
+      select s -> 'availability_overrides'
+      from jsonb_array_elements(get_merchant_day_schedule('e1430000-0000-4000-8000-000000000020'::uuid, '2026-12-03'::date) -> 'staff') s
+      where s ->> 'staff_id' = 'e1430000-0000-4000-8000-000000000040'
+    )
+  ),
+  1,
+  '485(核心必測):商家管理員視角看到整天排休合併成單一一筆區間(不是碎成多筆或消失)'
+);
+
+select is(
+  (
+    select (s -> 'availability_overrides' -> 0) ->> 'start_time'
+    from jsonb_array_elements(get_merchant_day_schedule('e1430000-0000-4000-8000-000000000020'::uuid, '2026-12-03'::date) -> 'staff') s
+    where s ->> 'staff_id' = 'e1430000-0000-4000-8000-000000000040'
+  ),
+  '00:00:00',
+  '485(核心必測):合併區間 start_time = 00:00:00'
+);
+
+select is(
+  (
+    select (s -> 'availability_overrides' -> 0) ->> 'end_time'
+    from jsonb_array_elements(get_merchant_day_schedule('e1430000-0000-4000-8000-000000000020'::uuid, '2026-12-03'::date) -> 'staff') s
+    where s ->> 'staff_id' = 'e1430000-0000-4000-8000-000000000040'
+  ),
+  '24:00:00',
+  '485(核心必測,修正前的真實 bug 這裡會得到 00:00:00 造成零寬度區間):合併區間 end_time 正確等於 24:00:00,不會因為 23:30+30分鐘的 time 型別跨日回捲變成 00:00:00'
+);
+
+select is(
+  (
+    select ((s -> 'availability_overrides' -> 0) ->> 'is_available')::boolean
+    from jsonb_array_elements(get_merchant_day_schedule('e1430000-0000-4000-8000-000000000020'::uuid, '2026-12-03'::date) -> 'staff') s
+    where s ->> 'staff_id' = 'e1430000-0000-4000-8000-000000000040'
+  ),
+  false,
+  '485:合併區間 is_available = false(整天排休,不可預約),商家管理員視角能正確判斷出「例外關閉」樣式'
+);
+
+select pg_temp.test_clear_auth();
+
+-- 回歸測試:一般不跨 24:00 的單一時段合併,行為完全不受這次修正影響。
+select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000002');
+
+select is(
+  (select set_staff_day_override('e1430000-0000-4000-8000-000000000040'::uuid, '2026-12-04'::date, '09:00'::time, '10:00'::time, false)),
+  0,
+  '485 回歸測試 fixture:X 標記 2026-12-04 09:00-10:00 休息'
+);
+
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000001');
+
+select is(
+  (
+    select (s -> 'availability_overrides' -> 0) ->> 'end_time'
+    from jsonb_array_elements(get_merchant_day_schedule('e1430000-0000-4000-8000-000000000020'::uuid, '2026-12-04'::date) -> 'staff') s
+    where s ->> 'staff_id' = 'e1430000-0000-4000-8000-000000000040'
+  ),
+  '10:00:00',
+  '485 回歸測試:一般不跨 24:00 的合併區間,end_time 計算不受這次修正影響,仍正確等於 10:00:00'
 );
 
 select pg_temp.test_clear_auth();

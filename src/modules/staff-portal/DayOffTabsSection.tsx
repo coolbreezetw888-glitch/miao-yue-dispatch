@@ -80,6 +80,7 @@ function DayOffMonthCalendar({
             <button
               key={dateKey}
               type="button"
+              data-testid={`day-off-cell-${dateKey}`}
               onClick={() => onSelectDate(dateKey)}
               className={cn(
                 "flex h-12 flex-col items-center justify-center rounded-md border text-xs transition-colors",
