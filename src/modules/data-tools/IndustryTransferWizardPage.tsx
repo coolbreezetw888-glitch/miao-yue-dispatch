@@ -108,6 +108,14 @@ function IndustryTransferWizardPageInner() {
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-5 py-10">
       <div>
+        {/* SPECS-INDEX #600(§10.1):規格書明講這次調整項目雖然沒有明確指名這個頁面，但為了
+            三個「資料工具」模組底下的精靈頁面一致，一併補上同樣的「← 返回功能」，跟精靈本身
+            每個步驟裡的「上一步」按鈕是兩件不同的事，位置分開避免混淆。 */}
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
+      <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">產業轉移</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           建立一間新商家(選新產業)，並選擇性把會員資料/紅利點數歷史搬過去。這不是修改現有商家的

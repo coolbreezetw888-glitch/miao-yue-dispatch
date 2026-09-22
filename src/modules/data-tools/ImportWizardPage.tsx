@@ -45,6 +45,7 @@ import {
   type ParsedCsv,
 } from "@/lib/csv";
 import { supabase } from "@/integrations/supabase/client";
+import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { addMerchantStaff } from "@/modules/staff-agent/api";
@@ -63,6 +64,52 @@ import {
 } from "./types";
 
 const MAX_ROWS = 2000;
+
+// SPECS-INDEX #603(§10.4):會員/歷史訂單各自的 CSV 模板。欄位對照 types.ts 的
+// MEMBER_IMPORT_TARGET_FIELDS/HISTORICAL_BOOKING_IMPORT_TARGET_FIELDS(實際匯入解析邏輯的
+// 目標欄位),確保模板不是自說自話。歷史訂單模板依規格書 §10.4 只列出核心 9 個欄位(不含
+// Email/服務內容描述/小計折扣稅金分項/付款方式/會員電話這些進階選填欄位——這些欄位商家如果
+// 需要，可以在步驟二自行把 CSV 多加的欄位對應上去，不影響模板本身的最小可用性)。
+// ⚠️ 維護提醒:之後 3.1/3.4 的欄位對應邏輯如果調整，這兩個模板要同步更新。
+function buildMemberImportTemplate(): { filename: string; csv: string } {
+  const headers = ["姓名", "電話", "Email", "生日", "備註", "推薦人電話/推薦碼", "起始點數餘額"];
+  const example = [
+    "王小明",
+    "0912345678",
+    "example@example.com",
+    "1990-01-01",
+    "VIP 客戶",
+    "0922333444",
+    "100",
+  ];
+  return { filename: "會員資料匯入模板.csv", csv: buildCsvContent(headers, [example]) };
+}
+
+function buildHistoricalBookingImportTemplate(): { filename: string; csv: string } {
+  const headers = [
+    "客戶姓名",
+    "客戶電話",
+    "服務人員",
+    "預約日期時間",
+    "服務時長分鐘數",
+    "訂單狀態",
+    "最終金額",
+    "客戶地址",
+    "客戶備註",
+  ];
+  const example = [
+    "陳小華",
+    "0933222111",
+    "王師傅",
+    "2024-01-15 14:00",
+    "90",
+    "已完成",
+    "1200",
+    "台北市中山區示範路1號",
+    "首次來店",
+  ];
+  return { filename: "歷史訂單匯入模板.csv", csv: buildCsvContent(headers, [example]) };
+}
 
 type WizardStep = "type" | "upload" | "value-mapping" | "preview" | "confirm" | "result";
 
@@ -91,6 +138,10 @@ function ImportWizardPageInner() {
   const [parsed, setParsed] = useState<ParsedCsv | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>({});
   const [staffValueMapping, setStaffValueMapping] = useState<Record<string, string>>({});
+  // SPECS-INDEX #632:步驟三「建立新服務人員」現在需要另外收集一個手機號碼(§595/§596 之後
+  // merchant_staff.phone 已經是 NOT NULL + 格式檢查),每個不重複的服務人員文字值各自有自己的
+  // 輸入框草稿值,key 是 CSV 裡的服務人員文字姓名(跟 staffValueMapping 用同一組 key)。
+  const [newStaffPhoneDrafts, setNewStaffPhoneDrafts] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ImportResultSummary | null>(null);
   const [rawFailedRows, setRawFailedRows] = useState<Record<string, unknown>[]>([]);
@@ -183,8 +234,21 @@ function ImportWizardPageInner() {
   }
 
   async function handleCreateNewStaff(name: string) {
+    // SPECS-INDEX #632:merchant_staff.phone 現在是 NOT NULL + 台灣手機號碼格式檢查(09 開頭
+    // 共 10 碼),這裡套用跟既有服務人員新增表單(StaffListPage.tsx §8.1)、客服邀請表單
+    // (AgentListPage.tsx §8.2)完全相同的驗證規則,共用同一支 isValidTaiwanMobilePhone,
+    // 不重寫一份新的正規表示式判斷(§8.3 邊界情況的既有要求)。
+    const trimmedPhone = (newStaffPhoneDrafts[name] ?? "").trim();
+    if (!trimmedPhone) {
+      toast.error("請填寫這位新服務人員的手機號碼");
+      return;
+    }
+    if (!isValidTaiwanMobilePhone(trimmedPhone)) {
+      toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
+      return;
+    }
     try {
-      const created = await addMerchantStaff(merchantId, { name });
+      const created = await addMerchantStaff(merchantId, { name, phone: trimmedPhone });
       setStaffValueMapping((prev) => ({ ...prev, [name]: created.id }));
       toast.success(`已建立新服務人員「${name}」`);
     } catch (err) {
@@ -243,6 +307,15 @@ function ImportWizardPageInner() {
     }
   }
 
+  function handleDownloadTemplate() {
+    if (!importKind) return;
+    const { filename, csv } =
+      importKind === "members"
+        ? buildMemberImportTemplate()
+        : buildHistoricalBookingImportTemplate();
+    downloadCsv(filename, csv);
+  }
+
   function handleDownloadFailedRows() {
     if (rawFailedRows.length === 0) return;
     const headers = Array.from(new Set(rawFailedRows.flatMap((r) => Object.keys(r))));
@@ -265,6 +338,14 @@ function ImportWizardPageInner() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+      <div>
+        {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟精靈本身每個步驟裡的「上一步」按鈕
+            是兩件不同的事——「上一步」留在匯入流程內、回到前一個步驟；這顆「← 返回功能」是離開
+            整個匯入流程。比照既有頁面(例如付款方式管理)的統一寫法與文案。 */}
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">資料匯入</h1>
@@ -323,6 +404,26 @@ function ImportWizardPageInner() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* SPECS-INDEX #603(§10.4):會員/歷史訂單各自提供專屬模板,不是通用單一模板。 */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border p-3">
+              <p className="text-sm text-muted-foreground">
+                {importKind === "members" ? (
+                  <>
+                    還沒整理好 CSV?可以先下載範例模板對照欄位。這個商家目前
+                    {phoneRequiredForMembers ? "要求" : "不要求"}建立會員時必填電話。
+                  </>
+                ) : (
+                  <>
+                    還沒整理好 CSV?可以先下載範例模板對照欄位。服務時長沒填預設
+                    60 分鐘,訂單狀態沒填預設「已完成」,付款方式為選填(留空也能成功匯入)。
+                  </>
+                )}
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                下載 CSV 模板
+              </Button>
+            </div>
+
             <div>
               <Label htmlFor="csv-file">CSV 檔案</Label>
               <Input
@@ -422,7 +523,7 @@ function ImportWizardPageInner() {
             <CardTitle>步驟三:服務人員數值對應</CardTitle>
             <CardDescription>
               CSV 裡每一個不重複的服務人員文字值，請選擇對應到既有服務人員，或建立一筆新的服務人員
-              (僅姓名)。如果中途離開沒完成匯入，已建立的新服務人員不會被自動刪除。
+              (姓名+手機號碼)。如果中途離開沒完成匯入，已建立的新服務人員不會被自動刪除。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -458,6 +559,18 @@ function ImportWizardPageInner() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {/* SPECS-INDEX #632:建立新服務人員現在需要手機號碼(09 開頭共 10 碼),
+                        跟既有服務人員管理頁的新增表單套用同一套必填+格式驗證規則。 */}
+                    <Input
+                      type="tel"
+                      placeholder="手機號碼,例如 0912345678"
+                      className="w-44 shrink-0"
+                      data-testid={`staff-new-phone-${name}`}
+                      value={newStaffPhoneDrafts[name] ?? ""}
+                      onChange={(e) =>
+                        setNewStaffPhoneDrafts((prev) => ({ ...prev, [name]: e.target.value }))
+                      }
+                    />
                     <Button
                       variant="outline"
                       size="sm"

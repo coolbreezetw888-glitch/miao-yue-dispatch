@@ -3,6 +3,7 @@
 // 各自來源模組已經暴露的對外介面，不新建任何查詢函式(模組獨立性，見規格書第一節判斷 13)。
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -195,6 +196,13 @@ function ReportExportCenterPageInner() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+      <div>
+        {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟資料匯入精靈/產業轉移精靈的
+            「← 返回功能」行為一致。這個頁面不是多步驟精靈，沒有「上一步」按鈕需要區分。 */}
+        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
+          ← 返回功能
+        </Link>
+      </div>
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">報表匯出中心</h1>
         <p className="mt-1 text-sm text-muted-foreground">
