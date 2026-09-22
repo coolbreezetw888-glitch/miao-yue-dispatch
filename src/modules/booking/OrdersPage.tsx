@@ -21,15 +21,19 @@
 // 「不放行」時改成原地渲染提示文字,不 navigate() 離開。刻意不改 RequireBookingAccess.tsx
 // 本身——那支同時也是 CalendarPage.tsx(行事曆分頁籤)在用的守衛,行事曆這次沒有被要求改變行為,
 // 保持模組獨立、改動範圍不外溢。
+//
+// 建單與訂單管理介面優化 §十(SPECS-INDEX #633):訂單狀態顏色「設定」UI(4 個色彩選擇器 +
+// 儲存按鈕)原本掛在這個頁面(#620/#621),已搬到 MerchantSettingsPage.tsx(/app/settings,
+// 商家層級設定的既有頁面)——顏色屬於商家設定而非日常訂單操作。這裡只留下「讀」的那一半:
+// useMerchantBookingStatusColors 查詢 + effectiveStatusColors fallback,供下面 OrderCard
+// 左側色條顯示用,資料表/RLS/RPC 完全不動,寫入邏輯(updateMerchantBookingStatusColors)一併
+// 搬去 MerchantSettingsPage.tsx,不在這個檔案裡重複一份。
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,19 +46,13 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { cn } from "@/lib/utils";
-import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import type { IndustryType } from "@/modules/merchant/types";
 import { useAgentPermission, useCurrentMerchantRole, useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { BookingFormDialog } from "./CalendarPage";
-import {
-  updateMerchantBookingStatusColors,
-  useBookingCardExtras,
-  useMerchantBookings,
-  useMerchantBookingStatusColors,
-} from "./context";
+import { useBookingCardExtras, useMerchantBookings, useMerchantBookingStatusColors } from "./context";
 import { addDays, buildTaipeiIso, isoToTaipeiDateTimeWithSeconds, toDateKey } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import {
@@ -336,103 +334,7 @@ function OrdersPageInner() {
         editingBookingId={editingBookingId}
         onSaved={refetchAll}
       />
-
-      {/* 建單與訂單管理介面優化 §十 10.6(SPECS-INDEX #620/#621):訂單狀態顏色設定畫面。
-          掛載在這個頁面(而不是另開路由/掛到 BusinessHoursPage.tsx)是刻意的:權限判斷
-          (§10.3)跟這個頁面本身的 RequireBookingAccess 守衛剛好是同一支
-          private.can_manage_bookings/orders section_key,不需要另外判斷可否操作——能看到
-          這個頁面的人,就是能操作這個設定的人。 */}
-      <BookingStatusColorsCard merchantId={merchantId} />
     </main>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 建單與訂單管理介面優化 §十 10.6(SPECS-INDEX #620/#621):訂單狀態顏色設定畫面。
-// 4 個狀態各自一個 <input type="color">(原生色彩選擇器,不需要額外安裝套件)+ 色碼文字輸入框
-// + 即時預覽色塊,依 §10.3 權限判斷是否可操作(這個元件只在 RequireBookingAccess 通過後才會
-// 渲染,不需要再重複判斷一次 useAgentPermission)。
-// ---------------------------------------------------------------------------
-const STATUS_COLOR_FIELDS: { key: keyof BookingStatusColorMap; label: string }[] = [
-  { key: "pendingConfirmation", label: "待確認" },
-  { key: "accepted", label: "已確認" },
-  { key: "completed", label: "已完成" },
-  { key: "cancelled", label: "已取消" },
-];
-
-function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
-  const queryClient = useQueryClient();
-  const { data: colors, isLoading } = useMerchantBookingStatusColors(merchantId);
-  const [form, setForm] = useState<BookingStatusColorMap>(DEFAULT_BOOKING_STATUS_COLORS);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (colors) setForm(colors);
-  }, [colors]);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await updateMerchantBookingStatusColors(merchantId, form);
-      await queryClient.invalidateQueries({
-        queryKey: ["booking-module", "merchant-booking-status-colors", merchantId],
-      });
-      toast.success("已更新訂單狀態顏色設定");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>訂單狀態顏色設定</CardTitle>
-        <CardDescription>
-          自訂 4 種訂單狀態在行事曆、訂單管理頁顯示的代表色。這次不強制檢查顏色搭配文字是否夠清楚,
-          請自行參考右側的即時預覽色塊判斷。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          <>
-            {STATUS_COLOR_FIELDS.map(({ key, label }) => (
-              <div
-                key={key}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
-              >
-                <span className="w-16 shrink-0 text-sm font-medium text-foreground">{label}</span>
-                <input
-                  type="color"
-                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-input bg-background p-0.5"
-                  value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : "#000000"}
-                  onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                />
-                <Input
-                  className="w-32"
-                  value={form[key]}
-                  onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                />
-                {/* 即時預覽色塊,對應規格書 §10.5 第 4 點的「顏色選擇器旁邊即時顯示一個小色塊
-                    預覽」邊界情況建議。 */}
-                <span
-                  className="ml-auto rounded-md border border-border px-3 py-1 text-xs font-medium"
-                  style={{ backgroundColor: form[key], color: "#ffffff" }}
-                >
-                  預覽文字
-                </span>
-              </div>
-            ))}
-            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
