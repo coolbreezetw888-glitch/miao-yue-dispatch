@@ -363,17 +363,19 @@ select throws_ok(
   '§8.1 第 8 條:update_booking 改選另一個已下架的付款方式(不是原本的值)應該報錯'
 );
 
--- payment_method_id/payment_method_name_snapshot 可以是 null(留空建單)。
-select id from create_booking(
-  'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
-  jsonb_build_array(jsonb_build_object('service_item_id', 'd9000000-0000-4000-8000-000000000031', 'quantity', 1, 'unit_price', 300)),
-  '2026-09-29 13:00:00+08', '客戶丁', '0955000004'
-) \gset booking_noPM_
-
-select is(
-  (select (payment_method_id is null and payment_method_name_snapshot is null) from bookings where id = :'booking_noPM_id'),
-  true,
-  '§8.1 第 9 條:不指定付款方式時,payment_method_id/payment_method_name_snapshot 皆為 null'
+-- SPECS-INDEX #604(2026-09-23 疊加,推翻本檔案原本 §8.1 第 9 條「可以留空建單」的既有假設):
+-- 新建訂單付款方式已改為必填(規格書 .project/specs/支付方式.md §3.1.1),不指定付款方式時
+-- create_booking 現在會被擋下,不再是「留空成 null」。這條測試改成驗證這個新規則,原本測「留空
+-- 建單成功」的正面案例已經被 module9_02_payment_method_required.sql 的必填規則測試取代
+-- (該檔案也覆蓋了 update_booking 維持原值放行的邊界情況)。
+select throws_ok(
+  $$select create_booking(
+    'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
+    jsonb_build_array(jsonb_build_object('service_item_id', 'd9000000-0000-4000-8000-000000000031', 'quantity', 1, 'unit_price', 300)),
+    '2026-09-29 13:00:00+08', '客戶丁', '0955000004'
+  )$$,
+  'P0001', null,
+  'SPECS-INDEX #604 疊加:不指定付款方式時,create_booking 現在會被擋下(取代原本 §8.1 第 9 條「可以留空建單」的舊假設,新規則見 module9_02)'
 );
 
 -- =========================================================================

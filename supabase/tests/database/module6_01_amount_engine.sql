@@ -53,13 +53,18 @@ insert into payment_methods (id, merchant_id, name)
 values ('c1000000-0000-4000-8000-000000000091', 'c1000000-0000-4000-8000-000000000020', '現場付款');
 
 select pg_temp.test_set_auth('c1000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('eba9a441-7ee4-5a5a-b757-44d879655481', 'c1000000-0000-4000-8000-000000000020', '現場付款');
+
 
 -- ① §2.2:quantity=2 的 60 分鐘服務項目,工時貢獻正確算成 120 分鐘(end_at = start + 120 分)。
 select id, end_at from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 2, 'unit_price', 500)),
   '2026-09-22 10:00:00+08', '客戶一', '0911000001'
-) \gset qty2_
+, p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset qty2_
 
 select is(
   :'qty2_end_at'::timestamptz,
@@ -96,7 +101,7 @@ select id from create_booking(
   '2026-09-22 13:00:00+08', '客戶二', '0911000002',
   null, null, '{}', '{}', null, null,
   true, 800
-) \gset custom_
+, p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset custom_
 
 select is(
   (select subtotal_amount_snapshot from bookings where id = :'custom_id'::uuid),
@@ -116,7 +121,7 @@ select id from create_booking(
   '2026-09-22 14:00:00+08', '客戶三', '0911000003',
   null, null, '{}', '{}', null, null,
   false, null, true, 'fixed', 50
-) \gset discount_fixed_
+, p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset discount_fixed_
 
 select is(
   (select discount_amount_snapshot from bookings where id = :'discount_fixed_id'::uuid),
@@ -136,7 +141,7 @@ select id from create_booking(
   '2026-09-22 15:00:00+08', '客戶四', '0911000004',
   null, null, '{}', '{}', null, null,
   false, null, true, 'percentage', 10
-) \gset discount_pct_
+, p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset discount_pct_
 
 select is(
   (select discount_amount_snapshot from bookings where id = :'discount_pct_id'::uuid),
@@ -157,19 +162,23 @@ select throws_ok(
     '2026-09-22 16:00:00+08', '客戶五', '0911000005',
     null, null, '{}', '{}', null, null,
     false, null, true, 'fixed', 500
-  )$$,
+  , p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481')$$,
   'P0001', null,
   '§2.3 邊界情況:折扣金額(500)超過小計(300)時被擋下'
 );
 
 -- ⑨ §4.6/§2.3:稅金以「折扣後金額」為課稅基礎,不是原始小計。
 --    小計 1000(500×2),折扣固定 200 -> 折扣後 800,稅金比例 5% -> 40,最終 = 1000-200+40=840。
+-- SPECS-INDEX #604(2026-09-23 批次修正):create_booking 新建訂單付款方式改為必填,補上
+-- p_payment_method_id(重用上面 ⑩ 原本就準備好的 c1...091 付款方式),不影響這裡要驗證的
+-- 折扣/稅金金額計算邏輯。
 select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 2, 'unit_price', 500)),
   '2026-09-22 17:00:00+08', '客戶六', '0911000006',
   null, null, '{}', '{}', null, null,
-  false, null, true, 'fixed', 200, true, 'percentage', 5
+  false, null, true, 'fixed', 200, true, 'percentage', 5,
+  'c1000000-0000-4000-8000-000000000091'
 ) \gset tax_
 
 select is((select discount_amount_snapshot from bookings where id = :'tax_id'::uuid), 200.00, '§4.6:折扣先扣完');
@@ -184,11 +193,21 @@ select is(
   '§4.6/§2.3:最終金額 = 1000 - 200 + 40 = 840'
 );
 
--- ⑩ 模組 9 v2:payment_method_id/payment_method_name_snapshot 正常寫入/查詢,留空時是 null。
-select is(
-  (select (payment_method_id is null and payment_method_name_snapshot is null) from bookings where id = :'tax_id'::uuid),
-  true,
-  '模組 9 v2:沒有傳 payment_method_id 時,payment_method_id/payment_method_name_snapshot 查詢結果都是 null(尚未設定)'
+-- ⑩ 模組 9 v2:payment_method_id/payment_method_name_snapshot 正常寫入/查詢。
+-- SPECS-INDEX #604(2026-09-23 疊加,推翻這裡原本「留空時是 null」的既有假設):新建訂單付款方式
+-- 已改為必填,不再能留空建單成 null——改成驗證「不傳付款方式時 create_booking 現在會被擋下」,
+-- 詳細的必填規則(含 update_booking 維持原值放行的邊界情況)已經由 module9_02_payment_method_
+-- required.sql 完整覆蓋,這裡只確認這個檔案本身的既有情境也符合新規則,不留下過期的正面案例。
+-- ⚠️ 這裡故意「不」補 p_payment_method_id(這條就是在測「沒帶付款方式會被擋下」本身),
+-- 跟本檔案其餘呼叫的機械性補參數是相反方向,不要被後續批次修正誤加。
+select throws_ok(
+  $$select create_booking(
+    'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
+    jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
+    '2026-09-22 20:00:00+08', '客戶九', '0911000009'
+  )$$,
+  'P0001', null,
+  'SPECS-INDEX #604 疊加:不傳付款方式時,create_booking 現在會被擋下(取代原本「留空時是 null」的舊假設)'
 );
 
 -- tax_id 那筆是 17:00-19:00(quantity 2 的 60 分鐘服務),這裡刻意排到 19:00 之後,避免時段重疊
@@ -212,10 +231,13 @@ select is(
 --    確認 unit_price_snapshot/final_amount_snapshot 完全沒有變動。
 update service_items set price = 999 where id = 'c1000000-0000-4000-8000-000000000030';
 
+-- SPECS-INDEX #604:維持原付款方式不變(qty2_ 建立時已帶 payment_method_id),不然預設 null
+-- 會被判定成「主動清空」而擋下。
 select update_booking(
   :'qty2_id'::uuid, 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 2, 'unit_price', 500)),
-  '2026-09-22 10:00:00+08', '客戶一(改電話)', '0911999999'
+  '2026-09-22 10:00:00+08', '客戶一(改電話)', '0911999999',
+  p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481'
 );
 
 select is(
@@ -234,7 +256,8 @@ select is(
 select update_booking(
   :'qty2_id'::uuid, 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 2, 'unit_price', 700)),
-  '2026-09-22 10:00:00+08', '客戶一(改電話)', '0911999999'
+  '2026-09-22 10:00:00+08', '客戶一(改電話)', '0911999999',
+  p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481'
 );
 
 select is(

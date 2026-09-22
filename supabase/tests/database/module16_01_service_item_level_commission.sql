@@ -121,6 +121,11 @@ where staff_id = 'ec000000-0000-4000-8000-000000000041' and service_item_id = 'e
 insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value) values
   ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000031', 'percentage', 10),
   ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000032', 'percentage', 20);
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('6044747d-245c-5c27-ba98-63d61997fb5d', 'ec000000-0000-4000-8000-000000000021', '現場付款');
+
 
 select id from create_booking(
   p_merchant_id => 'ec000000-0000-4000-8000-000000000021',
@@ -135,7 +140,7 @@ select id from create_booking(
   p_discount_enabled => true,
   p_discount_mode => 'fixed',
   p_discount_value => 150
-) \gset multi_item_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset multi_item_booking_
 
 select confirm_booking(:'multi_item_booking_id'::uuid);
 select complete_booking(:'multi_item_booking_id'::uuid);
@@ -179,7 +184,7 @@ select id from create_booking(
   p_start_at => '2026-11-10 12:00:00+08',
   p_customer_name => '混用模式測試客戶',
   p_customer_phone => '0966010002'
-) \gset mixed_mode_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset mixed_mode_booking_
 
 select confirm_booking(:'mixed_mode_booking_id'::uuid);
 select complete_booking(:'mixed_mode_booking_id'::uuid);
@@ -203,12 +208,14 @@ select is(
 update staff_service_commission_rates set commission_mode = 'percentage', commission_value = 10
 where staff_id = 'ec000000-0000-4000-8000-000000000041' and service_item_id = 'ec000000-0000-4000-8000-000000000031';
 
+-- SPECS-INDEX #604:補上 p_payment_method_id(重用上面已建立的 6044747d... 付款方式)。
 select lives_ok(
   format(
     $$select id from create_booking(
       p_merchant_id => '%s', p_staff_id => '%s',
       p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','%s','quantity',1,'unit_price',800)),
-      p_start_at => '2026-11-10 14:30:00+08', p_customer_name => '未設定抽成測試客戶', p_customer_phone => '0966010003'
+      p_start_at => '2026-11-10 14:30:00+08', p_customer_name => '未設定抽成測試客戶', p_customer_phone => '0966010003',
+      p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d'
     )$$,
     'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000032'
   ),
@@ -225,7 +232,7 @@ select id from create_booking(
   p_start_at => '2026-11-10 16:00:00+08',
   p_customer_name => '判斷2測試客戶',
   p_customer_phone => '0966010004'
-) \gset no_rate_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset no_rate_booking_
 
 select confirm_booking(:'no_rate_booking_id'::uuid);
 
@@ -265,7 +272,7 @@ select id from create_booking(
   p_customer_phone => '0966010005',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 900
-) \gset custom_total_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset custom_total_booking_
 
 select confirm_booking(:'custom_total_booking_id'::uuid);
 select complete_booking(:'custom_total_booking_id'::uuid);
@@ -294,7 +301,7 @@ select id from create_booking(
   p_customer_phone => '0966010006',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset zero_price_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset zero_price_booking_
 
 select confirm_booking(:'zero_price_booking_id'::uuid);
 select complete_booking(:'zero_price_booking_id'::uuid);
@@ -320,7 +327,7 @@ select id from create_booking(
   p_customer_name => '料錢成本分攤測試客戶',
   p_customer_phone => '0966010007',
   p_material_cost_item_ids => array['ec000000-0000-4000-8000-000000000034']::uuid[]
-) \gset material_cost_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset material_cost_booking_
 
 select confirm_booking(:'material_cost_booking_id'::uuid);
 select complete_booking(:'material_cost_booking_id'::uuid);
@@ -372,7 +379,7 @@ select id from create_booking(
   p_start_at => '2026-11-10 23:00:00+08',
   p_customer_name => '規則26新訂單測試客戶',
   p_customer_phone => '0966010008'
-) \gset rule26_new_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset rule26_new_booking_
 
 select confirm_booking(:'rule26_new_booking_id'::uuid);
 select complete_booking(:'rule26_new_booking_id'::uuid);

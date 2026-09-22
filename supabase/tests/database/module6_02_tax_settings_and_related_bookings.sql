@@ -141,6 +141,13 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
 insert into payment_methods (id, merchant_id, name) values
   ('c2000000-0000-4000-8000-000000000091', 'c2000000-0000-4000-8000-000000000021', '現場付款');
 
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。這兩筆(含二店那筆)一樣用還沒 test_set_auth 任何角色的 postgres
+-- 超級使用者身分布置,避免用「一店管理員」身分插入「二店」的付款方式時被 RLS 擋下。
+insert into payment_methods (id, merchant_id, name) values ('638acea5-dfd1-564e-9b22-ab9cbd3282ab', 'c2000000-0000-4000-8000-000000000021', '現場付款');
+insert into payment_methods (id, merchant_id, name) values ('257a215d-f307-5955-adf0-24127d0362db', 'c2000000-0000-4000-8000-000000000022', '現場付款');
+
 select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000001');
 
 -- 同一位客戶(0955000001)在一店有三筆訂單。
@@ -148,20 +155,20 @@ select id from create_booking(
   'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c2000000-0000-4000-8000-000000000041', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 09:00:00+08', '客戶甲', '0955000001'
-) \gset booking_a_
+, p_payment_method_id => '638acea5-dfd1-564e-9b22-ab9cbd3282ab') \gset booking_a_
 
 select id from create_booking(
   'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c2000000-0000-4000-8000-000000000041', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 10:00:00+08', '客戶甲', '0955000001'
-) \gset booking_b_
+, p_payment_method_id => '638acea5-dfd1-564e-9b22-ab9cbd3282ab') \gset booking_b_
 
 -- 另一位客戶(0955000002)在一店的訂單,不應該出現在客戶甲的相關訂單清單裡。
 select id from create_booking(
   'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c2000000-0000-4000-8000-000000000041', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 11:00:00+08', '客戶乙', '0955000002'
-) \gset booking_c_
+, p_payment_method_id => '638acea5-dfd1-564e-9b22-ab9cbd3282ab') \gset booking_c_
 
 -- ⑤ 同電話比對正確抓出同商家內其他訂單,不含自己(排除 booking_a 本身)。
 select is(
@@ -208,7 +215,7 @@ select id from create_booking(
   'c2000000-0000-4000-8000-000000000022', 'c2000000-0000-4000-8000-000000000052',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c2000000-0000-4000-8000-000000000042', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 09:00:00+08', '客戶甲(二店)', '0955000001'
-) \gset booking_foreign_
+, p_payment_method_id => '257a215d-f307-5955-adf0-24127d0362db') \gset booking_foreign_
 
 select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000001');

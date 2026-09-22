@@ -830,10 +830,14 @@ export type Database = {
       members: {
         Row: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -848,15 +852,20 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
         Insert: {
           birthday?: string | null
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
+          blacklisted_by_user_id?: string | null
           created_at?: string
           created_by_user_id?: string | null
           email?: string | null
           id?: string
+          is_blacklisted?: boolean
           last_birthday_bonus_year?: number | null
           line_bound?: boolean
           line_user_id?: string | null
@@ -871,15 +880,20 @@ export type Database = {
           referral_rewarded_at?: string | null
           referred_by_member_id?: string | null
           status?: string
+          tier_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Update: {
           birthday?: string | null
+          blacklist_reason?: string | null
+          blacklisted_at?: string | null
+          blacklisted_by_user_id?: string | null
           created_at?: string
           created_by_user_id?: string | null
           email?: string | null
           id?: string
+          is_blacklisted?: boolean
           last_birthday_bonus_year?: number | null
           line_bound?: boolean
           line_user_id?: string | null
@@ -894,6 +908,7 @@ export type Database = {
           referral_rewarded_at?: string | null
           referred_by_member_id?: string | null
           status?: string
+          tier_id?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -910,6 +925,13 @@ export type Database = {
             columns: ["referred_by_member_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "members_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_member_tiers"
             referencedColumns: ["id"]
           },
         ]
@@ -1434,33 +1456,36 @@ export type Database = {
           birthday_bonus_points: number
           created_at: string
           merchant_id: string
-          phone_required_to_create: boolean
           points_earn_rate: number
           points_feature_enabled: boolean
+          policy_content: string | null
+          policy_enabled: boolean
           referral_bonus_points: number
-          require_verified_phone_for_rewards: boolean
+          reward_condition_mode: string
           updated_at: string
         }
         Insert: {
           birthday_bonus_points?: number
           created_at?: string
           merchant_id: string
-          phone_required_to_create?: boolean
           points_earn_rate?: number
           points_feature_enabled?: boolean
+          policy_content?: string | null
+          policy_enabled?: boolean
           referral_bonus_points?: number
-          require_verified_phone_for_rewards?: boolean
+          reward_condition_mode?: string
           updated_at?: string
         }
         Update: {
           birthday_bonus_points?: number
           created_at?: string
           merchant_id?: string
-          phone_required_to_create?: boolean
           points_earn_rate?: number
           points_feature_enabled?: boolean
+          policy_content?: string | null
+          policy_enabled?: boolean
           referral_bonus_points?: number
-          require_verified_phone_for_rewards?: boolean
+          reward_condition_mode?: string
           updated_at?: string
         }
         Relationships: [
@@ -1468,6 +1493,44 @@ export type Database = {
             foreignKeyName: "merchant_member_settings_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_member_tiers: {
+        Row: {
+          created_at: string
+          id: string
+          merchant_id: string
+          name: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          merchant_id: string
+          name: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          merchant_id?: string
+          name?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_member_tiers_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -2347,10 +2410,14 @@ export type Database = {
         Args: { p_member_id: string; p_note: string; p_points_delta: number }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -2365,6 +2432,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -2698,13 +2766,18 @@ export type Database = {
           p_notes?: string
           p_phone?: string
           p_referred_by_member_id?: string
+          p_tier_id?: string
         }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -2719,6 +2792,55 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      get_members_by_phone: {
+        Args: {
+          p_merchant_id: string
+          p_phone: string
+        }
+        Returns: Json
+      }
+      set_member_blacklist_status: {
+        Args: {
+          p_is_blacklisted: boolean
+          p_member_id: string
+          p_reason?: string
+        }
+        Returns: {
+          birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          is_blacklisted: boolean
+          last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -2774,10 +2896,14 @@ export type Database = {
         Args: { p_member_id: string }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -2792,6 +2918,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -3145,10 +3272,14 @@ export type Database = {
         Args: { p_member_id: string }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -3163,6 +3294,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -3222,10 +3354,14 @@ export type Database = {
         Args: { p_member_id: string; p_note: string; p_points: number }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -3240,6 +3376,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -3331,10 +3468,14 @@ export type Database = {
         Args: { p_member_id: string; p_verified: boolean }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -3349,6 +3490,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }
@@ -3567,13 +3709,18 @@ export type Database = {
           p_name: string
           p_notes: string
           p_phone: string
+          p_tier_id?: string
         }
         Returns: {
           birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
           created_at: string
           created_by_user_id: string | null
           email: string | null
           id: string
+          is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
           line_user_id: string | null
@@ -3588,6 +3735,7 @@ export type Database = {
           referral_rewarded_at: string | null
           referred_by_member_id: string | null
           status: string
+          tier_id: string | null
           updated_at: string
           user_id: string | null
         }

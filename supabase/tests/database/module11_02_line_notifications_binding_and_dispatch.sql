@@ -55,6 +55,11 @@ values ('ed000000-0000-4000-8000-000000000041', 'ed000000-0000-4000-8000-0000000
 
 select seed_default_line_event_settings('ed000000-0000-4000-8000-000000000021');
 select seed_default_member_settings('ed000000-0000-4000-8000-000000000021');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('d58ebc73-40eb-5a2b-b8ca-3151a781e8bf', 'ed000000-0000-4000-8000-000000000021', '現場付款');
+
 
 select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001');
 select id from create_member('ed000000-0000-4000-8000-000000000021', '綁定測試會員', '0933000001') \gset member_
@@ -66,7 +71,7 @@ select id from create_booking(
   p_customer_name => '通知測試客戶',
   p_customer_phone => '0955099001',
   p_member_id => :'member_id'::uuid
-) \gset booking_
+, p_payment_method_id => 'd58ebc73-40eb-5a2b-b8ca-3151a781e8bf') \gset booking_
 select pg_temp.test_clear_auth();
 
 -- =========================================================================

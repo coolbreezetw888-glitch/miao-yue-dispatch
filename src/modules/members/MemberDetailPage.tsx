@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,6 +26,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -32,15 +40,19 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
 
 import {
+  setMemberBlacklistStatus,
   setMemberPhoneVerified,
   updateMember,
   useMember,
   useMemberReferrals,
   useMemberRelatedBookings,
   useMerchantMemberSettings,
+  useMerchantMemberTiers,
 } from "./api";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { MEMBER_STATUS_LABELS, type Member } from "./types";
+
+const UNASSIGNED_TIER_VALUE = "__unassigned__";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -52,11 +64,13 @@ function formatDateTime(iso: string | null): string {
 // ---------------------------------------------------------------------------
 function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
+  const { data: tiers } = useMerchantMemberTiers(member.merchant_id, true);
   const [name, setName] = useState(member.name);
   const [phone, setPhone] = useState(member.phone ?? "");
   const [email, setEmail] = useState(member.email ?? "");
   const [birthday, setBirthday] = useState(member.birthday ?? "");
   const [notes, setNotes] = useState(member.notes ?? "");
+  const [tierId, setTierId] = useState(member.tier_id ?? UNASSIGNED_TIER_VALUE);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -66,6 +80,7 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
       setEmail(member.email ?? "");
       setBirthday(member.birthday ?? "");
       setNotes(member.notes ?? "");
+      setTierId(member.tier_id ?? UNASSIGNED_TIER_VALUE);
     }
   }, [open, member]);
 
@@ -83,6 +98,7 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
         email: email.trim() ? email.trim() : null,
         birthday: birthday.trim() ? birthday.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
+        tierId: tierId === UNASSIGNED_TIER_VALUE ? null : tierId,
       });
       toast.success("已更新會員資料");
       setOpen(false);
@@ -134,6 +150,23 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
               onChange={(e) => setBirthday(e.target.value)}
             />
           </div>
+          {/* #615(SPECS-INDEX):會員等級,選填,可隨時重新指派。 */}
+          <div>
+            <Label>會員等級</Label>
+            <Select value={tierId} onValueChange={setTierId}>
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED_TIER_VALUE}>未分級</SelectItem>
+                {(tiers ?? []).map((tier) => (
+                  <SelectItem key={tier.id} value={tier.id}>
+                    {tier.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div>
             <Label>推薦人</Label>
             <p className="mt-2 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
@@ -161,6 +194,70 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
   );
 }
 
+/** #616(SPECS-INDEX §10.4):列入黑名單需要輸入原因(必填,函式層檢查)。解除黑名單不需要
+ * 額外輸入,直接呼叫。這不是最高權限敏感操作,依既有 members 權限判斷,管理員跟被授權的客服
+ * 都可以操作(規則 2.10 既有分類原則)。 */
+function BlacklistDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!reason.trim()) {
+      toast.error("請輸入列入黑名單的原因");
+      return;
+    }
+    setSaving(true);
+    try {
+      await setMemberBlacklistStatus(member.id, true, reason.trim());
+      toast.success("已列入黑名單");
+      setOpen(false);
+      setReason("");
+      onSaved();
+    } catch (err) {
+      toast.error("操作失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" variant="destructive" size="sm">
+          列入黑名單
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>列入黑名單</DialogTitle>
+          <DialogDescription>
+            純警告用途,不會阻擋這位客戶之後的建單。這個狀態不會顯示給客戶端看見。
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="blacklist-reason">原因 *</Label>
+            <Textarea
+              id="blacklist-reason"
+              className="mt-2"
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" variant="destructive" disabled={saving}>
+              {saving ? "處理中⋯" : "確認列入黑名單"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function MemberDetailInner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -172,6 +269,10 @@ function MemberDetailInner() {
   const { data: member, isLoading } = useMember(id);
   const { data: relatedBookings } = useMemberRelatedBookings(id);
   const { data: referrals } = useMemberReferrals(id);
+  // #615(SPECS-INDEX):會員等級名稱顯示,查詢範圍是「這位會員所屬商家」的等級清單(含已下架的,
+  // 因為這位會員目前指派的等級可能剛好已被下架,下架不會連帶清空既有會員的 tier_id)。
+  const { data: tiers } = useMerchantMemberTiers(member?.merchant_id, false);
+  const tierNameById = new Map((tiers ?? []).map((t) => [t.id, t.name]));
 
   const [verifying, setVerifying] = useState(false);
   const [copyLabel, setCopyLabel] = useState("複製");
@@ -194,6 +295,17 @@ function MemberDetailInner() {
       toast.error("操作失敗", { description: getErrorMessage(err) });
     } finally {
       setVerifying(false);
+    }
+  }
+
+  async function handleUnblacklist() {
+    if (!member) return;
+    try {
+      await setMemberBlacklistStatus(member.id, false);
+      toast.success("已解除黑名單");
+      refetchAll();
+    } catch (err) {
+      toast.error("操作失敗", { description: getErrorMessage(err) });
     }
   }
 
@@ -237,6 +349,7 @@ function MemberDetailInner() {
             <Badge variant={member.status === "active" ? "default" : "secondary"}>
               {MEMBER_STATUS_LABELS[member.status as "active" | "removed"]}
             </Badge>
+            {member.is_blacklisted ? <Badge variant="destructive">黑名單</Badge> : null}
           </div>
         </div>
         <EditMemberDialog member={member} onSaved={refetchAll} />
@@ -282,6 +395,36 @@ function MemberDetailInner() {
               <Button type="button" variant="outline" size="sm" disabled={verifying} onClick={handleToggleVerified}>
                 {member.phone_verified ? "取消驗證標記" : "標記為已驗證"}
               </Button>
+            </div>
+          </div>
+          {/* #615(SPECS-INDEX):會員等級顯示(唯讀,編輯入口在上方「編輯」按鈕的表單裡)。 */}
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">會員等級</span>
+            <span className="text-foreground">
+              {member.tier_id && tierNameById.has(member.tier_id)
+                ? tierNameById.get(member.tier_id)
+                : "未分級"}
+            </span>
+          </div>
+          {/* #616(SPECS-INDEX §10.4):黑名單狀態,純警告用途,不擋建單,不顯示給客戶端看見。 */}
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-muted-foreground">黑名單狀態</span>
+              {member.is_blacklisted && member.blacklist_reason ? (
+                <p className="text-xs text-muted-foreground">原因:{member.blacklist_reason}</p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              {member.is_blacklisted ? (
+                <>
+                  <Badge variant="destructive">黑名單</Badge>
+                  <Button type="button" variant="outline" size="sm" onClick={handleUnblacklist}>
+                    解除黑名單
+                  </Button>
+                </>
+              ) : (
+                <BlacklistDialog member={member} onSaved={refetchAll} />
+              )}
             </div>
           </div>
           {member.notes ? (

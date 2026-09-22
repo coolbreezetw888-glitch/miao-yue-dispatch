@@ -238,6 +238,11 @@ select lives_ok(
 select id from staff_leave_records
   where staff_id = 'd7000000-0000-4000-8000-000000000043' and status = 'confirmed'
   order by created_at desc limit 1 \gset leave_z_
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('57690c34-7561-5f39-a50a-d53dd300429d', 'd7000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- =========================================================================
 -- ⑥ 規則 2.6:建立請假紀錄時跟既有預約重疊,警示但不強制擋下(用 W 服務人員,避免干擾 X/Z)。
@@ -246,7 +251,7 @@ select id from create_booking(
   'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000044',
   jsonb_build_array(jsonb_build_object('service_item_id', 'd7000000-0000-4000-8000-000000000031', 'quantity', 1, 'unit_price', 300)),
   '2026-10-05 09:00:00+08', '衝突測試客戶', '0955000010'
-) \gset conflict_booking_
+, p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d') \gset conflict_booking_
 
 select is(
   (select count(*)::int from preview_staff_leave_conflicts('d7000000-0000-4000-8000-000000000044', '2026-10-05', '2026-10-06')),
@@ -317,7 +322,7 @@ select throws_ok(
     'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000041',
     jsonb_build_array(jsonb_build_object('service_item_id','d7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
     '2026-09-26 10:00:00+08', '請假期間建單測試客戶', '0955000011'
-  )$$,
+  , p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d')$$,
   'P0001', '主要服務人員這天是休假日(假別:特休),無法預約',
   '規則 2.7 核心:請假期間(9/26,落在 9/25~9/27 內)建單被擋下,錯誤訊息包含正確的假別名稱「特休」'
 );
@@ -329,7 +334,7 @@ select id from create_booking(
   'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','d7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
   '2026-09-26 10:00:00+08', '取消請假後建單測試客戶', '0955000012'
-) \gset booking_after_cancel_
+, p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d') \gset booking_after_cancel_
 
 select ok(
   :'booking_after_cancel_id' is not null,
@@ -343,7 +348,7 @@ select throws_ok(
     'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000043',
     jsonb_build_array(jsonb_build_object('service_item_id','d7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
     '2026-09-26 11:00:00+08', '無限制編輯反轉測試客戶', '0955000013'
-  )$$,
+  , p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d')$$,
   'P0001', '主要服務人員這天是休假日(假別:特休),無法預約',
   '主腦裁示反轉測試(取代規格書規則 2.7 測試清單第 3 條):unlimited_backend_edit=true 的服務人員(Z),請假期間仍然被擋下建單,不受這個開關覆寫'
 );
@@ -356,7 +361,7 @@ select throws_ok(
     'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000043',
     jsonb_build_array(jsonb_build_object('service_item_id','d7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
     '2026-09-26 12:00:00+08', '假別改名快照測試客戶', '0955000014'
-  )$$,
+  , p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d')$$,
   'P0001', '主要服務人員這天是休假日(假別:特休),無法預約',
   '規則 2.7:假別事後改名(特休→特休(改名後))後,check_staff_booking_slot 的錯誤訊息仍維持請假登記當下的舊名字「特休」(快照不變性)'
 );
@@ -544,7 +549,7 @@ select throws_ok(
     'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000043',
     jsonb_build_array(jsonb_build_object('service_item_id','d7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
     '2026-09-26 13:00:00+08', '僅訂單客服建單測試客戶', '0955000015'
-  )$$,
+  , p_payment_method_id => '57690c34-7561-5f39-a50a-d53dd300429d')$$,
   'P0001', '主要服務人員這天是休假日(假別:特休),無法預約',
   '規則 2.11 邊界情況:只有 orders 權限、沒有 team_leave 權限的客服,建單時一樣會被請假擋下(不需要額外檢查 team_leave)'
 );

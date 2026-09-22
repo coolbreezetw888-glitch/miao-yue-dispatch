@@ -86,13 +86,18 @@ insert into staff_availability_windows (staff_id, day_of_week, start_time, end_t
   ('c6000000-0000-4000-8000-000000000046', 2, '10:00', '11:30');
 
 select pg_temp.test_set_auth('c6000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('8f20edea-4d28-5157-93f3-dc5e1103328f', 'c6000000-0000-4000-8000-000000000020', '現場付款');
+
 
 -- ① 關閉自訂工時(預設):end_at 沿用逐項加總(15 分鐘服務,10:00 開始 → end_at = 10:15)。
 select id, end_at from create_booking(
   'c6000000-0000-4000-8000-000000000020', 'c6000000-0000-4000-8000-000000000045',
   jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   'C1客戶', '0931000001'
-) \gset c1_
+, p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f') \gset c1_
 
 select is(
   (:'c1_end_at'::timestamptz),
@@ -109,7 +114,7 @@ select id, end_at from create_booking(
   jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   'C2客戶', '0931000002',
   p_custom_duration_enabled => true, p_custom_duration_minutes => 70
-) \gset c2_
+, p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f') \gset c2_
 
 select is(
   (:'c2_end_at'::timestamptz),
@@ -131,7 +136,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
     'C3客戶', '0931000003',
     p_custom_duration_enabled => true, p_custom_duration_minutes => 100
-  )$$,
+  , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
   'P0001', null,
   '§4.3③:自訂工時延伸超出服務人員可預約時段,整筆被擋下(沒有繞過既有邊界驗證)'
 );
@@ -148,7 +153,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     'C4客戶', '0931000004',
     p_custom_duration_enabled => true, p_custom_duration_minutes => 90
-  )$$,
+  , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
   'P0001', null,
   '§4.3④:自訂工時延伸到單日例外關閉的時段,整筆被擋下(自訂工時 × 第三層單日例外的交集驗證)'
 );
@@ -163,7 +168,7 @@ select lives_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     'C4對照客戶', '0931000005',
     p_custom_duration_enabled => true, p_custom_duration_minutes => 90
-  )$$,
+  , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
   '§4.3④對照組:清除例外後,同一筆自訂工時預約成功建立,證明④確實是被例外擋下'
 );
 
@@ -173,7 +178,7 @@ select id from create_booking(
   jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
   'C5客戶', '0931000006',
   p_custom_duration_enabled => false, p_custom_duration_minutes => 999
-) \gset c5_
+, p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f') \gset c5_
 
 select is(
   (select custom_duration_minutes from bookings where id = :'c5_id'::uuid),
@@ -188,7 +193,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 15:00:00+08',
     'C6客戶a', '0931000007',
     p_custom_duration_enabled => true, p_custom_duration_minutes => null
-  )$$,
+  , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
   'P0001', null,
   '§4.3⑥:開啟自訂工時但沒有填總服務時長,被擋下'
 );
@@ -199,7 +204,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 15:00:00+08',
     'C6客戶b', '0931000008',
     p_custom_duration_enabled => true, p_custom_duration_minutes => -5
-  )$$,
+  , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
   'P0001', null,
   '§4.3⑥:開啟自訂工時但填了 <=0 的總服務時長,被擋下'
 );
@@ -215,7 +220,7 @@ select throws_ok(
       'C7客戶', '0931000009',
       p_assistant_staff_ids => array['%s']::uuid[],
       p_custom_duration_enabled => true, p_custom_duration_minutes => 60
-    )$$,
+    , p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f')$$,
     'c6000000-0000-4000-8000-000000000043'
   ),
   'P0001', null,
@@ -230,7 +235,7 @@ select id from create_booking(
   jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   'C8客戶', '0931000010',
   p_custom_duration_enabled => true, p_custom_duration_minutes => 90
-) \gset c8_
+, p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f') \gset c8_
 
 select is(
   (select end_at from bookings where id = :'c8_id'::uuid),
@@ -238,11 +243,13 @@ select is(
   '§4.3⑧前置:自訂工時 90 分鐘建立成功,end_at 正確是 11:30'
 );
 
+-- SPECS-INDEX #604:維持原付款方式不變(c8_ 建立時已帶 payment_method_id)。
 select update_booking(
   :'c8_id'::uuid, 'c6000000-0000-4000-8000-000000000044',
   jsonb_build_array(jsonb_build_object('service_item_id','c6000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   'C8客戶', '0931000010',
-  p_custom_duration_enabled => false, p_custom_duration_minutes => null
+  p_custom_duration_enabled => false, p_custom_duration_minutes => null,
+  p_payment_method_id => '8f20edea-4d28-5157-93f3-dc5e1103328f'
 );
 
 select is(

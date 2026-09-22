@@ -45,6 +45,22 @@ export function getPaymentMethodLabel(nameSnapshot: string | null | undefined): 
   return nameSnapshot;
 }
 
+/** SPECS-INDEX #598(訂單管理.md §9.2):建單表單服務項目分類篩選下拉選單的值——'all' 顯示全部
+ * (預設,等同目前既有行為)、'uncategorized' 只顯示 category_id 為 null 的項目(§4.1 邊界情況既有
+ * 的「未分類」虛擬分類),其餘值是實際的 service_categories.id。從 CalendarPage.tsx 抽出成純函式,
+ * 方便 Vitest 測試,不用 import supabase client。篩選只影響「顯示哪些選項讓你勾」,不影響「已經
+ * 勾了哪些」(已勾選項目切換篩選後不會被清除,呼叫端維持獨立的勾選狀態,不受這支函式回傳結果限制)。 */
+export type ServiceItemCategoryFilter = "all" | "uncategorized" | (string & {});
+
+export function filterServiceItemsByCategory<T extends { category_id: string | null }>(
+  items: T[],
+  filter: ServiceItemCategoryFilter,
+): T[] {
+  if (filter === "all") return items;
+  if (filter === "uncategorized") return items.filter((item) => item.category_id === null);
+  return items.filter((item) => item.category_id === filter);
+}
+
 /** 建單表單下拉選單顯示用的最小欄位集合(§5.2)。 */
 export interface PaymentMethodOption {
   id: string;

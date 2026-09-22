@@ -54,6 +54,12 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
   ('ba000000-0000-4000-8000-000000000041', 'ba000000-0000-4000-8000-000000000021', '到店設計師', '0901000102', true);
 
 select pg_temp.test_set_auth('ba000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('6472c5f8-c331-5029-bea3-63864679cb14', 'ba000000-0000-4000-8000-000000000020', '現場付款');
+insert into payment_methods (id, merchant_id, name) values ('f93e6a38-2e60-53f0-8e13-0d8cba51d213', 'ba000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- ① 到府派工商家:不填地址(p_customer_address 完全不傳,用預設值 null),建單應被擋下。
 select throws_ok(
@@ -61,7 +67,7 @@ select throws_ok(
     'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶一', '0911100001'
-  )$$,
+  , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14')$$,
   'P0001', NULL,
   '規格書第二節:到府派工商家建單不填地址,被擋下'
 );
@@ -73,7 +79,7 @@ select throws_ok(
       'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '   '
-    )$$
+    , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14')$$
   ),
   'P0001', NULL,
   '規格書第二節:到府派工商家建單地址只有空白字元,一樣視為沒填,被擋下'
@@ -84,7 +90,7 @@ select id from create_booking(
   'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '  台北市中正區忠孝東路一段1號  '
-) \gset dispatch_
+, p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14') \gset dispatch_
 
 select is(
   (select customer_address from bookings where id = :'dispatch_id'::uuid),
@@ -98,7 +104,7 @@ select lives_ok(
     'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
     jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶二', '0911100002'
-  )$$,
+  , p_payment_method_id => 'f93e6a38-2e60-53f0-8e13-0d8cba51d213')$$,
   '規格書第二節:到店服務商家建單不填地址,不受影響,建立成功'
 );
 
@@ -107,7 +113,7 @@ select id from create_booking(
   'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
   '客戶三', '0911100003'
-) \gset beauty_
+, p_payment_method_id => 'f93e6a38-2e60-53f0-8e13-0d8cba51d213') \gset beauty_
 
 select is(
   (select customer_address from bookings where id = :'beauty_id'::uuid),
@@ -130,13 +136,14 @@ select throws_ok(
 );
 
 -- ⑦ 編輯(update_booking):到府派工商家,改成有效地址,應該成功並正確更新。
+-- SPECS-INDEX #604:維持原付款方式不變(dispatch_ 建立時已帶 payment_method_id)。
 select lives_ok(
   format(
     $$select update_booking(
       '%s', 'ba000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
       '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '台北市大安區'
-    )$$,
+    , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14')$$,
     :'dispatch_id'::text
   ),
   '規格書第二節:到府派工商家編輯時改成有效地址,更新成功'

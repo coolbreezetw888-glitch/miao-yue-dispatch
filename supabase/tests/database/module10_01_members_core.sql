@@ -5,7 +5,12 @@
 -- 一之二節「既有 RLS 政策定義完全沒有變動」的回歸驗證。
 begin;
 
-select plan(48);
+-- ⚠️ SPECS-INDEX #615/#618 疊加(2026-09-22):phone_required_to_create/
+-- require_verified_phone_for_rewards 兩個開關已被移除(#618),電話從此不再是 create_member/
+-- update_member 的必填欄位,相關斷言已就地改寫,不是新增獨立測試檔——理由跟改法見本檔案下方
+-- 對應區塊的行內註解。plan 數量因此從 48 調整為 47(拿掉一筆對「電話必填開關關閉」的重複驗證,
+-- 因為那個開關已經不存在)。
+select plan(47);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -95,10 +100,10 @@ select is(
 );
 
 select is(
-  (select row(phone_required_to_create, require_verified_phone_for_rewards, points_earn_rate, referral_bonus_points, birthday_bonus_points)
+  (select row(points_earn_rate, referral_bonus_points, birthday_bonus_points, reward_condition_mode, policy_enabled, policy_content)
    from merchant_member_settings where merchant_id = 'ea000000-0000-4000-8000-000000000021')::text,
-  row(true, false, 0.00, 0, 0)::text,
-  '1.1:查無資料時前端/後端一律套用的預設值正確(第〇節判斷 3:全部預設 0/false)'
+  row(0.00, 0, 0, 'none', false, null)::text,
+  '1.1:查無資料時前端/後端一律套用的預設值正確(第〇節判斷 3:點數相關全部預設 0;#618/#619 新欄位:reward_condition_mode 預設 none、policy_enabled 預設 false、policy_content 預設 null)'
 );
 
 -- =========================================================================
@@ -141,15 +146,15 @@ select ok(private.can_manage_member_settings('ea000000-0000-4000-8000-0000000000
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ④ §3.3:create_member(電話必填政策、推薦人驗證、權限邊界、referral_code 唯一)。
+-- ④ §3.3:create_member(電話已非必填、推薦人驗證、權限邊界、referral_code 唯一)。
 -- =========================================================================
--- 電話必填(預設 phone_required_to_create=true)。
+-- #618(SPECS-INDEX):phone_required_to_create 開關已移除,電話這次只當查詢索引(#614/§10.2),
+-- 不再是必填欄位——不管商家有沒有做過任何設定,建立會員都不要求電話。
 select pg_temp.test_set_auth('ea000000-0000-4000-8000-000000000001');
 
-select throws_ok(
+select lives_ok(
   $$select create_member('ea000000-0000-4000-8000-000000000021', '無電話會員')$$,
-  'P0001', null,
-  '3.3:phone_required_to_create=true 時,不填電話被擋下'
+  '#618:電話已不是必填欄位(phone_required_to_create 開關已移除),不填電話一樣可以成功建立會員'
 );
 
 select id from create_member('ea000000-0000-4000-8000-000000000021', '會員甲', '0911000001') \gset member_a1_
@@ -173,18 +178,6 @@ select isnt(
   (select referral_code from members where id = :'member_a2_id'::uuid),
   '3.3:兩位會員的 referral_code 不同(唯一性)'
 );
-
--- 關閉電話必填政策後可以不填電話。
-update merchant_member_settings set phone_required_to_create = false
-where merchant_id = 'ea000000-0000-4000-8000-000000000021';
-
-select lives_ok(
-  $$select create_member('ea000000-0000-4000-8000-000000000021', '無電話會員2')$$,
-  '3.3:phone_required_to_create=false 時,不填電話可以成功'
-);
-
-update merchant_member_settings set phone_required_to_create = true
-where merchant_id = 'ea000000-0000-4000-8000-000000000021';
 
 -- 推薦人驗證:不存在。
 select throws_ok(
@@ -257,11 +250,14 @@ select is(
   '3.4:update_member 正確更新姓名/電話/備註'
 );
 
-select throws_ok(
+select lives_ok(
   format($$select update_member('%s', '缺電話', null, null, null, null)$$, (:'member_a2_id')),
-  'P0001', null,
-  '3.4:phone_required_to_create=true 時,更新成空電話被擋下'
+  '#618:電話已不是必填欄位,update_member 更新成空電話一樣可以成功'
 );
+
+-- 上面那筆呼叫把姓名改成了「缺電話」,順手改回來,避免影響下面依賴 member_a2 姓名的斷言
+-- (目前沒有其他斷言依賴這個姓名,這裡只是保守起見)。
+select update_member(:'member_a2_id'::uuid, '會員乙(改名)', '0911999999', null, null, '備註');
 
 -- update_member 沒有 referred_by 參數,直接呼叫既有簽章(6 個參數)驗證函式簽章沒有多出來的參數。
 select is(

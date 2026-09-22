@@ -62,6 +62,10 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, co
 insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
 values ('ec000000-0000-4000-8000-000000000021', 100, 0, 88);
 
+-- SPECS-INDEX #604(本次同批次疊加):create_booking 新建訂單付款方式改為必填。
+insert into payment_methods (id, merchant_id, name) values
+  ('ec000000-0000-4000-8000-000000000061', 'ec000000-0000-4000-8000-000000000021', '現場付款');
+
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
 select id from create_member('ec000000-0000-4000-8000-000000000021', '點數測試會員', '0988000001') \gset member_
 select pg_temp.test_clear_auth();
@@ -247,6 +251,7 @@ select id from create_booking(
   p_start_at => '2026-12-10 10:00:00+08',
   p_customer_name => '讀取函式測試客戶',
   p_customer_phone => '0955040001',
+  p_payment_method_id => 'ec000000-0000-4000-8000-000000000061',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000,
   p_member_id => :'birthday_member_id'::uuid

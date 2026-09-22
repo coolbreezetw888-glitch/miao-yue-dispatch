@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -33,10 +40,12 @@ import {
   fetchMerchantMembersList,
   grantPendingBirthdayBonuses,
   reactivateMember,
-  useMerchantMemberSettings,
+  useMerchantMemberTiers,
 } from "./api";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { MEMBER_STATUS_LABELS, type MemberStatus, type MemberSummary } from "./types";
+
+const UNASSIGNED_TIER_VALUE = "__unassigned__";
 
 const membersListQueryKey = (merchantId: string, search: string) =>
   ["members-module", "members-list", merchantId, search] as const;
@@ -112,13 +121,14 @@ function ReferrerPicker({
 
 function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const { data: settings } = useMerchantMemberSettings(merchantId);
+  const { data: tiers } = useMerchantMemberTiers(merchantId, true);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [birthday, setBirthday] = useState("");
   const [notes, setNotes] = useState("");
   const [referrer, setReferrer] = useState<{ id: string; name: string } | null>(null);
+  const [tierId, setTierId] = useState(UNASSIGNED_TIER_VALUE);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -129,19 +139,14 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
       setBirthday("");
       setNotes("");
       setReferrer(null);
+      setTierId(UNASSIGNED_TIER_VALUE);
     }
   }, [open]);
-
-  const phoneRequired = settings?.phone_required_to_create ?? true;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
       toast.error("請填寫會員姓名");
-      return;
-    }
-    if (phoneRequired && !phone.trim()) {
-      toast.error("這個商家要求建立會員時必須填寫電話");
       return;
     }
     setSaving(true);
@@ -154,6 +159,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
         birthday: birthday.trim() ? birthday.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
         referredByMemberId: referrer?.id ?? null,
+        tierId: tierId === UNASSIGNED_TIER_VALUE ? null : tierId,
       });
       toast.success("已建立會員");
       setOpen(false);
@@ -180,8 +186,10 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
             <Label htmlFor="member-name">姓名 *</Label>
             <Input id="member-name" className="mt-2" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          {/* #614(SPECS-INDEX):電話這次只當查詢索引,不是必填的唯一鍵,不再依 merchant_member_
+              settings 的任何開關判斷是否必填(該開關已於 #618 移除)。 */}
           <div>
-            <Label htmlFor="member-phone">電話{phoneRequired ? " *" : ""}</Label>
+            <Label htmlFor="member-phone">電話</Label>
             <Input id="member-phone" className="mt-2" value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
           <div>
@@ -203,6 +211,23 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
             />
+          </div>
+          {/* #615(SPECS-INDEX):會員等級,選填。 */}
+          <div>
+            <Label>會員等級(選填)</Label>
+            <Select value={tierId} onValueChange={setTierId}>
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED_TIER_VALUE}>未分級</SelectItem>
+                {(tiers ?? []).map((tier) => (
+                  <SelectItem key={tier.id} value={tier.id}>
+                    {tier.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>推薦人(選填)</Label>
@@ -232,12 +257,16 @@ function MembersListInner() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<MemberStatus | "all">("active");
+  // #615(SPECS-INDEX):會員等級篩選,"all" 顯示全部。
+  const [tierFilter, setTierFilter] = useState<string>("all");
   const [birthdayNotice, setBirthdayNotice] = useState<number | null>(null);
 
   const { data: members, isLoading } = useQuery({
     queryKey: membersListQueryKey(merchantId, search),
     queryFn: () => fetchMerchantMembersList(merchantId, search),
   });
+  const { data: tiers } = useMerchantMemberTiers(merchantId, false);
+  const tierNameById = new Map((tiers ?? []).map((t) => [t.id, t.name]));
 
   // 規則 2.5:頁面載入時被動檢查並核發生日獎勵,不是背景排程。
   useEffect(() => {
@@ -278,9 +307,12 @@ function MembersListInner() {
     }
   }
 
-  const visibleMembers: MemberSummary[] = (members ?? []).filter(
-    (m) => statusFilter === "all" || m.status === statusFilter,
-  );
+  const visibleMembers: MemberSummary[] = (members ?? []).filter((m) => {
+    if (statusFilter !== "all" && m.status !== statusFilter) return false;
+    if (tierFilter === "all") return true;
+    if (tierFilter === UNASSIGNED_TIER_VALUE) return m.tierId === null;
+    return m.tierId === tierFilter;
+  });
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
@@ -323,6 +355,21 @@ function MembersListInner() {
             </Button>
           ))}
         </div>
+        {/* #615(SPECS-INDEX):會員等級篩選。 */}
+        <Select value={tierFilter} onValueChange={setTierFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部等級</SelectItem>
+            <SelectItem value={UNASSIGNED_TIER_VALUE}>未分級</SelectItem>
+            {(tiers ?? []).map((tier) => (
+              <SelectItem key={tier.id} value={tier.id}>
+                {tier.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -351,6 +398,10 @@ function MembersListInner() {
                       {member.phone ? <span>{member.phone}</span> : null}
                       <span>推薦碼 {member.referralCode}</span>
                       <Badge variant="outline">{member.pointsBalance} 點</Badge>
+                      {member.tierId && tierNameById.has(member.tierId) ? (
+                        <Badge variant="outline">{tierNameById.get(member.tierId)}</Badge>
+                      ) : null}
+                      {member.isBlacklisted ? <Badge variant="destructive">黑名單</Badge> : null}
                       <Badge variant={member.status === "active" ? "default" : "secondary"}>
                         {MEMBER_STATUS_LABELS[member.status]}
                       </Badge>

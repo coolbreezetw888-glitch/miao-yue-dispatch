@@ -69,6 +69,12 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
 insert into merchant_feature_flags (merchant_id, feature_key, enabled)
 values ('b4000000-0000-4000-8000-000000000020', 'strict_conflict_check', true);
 
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking 呼叫補上
+-- p_payment_method_id。用 postgres 超級使用者身分布置(還沒 test_set_auth 任何角色),避免用
+-- 「無授權客服」等身分插入付款方式時被 RLS 擋下。
+insert into payment_methods (id, merchant_id, name) values ('d6cb28ba-77fd-510c-b712-09069dd2a038', 'b4000000-0000-4000-8000-000000000020', '現場付款');
+
 -- ① 無授權客服:不能寫入 merchant_business_hours(business_hours 權限)。
 -- RLS 的 UPDATE 政策不符合條件時是「靜默 0 筆」,不是拋例外,所以用「更新後仍是原值」驗證,
 -- 不用 throws_ok(避免對 RLS 行為的斷言方式產生誤判)。
@@ -94,12 +100,13 @@ select pg_temp.test_clear_auth();
 -- ② 無授權客服:不能呼叫 create_booking(orders 權限)。
 select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000002');
 
+
 select throws_ok(
   $$select create_booking(
     'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶', '0966000001'
-  )$$,
+  , p_payment_method_id => 'd6cb28ba-77fd-510c-b712-09069dd2a038')$$,
   '42501', null,
   '規則 2.12:無授權客服不能呼叫 create_booking'
 );
@@ -198,7 +205,7 @@ select throws_ok(
     'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶', '0966000002'
-  )$$,
+  , p_payment_method_id => 'd6cb28ba-77fd-510c-b712-09069dd2a038')$$,
   '42501', null,
   '規則 2.12:被授權 business_hours 但沒被授權 orders 的客服,不能呼叫 create_booking'
 );
@@ -212,7 +219,7 @@ select id, status from create_booking(
   'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','b4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶', '0966000003'
-) \gset orders_agent_
+, p_payment_method_id => 'd6cb28ba-77fd-510c-b712-09069dd2a038') \gset orders_agent_
 
 select is(:'orders_agent_status'::text, 'pending_confirmation'::text, '規則 2.12:被授權 orders 的客服可以成功呼叫 create_booking(建立後狀態是 pending_confirmation,決策記錄 5)');
 

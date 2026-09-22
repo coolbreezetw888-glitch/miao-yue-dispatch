@@ -12,13 +12,17 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Member,
+  MemberPhoneMatchCandidate,
   MemberPointHistoryEntry,
   MemberPointTransactionType,
   MemberReferral,
   MemberRelatedBooking,
   MemberStatus,
   MemberSummary,
+  MemberTierStatus,
   MerchantMemberSettings,
+  MerchantMemberTier,
+  RewardConditionMode,
 } from "./types";
 import { DEFAULT_MERCHANT_MEMBER_SETTINGS } from "./types";
 
@@ -51,14 +55,18 @@ export function useMerchantMemberSettings(
   });
 }
 
+/** #618/#619(SPECS-INDEX)疊加:phoneRequiredToCreate/requireVerifiedPhoneForRewards 兩個欄位
+ * 已移除,新增 rewardConditionMode(五選一,取代原本單一開關)、policyEnabled/policyContent
+ * (「基本政策」改名「會員政策」)。 */
 export interface UpsertMerchantMemberSettingsInput {
-  phoneRequiredToCreate: boolean;
-  requireVerifiedPhoneForRewards: boolean;
   pointsEarnRate: number;
   referralBonusPoints: number;
   birthdayBonusPoints: number;
   /** #617(.project/specs/會員與紅利.md §10.5):商家是否啟用紅利點數功能。 */
   pointsFeatureEnabled: boolean;
+  rewardConditionMode: RewardConditionMode;
+  policyEnabled: boolean;
+  policyContent: string | null;
 }
 
 export async function upsertMerchantMemberSettings(
@@ -68,12 +76,13 @@ export async function upsertMerchantMemberSettings(
   const { error } = await supabase.from("merchant_member_settings").upsert(
     {
       merchant_id: merchantId,
-      phone_required_to_create: input.phoneRequiredToCreate,
-      require_verified_phone_for_rewards: input.requireVerifiedPhoneForRewards,
       points_earn_rate: input.pointsEarnRate,
       referral_bonus_points: input.referralBonusPoints,
       birthday_bonus_points: input.birthdayBonusPoints,
       points_feature_enabled: input.pointsFeatureEnabled,
+      reward_condition_mode: input.rewardConditionMode,
+      policy_enabled: input.policyEnabled,
+      policy_content: input.policyContent,
     },
     { onConflict: "merchant_id" },
   );
@@ -91,6 +100,8 @@ export interface CreateMemberInput {
   birthday?: string | null; // ISO date (yyyy-mm-dd)
   notes?: string | null;
   referredByMemberId?: string | null;
+  /** #615(SPECS-INDEX):選填,指派會員等級,須屬於同商家且未下架。 */
+  tierId?: string | null;
 }
 
 export async function createMember(input: CreateMemberInput): Promise<Member> {
@@ -102,12 +113,14 @@ export async function createMember(input: CreateMemberInput): Promise<Member> {
     ...(input.birthday ? { p_birthday: input.birthday } : {}),
     ...(input.notes ? { p_notes: input.notes } : {}),
     ...(input.referredByMemberId ? { p_referred_by_member_id: input.referredByMemberId } : {}),
+    ...(input.tierId ? { p_tier_id: input.tierId } : {}),
   });
   if (error) throw error;
   return data as Member;
 }
 
-/** §5.1 對外介面:4.4 MemberPickerField「找不到?建立新會員」快速建立入口專用的精簡版本。 */
+/** §5.1 對外介面:§10.2.2(SPECS-INDEX #614)建單頁「+ 這支電話的新客戶」快速建立入口專用的
+ * 精簡版本(取代已移除的 §4.4 MemberPickerField 快速建立)。 */
 export async function createMemberQuick(
   merchantId: string,
   name: string,
@@ -123,6 +136,8 @@ export interface UpdateMemberInput {
   email?: string | null;
   birthday?: string | null;
   notes?: string | null;
+  /** #615(SPECS-INDEX):選填,重新指派會員等級,傳 null 清空成未分級。 */
+  tierId?: string | null;
 }
 
 export async function updateMember(memberId: string, input: UpdateMemberInput): Promise<Member> {
@@ -138,6 +153,8 @@ export async function updateMember(memberId: string, input: UpdateMemberInput): 
     p_email: (input.email ?? null) as string,
     p_birthday: (input.birthday ?? null) as string,
     p_notes: (input.notes ?? null) as string,
+    // 同上,p_tier_id 一樣接受 null(清空成未分級),型別產生工具的已知落差,見上方註解。
+    p_tier_id: (input.tierId ?? null) as string,
   });
   if (error) throw error;
   return data as Member;
@@ -165,9 +182,154 @@ export async function setMemberPhoneVerified(memberId: string, verified: boolean
   return data as Member;
 }
 
-/** §5.1 對外介面:唯讀搜尋清單,供 4.1 會員管理列表頁 + 4.4 MemberPickerField 使用,也保留給
- * 之後任何需要「選擇/建立會員」入口的模組直接複用。search 為空字串時回傳全部(依狀態篩選由
- * 呼叫端自行處理)。 */
+// =========================================================================
+// §10.4(SPECS-INDEX #616):會員黑名單。純警告用途,不擋建單。
+// =========================================================================
+export async function setMemberBlacklistStatus(
+  memberId: string,
+  isBlacklisted: boolean,
+  reason?: string | null,
+): Promise<Member> {
+  const { data, error } = await supabase.rpc("set_member_blacklist_status", {
+    p_member_id: memberId,
+    p_is_blacklisted: isBlacklisted,
+    ...(reason ? { p_reason: reason } : {}),
+  });
+  if (error) throw error;
+  return data as Member;
+}
+
+// =========================================================================
+// §10.2.1(SPECS-INDEX #614):get_members_by_phone。建單頁輸入客戶電話時,列出這支電話底下
+// 這個商家所有既有客戶(電話當查詢索引,不當唯一鍵)。權限只要求 orders(can_manage_bookings),
+// 不需要 members 權限,呼應規則 2.10 既有精神。
+// =========================================================================
+interface RawMemberPhoneMatchCandidate {
+  member_id: string;
+  name: string;
+  phone: string | null;
+  last_booking_date: string | null;
+  is_blacklisted: boolean;
+  blacklist_reason: string | null;
+}
+
+export async function fetchMembersByPhone(
+  merchantId: string,
+  phone: string,
+): Promise<MemberPhoneMatchCandidate[]> {
+  const { data, error } = await supabase.rpc("get_members_by_phone", {
+    p_merchant_id: merchantId,
+    p_phone: phone,
+  });
+  if (error) throw error;
+  return ((data ?? []) as unknown as RawMemberPhoneMatchCandidate[]).map((row) => ({
+    memberId: row.member_id,
+    name: row.name,
+    phone: row.phone,
+    lastBookingDate: row.last_booking_date,
+    isBlacklisted: row.is_blacklisted,
+    blacklistReason: row.blacklist_reason,
+  }));
+}
+
+export function useMembersByPhone(
+  merchantId: string | null | undefined,
+  phone: string,
+): UseQueryResult<MemberPhoneMatchCandidate[]> {
+  return useQuery({
+    queryKey: ["members-module", "phone-match", merchantId, phone],
+    queryFn: () => fetchMembersByPhone(merchantId as string, phone),
+    enabled: Boolean(merchantId) && phone.trim().length > 0,
+  });
+}
+
+// =========================================================================
+// §10.3(SPECS-INDEX #615):merchant_member_tiers 讀寫。比照 payment_methods 的既有做法,不包
+// RPC,直接開放 RLS(SELECT 同時放行 can_manage_members/can_manage_member_settings,
+// INSERT/UPDATE 只允許 can_manage_member_settings)。
+// =========================================================================
+export async function fetchMerchantMemberTiers(
+  merchantId: string,
+  activeOnly = false,
+): Promise<MerchantMemberTier[]> {
+  let query = supabase
+    .from("merchant_member_tiers")
+    .select("*")
+    .eq("merchant_id", merchantId)
+    .order("sort_order", { ascending: true });
+  if (activeOnly) {
+    query = query.eq("status", "active");
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as MerchantMemberTier[];
+}
+
+export function useMerchantMemberTiers(
+  merchantId: string | null | undefined,
+  activeOnly = false,
+): UseQueryResult<MerchantMemberTier[]> {
+  return useQuery({
+    queryKey: ["members-module", "member-tiers", merchantId, activeOnly],
+    queryFn: () => fetchMerchantMemberTiers(merchantId as string, activeOnly),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export interface UpsertMemberTierInput {
+  name: string;
+  sortOrder?: number;
+}
+
+export async function addMemberTier(
+  merchantId: string,
+  input: UpsertMemberTierInput,
+): Promise<MerchantMemberTier> {
+  const { data, error } = await supabase
+    .from("merchant_member_tiers")
+    .insert({
+      merchant_id: merchantId,
+      name: input.name.trim(),
+      sort_order: input.sortOrder ?? 0,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as MerchantMemberTier;
+}
+
+export async function updateMemberTier(
+  tierId: string,
+  input: Partial<UpsertMemberTierInput>,
+): Promise<void> {
+  const { error } = await supabase
+    .from("merchant_member_tiers")
+    .update({
+      ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+      ...(input.sortOrder !== undefined ? { sort_order: input.sortOrder } : {}),
+    })
+    .eq("id", tierId);
+  if (error) throw error;
+}
+
+async function setMemberTierStatus(tierId: string, status: MemberTierStatus): Promise<void> {
+  const { error } = await supabase.from("merchant_member_tiers").update({ status }).eq("id", tierId);
+  if (error) throw error;
+}
+
+/** 軟刪除(下架),不算危險操作,比照 payment_methods/material_cost_items 既有慣例。下架不會連帶
+ * 清空既有會員的 tier_id(#615 §10.3 規則)。 */
+export async function removeMemberTier(tierId: string): Promise<void> {
+  return setMemberTierStatus(tierId, "removed");
+}
+
+export async function reactivateMemberTier(tierId: string): Promise<void> {
+  return setMemberTierStatus(tierId, "active");
+}
+
+/** §5.1 對外介面:唯讀搜尋清單,供 4.1 會員管理列表頁 + 4.1 NewMemberDialog 的推薦人搜尋使用,
+ * 也保留給之後任何需要「選擇/建立會員」入口的模組直接複用。search 為空字串時回傳全部(依狀態
+ * 篩選由呼叫端自行處理)。 */
 const POSTGREST_PAGE_SIZE = 1000;
 
 export async function fetchMerchantMembersList(
@@ -181,7 +343,7 @@ export async function fetchMerchantMembersList(
   function buildQuery() {
     let query = supabase
       .from("members")
-      .select("id, name, phone, referral_code, points_balance, status")
+      .select("id, name, phone, referral_code, points_balance, status, tier_id, is_blacklisted")
       .eq("merchant_id", merchantId)
       .order("created_at", { ascending: false });
 
@@ -199,6 +361,8 @@ export async function fetchMerchantMembersList(
     referral_code: string;
     points_balance: number;
     status: string;
+    tier_id: string | null;
+    is_blacklisted: boolean;
   }[];
   if (unpaged) {
     const pages: typeof data = [];
@@ -227,6 +391,8 @@ export async function fetchMerchantMembersList(
     referralCode: row.referral_code,
     pointsBalance: row.points_balance,
     status: row.status as MemberStatus,
+    tierId: row.tier_id,
+    isBlacklisted: row.is_blacklisted,
   }));
 }
 
