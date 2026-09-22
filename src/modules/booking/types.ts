@@ -124,12 +124,110 @@ export function bookingBlockClasses(status: BookingStatus): string {
 
 /** 建單與訂單管理介面優化 §7.5:訂單卡片左側色條專用的邊框顏色 token,跟上面
  * bookingBlockClasses 沿用同一套狀態配色邏輯,只是套用在 border-l(色條)而不是整塊背景色。
- * cancelled 這次額外選用既有的灰階 token(muted-foreground),不新增自訂顏色。 */
+ * cancelled 這次額外選用既有的灰階 token(muted-foreground),不新增自訂顏色。
+ *
+ * ⚠️ 這兩支「Tailwind class」版本(bookingBlockClasses/bookingCardAccentBorderClass)保留給
+ * 目前唯一還在用它們的呼叫端:src/modules/staff-portal/MyCalendarTimelineView.tsx(服務人員自助
+ * 行事曆,模組 14)。建單與訂單管理介面優化 §10.5(SPECS-INDEX #621)明確只要求 CalendarPage.tsx/
+ * OrdersPage.tsx 這兩處改成讀 merchant_booking_status_colors 動態顏色表,MyCalendarTimelineView.tsx
+ * 不在這次規格範圍內,所以刻意不刪除/不改動這兩支既有函式,下面另外新增一組
+ * bookingBlockStyle/bookingCardAccentBorderStyle 給 CalendarPage.tsx/OrdersPage.tsx 改用
+ * (詳見下方「§10.5 動態顏色」區塊的說明)。 */
 export function bookingCardAccentBorderClass(status: BookingStatus): string {
   if (status === "completed") return "border-l-cta";
   if (status === "pending_confirmation") return "border-l-warn";
   if (status === "cancelled") return "border-l-muted-foreground/40";
   return "border-l-brand"; // accepted(已確認)
+}
+
+// ---------------------------------------------------------------------------
+// 建單與訂單管理介面優化 §10.5(SPECS-INDEX #621):CalendarPage.tsx(色塊)/OrdersPage.tsx
+// (色條)改讀 merchant_booking_status_colors 動態顏色表,取代上面兩支寫死 Tailwind class 的
+// 函式。Tailwind class 在建置時就已經固定,無法動態接受任意色碼,所以這裡改用 inline style。
+//
+// 設計決定(規格書把「視覺呈現方式」的具體做法留給 engineer 判斷,§10.5 只要求「兩處都讀同一張
+// 顏色設定表」+「用 inline style 套用」+「不強制對比度自動計算」+「灰階邊框跟動態色條各自獨立
+// 設定,不互相覆蓋」):
+//   - 訂單管理頁色條(bookingCardAccentBorderStyle):直接把設定表裡的色碼當
+//     `borderLeftColor` 使用,不做任何透明度轉換——改版前色條本來就是純色(border-l-{token}),
+//     商家沒自訂過顏色時套用量測後的真實色碼,肉眼跟改版前完全一致(§10.5 回歸測試要求)。
+//   - 行事曆色塊(bookingBlockStyle):改版前是「淺色背景+同色系文字」的柔和配色(例如
+//     bg-cta-soft text-cta),不是純色實心背景。單一色碼無法同時重現「背景」跟「文字」兩種
+//     語意不同的顏色,這裡統一規則:背景 = 設定色碼疊加 16% 透明度(近似原本柔和背景的視覺
+//     效果)、文字/邊框 = 設定色碼本身(飽和度足夠,在淺色背景上維持可讀)。四種狀態(含商家
+//     自訂的任意顏色)套用同一條規則,不再需要像改版前那樣每種狀態各自手動挑一組「背景 token +
+//     文字 token」的搭配。
+// ---------------------------------------------------------------------------
+
+/** 建單與訂單管理介面優化 §10.1/§10.5:商家目前設定的 4 種訂單狀態代表色。
+ * 查無資料(還沒特別設定過)時,呼叫端(useMerchantBookingStatusColors,見 context.tsx)一律
+ * fallback 成 DEFAULT_BOOKING_STATUS_COLORS,不回傳 undefined 欄位。 */
+export interface BookingStatusColorMap {
+  pendingConfirmation: string;
+  accepted: string;
+  completed: string;
+  cancelled: string;
+}
+
+/** §10.1:查無資料時的預設值,跟資料庫 migration(20260922160200_req620_...)的 DEFAULT 值
+ * 逐字一致——都是實際量測 src/styles.css 的 warn/brand/cta/muted-foreground 四個 design token
+ * 換算出來的真實色碼,不是估算值。前端/後端各自維護一份常數字面值是刻意的(呼應第五節「對外
+ * 介面」模組獨立性原則:前端不應該為了取得一組預設色碼而多發一支 RPC 查詢),兩邊的值必須保持
+ * 一致,之後如果要調整預設色碼,兩邊都要一起改(pgTAP/Vitest 測試都各自驗證了各自檔案裡的值,
+ * 沒有一支測試同時比對兩邊,這是已知的維護風險,已在回報中提出)。 */
+export const DEFAULT_BOOKING_STATUS_COLORS: BookingStatusColorMap = {
+  pendingConfirmation: "#ebaa2d",
+  accepted: "#1c6fd2",
+  completed: "#1ea25d",
+  cancelled: "#606d7f",
+};
+
+/** 依狀態值從顏色表挑出對應色碼。pending_reply/dispatching 這兩種狀態這次的顏色表沒有涵蓋
+ * (跟 bookingBlockClasses 舊版一致的既有 fallback 行為),沿用 accepted 的顏色。 */
+export function getBookingStatusColor(
+  colors: BookingStatusColorMap,
+  status: BookingStatus,
+): string {
+  if (status === "completed") return colors.completed;
+  if (status === "pending_confirmation") return colors.pendingConfirmation;
+  if (status === "cancelled") return colors.cancelled;
+  return colors.accepted;
+}
+
+/** 把 6 碼 hex 色碼轉成指定透明度的 rgba() 字串,供行事曆色塊的柔和背景使用。
+ * 商家這次允許輸入任意合法 CSS color 字串(§10.1 不做嚴格 hex CHECK 約束),不是合法 6 碼 hex
+ * 時(例如輸入 `rgb(...)`/CSS 顏色名稱)無法安全計算透明度,直接原樣回傳當背景色使用——
+ * 退化成實心背景,不會噴錯,只是視覺上少了柔和透明的效果(邊界情況,不阻擋操作)。 */
+export function hexToRgba(hex: string, alpha: number): string {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (!match) return hex;
+  const r = parseInt(match[1]!, 16);
+  const g = parseInt(match[2]!, 16);
+  const b = parseInt(match[3]!, 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** 建單與訂單管理介面優化 §10.5:CalendarPage.tsx 排程色塊改用的 inline style。 */
+export function bookingBlockStyle(
+  colors: BookingStatusColorMap,
+  status: BookingStatus,
+): { backgroundColor: string; color: string; borderColor: string } {
+  const color = getBookingStatusColor(colors, status);
+  return {
+    backgroundColor: hexToRgba(color, 0.16),
+    color,
+    borderColor: hexToRgba(color, 0.5),
+  };
+}
+
+/** 建單與訂單管理介面優化 §10.5:OrdersPage.tsx 訂單卡片左側色條改用的 inline style。
+ * 只設定 borderLeftColor 這一個屬性,跟灰階的上/右邊框(className 裡的 border-y border-r
+ * border-border)各自獨立設定,不會互相覆蓋(§10.5 第 3 點)。 */
+export function bookingCardAccentBorderStyle(
+  colors: BookingStatusColorMap,
+  status: BookingStatus,
+): { borderLeftColor: string } {
+  return { borderLeftColor: getBookingStatusColor(colors, status) };
 }
 
 /** 0=星期日...6=星期六,對應 merchant_business_hours.day_of_week /
@@ -229,6 +327,18 @@ export interface BookingDetailServiceItem extends DayScheduleServiceItemRef {
   unitPriceSnapshot: number;
   /** 方便顯示用的小計 = unitPriceSnapshot × quantity,不是另外存的欄位。 */
   lineTotal: number;
+}
+
+/** 模組 6 §9.1(SPECS-INDEX #597):操作記錄清單裡的一筆紀錄,由 getBookingStatusChangeLogs
+ * 回傳。fromStatus 為 null 代表「建立」這個動作本身。status 型別刻意沿用 BookingStatus | null
+ * (不是任意 string),因為後端 CHECK 約束/寫入路徑只會產生這個狀態機裡的合法值。 */
+export interface BookingStatusChangeLog {
+  id: string;
+  fromStatus: BookingStatus | null;
+  toStatus: BookingStatus;
+  actorNameSnapshot: string;
+  actorRoleSnapshot: "merchant_admin" | "agent" | "staff" | "system";
+  createdAt: string;
 }
 
 /** 模組 6 §3.3/§6.3:相關訂單清單裡的一筆訂單摘要,由 getCustomerRelatedBookings 回傳。 */

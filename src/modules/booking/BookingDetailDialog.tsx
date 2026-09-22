@@ -47,6 +47,7 @@ import {
   getBooking,
   getCustomerRelatedBookings,
 } from "./api";
+import { useBookingStatusChangeLogs } from "./context";
 import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import {
@@ -54,6 +55,7 @@ import {
   BOOKING_STATUS_LABELS,
   getPaymentMethodLabel,
   type BookingStatus,
+  type BookingStatusChangeLog,
   type CustomerRelatedBooking,
 } from "./types";
 
@@ -122,6 +124,58 @@ function RelatedBookingsView({
   );
 }
 
+// ---------------------------------------------------------------------------
+// 模組 6 §9.1(SPECS-INDEX #597):操作記錄清單畫面,套用在同一顆 Dialog 裡(比照 §3.3 相關訂單
+// 的既有互動模式,不另外疊一層彈窗)。
+// ---------------------------------------------------------------------------
+function statusChangeLogText(log: BookingStatusChangeLog): string {
+  if (log.fromStatus === null) {
+    return `建立訂單(${BOOKING_STATUS_LABELS[log.toStatus]})`;
+  }
+  return `把訂單狀態從「${BOOKING_STATUS_LABELS[log.fromStatus]}」改成「${BOOKING_STATUS_LABELS[log.toStatus]}」`;
+}
+
+function StatusChangeLogsView({
+  loading,
+  logs,
+  onBack,
+}: {
+  loading: boolean;
+  logs: BookingStatusChangeLog[];
+  onBack: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <Button type="button" variant="outline" size="sm" onClick={onBack}>
+        ← 返回訂單詳情
+      </Button>
+      {loading ? (
+        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      ) : logs.length === 0 ? (
+        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+          目前沒有任何操作紀錄。
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {logs.map((log) => (
+            <li
+              key={log.id}
+              className="rounded-md border border-border px-3 py-2 text-sm text-foreground"
+            >
+              <p className="text-xs text-muted-foreground">
+                {isoToTaipeiDateTimeWithSeconds(log.createdAt)}
+              </p>
+              <p className="mt-0.5">
+                {log.actorNameSnapshot} {statusChangeLogText(log)}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function BookingDetailDialog({
   bookingId,
   staffNameById,
@@ -143,12 +197,16 @@ export function BookingDetailDialog({
   // 切換成該筆訂單的 id,同一顆彈窗直接顯示對應詳情,不用另外開一顆彈窗。
   const [viewingBookingId, setViewingBookingId] = useState<string | null>(bookingId);
   const [showRelated, setShowRelated] = useState(false);
+  // 模組 6 §9.1(SPECS-INDEX #597):操作記錄的顯示狀態,跟 showRelated 互斥(同一時間只顯示
+  // 其中一種子畫面),比照「相關訂單」既有的互動模式。
+  const [showLogs, setShowLogs] = useState(false);
 
   useEffect(() => {
     if (open) {
       setViewingBookingId(bookingId);
       setReason("");
       setShowRelated(false);
+      setShowLogs(false);
     }
   }, [open, bookingId]);
 
@@ -177,6 +235,11 @@ export function BookingDetailDialog({
       getCustomerRelatedBookings(booking!.merchant_id, booking!.customer_phone, viewingBookingId),
     enabled: open && showRelated && Boolean(booking),
   });
+
+  // 模組 6 §9.1(SPECS-INDEX #597):操作記錄查詢,只在打開這個子畫面時才查(比照「相關訂單」
+  // 既有的 enabled 條件寫法),不用等使用者點開按鈕就預先撈。
+  const { data: statusChangeLogs, isLoading: statusChangeLogsLoading } =
+    useBookingStatusChangeLogs(viewingBookingId, open && showLogs);
 
   // 模組 11(LINE 通知)規則 2.5/§4.8:確認訂單前先預覽會不會通知任何人——沒有目標就直接確認,
   // 有目標才彈出 Yes/No 對話框,兩個選項都會執行 confirm_booking(),差別只在於「是」之後才呼叫
@@ -287,11 +350,19 @@ export function BookingDetailDialog({
         className="flex h-[92vh] max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-xl p-0"
       >
         <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
-          <SheetTitle>{showRelated ? "相關訂單" : "預約詳情"}</SheetTitle>
+          <SheetTitle>
+            {showRelated ? "相關訂單" : showLogs ? "操作記錄" : "預約詳情"}
+          </SheetTitle>
         </SheetHeader>
 
         <div className="min-w-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          {showRelated ? (
+          {showLogs ? (
+            <StatusChangeLogsView
+              loading={statusChangeLogsLoading}
+              logs={statusChangeLogs ?? []}
+              onBack={() => setShowLogs(false)}
+            />
+          ) : showRelated ? (
             <RelatedBookingsView
               loading={relatedLoading}
               bookings={relatedBookings ?? []}
@@ -549,16 +620,26 @@ export function BookingDetailDialog({
                     </div>
                   ) : null}
 
-                  {/* 模組 6 §3.3:相關訂單按鈕。 */}
-                  <div className="border-t border-border pt-3">
+                  {/* 模組 6 §3.3:相關訂單按鈕。§9.1(SPECS-INDEX #597):操作記錄按鈕,
+                      比照相關訂單按鈕的視覺樣式與互動模式,並排放在同一列。 */}
+                  <div className="flex gap-2 border-t border-border pt-3">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="w-full"
+                      className="flex-1"
                       onClick={() => setShowRelated(true)}
                     >
                       相關訂單
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setShowLogs(true)}
+                    >
+                      操作記錄
                     </Button>
                   </div>
                 </div>

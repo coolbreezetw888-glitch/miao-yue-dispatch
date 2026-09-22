@@ -258,6 +258,60 @@ export type Database = {
           },
         ]
       }
+      booking_status_change_logs: {
+        Row: {
+          actor_name_snapshot: string
+          actor_role_snapshot: string
+          actor_user_id: string | null
+          booking_id: string
+          created_at: string
+          from_status: string | null
+          id: string
+          merchant_id: string
+          note: string | null
+          to_status: string
+        }
+        Insert: {
+          actor_name_snapshot: string
+          actor_role_snapshot: string
+          actor_user_id?: string | null
+          booking_id: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          merchant_id: string
+          note?: string | null
+          to_status: string
+        }
+        Update: {
+          actor_name_snapshot?: string
+          actor_role_snapshot?: string
+          actor_user_id?: string | null
+          booking_id?: string
+          created_at?: string
+          from_status?: string | null
+          id?: string
+          merchant_id?: string
+          note?: string | null
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_status_change_logs_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_status_change_logs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           cancelled_at: string | null
@@ -1005,6 +1059,44 @@ export type Database = {
             foreignKeyName: "merchant_agents_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_booking_status_colors: {
+        Row: {
+          accepted_color: string
+          cancelled_color: string
+          completed_color: string
+          created_at: string
+          merchant_id: string
+          pending_confirmation_color: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_color?: string
+          cancelled_color?: string
+          completed_color?: string
+          created_at?: string
+          merchant_id: string
+          pending_confirmation_color?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_color?: string
+          cancelled_color?: string
+          completed_color?: string
+          created_at?: string
+          merchant_id?: string
+          pending_confirmation_color?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_booking_status_colors_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -2756,6 +2848,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_booking_status_change_logs: {
+        Args: { p_booking_id: string }
+        Returns: {
+          actor_name_snapshot: string
+          actor_role_snapshot: string
+          created_at: string
+          from_status: string
+          id: string
+          to_status: string
+        }[]
+      }
       get_customer_related_bookings: {
         Args: {
           p_customer_phone: string
@@ -3181,6 +3284,10 @@ export type Database = {
         Args: { p_operation_id: string }
         Returns: Json
       }
+      seed_default_booking_status_colors: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
       seed_default_leave_deduction_rules: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -3484,6 +3591,30 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      update_merchant_booking_status_colors: {
+        Args: {
+          p_accepted_color: string
+          p_cancelled_color: string
+          p_completed_color: string
+          p_merchant_id: string
+          p_pending_confirmation_color: string
+        }
+        Returns: {
+          accepted_color: string
+          cancelled_color: string
+          completed_color: string
+          created_at: string
+          merchant_id: string
+          pending_confirmation_color: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "merchant_booking_status_colors"
           isOneToOne: true
           isSetofReturn: false
         }
