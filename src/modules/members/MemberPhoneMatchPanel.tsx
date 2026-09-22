@@ -1,8 +1,12 @@
 // 模組 10(會員與紅利)§10.2/§10.2.1(SPECS-INDEX #614)。取代舊版 §4.4 MemberPickerField 的獨立
 // 「會員(選填)」欄位設計:電話不當唯一鍵,只當查詢索引。由模組 6 的建單表單(CalendarPage.tsx)
 // 直接掛載在「客戶電話」欄位下方,客服輸入電話後,這裡列出這支電話底下這個商家既有的所有客戶
-// (可能不只一筆,例如家庭成員共用電話),客服可以連結既有客戶,或選「+ 這支電話的新客戶」
-// 維持訪客訂單(member_id 留空)。本模組擁有並匯出這個元件,模組 6 只負責掛載(模組獨立性原則)。
+// (可能不只一筆,例如家庭成員共用電話),客服可以連結既有客戶,或選「+ 這支電話的新客戶」。
+// 本模組擁有並匯出這個元件,模組 6 只負責掛載(模組獨立性原則)。
+//
+// SPECS-INDEX #635(取代 #614 原本的做法):選「+ 這支電話的新客戶」不再只是「維持訪客訂單、
+// member_id 留空」——點下去直接開啟建立正式會員的小表單(電話已經有了,只需要確認/填姓名),
+// 送出後同步建立正式會員並連結,不再有獨立的「順便建立正式會員」按鈕要客服多點一步。
 //
 // §10.4(SPECS-INDEX #616)黑名單警告:客服點選一位 is_blacklisted=true 的既有客戶「當下」立即跳
 // 警告 toast,純警告不擋單——這裡是唯一需要判斷黑名單的地方,因為 get_members_by_phone 的查詢
@@ -40,8 +44,9 @@ function formatLastBookingDate(iso: string | null): string {
   return `最近消費 ${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** §10.2.2:選擇「+ 這支電話的新客戶」之後,客服如果想順便建立正式會員紀錄(而不是單純訪客
- * 訂單),可以點這個入口——沿用既有 create_member,建立成功後自動選中,帶入表單的 member_id。 */
+/** §10.2.2(SPECS-INDEX #635):客服點選「+ 這支電話的新客戶」就直接開這個表單——電話已經有了,
+ * 只需要確認/填姓名,送出後直接沿用既有 create_member 同步建立正式會員,成功後自動選中,帶入
+ * 表單的 member_id。不再有「訂單先當訪客送出、之後再補一步升級成會員」這個中間狀態。 */
 function QuickCreateMemberDialog({
   merchantId,
   defaultName,
@@ -100,7 +105,7 @@ function QuickCreateMemberDialog({
         <DialogHeader>
           <DialogTitle>建立正式會員</DialogTitle>
           <DialogDescription>
-            建立後自動連結這筆訂單。不建立也沒關係,訂單一樣可以用訪客身份送出。
+            電話已經帶入,確認或修改姓名後送出,會直接建立正式會員並連結到這筆訂單。
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -182,12 +187,6 @@ export function MemberPhoneMatchPanel({
     }
   }
 
-  function handleNewCustomer() {
-    // §10.2 第 3 點:維持目前輸入的姓名/電話,member_id 留空(訪客訂單)。
-    onSelectMember(null);
-    setDismissedPhone(trimmedPhone);
-  }
-
   if (selectedMember) {
     return (
       <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
@@ -232,17 +231,14 @@ export function MemberPhoneMatchPanel({
             </button>
           </li>
         ))}
-        <li className="flex items-center justify-between gap-2 px-2 py-1.5">
+        <li className="px-2 py-1.5">
           <button
             type="button"
             className="text-sm text-brand hover:underline"
-            onClick={handleNewCustomer}
+            onClick={() => setQuickCreateOpen(true)}
           >
             + 這支電話的新客戶
           </button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setQuickCreateOpen(true)}>
-            順便建立正式會員
-          </Button>
         </li>
       </ul>
 
