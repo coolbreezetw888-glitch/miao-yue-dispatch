@@ -8,8 +8,6 @@
 // 同一套 DateRangePicker 元件跟同一套一年上限規則——原本的 MyYearMonthSwitcher.tsx 已經被這次
 // 的區間篩選取代並移除,不留下死掉的舊元件。
 
-import { Link } from "react-router-dom";
-
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import {
   MonthlySalaryStaffReport,
@@ -29,11 +27,9 @@ function MyPayrollPageInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
+      {/* 商家端調整批次(2026-09-22,#609):這個頁面現在是底部「薪資報表」分頁籤直接可達的
+          目的地,不再是「功能」卡片底下的子頁面,不需要「← 返回功能」連結
+          (/app/manage 對服務人員角色而言已經沒有對應入口)。 */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">薪資報表</h1>
         <p className="mt-1 text-sm text-muted-foreground">

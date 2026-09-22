@@ -57,6 +57,8 @@ export interface UpsertMerchantMemberSettingsInput {
   pointsEarnRate: number;
   referralBonusPoints: number;
   birthdayBonusPoints: number;
+  /** #617(.project/specs/會員與紅利.md §10.5):商家是否啟用紅利點數功能。 */
+  pointsFeatureEnabled: boolean;
 }
 
 export async function upsertMerchantMemberSettings(
@@ -71,6 +73,7 @@ export async function upsertMerchantMemberSettings(
       points_earn_rate: input.pointsEarnRate,
       referral_bonus_points: input.referralBonusPoints,
       birthday_bonus_points: input.birthdayBonusPoints,
+      points_feature_enabled: input.pointsFeatureEnabled,
     },
     { onConflict: "merchant_id" },
   );

@@ -17,21 +17,30 @@
 //   1. 登入驗證/導向邏輯——原封不動從舊版 AppShell 搬過來,不重寫判斷邏輯本身,只是把生效範圍從
 //      「只在 /app 這個路由」擴大成「所有 /app/* 底下、套用這個外殼的路由都適用」。
 //   2. 渲染常駐頂端列:左側商家切換器、右側登出按鈕(見上方 2026-09-16 修正)。
-//   3. 渲染底部分頁籤列:首頁 / 功能 / 行事曆,3 個分頁籤永遠固定顯示,不因角色隱藏整個分頁籤、
-//      也不因模組增加而持續往上加分頁籤(規格書「新外殼結構」一節明講的刻意設計,分頁籤本身常駐,
-//      權限只決定分頁籤「裡面」顯示什麼)。行事曆之所以獨立成分頁籤,是因為它跟首頁同等級、
-//      是核心操作介面(第一版就有),不是先例允許「以後每個模組都能加一個分頁籤」——後續模組
-//      (例如模組 6 訂單管理)的頁面級入口,一律放進「功能」分頁籤底下用卡片呈現,見
-//      src/routes/ManagePage.tsx。在所有螢幕寬度都套用同一種底部分頁籤外殼,不做手機/
-//      桌面兩種版型。
+//   3. 渲染底部分頁籤列:4 個分頁籤永遠固定顯示,不因權限隱藏整個分頁籤(規格書「新外殼結構」
+//      一節明講的刻意設計,分頁籤本身常駐,權限只決定分頁籤「裡面」顯示什麼)。在所有螢幕寬度都
+//      套用同一種底部分頁籤外殼,不做手機/桌面兩種版型。
 //   4. 透過 <Outlet context={...}> 把 email/使用者 id/登出函式往下傳給子路由(例如「首頁」分頁籤
 //      的個人資料卡片需要 userId 查詢自己的管理員/客服紀錄),子路由不用重新呼叫一次登入驗證。
+//
+// 商家端調整批次(2026-09-22,對應 .project/SPECS-INDEX.md #609/#610,.project/specs/
+// 後台導覽外殼.md 該批次章節 + .project/specs/服務人員端.md §15.1):底部分頁籤數量從 3 個
+// 改成 4 個,而且**依角色不同**——這是這次改版唯一新增的分岐點,之前是全角色共用同一份靜態
+// TABS 陣列,現在改成依 useCurrentMerchantRole() 的結果挑選對應的分頁籤組合:
+//   - 商家管理員/客服(role !== 'staff',含角色還在載入中的預設情況):首頁/功能(拿掉訂單管理
+//     卡片,見 ManagePage.tsx)/訂單管理(新增,原本「功能」卡片獨立升級)/行事曆。
+//   - 服務人員(role === 'staff'):首頁/休假設定(原「功能」卡片獨立升級)/薪資報表(原「功能」
+//     卡片獨立升級)/行事曆。服務人員不再看到「功能」分頁籤,ManagePage.tsx 對服務人員角色而言
+//     已經沒有對應的分頁籤入口(見該檔案 isStaff 分支)。
+// 「分頁籤永遠顯示、不因角色/權限隱藏」這條既有規則延續適用(.project/SPECS-INDEX.md #118)——
+// 這次只是「永遠顯示的分頁籤數量」從 3 變成 4,不是推翻這條規則;「訂單管理」分頁籤沒有 orders
+// 權限的客服一樣看得到分頁籤本身,點進去由 OrdersPage.tsx 顯示空狀態文字,不是分頁籤消失。
 //
 // 例外(不套用這個外殼,見規格書「例外」一節):/app/onboarding、/app/agent-invite-complete
 // 維持獨立全螢幕流程,在 src/App.tsx 裡刻意放在 <AppLayout> 巢狀路由之外。
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Home, LayoutGrid } from "lucide-react";
+import { CalendarDays, CalendarOff, FileBarChart, Home, LayoutGrid, Receipt } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -48,6 +57,9 @@ import {
 } from "@/modules/merchant/context";
 import { MerchantSwitcher } from "@/modules/merchant/MerchantSwitcher";
 import { applyThemeColorToDocument, resolveMerchantThemeColor } from "@/modules/merchant/theme";
+// #609/#610:底部分頁籤這次依角色不同(商家管理員/客服 vs 服務人員),需要在外殼層級就知道
+// 目前使用者的角色。
+import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 export interface AppLayoutContext {
   email: string | null;
@@ -71,13 +83,25 @@ interface TabDef {
   isActive: (pathname: string) => boolean;
 }
 
-const TABS: TabDef[] = [
-  {
-    to: "/app",
-    label: "首頁",
-    icon: Home,
-    isActive: (pathname) => pathname === "/app",
-  },
+const HOME_TAB: TabDef = {
+  to: "/app",
+  label: "首頁",
+  icon: Home,
+  isActive: (pathname) => pathname === "/app",
+};
+
+const CALENDAR_TAB: TabDef = {
+  to: "/app/calendar",
+  label: "行事曆",
+  icon: CalendarDays,
+  isActive: (pathname) => pathname.startsWith("/app/calendar"),
+};
+
+// 商家管理員/客服(以及角色還在載入中時的預設值,避免第一次 render 就顯示錯誤的分頁籤組合
+// 後又跳成服務人員版——多數使用者是管理員/客服,以這組當預設風險最低):
+// 首頁/功能(#610 拿掉了訂單管理卡片)/訂單管理(#610 新增獨立分頁籤)/行事曆。
+const MERCHANT_TABS: TabDef[] = [
+  HOME_TAB,
   {
     to: "/app/manage",
     label: "功能",
@@ -90,11 +114,32 @@ const TABS: TabDef[] = [
       pathname.startsWith("/app/settings"),
   },
   {
-    to: "/app/calendar",
-    label: "行事曆",
-    icon: CalendarDays,
-    isActive: (pathname) => pathname.startsWith("/app/calendar"),
+    to: "/app/orders",
+    label: "訂單管理",
+    icon: Receipt,
+    isActive: (pathname) => pathname.startsWith("/app/orders"),
   },
+  CALENDAR_TAB,
+];
+
+// 服務人員(#609,.project/specs/服務人員端.md §15.1):首頁/休假設定/薪資報表/行事曆——原本
+// 「功能」分頁籤底下的兩張卡片各自升級成獨立分頁籤,「功能」分頁籤本身移除(ManagePage.tsx
+// 對服務人員角色而言已經沒有對應入口)。
+const STAFF_TABS: TabDef[] = [
+  HOME_TAB,
+  {
+    to: "/app/my-availability",
+    label: "休假設定",
+    icon: CalendarOff,
+    isActive: (pathname) => pathname.startsWith("/app/my-availability"),
+  },
+  {
+    to: "/app/my-payroll",
+    label: "薪資報表",
+    icon: FileBarChart,
+    isActive: (pathname) => pathname.startsWith("/app/my-payroll"),
+  },
+  CALENDAR_TAB,
 ];
 
 export default function AppLayout() {
@@ -109,6 +154,11 @@ export default function AppLayout() {
   const { merchants, isLoading: merchantsLoading } = useGroupMerchants();
   const clearCurrentMerchantSelection = useClearCurrentMerchantSelection();
   const { merchant: currentMerchant } = useCurrentMerchant();
+  // #609/#610:底部分頁籤依角色挑選,role 還沒解出來之前(或不是 'staff')一律用商家管理員/
+  // 客服那組當預設——多數使用者是管理員/客服,先顯示那組風險最低,role 一解出來是 'staff'
+  // 馬上就會切換,不會卡在錯的分頁籤組合太久。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const tabs = merchantRole === "staff" ? STAFF_TABS : MERCHANT_TABS;
 
   // 以下這段登入驗證/導向邏輯,原封不動搬自舊版 src/routes/app.tsx(AppShell),行為完全不變,
   // 只多存一份 userId(user.id)供 1.2 首頁個人資料卡片查詢自己的管理員/客服紀錄使用。
@@ -206,7 +256,7 @@ export default function AppLayout() {
 
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-border bg-background">
         <div className="mx-auto flex max-w-5xl items-stretch justify-around">
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = tab.isActive(location.pathname);
             return (

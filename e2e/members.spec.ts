@@ -1,10 +1,13 @@
 // 模組 10(會員與紅利)規格書 §7/§8 明確要求的 Playwright 測試:
 //   1. 會員管理列表頁(§4.1):建立會員 → 清單正確顯示;下架後預設篩選看不到,重新上架後恢復。
-//   2. 會員詳情頁(§4.2):登記兌換點數後,餘額與異動歷史正確更新;手動調整只有管理員看得到
-//      入口;相關訂單/推薦名單正確顯示 fixture 資料。
-//   3. 建單表單疊加 MemberPickerField(§4.4):在「新增預約」表單裡搜尋既有會員、選中後欄位
+//   2. 會員詳情頁(§4.2,已依 #617 更新):點數區塊簡化成摘要+連結;相關訂單/推薦名單正確顯示
+//      fixture 資料。
+//   3. 紅利點數管理頁(§10.5/#617,商家端調整批次 2026-09-22 新增):獨立卡片入口(取代原本掛在
+//      「功能」的「產業轉移」#601 已隱藏、「訂單管理」#610 已獨立成分頁籤)、餘額總覽搜尋、
+//      登記兌換與手動調整只有管理員看得到入口。
+//   4. 建單表單疊加 MemberPickerField(§4.4):在「新增預約」表單裡搜尋既有會員、選中後欄位
 //      正確顯示選中結果。
-//   4. 訂單詳情頁會員連結(§4.5):有 members 權限的管理員在訂單詳情頁看到會員姓名是可點擊連結。
+//   5. 訂單詳情頁會員連結(§4.5):有 members 權限的管理員在訂單詳情頁看到會員姓名是可點擊連結。
 //
 // 範圍說明(已在回報時一併提出):3.6/3.7/3.8「選擇既有會員完成訂單後正確核發點數」這條核心
 // 業務邏輯,已經由 supabase/tests/database/module10_02_booking_overlay_and_loyalty.sql 的 30
@@ -94,27 +97,72 @@ test("會員管理列表頁(§4.1):建立會員、下架後預設篩選看不到
   await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
-test("會員詳情頁(§4.2):登記兌換點數更新餘額與歷史,手動調整僅管理員可見,相關訂單/推薦名單正確顯示", async ({
-  page,
-}) => {
+test("會員詳情頁(§4.2):點數區塊簡化成摘要+連結,相關訂單/推薦名單正確顯示", async ({ page }) => {
   await page.goto(`/app/members/${fixture.existingMemberId}`);
   await expect(page.getByRole("heading", { name: fixture.existingMemberName })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
-  // 點數區塊(大字餘額顯示,用 CSS class 精準定位,避免跟兌換 Dialog 說明文字裡也帶餘額數字
-  // 的段落搞混):初始餘額 = fixture 手動灌點(INITIAL_POINTS_BALANCE)+ fixture 已完成訂單
-  // 自動核發的消費點數(BOOKING_SUBTOTAL / POINTS_EARN_RATE = 10 點,規則 2.1/3.7)。
+  // #617(紅利點數獨立化):點數區塊這次只保留精簡摘要(大字餘額顯示,用 CSS class 精準定位)
+  // + 「查看完整點數紀錄」連結,不再直接提供兌換/手動調整操作。
   const expectedEarnedPoints = 1000 / POINTS_EARN_RATE;
   const initialBalance = INITIAL_POINTS_BALANCE + expectedEarnedPoints;
   const balanceDisplay = page.locator("p.text-3xl");
   await expect(balanceDisplay).toHaveText(`${initialBalance} 點`);
+  await expect(page.getByRole("button", { name: "登記兌換" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "手動調整" })).toHaveCount(0);
 
-  // 規則 2.6:登入身分是商家管理員(fixture 用 create_group_and_merchant 建立),應該看得到
-  // 「手動調整」按鈕。
+  const pointsLink = page.getByRole("link", { name: "查看完整點數紀錄 →" });
+  await expect(pointsLink).toBeVisible();
+  await expect(pointsLink).toHaveAttribute(
+    "href",
+    `/app/member-points?member=${fixture.existingMemberId}`,
+  );
+
+  // 相關訂單:fixture 已連結並完成的那筆訂單應該出現,顯示已核發的點數。
+  await expect(page.getByText(`已核發 ${expectedEarnedPoints} 點`)).toBeVisible();
+
+  // 推薦名單:fixture 的被推薦會員應該出現。
+  await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
+});
+
+test("紅利點數管理頁(§10.5/#617):獨立卡片入口、餘額總覽搜尋、登記兌換與手動調整", async ({
+  page,
+}) => {
+  // 「功能」分頁籤正確顯示「紅利點數管理」獨立卡片,不再有「產業轉移」(#601)、
+  // 不再有「訂單管理」卡片(#610,已獨立成底部分頁籤——底部導覽本身也有一個同名連結,
+  // 這裡刻意把檢查範圍限定在 <main> 卡片區,避免跟底部分頁籤的「訂單管理」連結搞混)。
+  await page.goto("/app/manage");
+  await expect(page.getByRole("heading", { name: "功能" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const mainContent = page.locator("main");
+  const pointsCard = page.getByRole("link", { name: /紅利點數管理/ });
+  await expect(pointsCard).toBeVisible();
+  await expect(mainContent.getByText("產業轉移")).toHaveCount(0);
+  await expect(mainContent.getByText("訂單管理")).toHaveCount(0);
+
+  // 底部分頁籤改成 4 個(首頁/功能/訂單管理/行事曆),「訂單管理」獨立分頁籤直接可達。
+  const bottomNav = page.locator("nav");
+  await expect(bottomNav.getByRole("link")).toHaveCount(4);
+  await expect(bottomNav.getByRole("link", { name: "訂單管理" })).toBeVisible();
+
+  await pointsCard.click();
+  await expect(page.getByRole("heading", { name: "紅利點數管理" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 搜尋既有會員,確認清單顯示目前餘額。
+  const expectedEarnedPoints = 1000 / POINTS_EARN_RATE;
+  const initialBalance = INITIAL_POINTS_BALANCE + expectedEarnedPoints;
+  await page.getByPlaceholder("搜尋姓名/電話").fill(fixture.existingMemberName);
+  const memberRow = page.getByRole("button", { name: new RegExp(fixture.existingMemberName) });
+  await expect(memberRow).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(memberRow.getByText(`${initialBalance} 點`)).toBeVisible();
+
+  // 點擊會員展開完整異動歷史 + 兌換/調整入口。
+  await memberRow.click();
+  await expect(page.getByRole("button", { name: "登記兌換" })).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.getByRole("button", { name: "手動調整" })).toBeVisible();
 
-  // 登記兌換 10 點,餘額應該減少 10,且歷史多一筆 redeem 紀錄。
   await page.getByRole("button", { name: "登記兌換" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByLabel("兌換點數 *").fill("10");
@@ -123,15 +171,18 @@ test("會員詳情頁(§4.2):登記兌換點數更新餘額與歷史,手動調�
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 
   const expectedBalance = initialBalance - 10;
-  await expect(balanceDisplay).toHaveText(`${expectedBalance} 點`, { timeout: LOAD_TIMEOUT });
+  await expect(page.locator("p.text-3xl")).toHaveText(`${expectedBalance} 點`, {
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByText("兌換使用")).toBeVisible();
   await expect(page.getByText("e2e 測試兌換一次免費加值服務")).toBeVisible();
 
-  // 相關訂單:fixture 已連結並完成的那筆訂單應該出現,顯示已核發的點數。
-  await expect(page.getByText(`已核發 ${expectedEarnedPoints} 點`)).toBeVisible();
-
-  // 推薦名單:fixture 的被推薦會員應該出現。
-  await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
+  // 帶 ?member= query 直接進入這位會員的明細(會員詳情頁「查看完整點數紀錄」連結會這樣用)。
+  await page.goto(`/app/member-points?member=${fixture.existingMemberId}`);
+  await expect(page.getByText(fixture.existingMemberName).first()).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await expect(page.locator("p.text-3xl")).toHaveText(`${expectedBalance} 點`);
 });
 
 test("建單表單疊加 MemberPickerField(§4.4)+ 訂單詳情頁會員連結(§4.5)", async ({ page }) => {

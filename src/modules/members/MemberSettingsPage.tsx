@@ -32,6 +32,7 @@ function MemberSettingsPageInner() {
 
   const [phoneRequired, setPhoneRequired] = useState(true);
   const [requireVerifiedPhone, setRequireVerifiedPhone] = useState(false);
+  const [pointsFeatureEnabled, setPointsFeatureEnabled] = useState(true);
   const [pointsEarnRate, setPointsEarnRate] = useState("0");
   const [referralBonusPoints, setReferralBonusPoints] = useState("0");
   const [birthdayBonusPoints, setBirthdayBonusPoints] = useState("0");
@@ -41,6 +42,7 @@ function MemberSettingsPageInner() {
     if (!settings) return;
     setPhoneRequired(settings.phone_required_to_create);
     setRequireVerifiedPhone(settings.require_verified_phone_for_rewards);
+    setPointsFeatureEnabled(settings.points_feature_enabled);
     setPointsEarnRate(String(settings.points_earn_rate));
     setReferralBonusPoints(String(settings.referral_bonus_points));
     setBirthdayBonusPoints(String(settings.birthday_bonus_points));
@@ -72,6 +74,7 @@ function MemberSettingsPageInner() {
         pointsEarnRate: numericRate,
         referralBonusPoints: numericReferral,
         birthdayBonusPoints: numericBirthday,
+        pointsFeatureEnabled,
       });
       await queryClient.invalidateQueries({ queryKey: memberSettingsQueryKey(merchantId) });
       toast.success("已更新會員系統設定");
@@ -137,13 +140,34 @@ function MemberSettingsPageInner() {
       <Card>
         <CardHeader>
           <CardTitle>紅利點數</CardTitle>
-          <CardDescription>消費點數比例、推薦獎勵、生日贈點</CardDescription>
+          <CardDescription>
+            啟用開關、消費點數比例、推薦獎勵、生日贈點——完整的餘額檢視/兌換/手動調整操作,見
+            「功能」選單的「紅利點數管理」獨立頁面(
+            <Link to="/app/member-points" className="text-brand hover:underline">
+              前往紅利點數管理
+            </Link>
+            )。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {isLoading ? (
             <p className="text-sm text-muted-foreground">載入中⋯</p>
           ) : (
             <>
+              {/* #617(.project/specs/會員與紅利.md §10.5):商家決定要不要啟用紅利點數功能。
+                  關閉後建單表單/會員詳情頁不再顯示任何點數相關的操作入口與數字,既有的點數餘額
+                  資料不受影響,只是隱藏,重新開啟後完整還原顯示。 */}
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
+                  <p className="text-xs text-muted-foreground">
+                    關閉後,會員詳情頁跟紅利點數管理頁不再顯示任何點數相關的操作入口與數字,既有的
+                    點數餘額/異動歷史資料不會被清空,重新開啟後會完整還原顯示。
+                  </p>
+                </div>
+                <Switch checked={pointsFeatureEnabled} onCheckedChange={setPointsFeatureEnabled} />
+              </div>
+
               <div>
                 <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
                 <Input

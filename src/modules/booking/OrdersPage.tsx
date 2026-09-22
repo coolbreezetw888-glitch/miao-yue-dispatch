@@ -11,8 +11,18 @@
 // (dateField/keyword,見 api.ts fetchMerchantBookings),不新增查詢邏輯的資料表/RLS/RPC。
 // 點擊任一張卡片開啟既有的預約詳情彈窗(BookingDetailDialog,沿用模組 5 擴充既有元件,不重做),
 // 需要編輯時複用 CalendarPage.tsx 已經 export 出來的 BookingFormDialog,不重做一份幾乎一樣的表單。
+//
+// 商家端調整批次(2026-09-22,.project/SPECS-INDEX.md #610,.project/specs/後台導覽外殼.md
+// 該批次章節):這個頁面從「掛在 /app/manage 底下的一張卡片連結」改成 AppLayout 底部「訂單管理」
+// 分頁籤直接可達,頁面內容/RLS/RPC 完全不變。原本用來擋未授權瀏覽的 RequireBookingAccess.tsx
+// (「不符合就導回 /app」)不再適用——分頁籤規格明講「永遠顯示,沒有 orders 權限的客服點進來要
+// 看到空狀態/無權限提示文字,不是導回其他頁面或報錯」,所以這裡改成下面的 OrdersTabAccessGate,
+// 判斷邏輯(admin 一律放行、agent 要有 orders 權限)跟 RequireBookingAccess.tsx 完全一致,只是
+// 「不放行」時改成原地渲染提示文字,不 navigate() 離開。刻意不改 RequireBookingAccess.tsx
+// 本身——那支同時也是 CalendarPage.tsx(行事曆分頁籤)在用的守衛,行事曆這次沒有被要求改變行為,
+// 保持模組獨立、改動範圍不外溢。
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +40,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import type { IndustryType } from "@/modules/merchant/types";
-import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import { useAgentPermission, useCurrentMerchantRole, useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { BookingFormDialog } from "./CalendarPage";
@@ -47,7 +57,6 @@ import {
   type OrderDateFieldMode,
   type OrderStatusTab,
 } from "./ordersPageLogic";
-import { RequireBookingAccess } from "./RequireBookingAccess";
 import {
   BOOKING_STATUS_LABELS,
   bookingCardAccentBorderClass,
@@ -363,10 +372,47 @@ function OrderCard({
   );
 }
 
+/** 見檔案開頭 2026-09-22 說明:判斷邏輯比照 RequireBookingAccess.tsx(admin 一律放行、agent
+ * 要有 orders 權限),但「不放行」時原地顯示空狀態文字,不 navigate() 離開——因為這個頁面現在是
+ * 底部分頁籤直接可達的目的地,分頁籤規格要求「永遠顯示,沒有權限就看到提示文字」。這個元件只是
+ * 體驗層的顯示邏輯,不是安全邊界——真正擋住未授權操作的是 private.can_manage_bookings 這支函式
+ * 落實的 RLS/SECURITY DEFINER 函式權限檢查,即使有人繞過前端直接呼叫 API 也會被資料庫擋下。 */
+function OrdersTabAccessGate({ children }: { children: ReactNode }) {
+  const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
+  const { data: role, isLoading: roleLoading } = useCurrentMerchantRole();
+  const { data: canManageBookings, isLoading: permissionLoading } = useAgentPermission("orders");
+
+  const isAdmin = role === "admin";
+  const isAuthorizedAgent = role === "agent" && canManageBookings === true;
+  const stillLoadingAgentPermission = role === "agent" && permissionLoading;
+  const loading = merchantLoading || roleLoading || stillLoadingAgentPermission;
+  const allowed = isAdmin || isAuthorizedAgent;
+
+  if (loading || !merchant) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface">
+        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-12">
+        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+          尚未開放此功能,請洽商家管理員開通「訂單管理」權限。
+        </p>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function OrdersPage() {
   return (
-    <RequireBookingAccess>
+    <OrdersTabAccessGate>
       <OrdersPageInner />
-    </RequireBookingAccess>
+    </OrdersTabAccessGate>
   );
 }
