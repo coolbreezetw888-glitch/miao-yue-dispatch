@@ -9,6 +9,7 @@
 //
 // fixture 資料建立/清理見 e2e/support/data-import-members-fixture.ts。
 
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 import {
@@ -116,4 +117,64 @@ test("會員匯入精靈完整流程(§3.3/§4.1):含缺電話列在預覽階段
   await expect(readStatCard(page, "失敗")).resolves.toBe("1");
   await expect(readStatCard(page, "略過")).resolves.toBe("0");
   await expect(page.getByText("這個商家要求建立會員時必須填寫電話")).toBeVisible();
+});
+
+// SPECS-INDEX #603(§10.4):會員資料匯入模板——欄位需對照 import_members_batch 實際會處理的
+// 欄位,下載回來的模板填入範例資料後直接送出必須能成功匯入,不是好看但用不了的文件。
+test("會員資料匯入模板下載(§10.4):欄位跟解析邏輯一致,填入範例資料後可成功匯入", async ({
+  page,
+}) => {
+  await page.goto("/app/data-import");
+  await expect(page.getByRole("heading", { name: "資料匯入" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await page.getByRole("button", { name: "會員資料" }).click();
+  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: LOAD_TIMEOUT }),
+    page.getByRole("button", { name: "下載 CSV 模板" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("會員資料匯入模板.csv");
+  const path = await download.path();
+  expect(path).not.toBeNull();
+  const csv = readFileSync(path!, "utf-8");
+  const [headerLine, exampleLine] = csv.replace(/^\uFEFF/, "").split(/\r\n/) as [string, string];
+  expect(headerLine.split(",")).toEqual([
+    "姓名",
+    "電話",
+    "Email",
+    "生日",
+    "備註",
+    "推薦人電話/推薦碼",
+    "起始點數餘額",
+  ]);
+  expect(exampleLine).toContain("王小明");
+  expect(exampleLine).toContain("0912345678");
+
+  // 用下載回來的模板原封不動重新上傳,證明模板真的可用(§10.4 測試要求)。
+  await page.setInputFiles("#csv-file", {
+    name: "會員資料匯入模板.csv",
+    mimeType: "text/csv",
+    buffer: readFileSync(path!),
+  });
+  await expect(page.getByText("已解析 1 筆資料")).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  await mapColumn(page, "name", "姓名");
+  await mapColumn(page, "phone", "電話");
+
+  await page.getByRole("button", { name: "下一步" }).click();
+  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.locator("table tbody tr")).toHaveCount(1);
+  await expect(page.locator("table tbody tr").first()).toContainText("看起來會成功");
+
+  await page.getByRole("button", { name: "下一步" }).click();
+  await page.getByRole("button", { name: "確認匯入" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
+
+  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await expect(readStatCard(page, "成功")).resolves.toBe("1");
+  await expect(readStatCard(page, "失敗")).resolves.toBe("0");
 });

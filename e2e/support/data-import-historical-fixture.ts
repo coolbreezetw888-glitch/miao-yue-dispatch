@@ -87,12 +87,19 @@ export async function setupDataImportHistoricalFixture(): Promise<DataImportHist
     throw new Error(`建立測試商家失敗:${merchantError?.message ?? "沒有回傳 merchant id"}`);
   }
 
+  // 注意(非本次任務範圍,順手修正):SPECS-INDEX #595/#596(人員與權限管理模組,
+  // 20260922140000_req595_596_staff_agent_phone_not_null_check.sql)在同一個正式 Supabase
+  // 專案上把 merchant_staff.phone 改成 NOT NULL + 台灣手機號碼格式檢查(^09\d{8}$),這支
+  // fixture 原本沒有帶 phone,會被這個新約束擋下,不是這次 #600/#602/#603 任務造成的迴歸——
+  // 補一個依 runId 產生、符合格式的佔位電話,讓既有的歷史訂單匯入 e2e 測試恢復可執行。
   const existingStaffName = `E2E既有服務人員${runId}`;
+  const existingStaffPhone = `09${runId.slice(-8).padStart(8, "0")}`;
   const { data: staff, error: staffError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: existingStaffName,
+      phone: existingStaffPhone,
       no_time_slot_limit: true,
     })
     .select("id")
