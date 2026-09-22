@@ -15,6 +15,8 @@ import type {
   AmountAdjustmentMode,
   Booking,
   BookingDetail,
+  BookingStatusChangeLog,
+  BookingStatusColorMap,
   CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
@@ -22,7 +24,7 @@ import type {
   PaymentMethod,
   StaffAvailabilityWindow,
 } from "./types";
-import { DEFAULT_MERCHANT_TAX_SETTINGS } from "./types";
+import { DEFAULT_MERCHANT_TAX_SETTINGS, DEFAULT_BOOKING_STATUS_COLORS } from "./types";
 import { bookingMatchesKeyword } from "./ordersPageLogic";
 
 // =========================================================================
@@ -993,4 +995,74 @@ export async function fetchBookingAmountSummary(
     paymentMethodId: data.payment_method_id,
     paymentMethodNameSnapshot: data.payment_method_name_snapshot,
   };
+}
+
+// =========================================================================
+// 模組 6 §9.1(SPECS-INDEX #597):操作記錄——查詢某筆訂單的狀態變更歷史,供預約詳情彈窗
+// 「操作記錄」按鈕使用。
+// =========================================================================
+export async function getBookingStatusChangeLogs(
+  bookingId: string,
+): Promise<BookingStatusChangeLog[]> {
+  const { data, error } = await supabase.rpc("get_booking_status_change_logs", {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+  return (
+    (data ?? []) as {
+      id: string;
+      from_status: string | null;
+      to_status: string;
+      actor_name_snapshot: string;
+      actor_role_snapshot: string;
+      created_at: string;
+    }[]
+  ).map((row) => ({
+    id: row.id,
+    fromStatus: row.from_status as BookingStatusChangeLog["fromStatus"],
+    toStatus: row.to_status as BookingStatusChangeLog["toStatus"],
+    actorNameSnapshot: row.actor_name_snapshot,
+    actorRoleSnapshot: row.actor_role_snapshot as BookingStatusChangeLog["actorRoleSnapshot"],
+    createdAt: row.created_at,
+  }));
+}
+
+// =========================================================================
+// 建單與訂單管理介面優化 §十 10.1-10.6(SPECS-INDEX #620/#621):商家訂單狀態顏色設定讀寫。
+// 查無資料時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS(跟資料庫 DEFAULT 值一致,不回傳 null),
+// 讓呼叫端(CalendarPage.tsx/OrdersPage.tsx)不用另外處理「還沒設定過」的分支——這是刻意比照
+// fetchMerchantTaxSettings 既有的 fallback 慣例。
+// =========================================================================
+export async function fetchMerchantBookingStatusColors(
+  merchantId: string,
+): Promise<BookingStatusColorMap> {
+  const { data, error } = await supabase
+    .from("merchant_booking_status_colors")
+    .select("pending_confirmation_color, accepted_color, completed_color, cancelled_color")
+    .eq("merchant_id", merchantId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return { ...DEFAULT_BOOKING_STATUS_COLORS };
+  return {
+    pendingConfirmation: data.pending_confirmation_color,
+    accepted: data.accepted_color,
+    completed: data.completed_color,
+    cancelled: data.cancelled_color,
+  };
+}
+
+/** §10.6 顏色設定畫面用:upsert 一筆 merchant_booking_status_colors,四個顏色一次全部帶入
+ * (資料庫函式簽章要求四個都要有值,不支援局部更新單一狀態的顏色)。 */
+export async function updateMerchantBookingStatusColors(
+  merchantId: string,
+  colors: BookingStatusColorMap,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_merchant_booking_status_colors", {
+    p_merchant_id: merchantId,
+    p_pending_confirmation_color: colors.pendingConfirmation,
+    p_accepted_color: colors.accepted,
+    p_completed_color: colors.completed,
+    p_cancelled_color: colors.cancelled,
+  });
+  if (error) throw error;
 }

@@ -68,6 +68,7 @@ import {
   clearStaffDayOverride,
   setStaffDayOverride,
   useMerchantBookings,
+  useMerchantBookingStatusColors,
   useMerchantBusinessHours,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
@@ -97,8 +98,9 @@ import { RequireBookingAccess } from "./RequireBookingAccess";
 import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
-  bookingBlockClasses,
+  bookingBlockStyle,
   buildPaymentMethodOptions,
+  DEFAULT_BOOKING_STATUS_COLORS,
   getTaxModeHelperText,
   type AmountAdjustmentMode,
   type BookingStatus,
@@ -1155,6 +1157,12 @@ function CalendarPageInner() {
     merchantRole === "admin" ||
     (merchantRole === "agent" && canManageBusinessHoursPermission === true);
 
+  // 建單與訂單管理介面優化 §10.5(SPECS-INDEX #621):排程色塊改讀商家自訂顏色表,查無資料/
+  // 載入中時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS(等同改版前寫死的顏色),不會因為查詢
+  // 還沒回來而短暫顯示錯誤的顏色。
+  const { data: statusColors } = useMerchantBookingStatusColors(merchantId);
+  const effectiveStatusColors = statusColors ?? DEFAULT_BOOKING_STATUS_COLORS;
+
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const s of staffList ?? []) map.set(s.id, s.name);
@@ -1627,11 +1635,12 @@ function CalendarPageInner() {
                         key={b.id}
                         type="button"
                         onClick={() => setDetailBookingId(b.id)}
-                        className={cn(
-                          "absolute inset-x-0 z-10 overflow-hidden rounded-sm p-1 text-left text-[11px] leading-tight shadow-sm",
-                          bookingBlockClasses(b.status),
-                        )}
-                        style={{ top, height }}
+                        className="absolute inset-x-0 z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
+                        style={{
+                          top,
+                          height,
+                          ...bookingBlockStyle(effectiveStatusColors, b.status),
+                        }}
                       >
                         <p className="truncate font-medium">
                           {b.customer_name}

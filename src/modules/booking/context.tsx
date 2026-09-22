@@ -18,6 +18,7 @@ import {
   updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
   fetchBookingAmountSummary,
   fetchMerchantBookings,
+  fetchMerchantBookingStatusColors,
   fetchMerchantBusinessHours,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
@@ -25,7 +26,9 @@ import {
   fetchMerchantTaxSettings,
   fetchStaffAvailabilityWindows,
   getBooking,
+  getBookingStatusChangeLogs as apiGetBookingStatusChangeLogs,
   getCustomerRelatedBookings as apiGetCustomerRelatedBookings,
+  updateMerchantBookingStatusColors as apiUpdateMerchantBookingStatusColors,
   upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
   type BookingAmountSummary,
   type BookingCardExtra,
@@ -38,6 +41,8 @@ import type {
   AmountAdjustmentMode,
   Booking,
   BookingDetail,
+  BookingStatusChangeLog,
+  BookingStatusColorMap,
   CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
@@ -236,4 +241,37 @@ export function useBookingCardExtras(
     queryFn: () => fetchBookingCardExtras(merchantId as string, bookings),
     enabled: Boolean(merchantId) && bookings.length > 0,
   });
+}
+
+/** 模組 6 §9.1(SPECS-INDEX #597)對外介面:查詢某筆訂單的操作記錄,供預約詳情彈窗
+ * 「操作記錄」按鈕使用。 */
+export function useBookingStatusChangeLogs(
+  bookingId: string | null | undefined,
+  enabled: boolean,
+): UseQueryResult<BookingStatusChangeLog[]> {
+  return useQuery({
+    queryKey: ["booking-module", "booking-status-change-logs", bookingId],
+    queryFn: () => apiGetBookingStatusChangeLogs(bookingId as string),
+    enabled: Boolean(bookingId) && enabled,
+  });
+}
+
+/** 建單與訂單管理介面優化 §十 10.1-10.6(SPECS-INDEX #620/#621)對外介面:商家目前設定的
+ * 4 種訂單狀態代表色,查無資料時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS(見 api.ts)。
+ * 供 CalendarPage.tsx(色塊)/OrdersPage.tsx(色條+設定畫面)使用。 */
+export function useMerchantBookingStatusColors(
+  merchantId: string | null | undefined,
+): UseQueryResult<BookingStatusColorMap> {
+  return useQuery({
+    queryKey: ["booking-module", "merchant-booking-status-colors", merchantId],
+    queryFn: () => fetchMerchantBookingStatusColors(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export async function updateMerchantBookingStatusColors(
+  merchantId: string,
+  colors: BookingStatusColorMap,
+): Promise<void> {
+  return apiUpdateMerchantBookingStatusColors(merchantId, colors);
 }
