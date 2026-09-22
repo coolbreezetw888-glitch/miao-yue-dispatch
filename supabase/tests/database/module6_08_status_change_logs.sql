@@ -56,6 +56,14 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
   ('c8000000-0000-4000-8000-000000000051', 'c8000000-0000-4000-8000-000000000021', '一店服務人員', '0901000201', true),
   ('c8000000-0000-4000-8000-000000000052', 'c8000000-0000-4000-8000-000000000022', '二店服務人員', '0901000202', true);
 
+-- SPECS-INDEX #604(合併「會員生命週期與建單表單整合」分支時修正,2026-09-23):create_booking
+-- 新建訂單付款方式改為必填,這個檔案原本兩個 create_booking 呼叫都用位置參數、沒有帶付款方式
+-- (依賴預設值 null)——補一筆付款方式,下面每個呼叫在既有位置參數清單最後面補上具名參數
+-- p_payment_method_id(PostgreSQL 允許位置參數之後接具名參數),不改變任何測試原本要驗證的
+-- 操作記錄邏輯。比照 module5_01_create_booking_boundaries.sql 已經確立的修正手法。
+insert into payment_methods (id, merchant_id, name) values
+  ('c8000000-0000-4000-8000-000000000061', 'c8000000-0000-4000-8000-000000000021', '現場付款');
+
 -- =========================================================================
 -- ① create_booking 寫入一筆 from_status=null, to_status=pending_confirmation,
 --    actor_name_snapshot 正確帶出客服的 nickname。
@@ -65,7 +73,8 @@ select pg_temp.test_set_auth('c8000000-0000-4000-8000-000000000003');
 select id from create_booking(
   'c8000000-0000-4000-8000-000000000021', 'c8000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c8000000-0000-4000-8000-000000000041', 'quantity', 1, 'unit_price', 300)),
-  '2026-09-22 09:00:00+08', '客戶甲', '0955000301'
+  '2026-09-22 09:00:00+08', '客戶甲', '0955000301',
+  p_payment_method_id => 'c8000000-0000-4000-8000-000000000061'
 ) \gset booking_a_
 
 select is(
@@ -176,7 +185,8 @@ select pg_temp.test_set_auth('c8000000-0000-4000-8000-000000000001');
 select id from create_booking(
   'c8000000-0000-4000-8000-000000000021', 'c8000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c8000000-0000-4000-8000-000000000041', 'quantity', 1, 'unit_price', 300)),
-  '2026-09-22 11:00:00+08', '客戶乙', '0955000302'
+  '2026-09-22 11:00:00+08', '客戶乙', '0955000302',
+  p_payment_method_id => 'c8000000-0000-4000-8000-000000000061'
 ) \gset booking_b_
 
 select cancel_booking(:'booking_b_id'::uuid, '客戶臨時取消');
