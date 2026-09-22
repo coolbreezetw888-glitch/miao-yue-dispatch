@@ -24,8 +24,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
-import { upsertLeaveTypeDeductionRule, useLeaveTypeDeductionRule, useMerchantPayrollSettings } from "./api";
-import { previewLeaveDeductionPerDay, calculateDayRate } from "./previewCalculators";
+import { upsertLeaveTypeDeductionRule, useLeaveTypeDeductionRule } from "./api";
+import { previewLeaveDeductionPerDay, calculateDayRate, getDaysInMonth } from "./previewCalculators";
 import { DEDUCTION_MODE_LABELS, type DeductionMode } from "./types";
 
 const DEDUCTION_MODES: DeductionMode[] = [
@@ -48,7 +48,6 @@ export function LeaveDeductionRuleDialog({
 }) {
   const [open, setOpen] = useState(false);
   const { data: rule, isLoading } = useLeaveTypeDeductionRule(open ? leaveTypeId : null);
-  const { data: payrollSettings } = useMerchantPayrollSettings(open ? merchantId : null);
 
   const [mode, setMode] = useState<DeductionMode>("no_deduction");
   const [percentageValue, setPercentageValue] = useState("0");
@@ -105,11 +104,11 @@ export function LeaveDeductionRuleDialog({
   // 這裡的試算刻意用固定的範例月薪(3000 元),不是任何一位真實服務人員的實際月薪——這個 Dialog
   // 是針對「假別」設定扣款規則,不是針對特定服務人員,不知道要套用哪位的月薪才合理,用範例數字
   // 純粹幫助商家理解「這個模式/這個數字,實際換算成一天大概是扣多少錢」。
+  // §十 10.1:「月折算天數」已改成系統依當月實際天數動態計算,不再是商家設定值,這裡用「本月」
+  // 的實際天數預覽試算(純粹輔助理解,不是任何寫入依據)。
   const exampleMonthlySalary = 3000;
-  const exampleDayRate = calculateDayRate(
-    exampleMonthlySalary,
-    payrollSettings?.pay_days_per_month ?? 30,
-  );
+  const now = new Date();
+  const exampleDayRate = calculateDayRate(exampleMonthlySalary, getDaysInMonth(now.getFullYear(), now.getMonth() + 1));
   const previewPerDay = previewLeaveDeductionPerDay(
     exampleDayRate,
     mode,
@@ -180,11 +179,10 @@ export function LeaveDeductionRuleDialog({
             ) : null}
 
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              範例試算:假設月薪 {exampleMonthlySalary} 元(依目前月折算天數{" "}
-              {payrollSettings?.pay_days_per_month ?? 30} 天,一天薪水約{" "}
+              範例試算:假設月薪 {exampleMonthlySalary} 元(依本月實際天數換算,一天薪水約{" "}
               {exampleDayRate.toFixed(2)} 元),請這個假一天扣{" "}
-              <strong>{previewPerDay}</strong> 元(僅供參考,實際扣款以每位服務人員自己的月薪
-              計算為準)。
+              <strong>{previewPerDay}</strong> 元(僅供參考,實際扣款以每位服務人員自己的月薪、
+              請假當月的實際天數計算為準)。
             </p>
 
             <DialogFooter>

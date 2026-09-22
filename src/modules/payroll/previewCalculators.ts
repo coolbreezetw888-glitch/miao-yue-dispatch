@@ -30,13 +30,22 @@ export function previewServiceCommission(
   return roundToCents((basePrice * quantity * value) / 100);
 }
 
-/** 月折算天數換算成「一天薪水」(對應規則 2.7 的 day_rate)。pay_days_per_month <= 0 時視為 0,
- * 避免除以 0(正常情況下資料庫 CHECK 約束已經限制 1~31,這裡只是前端防呆)。 */
+/** 月折算天數換算成「一天薪水」(對應規則 2.7 的 day_rate)。payDaysPerMonth <= 0 時視為 0,
+ * 避免除以 0(正常情況下 §十 10.1 動態計算出來的天數一定是 28~31,這裡只是前端防呆)。 */
 export function calculateDayRate(monthlyBaseSalary: number, payDaysPerMonth: number): number {
   if (!Number.isFinite(monthlyBaseSalary) || !Number.isFinite(payDaysPerMonth) || payDaysPerMonth <= 0) {
     return 0;
   }
   return monthlyBaseSalary / payDaysPerMonth;
+}
+
+/** §十 10.1:「月折算天數」已改成系統依「當月實際天數」自動計算,不再是商家填寫的固定值
+ * (merchant_payroll_settings.pay_days_per_month 已移除)。前端預覽計算機用這個純函式算出某年月
+ * 的實際天數,邏輯跟資料庫 private.get_days_in_month 對齊(用 JS Date 的「該月第 0 天 = 上個月
+ * 最後一天」特性取得月底日期,不用自己手刻閏年判斷)。month 是 1~12(跟資料庫函式的參數習慣一致,
+ * 不是 JS Date 原生 0~11 的月份)。 */
+export function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
 }
 
 export type DeductionMode =

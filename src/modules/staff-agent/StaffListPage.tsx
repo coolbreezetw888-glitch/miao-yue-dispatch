@@ -40,6 +40,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import {
   getServiceItem,
@@ -74,10 +75,7 @@ import {
   uploadStaffAvatar,
   type UpsertMerchantStaffInput,
 } from "./api";
-import {
-  AdminSuggestLoginEmailDialog,
-  LoginEmailStatusDisplay,
-} from "./AdminLoginEmailManager";
+import { AdminSuggestLoginEmailDialog, LoginEmailStatusDisplay } from "./AdminLoginEmailManager";
 import { useStaffLoginEmailStatus } from "./context";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
@@ -372,6 +370,17 @@ function StaffFormDialog({
       toast.error("請填寫姓名");
       return;
     }
+    // 規格書 §8.1:電話這次改為必填,且必須符合台灣手機號碼格式(09 開頭共 10 碼),
+    // 驗證邏輯共用 §8.3 的 isValidTaiwanMobilePhone,不在這裡自己另外寫一份正規表示式。
+    const trimmedPhone = (form.phone ?? "").trim();
+    if (!trimmedPhone) {
+      toast.error("請填寫電話");
+      return;
+    }
+    if (!isValidTaiwanMobilePhone(trimmedPhone)) {
+      toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
+      return;
+    }
     if (
       form.bookingWindowMinDays != null &&
       form.bookingWindowMaxDays != null &&
@@ -441,13 +450,18 @@ function StaffFormDialog({
                 />
               </div>
               <div>
-                <Label htmlFor="staff-phone">電話</Label>
+                <Label htmlFor="staff-phone">電話 *</Label>
                 <Input
                   id="staff-phone"
                   className="mt-2"
                   value={form.phone ?? ""}
                   onChange={(e) => setField("phone", e.target.value)}
+                  placeholder="0912345678"
+                  required
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
+                </p>
               </div>
               <div>
                 <Label htmlFor="staff-email">對外聯絡 Email</Label>
@@ -950,7 +964,9 @@ function StaffListInner() {
                           {staff.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬"}
                         </Badge>
                         {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態徽章。 */}
-                        <Badge variant={loginStatusBadgeVariant(staff.login_status as StaffLoginStatus)}>
+                        <Badge
+                          variant={loginStatusBadgeVariant(staff.login_status as StaffLoginStatus)}
+                        >
                           {STAFF_LOGIN_STATUS_LABELS[staff.login_status as StaffLoginStatus]}
                         </Badge>
                         {staff.status === "removed" ? (

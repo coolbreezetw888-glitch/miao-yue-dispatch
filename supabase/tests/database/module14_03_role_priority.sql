@@ -38,8 +38,8 @@ insert into merchants (id, group_id, name, industry_type) values
   ('e1430000-0000-4000-8000-000000000021', 'e1430000-0000-4000-8000-000000000011', '角色優先權測試B店', 'on_site_dispatch');
 
 -- user X 是 A 店的服務人員(已完成登入)。
-insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at) values
-  ('e1430000-0000-4000-8000-000000000030', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000001', 'user X(服務人員身份)', 'piece_rate', 'active', 'active', now());
+insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, phone) values
+  ('e1430000-0000-4000-8000-000000000030', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000001', 'user X(服務人員身份)', 'piece_rate', 'active', 'active', now(), '0900000101');
 
 -- user X 同時是 B 店的管理員。
 insert into merchant_admins (merchant_id, user_id) values

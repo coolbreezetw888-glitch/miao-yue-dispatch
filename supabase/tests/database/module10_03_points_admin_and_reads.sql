@@ -41,9 +41,9 @@ insert into merchant_admins (merchant_id, user_id) values
 
 insert into platform_admins (user_id) values ('ec000000-0000-4000-8000-000000000002');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-members', 'pgtap-m10c-agent-members@test.local', 'active', now()),
-  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-僅訂單', 'pgtap-m10c-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-members', 'pgtap-m10c-agent-members@test.local', 'active', now(), '0900000101'),
+  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-僅訂單', 'pgtap-m10c-agent-orders@test.local', 'active', now(), '0900000102');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ec000000-0000-4000-8000-000000000051', 'members', true),
@@ -57,7 +57,7 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('ec000000-0000-4000-8000-000000000031', 'ec000000-0000-4000-8000-000000000021', '洗髮', 500, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
-  ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '服務人員P', null, true, 'piece_rate');
+  ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '服務人員P', '0901000101', true, 'piece_rate');
 
 insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
 values ('ec000000-0000-4000-8000-000000000021', 100, 0, 88);

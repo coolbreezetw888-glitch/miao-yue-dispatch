@@ -45,13 +45,13 @@ insert into merchant_admins (merchant_id, user_id) values
   ('e1710000-0000-4000-8000-000000000020', 'e1710000-0000-4000-8000-000000000001'),
   ('e1710000-0000-4000-8000-000000000021', 'e1710000-0000-4000-8000-000000000002');
 
-insert into merchant_staff (id, merchant_id, name, status, login_status, user_id) values
-  ('e1710000-0000-4000-8000-000000000030', 'e1710000-0000-4000-8000-000000000020', '在職且已開通登入的服務人員', 'active', 'active', 'e1710000-0000-4000-8000-000000000003'),
-  ('e1710000-0000-4000-8000-000000000031', 'e1710000-0000-4000-8000-000000000020', '尚未開通登入的服務人員', 'active', 'not_invited', null);
+insert into merchant_staff (id, merchant_id, name, status, login_status, user_id, phone) values
+  ('e1710000-0000-4000-8000-000000000030', 'e1710000-0000-4000-8000-000000000020', '在職且已開通登入的服務人員', 'active', 'active', 'e1710000-0000-4000-8000-000000000003', '0900000101'),
+  ('e1710000-0000-4000-8000-000000000031', 'e1710000-0000-4000-8000-000000000020', '尚未開通登入的服務人員', 'active', 'not_invited', null, '0900000102');
 
-insert into merchant_agents (id, merchant_id, name, invited_email, status, user_id) values
-  ('e1710000-0000-4000-8000-000000000040', 'e1710000-0000-4000-8000-000000000020', '在職客服', 'pgtap-agent-active@test.local', 'active', 'e1710000-0000-4000-8000-000000000004'),
-  ('e1710000-0000-4000-8000-000000000041', 'e1710000-0000-4000-8000-000000000020', '邀請中的客服', 'pgtap-agent-invited@test.local', 'invited', null);
+insert into merchant_agents (id, merchant_id, name, invited_email, status, user_id, phone) values
+  ('e1710000-0000-4000-8000-000000000040', 'e1710000-0000-4000-8000-000000000020', '在職客服', 'pgtap-agent-active@test.local', 'active', 'e1710000-0000-4000-8000-000000000004', '0900000101'),
+  ('e1710000-0000-4000-8000-000000000041', 'e1710000-0000-4000-8000-000000000020', '邀請中的客服', 'pgtap-agent-invited@test.local', 'invited', null, '0900000102');
 
 -- ===========================================================================
 -- 2.4.1 request_staff_login_email_change

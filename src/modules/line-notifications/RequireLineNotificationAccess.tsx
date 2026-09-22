@@ -8,7 +8,7 @@
 // private.can_manage_line_notification 這支函式落實的 RLS/SECURITY DEFINER 函式檢查(規格書
 // 規則 2.10),即使有人繞過前端路由直接呼叫 API,也會被資料庫擋下。
 //
-// 4.1(LINE 串接設定頁)/4.4(行銷再通知頁)不使用這個守衛——那兩個頁面永遠只給商家管理員
+// 4.1(LINE 串接設定頁)/4.4(行銷通知頁)不使用這個守衛——那兩個頁面永遠只給商家管理員
 // (規則 2.1/2.6),直接沿用既有的 RequireMerchantAdmin.tsx,不需要另外的守衛元件。
 //
 // 規則 2.11:判斷登入狀態一律呼叫 getVerifiedUser()——這裡透過 useCurrentMerchantRole/

@@ -40,11 +40,11 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 values ('b8000000-0000-4000-8000-000000000030', 'b8000000-0000-4000-8000-000000000020', '洗髮', 300, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('b8000000-0000-4000-8000-000000000040', 'b8000000-0000-4000-8000-000000000020', '服務人員', null, true);
+values ('b8000000-0000-4000-8000-000000000040', 'b8000000-0000-4000-8000-000000000020', '服務人員', '0901000101', true);
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('b8000000-0000-4000-8000-000000000051', 'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000002', '客服-無授權', 'pgtap-m5x-agent-none@test.local', 'active', now()),
-  ('b8000000-0000-4000-8000-000000000052', 'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000003', '客服-料錢成本', 'pgtap-m5x-agent-mc@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('b8000000-0000-4000-8000-000000000051', 'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000002', '客服-無授權', 'pgtap-m5x-agent-none@test.local', 'active', now(), '0900000101'),
+  ('b8000000-0000-4000-8000-000000000052', 'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000003', '客服-料錢成本', 'pgtap-m5x-agent-mc@test.local', 'active', now(), '0900000102');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('b8000000-0000-4000-8000-000000000052', 'material_costs', true);

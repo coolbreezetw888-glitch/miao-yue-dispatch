@@ -50,11 +50,11 @@ from generate_series(0, 6) as d;
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes)
 values ('e1420000-0000-4000-8000-000000000030', 'e1420000-0000-4000-8000-000000000020', '到府服務', 500, 'primary', 60);
 
-insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, no_time_slot_limit, show_member_info) values
-  ('e1420000-0000-4000-8000-000000000040', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000002', '服務人員X(按件)', 'piece_rate', 'active', 'active', now(), true, true),
-  ('e1420000-0000-4000-8000-000000000041', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000003', '服務人員Y(月薪)', 'monthly_salary', 'active', 'active', now(), true, false),
-  ('e1420000-0000-4000-8000-000000000042', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000004', '服務人員Z(隔離測試)', 'piece_rate', 'active', 'active', now(), true, false),
-  ('e1420000-0000-4000-8000-000000000043', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000005', '服務人員W2(不顯示會員)', 'piece_rate', 'active', 'active', now(), true, false);
+insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, no_time_slot_limit, show_member_info, phone) values
+  ('e1420000-0000-4000-8000-000000000040', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000002', '服務人員X(按件)', 'piece_rate', 'active', 'active', now(), true, true, '0900000101'),
+  ('e1420000-0000-4000-8000-000000000041', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000003', '服務人員Y(月薪)', 'monthly_salary', 'active', 'active', now(), true, false, '0900000102'),
+  ('e1420000-0000-4000-8000-000000000042', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000004', '服務人員Z(隔離測試)', 'piece_rate', 'active', 'active', now(), true, false, '0900000103'),
+  ('e1420000-0000-4000-8000-000000000043', 'e1420000-0000-4000-8000-000000000020', 'e1420000-0000-4000-8000-000000000005', '服務人員W2(不顯示會員)', 'piece_rate', 'active', 'active', now(), true, false, '0900000104');
 
 insert into merchant_staff_permissions (staff_id, section_key, granted)
 select s.id, k.key, true

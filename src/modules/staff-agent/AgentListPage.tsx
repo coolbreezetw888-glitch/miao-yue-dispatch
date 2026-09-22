@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 
 import {
   clearAgentPendingLoginEmail,
@@ -33,10 +34,7 @@ import {
   removeMerchantAgent,
   requestAgentLoginEmailChange,
 } from "./api";
-import {
-  AdminSuggestLoginEmailDialog,
-  LoginEmailStatusDisplay,
-} from "./AdminLoginEmailManager";
+import { AdminSuggestLoginEmailDialog, LoginEmailStatusDisplay } from "./AdminLoginEmailManager";
 import { useAgentLoginEmailStatus } from "./context";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
 import { AGENT_STATUS_LABELS, type AgentStatus, type MerchantAgent } from "./types";
@@ -109,6 +107,17 @@ function AgentListInner() {
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
     if (!email.trim() || !name.trim()) return;
+    // 規格書 §8.2:電話這次改為必填,格式驗證邏輯直接複用 §8.3 的共用函式,
+    // 不另外在這裡寫一份正規表示式(跟 StaffListPage.tsx §8.1 共用同一支 isValidTaiwanMobilePhone)。
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) {
+      toast.error("請填寫電話");
+      return;
+    }
+    if (!isValidTaiwanMobilePhone(trimmedPhone)) {
+      toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
+      return;
+    }
     setInviting(true);
     try {
       const result = await inviteMerchantAgent({ merchantId, email, name, nickname, phone });
@@ -198,16 +207,24 @@ function AgentListInner() {
               />
             </div>
             <div>
-              <Label htmlFor="agent-phone">電話</Label>
+              <Label htmlFor="agent-phone">電話 *</Label>
               <Input
                 id="agent-phone"
                 className="mt-2"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                placeholder="0912345678"
+                required
               />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
+              </p>
             </div>
             <div className="sm:col-span-2">
-              <Button type="submit" disabled={inviting || !email.trim() || !name.trim()}>
+              <Button
+                type="submit"
+                disabled={inviting || !email.trim() || !name.trim() || !phone.trim()}
+              >
                 {inviting ? "送出中⋯" : "送出邀請"}
               </Button>
             </div>
@@ -239,9 +256,7 @@ function AgentListInner() {
                     <p className="truncate text-xs text-muted-foreground">{agent.invited_email}</p>
                     {/* 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
                         狀態與修改入口。 */}
-                    {agent.status === "active" ? (
-                      <AgentLoginEmailManagement agent={agent} />
-                    ) : null}
+                    {agent.status === "active" ? <AgentLoginEmailManagement agent={agent} /> : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Badge variant={statusBadgeVariant(agent.status as AgentStatus)}>

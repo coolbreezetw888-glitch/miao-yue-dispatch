@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateDayRate,
+  getDaysInMonth,
   previewLeaveDeductionPerDay,
   previewServiceCommission,
   roundToCents,
@@ -67,6 +68,28 @@ describe("calculateDayRate(規則 2.7 day_rate)", () => {
 
   it("非數字輸入時安全返回 0", () => {
     expect(calculateDayRate(Number.NaN, 30)).toBe(0);
+  });
+});
+
+describe("getDaysInMonth(§十 10.1:取代商家手動填寫的月折算天數,前端預覽用,邏輯需跟資料庫 private.get_days_in_month 對齊)", () => {
+  it("2024 年 2 月是閏年 → 29 天", () => {
+    expect(getDaysInMonth(2024, 2)).toBe(29);
+  });
+
+  it("2025 年 2 月不是閏年 → 28 天", () => {
+    expect(getDaysInMonth(2025, 2)).toBe(28);
+  });
+
+  it("大月(1 月)→ 31 天", () => {
+    expect(getDaysInMonth(2026, 1)).toBe(31);
+  });
+
+  it("小月(4 月)→ 30 天", () => {
+    expect(getDaysInMonth(2026, 4)).toBe(30);
+  });
+
+  it("2000 年 2 月是世紀閏年(能被 400 整除)→ 29 天", () => {
+    expect(getDaysInMonth(2000, 2)).toBe(29);
   });
 });
 

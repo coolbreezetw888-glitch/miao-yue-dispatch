@@ -68,16 +68,16 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 -- Y:按件計酬——規則 2.2 測試用(不能登記請假)。
 -- W:月薪制——規則 2.6 既有預約衝突警示測試用,跟 X/Z/Y 分開避免互相干擾。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit, compensation_type) values
-  ('d7000000-0000-4000-8000-000000000041', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員X', null, true, false, 'monthly_salary'),
-  ('d7000000-0000-4000-8000-000000000042', 'd7000000-0000-4000-8000-000000000021', '按件服務人員Y', null, true, false, 'piece_rate'),
-  ('d7000000-0000-4000-8000-000000000043', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員Z(無限制編輯)', null, true, true, 'monthly_salary'),
-  ('d7000000-0000-4000-8000-000000000044', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員W(衝突測試)', null, true, false, 'monthly_salary');
+  ('d7000000-0000-4000-8000-000000000041', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員X', '0900000141', true, false, 'monthly_salary'),
+  ('d7000000-0000-4000-8000-000000000042', 'd7000000-0000-4000-8000-000000000021', '按件服務人員Y', '0900000142', true, false, 'piece_rate'),
+  ('d7000000-0000-4000-8000-000000000043', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員Z(無限制編輯)', '0900000143', true, true, 'monthly_salary'),
+  ('d7000000-0000-4000-8000-000000000044', 'd7000000-0000-4000-8000-000000000021', '月薪服務人員W(衝突測試)', '0900000144', true, false, 'monthly_salary');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('d7000000-0000-4000-8000-000000000051', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m7-agent-none@test.local', 'active', now()),
-  ('d7000000-0000-4000-8000-000000000052', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000004', '客服-team_leave', 'pgtap-m7-agent-teamleave@test.local', 'active', now()),
-  ('d7000000-0000-4000-8000-000000000053', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000005', '客服-scheduling', 'pgtap-m7-agent-scheduling@test.local', 'active', now()),
-  ('d7000000-0000-4000-8000-000000000054', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000006', '客服-僅訂單', 'pgtap-m7-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('d7000000-0000-4000-8000-000000000051', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m7-agent-none@test.local', 'active', now(), '0901000151'),
+  ('d7000000-0000-4000-8000-000000000052', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000004', '客服-team_leave', 'pgtap-m7-agent-teamleave@test.local', 'active', now(), '0901000152'),
+  ('d7000000-0000-4000-8000-000000000053', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000005', '客服-scheduling', 'pgtap-m7-agent-scheduling@test.local', 'active', now(), '0901000153'),
+  ('d7000000-0000-4000-8000-000000000054', 'd7000000-0000-4000-8000-000000000021', 'd7000000-0000-4000-8000-000000000006', '客服-僅訂單', 'pgtap-m7-agent-orders@test.local', 'active', now(), '0901000154');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('d7000000-0000-4000-8000-000000000052', 'team_leave', true),
@@ -90,14 +90,14 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
 select pg_temp.test_set_auth('d7000000-0000-4000-8000-000000000001');
 
 select throws_ok(
-  $$insert into merchant_staff (merchant_id, name, compensation_type)
-    values ('d7000000-0000-4000-8000-000000000021', '非法計酬類型測試', 'hourly')$$,
+  $$insert into merchant_staff (merchant_id, name, phone, compensation_type)
+    values ('d7000000-0000-4000-8000-000000000021', '非法計酬類型測試', '0900000145', 'hourly')$$,
   '23514', null,
-  '1.1:compensation_type 只能是 monthly_salary/piece_rate,非法值被 CHECK 約束擋下'
+  '1.1:compensation_type 只能是 monthly_salary/piece_rate,非法值被 CHECK 約束擋下(電話給合法格式,確保擋下原因單純是 compensation_type 的 CHECK)'
 );
 
-insert into merchant_staff (id, merchant_id, name)
-values ('d7000000-0000-4000-8000-000000000045', 'd7000000-0000-4000-8000-000000000021', '沒指定計酬類型的服務人員');
+insert into merchant_staff (id, merchant_id, name, phone)
+values ('d7000000-0000-4000-8000-000000000045', 'd7000000-0000-4000-8000-000000000021', '沒指定計酬類型的服務人員', '0900000146');
 
 select is(
   (select compensation_type from merchant_staff where id = 'd7000000-0000-4000-8000-000000000045'),
@@ -500,9 +500,9 @@ select ok(
 -- 編號 254/265 回歸驗證:INSERT/UPDATE 政策完全沒動,team_leave 客服依然不能寫入 merchant_staff。
 select throws_ok(
   $$insert into merchant_staff (merchant_id, name, phone, no_time_slot_limit)
-    values ('d7000000-0000-4000-8000-000000000021', 'team_leave客服嘗試新增', null, true)$$,
+    values ('d7000000-0000-4000-8000-000000000021', 'team_leave客服嘗試新增', '0900000147', true)$$,
   '42501', null,
-  '編號 254/265 回歸驗證:被授權 team_leave 的客服仍然不能新增 merchant_staff(INSERT 政策維持只給 is_merchant_admin,不受本次修正影響)'
+  '編號 254/265 回歸驗證:被授權 team_leave 的客服仍然不能新增 merchant_staff(INSERT 政策維持只給 is_merchant_admin,不受本次修正影響;電話給合法格式,確保擋下原因單純是權限不足)'
 );
 
 update merchant_staff set name = 'team_leave客服嘗試改名' where id = 'd7000000-0000-4000-8000-000000000041';

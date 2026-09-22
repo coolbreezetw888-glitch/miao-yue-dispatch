@@ -55,13 +55,13 @@ insert into merchant_feature_flags (merchant_id, feature_key, enabled) values
   ('ec000000-0000-4000-8000-000000000021', 'material_cost_enabled', true);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
-  ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '按件服務人員P', null, true, 'piece_rate'),
-  ('ec000000-0000-4000-8000-000000000042', 'ec000000-0000-4000-8000-000000000021', '月薪服務人員M', null, true, 'monthly_salary');
+  ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '按件服務人員P', '0901000101', true, 'piece_rate'),
+  ('ec000000-0000-4000-8000-000000000042', 'ec000000-0000-4000-8000-000000000021', '月薪服務人員M', '0901000102', true, 'monthly_salary');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000002', '客服-commission_settings', 'pgtap-m16-agent-commission@test.local', 'active', now()),
-  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m16-agent-none@test.local', 'active', now()),
-  ('ec000000-0000-4000-8000-000000000053', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-billing', 'pgtap-m16-agent-billing@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000002', '客服-commission_settings', 'pgtap-m16-agent-commission@test.local', 'active', now(), '0900000101'),
+  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m16-agent-none@test.local', 'active', now(), '0900000102'),
+  ('ec000000-0000-4000-8000-000000000053', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-billing', 'pgtap-m16-agent-billing@test.local', 'active', now(), '0900000103');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ec000000-0000-4000-8000-000000000051', 'commission_settings', true),

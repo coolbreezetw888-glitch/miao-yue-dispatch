@@ -1,5 +1,7 @@
-// 模組 11(LINE 通知)§4.4:行銷再通知頁(新路由 /app/line-marketing,僅商家管理員可見)。
+// 模組 11(LINE 通知)§4.4:行銷通知頁(新路由 /app/line-marketing,僅商家管理員可見;
+// §10.1/SPECS-INDEX #584 改名前叫「行銷再通知頁」)。
 // 會員多選清單(只顯示 line_bound=true 的會員,搜尋姓名/電話)+ 自訂訊息文字框(附字數統計)+
+// 可用變數說明/即時預覽(§10.1,複用 §4.2/§385 既有的 TemplateVariablePreview 共用元件)+
 // 「發送」按鈕(規則 2.6 二次確認)+ 發送後導向 4.3 發送記錄頁(篩選 marketing_manual)。
 
 import { useMemo, useState } from "react";
@@ -28,6 +30,11 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { RequireMerchantAdmin } from "@/modules/staff-agent/RequireMerchantAdmin";
 
 import { sendMarketingMessage, useMarketableMembers } from "./api";
+import { TemplateVariablePreview } from "./TemplateVariablePreview";
+import {
+  LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS,
+  previewLineMarketingTemplate,
+} from "./templateVariables";
 
 // LINE 文字訊息上限 5000 字(規格書「本模組明確不做的事」一節,engineer 動工前已查證,2026-09-20
 // 官方文件仍列 5000 字上限)。
@@ -87,7 +94,7 @@ function LineMarketingPageInner() {
         </Link>
       </div>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">行銷再通知</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">行銷通知</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           手動挑選已綁定 LINE 的會員名單,發送一次性的自訂文字訊息(不是自動化排程)。
         </p>
@@ -140,11 +147,15 @@ function LineMarketingPageInner() {
             maxLength={MESSAGE_MAX_LENGTH}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="支援 {{member_name}} 變數,會自動替換成每位會員的姓名"
+            placeholder="輸入要發送的訊息內容,可搭配下方的可用變數"
           />
           <p className="text-right text-xs text-muted-foreground">
             {message.length} / {MESSAGE_MAX_LENGTH}
           </p>
+          <TemplateVariablePreview
+            variables={LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS}
+            previews={[{ text: previewLineMarketingTemplate(message) }]}
+          />
 
           <AlertDialog>
             <AlertDialogTrigger asChild>

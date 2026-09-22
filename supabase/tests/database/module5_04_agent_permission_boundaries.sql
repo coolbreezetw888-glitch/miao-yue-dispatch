@@ -51,13 +51,13 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 values ('b4000000-0000-4000-8000-000000000030', 'b4000000-0000-4000-8000-000000000020', '洗髮', 300, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('b4000000-0000-4000-8000-000000000040', 'b4000000-0000-4000-8000-000000000020', '服務人員', null, true);
+values ('b4000000-0000-4000-8000-000000000040', 'b4000000-0000-4000-8000-000000000020', '服務人員', '0901000101', true);
 
 -- 三位客服:agent-none(什麼都沒被授權)、agent-bh(被授權 business_hours)、agent-orders(被授權 orders)。
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('b4000000-0000-4000-8000-000000000051', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000002', '客服-無授權', 'pgtap-m5-agent-none@test.local', 'active', now()),
-  ('b4000000-0000-4000-8000-000000000052', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000003', '客服-營業時間', 'pgtap-m5-agent-bh@test.local', 'active', now()),
-  ('b4000000-0000-4000-8000-000000000053', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000004', '客服-訂單', 'pgtap-m5-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('b4000000-0000-4000-8000-000000000051', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000002', '客服-無授權', 'pgtap-m5-agent-none@test.local', 'active', now(), '0900000101'),
+  ('b4000000-0000-4000-8000-000000000052', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000003', '客服-營業時間', 'pgtap-m5-agent-bh@test.local', 'active', now(), '0900000102'),
+  ('b4000000-0000-4000-8000-000000000053', 'b4000000-0000-4000-8000-000000000020', 'b4000000-0000-4000-8000-000000000004', '客服-訂單', 'pgtap-m5-agent-orders@test.local', 'active', now(), '0900000103');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('b4000000-0000-4000-8000-000000000052', 'business_hours', true),

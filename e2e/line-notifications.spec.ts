@@ -15,10 +15,12 @@
 //         選「否」不會呼叫 line-notify-dispatch,選「是」才會呼叫(mock line-notify-dispatch
 //         記錄呼叫次數)。
 //   4. LINE 通知設定頁(§4.2):切換開關/編輯文案後正確儲存並在重新整理後仍然生效。
-//   5. 行銷再通知頁(§4.4):目前沒有任何會員完成 LINE 綁定時的空狀態文字正確顯示。
+//   5. 行銷通知頁(§4.4,原「行銷再通知頁」,§10.1/SPECS-INDEX #584 改名):目前沒有任何會員
+//      完成 LINE 綁定時的空狀態文字正確顯示;填入含 {{member_name}} 變數的文字,即時預覽正確
+//      顯示替換後的白話文字;可用變數說明清單正確列出。
 //
 // 範圍外说明(已在回報中向主腦說明):§4.1 的「測試連線成功 → 狀態卡片顯示已連線」、
-// 4.5/4.6/4.7「產生的碼真的被使用完成綁定 → 狀態變成已綁定」、行銷再通知頁「真的選取已綁定
+// 4.5/4.6/4.7「產生的碼真的被使用完成綁定 → 狀態變成已綁定」、行銷通知頁「真的選取已綁定
 // 會員發送」這幾條,都需要「真的有一個已綁定 LINE 帳號的對象」,而 merchant_line_configs/
 // line_binding_codes 完全沒有開放給前端 anon/authenticated 角色的 RLS 政策、
 // consume_line_binding_code 只給 service role 呼叫、merchant_staff 額外有 BEFORE UPDATE
@@ -335,9 +337,9 @@ test("LINE 通知設定頁(§4.2):切換開關並編輯文案後正確儲存,重
   await expect(reloadedCard.locator("textarea")).toHaveValue(newTemplate);
 });
 
-test("行銷再通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對應的空狀態文字", async ({ page }) => {
+test("行銷通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對應的空狀態文字", async ({ page }) => {
   await page.goto("/app/line-marketing");
-  await expect(page.getByRole("heading", { name: "行銷再通知" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByText("目前沒有任何會員完成 LINE 綁定。")).toBeVisible({
@@ -346,4 +348,21 @@ test("行銷再通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對
   await expect(page.getByRole("button", { name: "發送" })).toBeDisabled();
 
   void MEMBER_NAME_PREFIX;
+});
+
+test("行銷通知頁(§10.1,SPECS-INDEX #584):可用變數說明 + 即時預覽正確顯示", async ({ page }) => {
+  await page.goto("/app/line-marketing");
+  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // §10.1 要求複用 §4.2/§385 既有的「可用變數說明 + 即時預覽」UI 模式。
+  await expect(page.getByText("可用變數:", { exact: false })).toBeVisible();
+  await expect(page.getByText("{{member_name}}", { exact: false })).toBeVisible();
+
+  const textarea = page.locator("textarea");
+  await textarea.fill("{{member_name}} 您好,本月有優惠活動");
+
+  await expect(page.getByText("即時預覽(套用範例假資料)")).toBeVisible();
+  await expect(page.getByText("王小姐 您好,本月有優惠活動")).toBeVisible();
 });

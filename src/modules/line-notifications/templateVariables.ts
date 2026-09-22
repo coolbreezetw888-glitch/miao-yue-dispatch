@@ -71,3 +71,22 @@ export function renderLineMessageTemplate(
 export function previewLineMessageTemplate(template: string): string {
   return renderLineMessageTemplate(template, LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES);
 }
+
+/** §10.1(「行銷通知」頁,SPECS-INDEX #584):行銷通知的訊息是商家自訂的自由文字,實際能替換
+ * 的變數以 line-send-marketing(3.15,supabase/functions/line-send-marketing/index.ts)這支
+ * Edge Function 組裝訊息時真的會用到的欄位為準——目前該函式只用會員姓名呼叫
+ * `renderMessageTemplate(message, { member_name: item.name })`,沒有 merchant_name 等其他
+ * 欄位,所以這裡只列出 `{{member_name}}` 這一個真的能替換到的變數(規格書§10.1 明講「只列出
+ * 真的能替換到的變數,不要列出做不到的」)。 */
+export const LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS: { key: string; label: string }[] = [
+  { key: "member_name", label: "會員姓名" },
+];
+
+/** §10.1 即時預覽:行銷通知只套用 member_name 這一個範例值,不套用完整的
+ * LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES——避免商家在預覽區看到 {{merchant_name}} 這類變數被
+ * 替換成範例值,誤以為實際發送時也會生效(實際上 line-send-marketing 不會替換)。 */
+export function previewLineMarketingTemplate(template: string): string {
+  return renderLineMessageTemplate(template, {
+    member_name: LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES["member_name"] ?? "王小姐",
+  });
+}

@@ -46,31 +46,31 @@ values ('c6000000-0000-4000-8000-000000000030', 'c6000000-0000-4000-8000-0000000
 
 -- 服務人員 J:窗口 10:00-11:30(90 分鐘寬),用來測「自訂工時算出的區間一樣要跑過既有邊界驗證」。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c6000000-0000-4000-8000-000000000040', 'c6000000-0000-4000-8000-000000000020', '服務人員J', null, false);
+values ('c6000000-0000-4000-8000-000000000040', 'c6000000-0000-4000-8000-000000000020', '服務人員J', '0901000101', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c6000000-0000-4000-8000-000000000040', 2, '10:00', '11:30');
 
 -- 服務人員 K:窗口跟 J 相同,專門測「自訂工時算出的區間橫跨到單日例外關閉時段一樣會被擋下」。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c6000000-0000-4000-8000-000000000041', 'c6000000-0000-4000-8000-000000000020', '服務人員K', null, false);
+values ('c6000000-0000-4000-8000-000000000041', 'c6000000-0000-4000-8000-000000000020', '服務人員K', '0901000102', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c6000000-0000-4000-8000-000000000041', 2, '10:00', '11:30');
 
 -- 服務人員 L(主要):窗口很寬(10:00-18:00),用來測「助手的驗證也套用自訂後的區間」;
 -- 助手 M 的窗口很窄(10:00-10:30),自訂工時延伸到助手窗口之外時應該整筆被擋下。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c6000000-0000-4000-8000-000000000042', 'c6000000-0000-4000-8000-000000000020', '服務人員L', null, false);
+values ('c6000000-0000-4000-8000-000000000042', 'c6000000-0000-4000-8000-000000000020', '服務人員L', '0901000103', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c6000000-0000-4000-8000-000000000042', 2, '10:00', '18:00');
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c6000000-0000-4000-8000-000000000043', 'c6000000-0000-4000-8000-000000000020', '助手M', null, false);
+values ('c6000000-0000-4000-8000-000000000043', 'c6000000-0000-4000-8000-000000000020', '助手M', '0901000104', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c6000000-0000-4000-8000-000000000043', 2, '10:00', '10:30');
 
 -- 服務人員 N:專門給 update_booking 測試用(§4.3 第 7 點:關閉自訂工時開關後正確恢復)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c6000000-0000-4000-8000-000000000044', 'c6000000-0000-4000-8000-000000000020', '服務人員N', null, false);
+values ('c6000000-0000-4000-8000-000000000044', 'c6000000-0000-4000-8000-000000000020', '服務人員N', '0901000105', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c6000000-0000-4000-8000-000000000044', 2, '10:00', '18:00');
 
@@ -78,9 +78,9 @@ values ('c6000000-0000-4000-8000-000000000044', 2, '10:00', '18:00');
 -- (strict_conflict_check 預設開啟)。P/Q 窗口跟 J 相同(10:00-11:30),R 窗口很寬,單純測
 -- 「關閉自訂工時」的既有行為,不需要窄窗口。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('c6000000-0000-4000-8000-000000000045', 'c6000000-0000-4000-8000-000000000020', '服務人員P', null, false),
-  ('c6000000-0000-4000-8000-000000000046', 'c6000000-0000-4000-8000-000000000020', '服務人員Q', null, false),
-  ('c6000000-0000-4000-8000-000000000047', 'c6000000-0000-4000-8000-000000000020', '服務人員R', null, true);
+  ('c6000000-0000-4000-8000-000000000045', 'c6000000-0000-4000-8000-000000000020', '服務人員P', '0901000106', false),
+  ('c6000000-0000-4000-8000-000000000046', 'c6000000-0000-4000-8000-000000000020', '服務人員Q', '0901000107', false),
+  ('c6000000-0000-4000-8000-000000000047', 'c6000000-0000-4000-8000-000000000020', '服務人員R', '0901000108', true);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time) values
   ('c6000000-0000-4000-8000-000000000045', 2, '10:00', '11:30'),
   ('c6000000-0000-4000-8000-000000000046', 2, '10:00', '11:30');

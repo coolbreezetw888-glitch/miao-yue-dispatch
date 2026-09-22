@@ -40,8 +40,8 @@ values ('ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-0000000
 insert into merchant_admins (merchant_id, user_id, display_name)
 values ('ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000001', '綁定測試管理員');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ed000000-0000-4000-8000-000000000051', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000002', '綁定測試客服', 'pgtap-m11b-agent@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ed000000-0000-4000-8000-000000000051', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000002', '綁定測試客服', 'pgtap-m11b-agent@test.local', 'active', now(), '0900000101');
 
 insert into merchant_business_hours (merchant_id, day_of_week, is_closed, open_time, close_time)
 select 'ed000000-0000-4000-8000-000000000021', d, false, '00:00', '23:59'

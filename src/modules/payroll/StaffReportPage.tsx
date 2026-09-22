@@ -30,7 +30,12 @@ import { useMerchantStaffList } from "@/modules/staff-agent/context";
 // (staff-portal 模組已經有 import booking/dateUtils 的既有先例,這裡是同樣的模式)。
 import { formatAmount } from "@/modules/booking/orderAmount";
 
-import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "./api";
+import {
+  useStaffCommissionSummary,
+  useStaffCommissionSummaryByRange,
+  useStaffMonthlyPayrollSummary,
+  useStaffMonthlyPayrollSummaryByRange,
+} from "./api";
 import { buildCsvContent, downloadCsv } from "./csvExport";
 import { formatStaffCommissionItemBreakdown } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
@@ -45,13 +50,19 @@ export function PieceRateStaffReport({
   staffName,
   year,
   month,
+  dateRange,
   showCsvExport = true,
   showSummaryCards = false,
 }: {
   staffId: string;
   staffName: string;
-  year: number;
-  month: number;
+  /** 商家管理員視角(StaffReportPage.tsx)一定會傳,服務人員自助視角改傳 dateRange 時可以不傳。 */
+  year?: number;
+  month?: number;
+  /** 商家端三項調整規格書 §3.6/服務人員端規格書 §15.2:服務人員自助頁面(MyPayrollPage.tsx)改
+   * 傳這個區間物件,取代 year/month,改用 get_staff_commission_summary_by_range 查詢;商家管理員
+   * 視角(StaffReportPage.tsx)不傳,繼續吃 year/month,維持既有行為不變。 */
+  dateRange?: { startDate: string; endDate: string };
   /** 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面(MyPayrollPage.tsx)傳 false 拿掉 CSV
    * 匯出按鈕;商家管理員視角(StaffReportPage.tsx)不傳,吃預設值 true,維持既有行為不變。 */
   showCsvExport?: boolean;
@@ -59,7 +70,16 @@ export function PieceRateStaffReport({
    * 我的抽成/訂單總額);商家管理員視角不傳,吃預設值 false,維持既有版面不變。 */
   showSummaryCards?: boolean;
 }) {
-  const { data: summary, isLoading, error } = useStaffCommissionSummary(staffId, year, month);
+  // 兩個 hook 都無條件呼叫(react hooks 規則),各自的 enabled 條件會確保只有其中一個真的送出
+  // 請求——沒有 dateRange 時走原本的年/月查詢(商家管理員視角),有 dateRange 時走區間查詢
+  // (服務人員自助視角)。
+  const monthQuery = useStaffCommissionSummary(staffId, dateRange ? null : year, dateRange ? null : month);
+  const rangeQuery = useStaffCommissionSummaryByRange(
+    staffId,
+    dateRange ? dateRange.startDate : null,
+    dateRange ? dateRange.endDate : null,
+  );
+  const { data: summary, isLoading, error } = dateRange ? rangeQuery : monthQuery;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   function toggleExpanded(bookingId: string) {
@@ -85,10 +105,8 @@ export function PieceRateStaffReport({
       d.commission_amount,
       d.recalculated ? "是" : "否",
     ]);
-    downloadCsv(
-      `師傅報表_${staffName}_${year}-${String(month).padStart(2, "0")}.csv`,
-      buildCsvContent(headers, rows),
-    );
+    const periodLabel = dateRange ? `${dateRange.startDate}_${dateRange.endDate}` : `${year}-${String(month).padStart(2, "0")}`;
+    downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
@@ -166,7 +184,9 @@ export function PieceRateStaffReport({
         </CardHeader>
         <CardContent>
           {summary.details.length === 0 ? (
-            <p className="text-sm text-muted-foreground">這個月沒有已完成的訂單。</p>
+            <p className="text-sm text-muted-foreground">
+              {dateRange ? "這段期間沒有已完成的訂單。" : "這個月沒有已完成的訂單。"}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -242,27 +262,36 @@ export function MonthlySalaryStaffReport({
   staffName,
   year,
   month,
+  dateRange,
   showCsvExport = true,
 }: {
   staffId: string;
   staffName: string;
-  year: number;
-  month: number;
+  year?: number;
+  month?: number;
+  /** 商家端三項調整規格書 §3.6/服務人員端規格書 §15.2:服務人員自助頁面改傳這個區間物件,取代
+   * year/month,改用 get_staff_monthly_payroll_summary_by_range 查詢;商家管理員視角不傳,繼續
+   * 吃 year/month。 */
+  dateRange?: { startDate: string; endDate: string };
   /** 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面傳 false 拿掉 CSV 匯出按鈕;商家管理員
    * 視角不傳,吃預設值 true,維持既有行為不變。這次需求 4 沒有提到要調整月薪制服務人員報表
    * 的摘要卡片(本來就已經有三張卡片),不新增 showSummaryCards 這個 prop。 */
   showCsvExport?: boolean;
 }) {
-  const { data: summary, isLoading, error } = useStaffMonthlyPayrollSummary(staffId, year, month);
+  const monthQuery = useStaffMonthlyPayrollSummary(staffId, dateRange ? null : year, dateRange ? null : month);
+  const rangeQuery = useStaffMonthlyPayrollSummaryByRange(
+    staffId,
+    dateRange ? dateRange.startDate : null,
+    dateRange ? dateRange.endDate : null,
+  );
+  const { data: summary, isLoading, error } = dateRange ? rangeQuery : monthQuery;
 
   function handleExportCsv() {
     if (!summary) return;
     const headers = ["假別", "天數", "扣款模式", "扣款金額"];
     const rows = summary.details.map((d) => [d.leave_type_name, d.days, d.deduction_mode, d.deduction_amount]);
-    downloadCsv(
-      `師傅報表_${staffName}_${year}-${String(month).padStart(2, "0")}.csv`,
-      buildCsvContent(headers, rows),
-    );
+    const periodLabel = dateRange ? `${dateRange.startDate}_${dateRange.endDate}` : `${year}-${String(month).padStart(2, "0")}`;
+    downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
@@ -272,8 +301,8 @@ export function MonthlySalaryStaffReport({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          本月休假額度 {summary.monthly_leave_quota_days ?? "未設定"} 天(僅供參考,不影響薪資計算)
-          ,實際請假 {summary.total_leave_days} 天
+          {dateRange ? "月休假額度" : "本月休假額度"} {summary.monthly_leave_quota_days ?? "未設定"}{" "}
+          天(僅供參考,不影響薪資計算),這段期間實際請假 {summary.total_leave_days} 天
         </p>
         {showCsvExport ? (
           <Button variant="outline" size="sm" onClick={handleExportCsv}>
@@ -315,13 +344,25 @@ export function MonthlySalaryStaffReport({
         </p>
       ) : null}
 
+      {/* 模組 8 §11.10:這個月(或查詢區間內有部分月份)早於系統開始記錄薪資歷史的時間,「月薪
+          基本額」是用最早的已知薪資回推估算,提醒使用者僅供參考。這個元件同時被 StaffReportPage.tsx
+          (商家管理員視角)跟 MyPayrollPage.tsx(服務人員自助視角)共用,兩邊都會自動套用這個提示,
+          不需要各自重複實作。 */}
+      {summary.salary_history_estimated ? (
+        <p className="rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm text-warn">
+          ⚠️ 這段期間早於系統開始記錄薪資歷史的時間,月薪基本額是用最早的已知薪資回推估算,僅供參考。
+        </p>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>假別扣款明細</CardTitle>
         </CardHeader>
         <CardContent>
           {summary.details.length === 0 ? (
-            <p className="text-sm text-muted-foreground">這個月沒有需要扣款的請假紀錄。</p>
+            <p className="text-sm text-muted-foreground">
+              {dateRange ? "這段期間沒有需要扣款的請假紀錄。" : "這個月沒有需要扣款的請假紀錄。"}
+            </p>
           ) : (
             <Table>
               <TableHeader>

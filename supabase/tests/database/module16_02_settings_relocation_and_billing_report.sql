@@ -47,13 +47,13 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('ed000000-0000-4000-8000-000000000031', 'ed000000-0000-4000-8000-000000000021', '洗髮', 1000, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
-  ('ed000000-0000-4000-8000-000000000041', 'ed000000-0000-4000-8000-000000000021', '按件服務人員P', null, true, 'piece_rate');
+  ('ed000000-0000-4000-8000-000000000041', 'ed000000-0000-4000-8000-000000000021', '按件服務人員P', '0901000101', true, 'piece_rate');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ed000000-0000-4000-8000-000000000051', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000002', '客服-business_hours', 'pgtap-m16b-agent-bh@test.local', 'active', now()),
-  ('ed000000-0000-4000-8000-000000000052', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000003', '客服-material_costs', 'pgtap-m16b-agent-mc@test.local', 'active', now()),
-  ('ed000000-0000-4000-8000-000000000053', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000004', '客服-payment_methods', 'pgtap-m16b-agent-pm@test.local', 'active', now()),
-  ('ed000000-0000-4000-8000-000000000054', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000005', '客服-commission_settings+billing', 'pgtap-m16b-agent-cs@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ed000000-0000-4000-8000-000000000051', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000002', '客服-business_hours', 'pgtap-m16b-agent-bh@test.local', 'active', now(), '0900000101'),
+  ('ed000000-0000-4000-8000-000000000052', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000003', '客服-material_costs', 'pgtap-m16b-agent-mc@test.local', 'active', now(), '0900000102'),
+  ('ed000000-0000-4000-8000-000000000053', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000004', '客服-payment_methods', 'pgtap-m16b-agent-pm@test.local', 'active', now(), '0900000103'),
+  ('ed000000-0000-4000-8000-000000000054', 'ed000000-0000-4000-8000-000000000021', 'ed000000-0000-4000-8000-000000000005', '客服-commission_settings+billing', 'pgtap-m16b-agent-cs@test.local', 'active', now(), '0900000104');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ed000000-0000-4000-8000-000000000051', 'business_hours', true),

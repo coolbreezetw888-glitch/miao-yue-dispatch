@@ -35,7 +35,7 @@ insert into merchant_business_hours (merchant_id, day_of_week, is_closed, open_t
 values ('c5000000-0000-4000-8000-000000000020', 2, false, '09:00', '18:00');
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c5000000-0000-4000-8000-000000000040', 'c5000000-0000-4000-8000-000000000020', '測試師傅', null, true);
+values ('c5000000-0000-4000-8000-000000000040', 'c5000000-0000-4000-8000-000000000020', '測試師傅', '0901000101', true);
 
 select pg_temp.test_set_auth('c5000000-0000-4000-8000-000000000001');
 

@@ -49,7 +49,7 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 values ('b3000000-0000-4000-8000-000000000031', 'b3000000-0000-4000-8000-000000000021', '按摩', 800, 'primary', 60);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('b3000000-0000-4000-8000-000000000041', 'b3000000-0000-4000-8000-000000000021', '服務人員', null, true);
+values ('b3000000-0000-4000-8000-000000000041', 'b3000000-0000-4000-8000-000000000021', '服務人員', '0901000101', true);
 
 select pg_temp.test_set_auth('b3000000-0000-4000-8000-000000000001');
 

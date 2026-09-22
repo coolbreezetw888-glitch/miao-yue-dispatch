@@ -43,10 +43,10 @@ insert into merchants (id, group_id, name, industry_type) values
 insert into merchant_admins (merchant_id, user_id) values
   ('da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000001');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('da000000-0000-4000-8000-000000000031', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000002', '客服-僅訂單', 'pgtap-bkrt-agent-orders@test.local', 'active', now()),
-  ('da000000-0000-4000-8000-000000000032', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000003', '客服-專屬權限', 'pgtap-bkrt-agent-specific@test.local', 'active', now()),
-  ('da000000-0000-4000-8000-000000000033', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000004', '客服-無授權', 'pgtap-bkrt-agent-none@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('da000000-0000-4000-8000-000000000031', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000002', '客服-僅訂單', 'pgtap-bkrt-agent-orders@test.local', 'active', now(), '0900000101'),
+  ('da000000-0000-4000-8000-000000000032', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000003', '客服-專屬權限', 'pgtap-bkrt-agent-specific@test.local', 'active', now(), '0900000102'),
+  ('da000000-0000-4000-8000-000000000033', 'da000000-0000-4000-8000-000000000021', 'da000000-0000-4000-8000-000000000004', '客服-無授權', 'pgtap-bkrt-agent-none@test.local', 'active', now(), '0900000103');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('da000000-0000-4000-8000-000000000031', 'orders', true),
@@ -60,7 +60,7 @@ insert into merchant_feature_flags (merchant_id, feature_key, enabled) values
   ('da000000-0000-4000-8000-000000000021', 'material_cost_enabled', true);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('da000000-0000-4000-8000-000000000041', 'da000000-0000-4000-8000-000000000021', '測試店服務人員', null, true);
+  ('da000000-0000-4000-8000-000000000041', 'da000000-0000-4000-8000-000000000021', '測試店服務人員', '0900000100', true);
 
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes) values
   ('da000000-0000-4000-8000-000000000051', 'da000000-0000-4000-8000-000000000021', '測試服務項目', 500, 'primary', 30);
@@ -113,9 +113,9 @@ select is(
 
 select throws_ok(
   $$insert into merchant_staff (merchant_id, name, phone, no_time_slot_limit)
-    values ('da000000-0000-4000-8000-000000000021', '僅訂單客服嘗試新增', null, true)$$,
+    values ('da000000-0000-4000-8000-000000000021', '僅訂單客服嘗試新增', '0900000199', true)$$,
   '42501', null,
-  '編號 241:只有 orders 權限的客服不能新增 merchant_staff(管理仍需商家管理員身分)'
+  '編號 241:只有 orders 權限的客服不能新增 merchant_staff(管理仍需商家管理員身分,用合法格式的電話確保擋下原因單純是權限不足)'
 );
 
 update merchant_staff set name = '僅訂單客服嘗試改名' where id = 'da000000-0000-4000-8000-000000000041';

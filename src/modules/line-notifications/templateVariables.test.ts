@@ -3,9 +3,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS,
   LINE_STAFF_LEAVE_TEMPLATE_VARIABLE_DEFINITIONS,
   LINE_TEMPLATE_VARIABLE_DEFINITIONS,
   getTemplateVariableDefinitions,
+  previewLineMarketingTemplate,
   previewLineMessageTemplate,
   renderLineMessageTemplate,
 } from "./templateVariables";
@@ -95,5 +97,27 @@ describe("getTemplateVariableDefinitions(4.2 可用變數清單,bug fix SPECS-IN
       expect(rendered).not.toContain(`{{${key}}}`);
       expect(rendered.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("§10.1 行銷通知(SPECS-INDEX #584):LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS / previewLineMarketingTemplate", () => {
+  it("只列出 line-send-marketing 實際會替換到的 member_name,不列出其他做不到的變數", () => {
+    expect(LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS.map((d) => d.key)).toEqual(["member_name"]);
+  });
+
+  it("套用範例假資料後正確渲染,{{member_name}} 出現多次都會被換掉", () => {
+    const rendered = previewLineMarketingTemplate("{{member_name}} 您好,{{member_name}} 感謝您的支持");
+    expect(rendered).not.toMatch(/\{\{\w+\}\}/);
+    expect(rendered).toContain("王小姐");
+  });
+
+  it("即使文案裡誤填了其他事件才有的變數(例如 {{merchant_name}}),預覽也不會被替換,如實反映實際發送行為", () => {
+    const rendered = previewLineMarketingTemplate("【{{merchant_name}}】{{member_name}} 您好");
+    expect(rendered).toContain("{{merchant_name}}");
+    expect(rendered).toContain("王小姐");
+  });
+
+  it("空字串範本渲染後仍是空字串", () => {
+    expect(previewLineMarketingTemplate("")).toBe("");
   });
 });

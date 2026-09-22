@@ -20,6 +20,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { isValidTaiwanMobilePhone } from "../_shared/phoneValidation.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -31,8 +32,7 @@ const PUBLIC_SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://miao-yue-dis
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {
@@ -91,10 +91,20 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
   const rawEmail = body.email?.trim();
   const name = body.name?.trim();
   const nickname = body.nickname?.trim() || null;
-  const phone = body.phone?.trim() || null;
+  const phone = body.phone?.trim() || "";
 
-  if (!merchantId || !rawEmail || !name) {
-    return jsonResponse({ error: "缺少必要欄位(商家、Email、姓名為必填)" }, 400);
+  if (!merchantId || !rawEmail || !name || !phone) {
+    return jsonResponse({ error: "缺少必要欄位(商家、Email、姓名、電話為必填)" }, 400);
+  }
+
+  // 規格書 §8.2:電話這次改為必填,Edge Function 內部也要用跟前端同一套正規表示式再驗證一次
+  // (§8.3 的 isValidTaiwanMobilePhone,不能只信任前端已經檢查過),不符合格式直接回傳 400,
+  // 不寄出邀請信、不寫入 merchant_agents。
+  if (!isValidTaiwanMobilePhone(phone)) {
+    return jsonResponse(
+      { error: "電話格式不正確,請輸入正確的台灣手機號碼(09 開頭共 10 碼),例如 0912345678" },
+      400,
+    );
   }
 
   const email = rawEmail.toLowerCase();
@@ -105,10 +115,9 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc(
-    "am_i_merchant_admin",
-    { p_merchant_id: merchantId },
-  );
+  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc("am_i_merchant_admin", {
+    p_merchant_id: merchantId,
+  });
 
   if (adminCheckError) {
     console.error("[invite-merchant-agent] am_i_merchant_admin 呼叫失敗", adminCheckError);

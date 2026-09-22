@@ -106,7 +106,11 @@ export interface StaffCommissionSummary {
   total_amount: number;
 }
 
-/** §3.10 get_staff_monthly_payroll_summary 回傳形狀(月薪制師傅報表,規則 2.8)。 */
+/** §3.10 get_staff_monthly_payroll_summary 回傳形狀(月薪制師傅報表,規則 2.8)。§11.7(2026-09-22
+ * 新增):monthly_base_salary 改查「該月當時」的歷史值(區間版本改成逐月加總),新增
+ * salary_history_estimated——查詢的月份/區間早於機制上線前時為 true(此時金額是用機制上線種子
+ * 回推估算,僅供參考);查詢的月份早於這位服務人員實際加入商家的時間點時,金額顯示 0 且這個欄位
+ * 是 false(不是估算,是誠實顯示「那時候還沒有這個人」)。 */
 export interface StaffMonthlyPayrollSummary {
   monthly_base_salary: number;
   details: Array<{
@@ -121,12 +125,16 @@ export interface StaffMonthlyPayrollSummary {
   over_deduction_warning: boolean;
   monthly_leave_quota_days: number | null;
   total_leave_days: number;
+  salary_history_estimated: boolean;
 }
 
 /** §3.11 get_merchant_billing_summary 回傳形狀(店家端帳務報表)。商家端三項調整規格書 §三 3.1:
  * 原本單一的 total_revenue(含稅)拆成 total_revenue_excl_tax(未稅)+ total_tax_amount(稅金)。
  * §三 3.2:estimated_net_margin 改用未稅營收計算(原本誤用含稅營收,虛增這個數字),前端顯示
- * 名稱也從「概估毛利」改成「商家總淨利」,JSON 欄位名稱不變。 */
+ * 名稱也從「概估毛利」改成「商家總淨利」,JSON 欄位名稱不變。§11.8(2026-09-22 新增):
+ * total_monthly_salary_base 改用歷史資料逐月加總,新增 salary_estimation_applied——查詢區間涵蓋
+ * 機制上線前的月份時為 true(僅供參考)。per_staff_breakdown 維持現況,不逐月還原歷史人員名單
+ * (§11.9,決策記錄)。 */
 export interface MerchantBillingSummary {
   total_revenue_excl_tax: number;
   total_tax_amount: number;
@@ -143,4 +151,5 @@ export interface MerchantBillingSummary {
     net_pay: number | null;
     commission_amount: number | null;
   }>;
+  salary_estimation_applied: boolean;
 }

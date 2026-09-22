@@ -136,6 +136,46 @@ test("推播通知設定頁(§7.9):管理員切換開關並編輯文案後正確
   await expect(reloadedCard.locator("input")).toHaveValue(newTitle);
 });
 
+test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對應事件的可用變數說明,填入文案後標題/內文分開即時預覽", async ({
+  page,
+}) => {
+  await injectAdminSession(page, fixture);
+  await page.goto("/app");
+  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  await page.goto("/app/push-events");
+  await expect(page.getByRole("heading", { name: "推播通知設定" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 4 張卡片各自都要有「可用變數」說明(複用模組 11 §385 的 TemplateVariablePreview 共用元件)。
+  const cardEventTypes = [
+    "booking_created",
+    "booking_cancelled",
+    "booking_updated",
+    "booking_reminder_next_day",
+  ];
+  for (const eventType of cardEventTypes) {
+    const card = page.getByTestId(`push-event-card-${eventType}`);
+    await expect(card.getByText("可用變數:", { exact: false })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  }
+
+  // booking_updated 只顯示該事件實際會替換到的變數(change_summary),不混入其他事件才有的
+  // service_names(對應 §13.1「不把 4 種事件全部變數混在一起列」)。
+  const updatedCard = page.getByTestId("push-event-card-booking_updated");
+  await expect(updatedCard.getByText("{{change_summary}}", { exact: false })).toBeVisible();
+  await expect(updatedCard.getByText("{{service_names}}", { exact: false })).toHaveCount(0);
+
+  // 標題/內文分開即時預覽,不合併成一大段文字(§13.1 邊界情況)。
+  const createdCard = page.getByTestId("push-event-card-booking_created");
+  await createdCard.locator("input").fill("{{customer_name}} 的新預約");
+  await createdCard.locator("textarea").fill("{{booking_date}} {{service_names}}");
+  await expect(createdCard.getByText("標題")).toBeVisible();
+  await expect(createdCard.getByText("內文")).toBeVisible();
+  await expect(createdCard.getByText("王小姐 的新預約")).toBeVisible();
+  await expect(createdCard.getByText("2026-10-01 14:30 手部保養、單色凝膠")).toBeVisible();
+});
+
 test("服務人員開啟/關閉推播通知(§7.2):訂閱成功寫入裝置清單,取消訂閱後移除", async ({ page }) => {
   await stubServiceWorkerAndPushManager(page);
   await injectStaffSession(page, fixture);

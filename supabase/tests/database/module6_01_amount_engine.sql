@@ -45,7 +45,7 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 values ('c1000000-0000-4000-8000-000000000030', 'c1000000-0000-4000-8000-000000000020', '洗髮', 300, 'primary', 60);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c1000000-0000-4000-8000-000000000040', 'c1000000-0000-4000-8000-000000000020', '服務人員', null, true);
+values ('c1000000-0000-4000-8000-000000000040', 'c1000000-0000-4000-8000-000000000020', '服務人員', '0901000101', true);
 
 -- 模組 9(支付方式)v2:payment_method 欄位已改成 payment_method_id(uuid,指向 payment_methods)+
 -- payment_method_name_snapshot(text 快照),這裡補一筆商家自訂付款方式供下面 ⑩ 的測試使用。

@@ -55,7 +55,7 @@ import {
   useStaffSalarySettings,
   useStaffServiceCommissionRates,
 } from "./api";
-import { previewServiceCommission, calculateDayRate } from "./previewCalculators";
+import { previewServiceCommission, calculateDayRate, getDaysInMonth } from "./previewCalculators";
 import {
   COMMISSION_BASIS_TYPE_LABELS,
   COMMISSION_MODE_LABELS,
@@ -79,27 +79,18 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
   const { data: settings, isLoading } = useMerchantPayrollSettings(merchantId);
 
   const [basisType, setBasisType] = useState<CommissionBasisType>("gross");
-  const [payDays, setPayDays] = useState("30");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
     setBasisType(settings.commission_basis_type as CommissionBasisType);
-    setPayDays(String(settings.pay_days_per_month));
   }, [settings]);
 
-  const numericPayDays = Number(payDays);
-
   async function handleSave() {
-    if (!Number.isInteger(numericPayDays) || numericPayDays < 1 || numericPayDays > 31) {
-      toast.error("月折算天數必須介於 1~31 之間的整數");
-      return;
-    }
     setSaving(true);
     try {
       await upsertMerchantPayrollSettings(merchantId, {
         commissionBasisType: basisType,
-        payDaysPerMonth: numericPayDays,
       });
       await queryClient.invalidateQueries({ queryKey: payrollSettingsQueryKey(merchantId) });
       toast.success("已更新抽成與薪資設定");
@@ -158,20 +149,13 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
             </div>
 
             <div>
-              <Label htmlFor="pay-days">月折算天數</Label>
-              <Input
-                id="pay-days"
-                className="mt-2 w-32"
-                type="number"
-                min={1}
-                max={31}
-                step="1"
-                value={payDays}
-                onChange={(e) => setPayDays(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                用來把月薪換算成一天的薪水,一般常見填 30。假別扣款的「扣一天全薪」「扣一天薪水的
-                某個百分比」兩種模式會用到這個數字。
+              <Label>月折算天數</Label>
+              {/* §十 10.1:這次拿掉商家手動填寫的固定天數,改成系統依「當月實際天數」自動計算
+                  (28~31 天),不需要另外設定,也不再是這裡可以編輯的欄位。 */}
+              <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                月折算天數依系統自動依當月實際天數計算(28~31 天),不需要另外設定。假別扣款的「扣
+                一天全薪」「扣一天薪水的某個百分比」兩種模式會用到這個數字,每個月會依那個月的實際
+                天數自動換算,不是固定的一個數字。
               </p>
             </div>
 
@@ -680,8 +664,9 @@ function StaffSalarySettingsDialog({
 
             {!Number.isNaN(numericBaseSalary) ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                依目前月折算天數({payDaysPerMonth} 天)換算,一天薪水約{" "}
-                <strong>{dayRate.toFixed(2)}</strong> 元(假別扣款「扣一天全薪」模式會用到這個數字)。
+                依本月實際天數({payDaysPerMonth} 天)換算,一天薪水約{" "}
+                <strong>{dayRate.toFixed(2)}</strong> 元(假別扣款「扣一天全薪」模式會用到這個數字;
+                每個月的實際天數不同,系統會依請假當月自動換算,這裡只是用本月天數預覽試算)。
               </p>
             ) : null}
 
@@ -785,9 +770,13 @@ function MonthlySalaryStaffRow({
 function PayrollSettingsPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
-  const { data: settings } = useMerchantPayrollSettings(merchantId);
 
-  const payDaysPerMonth = settings ? Number(settings.pay_days_per_month) : 30;
+  // §十 10.1:「月折算天數」不再是商家設定值,改成系統依當月實際天數動態計算。這裡只是給下面
+  // 月薪制服務人員區塊的「即時預覽計算機」用「本月」的實際天數試算,純粹輔助理解,不是任何寫入
+  // 依據——真正的計算永遠以資料庫函式(private.compute_staff_payroll)在查詢當下實際那個年月
+  // 算出的天數為準。
+  const now = new Date();
+  const payDaysPerMonth = getDaysInMonth(now.getFullYear(), now.getMonth() + 1);
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">

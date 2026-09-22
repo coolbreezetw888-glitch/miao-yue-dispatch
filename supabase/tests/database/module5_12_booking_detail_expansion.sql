@@ -55,9 +55,9 @@ insert into merchant_admins (merchant_id, user_id) values
 -- 丙客服:有填 nickname。丁客服:沒填,應該 fallback 顯示 name 欄位(必填,一定有值)。
 -- 丙同時開通 orders 權限,用來驗證 get_booking_actor_names 的權限檢查是 can_manage_bookings
 -- (不是 is_merchant_admin),被開通 orders 的客服也能查詢。
-insert into merchant_agents (id, merchant_id, user_id, name, nickname, invited_email, status) values
-  ('bc000000-0000-4000-8000-000000000031', 'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000003', '客服丙本名', '阿丙', 'pgtap-detail-agent-c@test.local', 'active'),
-  ('bc000000-0000-4000-8000-000000000032', 'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000004', '客服丁', null, 'pgtap-detail-agent-d@test.local', 'active');
+insert into merchant_agents (id, merchant_id, user_id, name, nickname, invited_email, status, phone) values
+  ('bc000000-0000-4000-8000-000000000031', 'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000003', '客服丙本名', '阿丙', 'pgtap-detail-agent-c@test.local', 'active', '0900000101'),
+  ('bc000000-0000-4000-8000-000000000032', 'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000004', '客服丁', null, 'pgtap-detail-agent-d@test.local', 'active', '0900000102');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('bc000000-0000-4000-8000-000000000031', 'orders', true);
@@ -69,7 +69,7 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('bc000000-0000-4000-8000-000000000041', 'bc000000-0000-4000-8000-000000000020', '洗髮', 300, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('bc000000-0000-4000-8000-000000000051', 'bc000000-0000-4000-8000-000000000020', '服務人員甲', null, true);
+values ('bc000000-0000-4000-8000-000000000051', 'bc000000-0000-4000-8000-000000000020', '服務人員甲', '0901000101', true);
 
 -- =========================================================================
 -- ①②③ create_booking:寫入 customer_notes,剛建立時 last_modified_by_user_id/at 都是 null

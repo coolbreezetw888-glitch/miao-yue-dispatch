@@ -59,36 +59,36 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('c4000000-0000-4000-8000-000000000031', 'c4000000-0000-4000-8000-000000000020', '長服務', 800, 'primary', 90);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c4000000-0000-4000-8000-000000000040', 'c4000000-0000-4000-8000-000000000020', '服務人員A', null, false, false);
+values ('c4000000-0000-4000-8000-000000000040', 'c4000000-0000-4000-8000-000000000020', '服務人員A', '0901000101', false, false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c4000000-0000-4000-8000-000000000040', 2, '10:00', '11:30');
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c4000000-0000-4000-8000-000000000041', 'c4000000-0000-4000-8000-000000000020', '服務人員B(不限)', null, false, true);
+values ('c4000000-0000-4000-8000-000000000041', 'c4000000-0000-4000-8000-000000000020', '服務人員B(不限)', '0901000102', false, true);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c4000000-0000-4000-8000-000000000042', 'c4000000-0000-4000-8000-000000000020', '服務人員C(無時段限制)', null, true, false);
+values ('c4000000-0000-4000-8000-000000000042', 'c4000000-0000-4000-8000-000000000020', '服務人員C(無時段限制)', '0901000103', true, false);
 
 -- 服務人員 D/E:專門給 A7/A8 多格子情境用,避免跟服務人員 A 既有的 A1 那筆 10:00-11:00 預約重疊
 -- (strict_conflict_check 預設開啟,同一位服務人員時段重疊會被規則 2.4 擋下,那是另一條規則,
 -- 不是這裡要測的邊界規則,用獨立的服務人員避免兩條規則互相干擾)。時段設定跟服務人員 A 相同
 -- (10:00-11:30)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c4000000-0000-4000-8000-000000000043', 'c4000000-0000-4000-8000-000000000020', '服務人員D', null, false, false);
+values ('c4000000-0000-4000-8000-000000000043', 'c4000000-0000-4000-8000-000000000020', '服務人員D', '0901000104', false, false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c4000000-0000-4000-8000-000000000043', 2, '10:00', '11:30');
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c4000000-0000-4000-8000-000000000044', 'c4000000-0000-4000-8000-000000000020', '服務人員E', null, false, false);
+values ('c4000000-0000-4000-8000-000000000044', 'c4000000-0000-4000-8000-000000000020', '服務人員E', '0901000105', false, false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('c4000000-0000-4000-8000-000000000044', 2, '10:00', '11:30');
 
 -- PART B 專用的服務人員 F/G/H/I,窗口設定跟 A/D/E 相同(10:00-11:30),各自獨立不互相干擾。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit) values
-  ('c4000000-0000-4000-8000-000000000045', 'c4000000-0000-4000-8000-000000000020', '服務人員F', null, false, false),
-  ('c4000000-0000-4000-8000-000000000046', 'c4000000-0000-4000-8000-000000000020', '服務人員G', null, false, false),
-  ('c4000000-0000-4000-8000-000000000047', 'c4000000-0000-4000-8000-000000000020', '服務人員H', null, false, false),
-  ('c4000000-0000-4000-8000-000000000048', 'c4000000-0000-4000-8000-000000000020', '服務人員I', null, false, false);
+  ('c4000000-0000-4000-8000-000000000045', 'c4000000-0000-4000-8000-000000000020', '服務人員F', '0901000106', false, false),
+  ('c4000000-0000-4000-8000-000000000046', 'c4000000-0000-4000-8000-000000000020', '服務人員G', '0901000107', false, false),
+  ('c4000000-0000-4000-8000-000000000047', 'c4000000-0000-4000-8000-000000000020', '服務人員H', '0901000108', false, false),
+  ('c4000000-0000-4000-8000-000000000048', 'c4000000-0000-4000-8000-000000000020', '服務人員I', '0901000109', false, false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time) values
   ('c4000000-0000-4000-8000-000000000045', 2, '10:00', '11:30'),
   ('c4000000-0000-4000-8000-000000000046', 2, '10:00', '11:30'),

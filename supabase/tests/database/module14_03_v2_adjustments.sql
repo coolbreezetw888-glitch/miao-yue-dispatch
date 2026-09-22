@@ -50,9 +50,9 @@ insert into merchant_business_hours (merchant_id, day_of_week, is_closed, open_t
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes)
 values ('e1430000-0000-4000-8000-000000000030', 'e1430000-0000-4000-8000-000000000020', '到府服務', 1000, 'primary', 60);
 
-insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, no_time_slot_limit) values
-  ('e1430000-0000-4000-8000-000000000040', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000002', '服務人員X', 'piece_rate', 'active', 'active', now(), true),
-  ('e1430000-0000-4000-8000-000000000041', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000003', '服務人員Z(隔離測試)', 'piece_rate', 'active', 'active', now(), true);
+insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, no_time_slot_limit, phone) values
+  ('e1430000-0000-4000-8000-000000000040', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000002', '服務人員X', 'piece_rate', 'active', 'active', now(), true, '0900000101'),
+  ('e1430000-0000-4000-8000-000000000041', 'e1430000-0000-4000-8000-000000000020', 'e1430000-0000-4000-8000-000000000003', '服務人員Z(隔離測試)', 'piece_rate', 'active', 'active', now(), true, '0900000102');
 
 insert into merchant_staff_permissions (staff_id, section_key, granted)
 select s.id, k.key, true

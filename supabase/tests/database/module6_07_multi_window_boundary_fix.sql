@@ -52,7 +52,7 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 -- 服務人員週二設定兩組相鄰時段:09:00-10:00、10:00-12:00,中間沒有空檔,也完全沒有設定任何
 -- staff_availability_overrides(第三層完全沒有例外資料)——這正是重現步驟要求的情境布置。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('c5000000-0000-4000-8000-000000000040', 'c5000000-0000-4000-8000-000000000020', '服務人員A(雙時段)', null, false, false);
+values ('c5000000-0000-4000-8000-000000000040', 'c5000000-0000-4000-8000-000000000020', '服務人員A(雙時段)', '0901000101', false, false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time) values
   ('c5000000-0000-4000-8000-000000000040', 2, '09:00', '10:00'),
   ('c5000000-0000-4000-8000-000000000040', 2, '10:00', '12:00');

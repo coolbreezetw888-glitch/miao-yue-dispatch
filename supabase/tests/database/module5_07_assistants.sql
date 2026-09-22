@@ -46,18 +46,21 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 
 -- 一店:主要服務人員(全天可預約),助手 A(個人時段只有 14:00-18:00,比營業時間窄),
 -- 助手 B(unlimited_backend_edit=true)。
+-- 2026-09-22 補充(對應 .project/SPECS-INDEX.md #595/#596):merchant_staff.phone 改成
+-- NOT NULL 之後不能再用 null 佔位,這三位跟跨商家電話比對邏輯無關,給互不相同的佔位電話即可。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('b7000000-0000-4000-8000-000000000041', 'b7000000-0000-4000-8000-000000000021', '主要人員', null, true);
+  ('b7000000-0000-4000-8000-000000000041', 'b7000000-0000-4000-8000-000000000021', '主要人員', '0900000020', true);
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('b7000000-0000-4000-8000-000000000042', 'b7000000-0000-4000-8000-000000000021', '助手A', null, false);
+  ('b7000000-0000-4000-8000-000000000042', 'b7000000-0000-4000-8000-000000000021', '助手A', '0900000021', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('b7000000-0000-4000-8000-000000000042', 2, '14:00', '18:00');
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit) values
-  ('b7000000-0000-4000-8000-000000000043', 'b7000000-0000-4000-8000-000000000021', '助手B(不限)', null, false, true);
+  ('b7000000-0000-4000-8000-000000000043', 'b7000000-0000-4000-8000-000000000021', '助手B(不限)', '0900000022', false, true);
 
--- 二店:師傅C,電話跟一店的「助手A」不同,跟一店的「跨店助手D」電話正規化後相同,用來測跨商家電話比對。
+-- 二店:師傅C,電話跟一店的「助手A」不同,跟一店的「跨店助手D」電話字串完全相同,用來測跨商家電話比對
+-- (2026-09-22 補充:CHECK 約束生效後不能再用不同格式表示同一號碼,兩邊改成逐字相同的 0933222222)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('b7000000-0000-4000-8000-000000000051', 'b7000000-0000-4000-8000-000000000022', '二店師傅C', '0933-222-222', true);
+  ('b7000000-0000-4000-8000-000000000051', 'b7000000-0000-4000-8000-000000000022', '二店師傅C', '0933222222', true);
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
   ('b7000000-0000-4000-8000-000000000044', 'b7000000-0000-4000-8000-000000000021', '跨店助手D', '0933222222', true);
 

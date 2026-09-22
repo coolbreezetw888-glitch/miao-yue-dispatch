@@ -2,7 +2,7 @@
 -- 核心必測:規則 2.4(抽成快照建立後不自動重算)、規則 2.6(手動重算僅限管理員)。
 begin;
 
-select plan(75);
+select plan(96);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -61,19 +61,20 @@ insert into merchant_feature_flags (merchant_id, feature_key, enabled) values
   ('e8000000-0000-4000-8000-000000000021', 'material_cost_enabled', true);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
-  ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000021', '按件服務人員P', null, true, 'piece_rate'),
-  ('e8000000-0000-4000-8000-000000000042', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M', null, true, 'monthly_salary'),
-  ('e8000000-0000-4000-8000-000000000043', 'e8000000-0000-4000-8000-000000000021', '按件助手AST', null, true, 'piece_rate'),
-  ('e8000000-0000-4000-8000-000000000045', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M2(跨月測試)', null, true, 'monthly_salary'),
-  ('e8000000-0000-4000-8000-000000000046', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M3(無薪資設定)', null, true, 'monthly_salary'),
-  ('e8000000-0000-4000-8000-000000000047', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M4(超額扣款測試)', null, true, 'monthly_salary'),
-  ('e8000000-0000-4000-8000-000000000048', 'e8000000-0000-4000-8000-000000000021', '按件服務人員P2(報表測試專用)', null, true, 'piece_rate');
+  ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000021', '按件服務人員P', '0901000101', true, 'piece_rate'),
+  ('e8000000-0000-4000-8000-000000000042', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M', '0901000102', true, 'monthly_salary'),
+  ('e8000000-0000-4000-8000-000000000043', 'e8000000-0000-4000-8000-000000000021', '按件助手AST', '0901000103', true, 'piece_rate'),
+  ('e8000000-0000-4000-8000-000000000045', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M2(跨月測試)', '0901000104', true, 'monthly_salary'),
+  ('e8000000-0000-4000-8000-000000000046', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M3(無薪資設定)', '0901000105', true, 'monthly_salary'),
+  ('e8000000-0000-4000-8000-000000000047', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M4(超額扣款測試)', '0901000106', true, 'monthly_salary'),
+  ('e8000000-0000-4000-8000-000000000048', 'e8000000-0000-4000-8000-000000000021', '按件服務人員P2(報表測試專用)', '0901000107', true, 'piece_rate'),
+  ('e8000000-0000-4000-8000-000000000049', 'e8000000-0000-4000-8000-000000000021', '月薪服務人員M5(§十10.1動態天數對照,獨立)', '0901000108', true, 'monthly_salary');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('e8000000-0000-4000-8000-000000000051', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m8-agent-none@test.local', 'active', now()),
-  ('e8000000-0000-4000-8000-000000000052', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000004', '客服-commission_settings', 'pgtap-m8-agent-commission@test.local', 'active', now()),
-  ('e8000000-0000-4000-8000-000000000053', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000005', '客服-billing', 'pgtap-m8-agent-billing@test.local', 'active', now()),
-  ('e8000000-0000-4000-8000-000000000054', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000006', '客服-staff_report', 'pgtap-m8-agent-staffreport@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('e8000000-0000-4000-8000-000000000051', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m8-agent-none@test.local', 'active', now(), '0900000101'),
+  ('e8000000-0000-4000-8000-000000000052', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000004', '客服-commission_settings', 'pgtap-m8-agent-commission@test.local', 'active', now(), '0900000102'),
+  ('e8000000-0000-4000-8000-000000000053', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000005', '客服-billing', 'pgtap-m8-agent-billing@test.local', 'active', now(), '0900000103'),
+  ('e8000000-0000-4000-8000-000000000054', 'e8000000-0000-4000-8000-000000000021', 'e8000000-0000-4000-8000-000000000006', '客服-staff_report', 'pgtap-m8-agent-staffreport@test.local', 'active', now(), '0900000104');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('e8000000-0000-4000-8000-000000000052', 'commission_settings', true),
@@ -99,20 +100,43 @@ select throws_ok(
   '1.1:commission_basis_type 只能是 gross/net_of_material_cost,非法值被 CHECK 約束擋下'
 );
 
-select throws_ok(
-  $$insert into merchant_payroll_settings (merchant_id, pay_days_per_month)
-    values ('e8000000-0000-4000-8000-000000000021', 0)$$,
-  '23514', null,
-  '1.1:pay_days_per_month 必須介於 1~31,0 被 CHECK 約束擋下'
-);
+-- ⚠️ 已於 2026-09-22 調整(§十 10.1):pay_days_per_month 這個欄位已經 drop,不再有這個 CHECK
+-- 約束可以測,原本這裡的「0 被 CHECK 約束擋下」測試整條移除。改成新增下方 ⓪ 區塊測
+-- private.get_days_in_month 動態計算(取代這個欄位原本的作用)。
 
 insert into merchant_payroll_settings (merchant_id) values ('e8000000-0000-4000-8000-000000000021');
 
 select is(
-  (select row(commission_basis_type, pay_days_per_month)
-   from merchant_payroll_settings where merchant_id = 'e8000000-0000-4000-8000-000000000021')::text,
-  row('gross', 30)::text,
-  '1.1:不指定任何欄位時,預設值為 gross/30(商家端三項調整規格書 §二 2.2.2 拿掉商家層級預設抽成比例欄位之後,不再有預設抽成比例這件事,抽成完全改成服務項目層級——見商家端三項調整規格書 §二 1.2 的 CHECK 約束測試)'
+  (select commission_basis_type
+   from merchant_payroll_settings where merchant_id = 'e8000000-0000-4000-8000-000000000021'),
+  'gross',
+  '1.1:不指定任何欄位時,預設值為 gross(商家端三項調整規格書 §二 2.2.2 拿掉商家層級預設抽成比例欄位、§十 10.1 拿掉 pay_days_per_month 欄位之後,merchant_payroll_settings 只剩 commission_basis_type 這個商家可調整欄位)'
+);
+
+select hasnt_column(
+  'public', 'merchant_payroll_settings', 'pay_days_per_month',
+  '§十 10.1:merchant_payroll_settings 表結構確認已無 pay_days_per_month 欄位'
+);
+
+-- =========================================================================
+-- ⓪ §十 10.1(核心必測):private.get_days_in_month 動態計算「月折算天數」,取代原本商家手動
+-- 填寫的固定 pay_days_per_month。
+-- =========================================================================
+select is(
+  private.get_days_in_month(2024, 2), 29,
+  '§十 10.1:2024 年 2 月是閏年,get_days_in_month 正確回傳 29'
+);
+select is(
+  private.get_days_in_month(2025, 2), 28,
+  '§十 10.1:2025 年 2 月不是閏年,get_days_in_month 正確回傳 28'
+);
+select is(
+  private.get_days_in_month(2026, 1), 31,
+  '§十 10.1:1 月(大月)get_days_in_month 正確回傳 31'
+);
+select is(
+  private.get_days_in_month(2026, 4), 30,
+  '§十 10.1:4 月(小月)get_days_in_month 正確回傳 30'
 );
 
 -- 1.2(商家端三項調整規格書 §二 2.2.1):服務項目層級抽成設定表的 CHECK 約束,取代原本
@@ -218,7 +242,7 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
 -- 2.1:針對「按件服務人員P × 洗髮」設定 10%。base = 1000(自訂總額) - 100(固定折扣) = 900。
 update merchant_payroll_settings
-set commission_basis_type = 'gross', pay_days_per_month = 30
+set commission_basis_type = 'gross'
 where merchant_id = 'e8000000-0000-4000-8000-000000000021';
 insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
 values ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031', 'percentage', 10);
@@ -697,6 +721,51 @@ select is(
   '判斷 4:monthly_leave_quota_days 純參考回傳,不牽動扣款計算(即使實際請假天數已超過額度 5 天)'
 );
 
+-- =========================================================================
+-- ⓪-2 §十 10.1(核心必測):同一位月薪制服務人員、同樣的請假天數(事假 full_day_rate 3 天),
+-- 分別查兩個天數不同的月份,證明扣款金額因為分母(月折算天數)不同而正確不同——不是還在讀一個
+-- 寫死的常數(改動前固定 30,兩個月會算出一樣的數字)。
+--
+-- ⚠️ 模組 8 §11(2026-09-22 新增歷史紀錄機制後的調整):改用獨立的服務人員 M5(不共用 M/042),
+-- 且改查 10 月(31 天)/11 月(30 天)這兩個相對於本測試檔案執行當下(now())都在「未來」的月份
+-- ——原本這裡查的是 2 月/8 月,但 §11.7 起 monthly_base_salary 改成查「該月當時」的歷史值
+-- (private.get_staff_payroll_status_as_of),如果查詢的月份早於這位服務人員這次測試 fixture
+-- 建立的時間點(now()),且他的最早一筆歷史紀錄不是機制上線種子(is_backfill_seed=false,一般
+-- 測試 fixture 建立的服務人員本來就不是),會被正確判定為「那個月他還不存在」(existed=false,
+-- monthly_base_salary=0,見 11.5/11.7 核心測試),導致這裡原本想驗證的「同一份月薪、不同分母」
+-- 情境被跳過,失去測試意義。改成查未來月份可以避開這個跟本測試目的無關的複雜度,把「機制上線前
+-- 估算」「機制上線後才加入」這兩種情境的測試,留給 module8_02_payroll_status_history.sql 專門
+-- 覆蓋(對應 11.5/11.7 核心測試清單)。
+insert into staff_salary_settings (staff_id, monthly_base_salary)
+values ('e8000000-0000-4000-8000-000000000049', 3000);
+
+select create_staff_leave('e8000000-0000-4000-8000-000000000049', 'e8000000-0000-4000-8000-000000000061', '2026-10-05', '2026-10-07', null, true);
+select create_staff_leave('e8000000-0000-4000-8000-000000000049', 'e8000000-0000-4000-8000-000000000061', '2026-11-05', '2026-11-07', null, true);
+
+select is(
+  (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000049', 2026, 10) ->> 'total_deduction_amount')::numeric,
+  round(3000.0 / 31 * 3, 2),
+  '§十 10.1:2026 年 10 月(31 天)day_rate = 3000/31,事假 3 天扣款 = round(3000/31*3, 2)'
+);
+
+select is(
+  (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000049', 2026, 11) ->> 'total_deduction_amount')::numeric,
+  round(3000.0 / 30 * 3, 2),
+  '§十 10.1:2026 年 11 月(30 天)day_rate = 3000/30,事假 3 天扣款 = round(3000/30*3, 2),跟 10 月算出的數字不同,證明真的是動態計算'
+);
+
+select isnt(
+  (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000049', 2026, 10) ->> 'total_deduction_amount')::numeric,
+  (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000049', 2026, 11) ->> 'total_deduction_amount')::numeric,
+  '§十 10.1:對照組——10 月跟 11 月算出的扣款金額確實不同(如果誤植回讀寫死的 30 天常數,這裡會 fail)'
+);
+
+select is(
+  (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000049', 2026, 10) ->> 'salary_history_estimated')::boolean,
+  false,
+  '§11.7 回歸:M5 這次查詢的月份在 fixture 建立時間點之後(existed=true、非估算),salary_history_estimated 正確為 false'
+);
+
 -- 「忘記設定規則的假別」(065):查無規則資料視為 no_deduction。
 select create_staff_leave('e8000000-0000-4000-8000-000000000042', 'e8000000-0000-4000-8000-000000000065', '2026-12-01', '2026-12-01', null, true);
 
@@ -936,8 +1005,10 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000004');
 
 select is(
+  -- 模組 8 §11(2026-09-22 新增)固定資料多了一位 M5(049,§十 10.1 動態天數對照專用,見上方
+  -- ⓪-2 區塊),在職服務人員數從原本 7 位變成 8 位,這裡的期望值同步更新,不是這次修正的行為變動。
   (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
-  7,
+  8,
   '§299 回歸修正:被授權 commission_settings(沒有 orders/team_leave)的客服現在能讀到 A 店在職服務人員清單(抽成與薪資設定頁用)'
 );
 
@@ -946,8 +1017,10 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000005');
 
 select is(
+  -- 模組 8 §11(2026-09-22 新增)固定資料多了一位 M5(049,§十 10.1 動態天數對照專用,見上方
+  -- ⓪-2 區塊),在職服務人員數從原本 7 位變成 8 位,這裡的期望值同步更新,不是這次修正的行為變動。
   (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
-  7,
+  8,
   '§302 回歸修正:被授權 billing(can_view_payroll_reports 涵蓋)的客服現在能讀到 A 店在職服務人員清單(師傅報表頁下拉選單用)'
 );
 
@@ -956,8 +1029,10 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000006');
 
 select is(
+  -- 模組 8 §11(2026-09-22 新增)固定資料多了一位 M5(049,§十 10.1 動態天數對照專用,見上方
+  -- ⓪-2 區塊),在職服務人員數從原本 7 位變成 8 位,這裡的期望值同步更新,不是這次修正的行為變動。
   (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
-  7,
+  8,
   '§302 回歸修正:被授權 staff_report 的客服現在能讀到 A 店在職服務人員清單(師傅報表頁下拉選單用)'
 );
 
@@ -987,10 +1062,10 @@ select is(
 );
 
 select is(
-  (select row(commission_basis_type, pay_days_per_month)
-   from merchant_payroll_settings where merchant_id = :'seed_group_merchant_create_group_and_merchant'::uuid)::text,
-  row('gross', 30)::text,
-  '§3.12:種入的預設薪資設定為 gross/30 天(商家層級不再有預設抽成比例這個概念)'
+  (select commission_basis_type
+   from merchant_payroll_settings where merchant_id = :'seed_group_merchant_create_group_and_merchant'::uuid),
+  'gross',
+  '§3.12:種入的預設薪資設定為 gross(商家層級不再有預設抽成比例、也不再有 pay_days_per_month 這兩個概念)'
 );
 
 select is(
@@ -1026,6 +1101,126 @@ select is(
   (select count(*)::int from leave_type_deduction_rules where merchant_id = :'seed_second_merchant_create_merchant_in_group'::uuid),
   3,
   '§3.12:create_merchant_in_group 建立分店後,leave_type_deduction_rules 也剛好 3 筆(對齊假別筆數)'
+);
+
+select pg_temp.test_clear_auth();
+
+-- =========================================================================
+-- ⑫ 商家端三項調整規格書 §3.6/服務人員端規格書 §15.2(核心必測):時間篩選從單一年/月改成可選
+-- 區間——get_merchant_billing_summary_by_range/get_staff_commission_summary_by_range/
+-- get_staff_monthly_payroll_summary_by_range 三支新函式,含區間上限保護(> 366 天擋下)、跨月
+-- 薪資扣款「依各月實際天數分別計算再加總」的等價性驗證。
+-- =========================================================================
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
+
+-- A. 複用 ⑨ 區塊已經建立的 R1(12/3,1000)/R2(12/3,已折扣後1500)/R3(12/3,1000)三筆訂單:
+-- 區間版本涵蓋整個 12 月,應該跟月份版本算出完全相同的未稅營收/稅金小計。
+select is(
+  (get_merchant_billing_summary_by_range(
+    'e8000000-0000-4000-8000-000000000021', '2026-12-01'::date, '2026-12-31'::date
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  3500.00,
+  '§3.6:get_merchant_billing_summary_by_range([12/1,12/31]) 的 total_revenue_excl_tax 跟月份版本算出同樣的 3500.00(R1+R2+R3)'
+);
+
+select is(
+  (get_merchant_billing_summary_by_range(
+    'e8000000-0000-4000-8000-000000000021', '2026-12-01'::date, '2026-12-31'::date
+  ) ->> 'total_tax_amount')::numeric,
+  0.00,
+  '§3.6:get_merchant_billing_summary_by_range 的 total_tax_amount 跟月份版本一致(0.00,這三筆都沒開稅金)'
+);
+
+-- B. 縮小區間到 [12/4,12/31](R1/R2/R3 全部發生在 12/3,不在這個區間內),證明區間查詢真的是
+-- 依日期篩選、會正確排除範圍外的訂單,不是原封不動回傳月份版本的數字。
+select is(
+  (get_merchant_billing_summary_by_range(
+    'e8000000-0000-4000-8000-000000000021', '2026-12-04'::date, '2026-12-31'::date
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  0.00,
+  '§3.6:縮小區間到 [12/4,12/31](排除 12/3 當天建立的 R1/R2/R3 三筆訂單)後,total_revenue_excl_tax 正確變成 0.00,證明真的是依日期篩選'
+);
+
+-- C. 區間上限保護(核心必測):剛好 366 天允許,367 天擋下,結束早於起始擋下。
+select lives_ok(
+  $$select get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021'::uuid, '2026-01-01'::date, '2026-01-01'::date + 366)$$,
+  '§3.6:區間邊界值——剛好 366 天(p_end_date - p_start_date = 366)正確允許'
+);
+
+select throws_ok(
+  $$select get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021'::uuid, '2026-01-01'::date, '2026-01-01'::date + 367)$$,
+  'P0001', '查詢區間最長不能超過一年',
+  '§3.6:區間邊界值——367 天(超過 366)被後端擋下,不只是前端擋'
+);
+
+select throws_ok(
+  $$select get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021'::uuid, '2026-12-31'::date, '2026-12-01'::date)$$,
+  'P0001', '結束日期不能早於起始日期',
+  '§3.6:結束日期早於起始日期被擋下'
+);
+
+-- D. get_staff_commission_summary_by_range:跟月份版本比對,證明區間查詢正確涵蓋同一批訂單。
+select is(
+  (get_staff_commission_summary_by_range(
+    'e8000000-0000-4000-8000-000000000048', '2026-12-01'::date, '2026-12-31'::date
+  ) ->> 'total_orders')::int,
+  2,
+  '§3.6:get_staff_commission_summary_by_range([12/1,12/31]) 訂單筆數跟月份版本一致(2 筆)'
+);
+
+select is(
+  (get_staff_commission_summary_by_range(
+    'e8000000-0000-4000-8000-000000000048', '2026-12-01'::date, '2026-12-31'::date
+  ) ->> 'total_commission_amount')::numeric,
+  500.00,
+  '§3.6:get_staff_commission_summary_by_range 總抽成金額跟月份版本一致(500.00)'
+);
+
+-- E. compute_staff_payroll_by_range(核心必測):跨月區間(10/1~11/30)涵蓋 M2(045)的跨月請假
+-- (10/30~11/2),應該等於「10 月單月版本」+「11 月單月版本」各自算出的扣款金額加總——因為
+-- 兩支函式對同一筆請假紀錄,在各自涵蓋的月份份內用的是同一套「當月實際天數」邏輯,只是一個是
+-- 分開查兩次、一個是一次查完整個區間,結果應該完全一致。
+select is(
+  (get_staff_monthly_payroll_summary_by_range(
+    'e8000000-0000-4000-8000-000000000045', '2026-10-01'::date, '2026-11-30'::date
+  ) ->> 'total_deduction_amount')::numeric,
+  (
+    (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000045', 2026, 10) ->> 'total_deduction_amount')::numeric
+    + (get_staff_monthly_payroll_summary('e8000000-0000-4000-8000-000000000045', 2026, 11) ->> 'total_deduction_amount')::numeric
+  ),
+  '§3.6/§15.2(核心必測):跨月區間 [10/1,11/30] 的 total_deduction_amount 等於 10 月單月版本 + 11 月單月版本的加總——證明區間查詢真的是逐月分別用當月實際天數計算再加總,不是整個區間套用同一個天數去算'
+);
+
+select is(
+  (get_staff_monthly_payroll_summary_by_range(
+    'e8000000-0000-4000-8000-000000000045', '2026-10-01'::date, '2026-11-30'::date
+  ) ->> 'total_leave_days')::numeric,
+  4::numeric,
+  '§3.6/§15.2:跨月區間正確加總兩個月份各自 2 天的重疊天數,總共 4 天(10/30、10/31、11/1、11/2)'
+);
+
+-- F. 區間上限保護同樣套用在服務人員自助/師傅報表用的兩支函式(不是只有店家帳務報表那支有擋)。
+select throws_ok(
+  $$select get_staff_monthly_payroll_summary_by_range('e8000000-0000-4000-8000-000000000045'::uuid, '2026-01-01'::date, '2026-01-01'::date + 367)$$,
+  'P0001', '查詢區間最長不能超過一年',
+  '§3.6/§15.2:get_staff_monthly_payroll_summary_by_range 同樣有區間 > 366 天的後端保護'
+);
+
+select throws_ok(
+  $$select get_staff_commission_summary_by_range('e8000000-0000-4000-8000-000000000048'::uuid, '2026-01-01'::date, '2026-01-01'::date + 367)$$,
+  'P0001', '查詢區間最長不能超過一年',
+  '§3.6/§15.2:get_staff_commission_summary_by_range 同樣有區間 > 366 天的後端保護'
+);
+
+select pg_temp.test_clear_auth();
+
+-- G. 跨商家隔離:B 店管理員不能用區間版本查詢 A 店的報表。
+select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000002');
+
+select throws_ok(
+  $$select get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021'::uuid, '2026-12-01'::date, '2026-12-31'::date)$$,
+  '42501', null,
+  '§3.6 跨商家隔離:B 店管理員不能用區間版本查詢 A 店的帳務報表'
 );
 
 select pg_temp.test_clear_auth();

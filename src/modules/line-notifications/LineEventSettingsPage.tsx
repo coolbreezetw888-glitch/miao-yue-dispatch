@@ -19,6 +19,7 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 
 import { updateLineEventSetting, useMerchantLineEventSettings } from "./api";
 import { RequireLineNotificationAccess } from "./RequireLineNotificationAccess";
+import { TemplateVariablePreview } from "./TemplateVariablePreview";
 import {
   LINE_NOTIFICATION_EVENT_LABELS,
   LINE_NOTIFICATION_EVENT_TYPES,
@@ -151,18 +152,10 @@ function EventSettingCard({
             value={form.messageTemplate}
             onChange={(e) => setField("messageTemplate", e.target.value)}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            可用變數:
-            {getTemplateVariableDefinitions(eventType).map(
-              (v, i) => `${i > 0 ? "、" : ""}{{${v.key}}}(${v.label})`,
-            )}
-          </p>
-          <div className="mt-2 rounded-md border border-dashed border-border px-3 py-2">
-            <p className="text-xs text-muted-foreground">即時預覽(套用範例假資料)</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
-              {previewLineMessageTemplate(form.messageTemplate) || "(尚未填寫文案)"}
-            </p>
-          </div>
+          <TemplateVariablePreview
+            variables={getTemplateVariableDefinitions(eventType)}
+            previews={[{ text: previewLineMessageTemplate(form.messageTemplate) }]}
+          />
         </div>
 
         <Button type="button" size="sm" disabled={saving} onClick={handleSave}>

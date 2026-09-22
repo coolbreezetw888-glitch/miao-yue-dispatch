@@ -49,24 +49,24 @@ insert into merchant_admins (merchant_id, user_id) values
   ('aa150000-0000-4000-8000-000000000020', 'aa150000-0000-4000-8000-000000000001'),
   ('aa150000-0000-4000-8000-000000000021', 'aa150000-0000-4000-8000-000000000002');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('aa150000-0000-4000-8000-000000000005', 'aa150000-0000-4000-8000-000000000020', 'aa150000-0000-4000-8000-000000000003', '硬刪除測試客服', 'pgtap-m3hd-agent@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('aa150000-0000-4000-8000-000000000005', 'aa150000-0000-4000-8000-000000000020', 'aa150000-0000-4000-8000-000000000003', '硬刪除測試客服', 'pgtap-m3hd-agent@test.local', 'active', now(), '0900000101');
 
 -- S1(status=active,①)、S2(removed+有訂單,②)、S3(removed+有助手身份訂單,③)、
 -- S4(removed+有請假紀錄,④核心)、S5(removed+有抽成紀錄,⑤核心)、
 -- S6(removed+完全乾淨+掛滿六張純設定表,⑥,user_id 指向真實 auth.users 驗證不受影響)、
 -- S7(removed+完全乾淨,⑦專門測權限擋下,不會真的被刪除)。
-insert into merchant_staff (id, merchant_id, name, status, user_id) values
-  ('aa150000-0000-4000-8000-000000000030', 'aa150000-0000-4000-8000-000000000020', 'S1-在職', 'active', null),
-  ('aa150000-0000-4000-8000-000000000031', 'aa150000-0000-4000-8000-000000000020', 'S2-有訂單', 'removed', null),
-  ('aa150000-0000-4000-8000-000000000032', 'aa150000-0000-4000-8000-000000000020', 'S3-有助手訂單', 'removed', null),
-  ('aa150000-0000-4000-8000-000000000033', 'aa150000-0000-4000-8000-000000000020', 'S4-有請假紀錄', 'removed', null),
-  ('aa150000-0000-4000-8000-000000000034', 'aa150000-0000-4000-8000-000000000020', 'S5-有抽成紀錄', 'removed', null),
-  ('aa150000-0000-4000-8000-000000000035', 'aa150000-0000-4000-8000-000000000020', 'S6-乾淨可刪除', 'removed', 'aa150000-0000-4000-8000-000000000004'),
-  ('aa150000-0000-4000-8000-000000000036', 'aa150000-0000-4000-8000-000000000020', 'S7-乾淨但只測權限', 'removed', null);
+insert into merchant_staff (id, merchant_id, name, status, user_id, phone) values
+  ('aa150000-0000-4000-8000-000000000030', 'aa150000-0000-4000-8000-000000000020', 'S1-在職', 'active', null, '0900000101'),
+  ('aa150000-0000-4000-8000-000000000031', 'aa150000-0000-4000-8000-000000000020', 'S2-有訂單', 'removed', null, '0900000102'),
+  ('aa150000-0000-4000-8000-000000000032', 'aa150000-0000-4000-8000-000000000020', 'S3-有助手訂單', 'removed', null, '0900000103'),
+  ('aa150000-0000-4000-8000-000000000033', 'aa150000-0000-4000-8000-000000000020', 'S4-有請假紀錄', 'removed', null, '0900000104'),
+  ('aa150000-0000-4000-8000-000000000034', 'aa150000-0000-4000-8000-000000000020', 'S5-有抽成紀錄', 'removed', null, '0900000105'),
+  ('aa150000-0000-4000-8000-000000000035', 'aa150000-0000-4000-8000-000000000020', 'S6-乾淨可刪除', 'removed', 'aa150000-0000-4000-8000-000000000004', '0900000106'),
+  ('aa150000-0000-4000-8000-000000000036', 'aa150000-0000-4000-8000-000000000020', 'S7-乾淨但只測權限', 'removed', null, '0900000107');
 
-insert into merchant_staff (id, merchant_id, name, status) values
-  ('aa150000-0000-4000-8000-000000000040', 'aa150000-0000-4000-8000-000000000021', 'SB1-商家B對照組', 'active');
+insert into merchant_staff (id, merchant_id, name, status, phone) values
+  ('aa150000-0000-4000-8000-000000000040', 'aa150000-0000-4000-8000-000000000021', 'SB1-商家B對照組', 'active', '0900000101');
 
 -- 給 S2 一筆歷史訂單(bookings.staff_id 指向 S2)。
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes) values
@@ -113,8 +113,14 @@ insert into merchant_staff_permissions (staff_id, section_key) values
   ('aa150000-0000-4000-8000-000000000035', 'staff_calendar_view');
 insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value) values
   ('aa150000-0000-4000-8000-000000000035', 'aa150000-0000-4000-8000-000000000050', 'percentage', 15);
+-- 模組 8 §11.4(2026-09-22 新增第五項檢查後的回歸修正):這裡故意用 0 元(不是原本的 30000),
+-- 因為 merchant_staff/staff_salary_settings 現在各掛了一個歷史紀錄觸發器(§11.2),任何非 0
+-- 的月薪都會被記進 staff_payroll_status_history,而 §11.4 新增的第五項檢查會擋下「曾經領過
+-- 非 0 月薪」的人真正被硬刪除——這裡的測試目的只是驗證 staff_salary_settings 這張表本身會被
+-- cascade 清掉(規則⑥),不是要測 §11.4 那條新檢查(那條在 module8_02_payroll_status_history.sql
+-- 有專門的核心測試),用 0 元維持 S6 依然能被成功硬刪除的既有行為。
 insert into staff_salary_settings (staff_id, monthly_base_salary) values
-  ('aa150000-0000-4000-8000-000000000035', 30000);
+  ('aa150000-0000-4000-8000-000000000035', 0);
 
 -- =========================================================================
 -- 以商家 A 管理員身份執行以下所有測試(除了⑦權限測試會切換身份)。

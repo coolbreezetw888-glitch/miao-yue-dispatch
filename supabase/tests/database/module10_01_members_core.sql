@@ -49,11 +49,11 @@ insert into merchant_admins (merchant_id, user_id) values
 insert into auth.users (id, email) values
   ('ea000000-0000-4000-8000-000000000007', 'pgtap-m10-agent-orders@test.local');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ea000000-0000-4000-8000-000000000051', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m10-agent-none@test.local', 'active', now()),
-  ('ea000000-0000-4000-8000-000000000052', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000004', '客服-members', 'pgtap-m10-agent-members@test.local', 'active', now()),
-  ('ea000000-0000-4000-8000-000000000053', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000005', '客服-member_settings', 'pgtap-m10-agent-settings@test.local', 'active', now()),
-  ('ea000000-0000-4000-8000-000000000054', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000007', '客服-僅orders', 'pgtap-m10-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ea000000-0000-4000-8000-000000000051', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m10-agent-none@test.local', 'active', now(), '0900000101'),
+  ('ea000000-0000-4000-8000-000000000052', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000004', '客服-members', 'pgtap-m10-agent-members@test.local', 'active', now(), '0900000102'),
+  ('ea000000-0000-4000-8000-000000000053', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000005', '客服-member_settings', 'pgtap-m10-agent-settings@test.local', 'active', now(), '0900000103'),
+  ('ea000000-0000-4000-8000-000000000054', 'ea000000-0000-4000-8000-000000000021', 'ea000000-0000-4000-8000-000000000007', '客服-僅orders', 'pgtap-m10-agent-orders@test.local', 'active', now(), '0900000104');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ea000000-0000-4000-8000-000000000052', 'members', true),

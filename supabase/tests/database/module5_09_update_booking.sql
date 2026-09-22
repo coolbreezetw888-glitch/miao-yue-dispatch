@@ -46,9 +46,9 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('b9000000-0000-4000-8000-000000000032', 'b9000000-0000-4000-8000-000000000021', '剪髮', 500, 'primary', 60);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('b9000000-0000-4000-8000-000000000041', 'b9000000-0000-4000-8000-000000000021', '服務人員甲', null, true);
+values ('b9000000-0000-4000-8000-000000000041', 'b9000000-0000-4000-8000-000000000021', '服務人員甲', '0901000101', true);
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('b9000000-0000-4000-8000-000000000042', 'b9000000-0000-4000-8000-000000000021', '服務人員乙', null, true);
+values ('b9000000-0000-4000-8000-000000000042', 'b9000000-0000-4000-8000-000000000021', '服務人員乙', '0901000102', true);
 
 select pg_temp.test_set_auth('b9000000-0000-4000-8000-000000000001');
 

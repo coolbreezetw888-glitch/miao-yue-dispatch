@@ -1,6 +1,8 @@
 // 模組 15(服務人員推播通知)§7.9:推播事件設定頁(新路由 /app/push-events)。
-// 4 張卡片(對應 4 種事件),每張只有「開關 + 標題 + 內文」兩個文字欄位(對應規則 4.4,
-// 沒有通知對象勾選——通知對象永遠是這筆訂單指定的服務人員本人)。
+// 4 張卡片(對應 4 種事件),每張有「開關 + 標題 + 內文」欄位(對應規則 4.4,沒有通知對象
+// 勾選——通知對象永遠是這筆訂單指定的服務人員本人)+ §13.1(SPECS-INDEX #586)補上的
+// 「可用變數說明 + 即時預覽」,複用模組 11 §4.2/§385/§10.1 既有的 TemplateVariablePreview
+// 共用元件,標題/內文分開兩段預覽(對應 §13.1 邊界情況,推播內文比 LINE 訊息更寸土寸金)。
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -15,9 +17,13 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+// §13.1 明講「直接複用該檔案已經做好的同一套元件/邏輯」——這是模組 15 對模組 11 的 UI 呈現層
+// 依賴(見 `.project/specs/服務人員推播通知.md` §8.3/§13.1),不重寫第三份幾乎相同的 JSX。
+import { TemplateVariablePreview } from "@/modules/line-notifications/TemplateVariablePreview";
 
 import { updatePushEventSetting, useMerchantPushEventSettings } from "./api";
 import { RequirePushNotificationAccess } from "./RequirePushNotificationAccess";
+import { getPushTemplateVariableDefinitions, previewPushTemplate } from "./templateVariables";
 import {
   PUSH_NOTIFICATION_EVENT_LABELS,
   PUSH_NOTIFICATION_EVENT_TYPES,
@@ -111,12 +117,15 @@ function EventSettingCard({
             maxLength={120}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            {`建議 50 字以內(${form.messageBody.length} 字)。可用變數:${
-              eventType === "booking_updated"
-                ? "{{booking_date}}、{{customer_name}}、{{change_summary}}"
-                : "{{booking_date}}、{{customer_name}}、{{service_names}}"
-            }`}
+            建議 50 字以內({form.messageBody.length} 字)——手機通知列空間有限,超出的部分會被系統截斷。
           </p>
+          <TemplateVariablePreview
+            variables={getPushTemplateVariableDefinitions(eventType)}
+            previews={[
+              { label: "標題", text: previewPushTemplate(form.messageTitle) },
+              { label: "內文", text: previewPushTemplate(form.messageBody) },
+            ]}
+          />
         </div>
 
         <Button type="button" size="sm" disabled={saving} onClick={handleSave}>

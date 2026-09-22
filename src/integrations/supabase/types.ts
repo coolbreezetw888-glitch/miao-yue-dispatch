@@ -1383,21 +1383,18 @@ export type Database = {
           commission_basis_type: string
           created_at: string
           merchant_id: string
-          pay_days_per_month: number
           updated_at: string
         }
         Insert: {
           commission_basis_type?: string
           created_at?: string
           merchant_id: string
-          pay_days_per_month?: number
           updated_at?: string
         }
         Update: {
           commission_basis_type?: string
           created_at?: string
           merchant_id?: string
-          pay_days_per_month?: number
           updated_at?: string
         }
         Relationships: [
@@ -2856,6 +2853,14 @@ export type Database = {
         Args: { p_merchant_id: string; p_month: number; p_year: number }
         Returns: Json
       }
+      get_merchant_billing_summary_by_range: {
+        Args: {
+          p_end_date: string
+          p_merchant_id: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
       get_merchant_bulk_operations: {
         Args: { p_merchant_id: string }
         Returns: {
@@ -2904,6 +2909,10 @@ export type Database = {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
       }
+      get_staff_commission_summary_by_range: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: Json
+      }
       get_staff_login_email_status: {
         Args: { p_staff_id: string }
         Returns: {
@@ -2915,6 +2924,10 @@ export type Database = {
       }
       get_staff_monthly_payroll_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
+        Returns: Json
+      }
+      get_staff_monthly_payroll_summary_by_range: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
         Returns: Json
       }
       get_staff_push_subscription_count: {

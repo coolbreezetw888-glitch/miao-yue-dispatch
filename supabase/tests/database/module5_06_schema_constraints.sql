@@ -11,8 +11,8 @@ insert into groups (id) values ('b6000000-0000-4000-8000-000000000010');
 insert into merchants (id, group_id, name, industry_type)
 values ('b6000000-0000-4000-8000-000000000020', 'b6000000-0000-4000-8000-000000000010', '約束測試商家', 'in_store_beauty');
 
-insert into merchant_staff (id, merchant_id, name)
-values ('b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000020', '約束測試服務人員');
+insert into merchant_staff (id, merchant_id, name, phone)
+values ('b6000000-0000-4000-8000-000000000040', 'b6000000-0000-4000-8000-000000000020', '約束測試服務人員', '0900000101');
 
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes)
 values ('b6000000-0000-4000-8000-000000000030', 'b6000000-0000-4000-8000-000000000020', '約束測試服務', 100, 'primary', 30);
@@ -173,8 +173,8 @@ select throws_ok(
 );
 
 -- ⑪ 建單功能擴充 2.2:同一人不能在同一筆預約裡被加派兩次助手(unique(booking_id, staff_id))。
-insert into merchant_staff (id, merchant_id, name)
-values ('b6000000-0000-4000-8000-000000000041', 'b6000000-0000-4000-8000-000000000020', '約束測試助手');
+insert into merchant_staff (id, merchant_id, name, phone)
+values ('b6000000-0000-4000-8000-000000000041', 'b6000000-0000-4000-8000-000000000020', '約束測試助手', '0900000101');
 
 insert into booking_assistants (booking_id, staff_id)
 values ('b6000000-0000-4000-8000-000000000050', 'b6000000-0000-4000-8000-000000000041');

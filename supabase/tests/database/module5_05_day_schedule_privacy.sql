@@ -1,6 +1,11 @@
 -- 模組 5 規則 2.6 第 3 點/3.6:get_merchant_day_schedule 的隱私邊界——本店預約完整顯示,
 -- 跨商家占用只顯示起訖時間、不顯示對方客戶姓名/服務項目等細節。也一併驗證可預約邊界交集
 -- (規則 2.1 ∩ 2.2)跟查無權限時被擋下。
+--
+-- 2026-09-22 補充說明(對應 .project/SPECS-INDEX.md #595/#596):merchant_staff.phone 改成
+-- NOT NULL + CHECK(phone ~ '^09\d{8}$')之後,資料庫層不再可能存下帶符號的格式,下面兩位
+-- 「A師傅(同一人跨店)」的電話字串改成完全相同(這是現在唯一能表示「同一人跨店」的方式,
+-- 見 module5_02_conflict_and_phone_matching.sql 開頭同一天補充的說明)。
 begin;
 
 select plan(10);
@@ -49,11 +54,11 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 
 -- 一店 A 師傅:個人時段 10:00-14:00(比營業時間窄)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('b5000000-0000-4000-8000-000000000041', 'b5000000-0000-4000-8000-000000000021', 'A師傅(一店)', '0977-111-111', false);
+  ('b5000000-0000-4000-8000-000000000041', 'b5000000-0000-4000-8000-000000000021', 'A師傅(一店)', '0977111111', false);
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('b5000000-0000-4000-8000-000000000041', 2, '10:00', '14:00');
 
--- 二店 A 師傅(同一人,電話正規化後相同,二店本身公休但這位師傅仍可能被其他店預約走)。
+-- 二店 A 師傅(同一人,電話字串完全相同,二店本身公休但這位師傅仍可能被其他店預約走)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
   ('b5000000-0000-4000-8000-000000000042', 'b5000000-0000-4000-8000-000000000022', 'A師傅(二店)', '0977111111', true);
 

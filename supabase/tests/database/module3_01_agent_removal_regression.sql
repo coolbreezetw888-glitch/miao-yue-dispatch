@@ -51,7 +51,7 @@ values ('a2000000-0000-4000-8000-000000000020', 'a2000000-0000-4000-8000-0000000
 
 -- 直接插入一筆「已經是 active 客服」的紀錄(不透過 Edge Function 邀請流程,單純為了聚焦測試
 -- is_merchant_agent / remove_merchant_agent 這兩支函式本身的行為)。
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at)
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone)
 values (
   'a2000000-0000-4000-8000-000000000030',
   'a2000000-0000-4000-8000-000000000020',
@@ -59,8 +59,7 @@ values (
   'pgTAP 測試客服',
   'pgtap-agent@test.local',
   'active',
-  now()
-);
+  now(), '0900000101');
 
 -- ① 移除前:以客服本人身份查詢,is_merchant_agent 應為 true,而且看得到這間商家。
 select pg_temp.test_set_auth('a2000000-0000-4000-8000-000000000002');

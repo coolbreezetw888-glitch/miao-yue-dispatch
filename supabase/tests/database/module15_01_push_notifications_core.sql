@@ -48,18 +48,18 @@ insert into merchant_admins (merchant_id, user_id) values
   ('ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000001'),
   ('ec500000-0000-4000-8000-000000000022', 'ec500000-0000-4000-8000-000000000002');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ec500000-0000-4000-8000-000000000051', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m15-agent-none@test.local', 'active', now()),
-  ('ec500000-0000-4000-8000-000000000052', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000004', '客服-push', 'pgtap-m15-agent-push@test.local', 'active', now()),
-  ('ec500000-0000-4000-8000-000000000053', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000005', '客服-orders', 'pgtap-m15-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ec500000-0000-4000-8000-000000000051', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m15-agent-none@test.local', 'active', now(), '0900000101'),
+  ('ec500000-0000-4000-8000-000000000052', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000004', '客服-push', 'pgtap-m15-agent-push@test.local', 'active', now(), '0900000102'),
+  ('ec500000-0000-4000-8000-000000000053', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000005', '客服-orders', 'pgtap-m15-agent-orders@test.local', 'active', now(), '0900000103');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ec500000-0000-4000-8000-000000000052', 'push_notification', true),
   ('ec500000-0000-4000-8000-000000000053', 'orders', true);
 
-insert into merchant_staff (id, merchant_id, user_id, name, status, login_status) values
-  ('ec500000-0000-4000-8000-000000000061', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000006', '服務人員甲', 'active', 'active'),
-  ('ec500000-0000-4000-8000-000000000062', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000007', '服務人員乙', 'active', 'active');
+insert into merchant_staff (id, merchant_id, user_id, name, status, login_status, phone) values
+  ('ec500000-0000-4000-8000-000000000061', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000006', '服務人員甲', 'active', 'active', '0900000101'),
+  ('ec500000-0000-4000-8000-000000000062', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000007', '服務人員乙', 'active', 'active', '0900000102');
 
 -- =========================================================================
 -- ① 2.1 staff_push_subscriptions:CHECK/唯一索引/RLS(核心必測)。

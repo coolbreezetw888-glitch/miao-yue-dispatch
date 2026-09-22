@@ -47,14 +47,14 @@ values ('b1000000-0000-4000-8000-000000000030', 'b1000000-0000-4000-8000-0000000
 
 -- 服務人員 A:一般情況,時段比營業時間窄(10:00-11:00)。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('b1000000-0000-4000-8000-000000000040', 'b1000000-0000-4000-8000-000000000020', '服務人員A', null, false, false);
+values ('b1000000-0000-4000-8000-000000000040', 'b1000000-0000-4000-8000-000000000020', '服務人員A', '0901000101', false, false);
 
 insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values ('b1000000-0000-4000-8000-000000000040', 2, '10:00', '11:00');
 
 -- 服務人員 B:unlimited_backend_edit = true,用來測規則 2.3 覆寫例外。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('b1000000-0000-4000-8000-000000000041', 'b1000000-0000-4000-8000-000000000020', '服務人員B', null, false, true);
+values ('b1000000-0000-4000-8000-000000000041', 'b1000000-0000-4000-8000-000000000020', '服務人員B', '0901000102', false, true);
 
 select pg_temp.test_set_auth('b1000000-0000-4000-8000-000000000001');
 
@@ -128,7 +128,7 @@ select pg_temp.test_clear_auth();
 -- ⑦ 規則 2.5 邊界情況(在 create_booking 內以規則 2.2 的形式體現):服務人員完全沒設定任何時段時,
 --    視為不可預約。新增服務人員 C,不給任何 staff_availability_windows。
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, unlimited_backend_edit)
-values ('b1000000-0000-4000-8000-000000000042', 'b1000000-0000-4000-8000-000000000020', '服務人員C', null, false, false);
+values ('b1000000-0000-4000-8000-000000000042', 'b1000000-0000-4000-8000-000000000020', '服務人員C', '0901000103', false, false);
 
 select pg_temp.test_set_auth('b1000000-0000-4000-8000-000000000001');
 

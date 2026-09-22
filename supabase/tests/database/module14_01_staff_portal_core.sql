@@ -57,15 +57,15 @@ insert into merchant_admins (merchant_id, user_id) values
   ('e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000001'),
   ('e1400000-0000-4000-8000-000000000022', 'e1400000-0000-4000-8000-000000000007');
 
-insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at) values
-  ('e1400000-0000-4000-8000-000000000031', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000002', '服務人員X(按件)', 'piece_rate', 'active', 'active', now()),
-  ('e1400000-0000-4000-8000-000000000032', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000003', '服務人員Y(月薪)', 'monthly_salary', 'active', 'active', now()),
-  ('e1400000-0000-4000-8000-000000000033', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000005', '服務人員Z(已移除)', 'piece_rate', 'removed', 'active', now()),
-  ('e1400000-0000-4000-8000-000000000034', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000006', '服務人員W(邀請中)', 'piece_rate', 'active', 'invited', null),
-  ('e1400000-0000-4000-8000-000000000035', 'e1400000-0000-4000-8000-000000000021', null, '服務人員New(未邀請)', 'piece_rate', 'active', 'not_invited', null);
+insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, login_activated_at, phone) values
+  ('e1400000-0000-4000-8000-000000000031', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000002', '服務人員X(按件)', 'piece_rate', 'active', 'active', now(), '0900000101'),
+  ('e1400000-0000-4000-8000-000000000032', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000003', '服務人員Y(月薪)', 'monthly_salary', 'active', 'active', now(), '0900000102'),
+  ('e1400000-0000-4000-8000-000000000033', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000005', '服務人員Z(已移除)', 'piece_rate', 'removed', 'active', now(), '0900000103'),
+  ('e1400000-0000-4000-8000-000000000034', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000006', '服務人員W(邀請中)', 'piece_rate', 'active', 'invited', null, '0900000104'),
+  ('e1400000-0000-4000-8000-000000000035', 'e1400000-0000-4000-8000-000000000021', null, '服務人員New(未邀請)', 'piece_rate', 'active', 'not_invited', null, '0900000105');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('e1400000-0000-4000-8000-000000000041', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000004', '客服-無授權', 'pgtap-m14-agent@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('e1400000-0000-4000-8000-000000000041', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000004', '客服-無授權', 'pgtap-m14-agent@test.local', 'active', now(), '0900000101');
 
 insert into merchant_staff_permissions (staff_id, section_key, granted) values
   ('e1400000-0000-4000-8000-000000000031', 'staff_calendar_view', true),
@@ -414,8 +414,8 @@ select ok(
 );
 
 -- 3.12 邊界:只能改自己的紀錄,不會誤改到其他 invited 中的服務人員。
-insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, invited_login_email, login_invited_at)
-values ('e1400000-0000-4000-8000-000000000036', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000009', '服務人員New2(邀請中)', 'piece_rate', 'active', 'invited', 'invited-new2@test.local', now());
+insert into merchant_staff (id, merchant_id, user_id, name, compensation_type, status, login_status, invited_login_email, login_invited_at, phone)
+values ('e1400000-0000-4000-8000-000000000036', 'e1400000-0000-4000-8000-000000000021', 'e1400000-0000-4000-8000-000000000009', '服務人員New2(邀請中)', 'piece_rate', 'active', 'invited', 'invited-new2@test.local', now(), '0900000101');
 
 select pg_temp.test_set_auth('e1400000-0000-4000-8000-000000000008'); -- New(已經是 active),不應該影響 New2
 select lives_ok(

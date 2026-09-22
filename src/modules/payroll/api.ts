@@ -28,18 +28,16 @@ import type {
   StaffSalarySettings,
   StaffServiceCommissionRate,
 } from "./types";
+import { validateDateRange } from "./dateRangeUtils";
 
 // =========================================================================
 // §1.1 的預設值(查無資料時前端一律套用,對應規格書「查無資料時的預設值」段落——
 // 財務謹慎設計,不能自己在這裡「幫」商家填入非零數字)。商家端三項調整規格書 §二 2.2.2 拿掉
-// 商家層級預設抽成比例欄位之後,這裡的預設值不再包含它。
+// 商家層級預設抽成比例欄位、§十 10.1 拿掉 pay_days_per_month 欄位(改成系統動態計算,不再是
+// 商家可填寫的設定值)之後,這裡的預設值只剩 commission_basis_type。
 // =========================================================================
-export const DEFAULT_MERCHANT_PAYROLL_SETTINGS: Pick<
-  MerchantPayrollSettings,
-  "commission_basis_type" | "pay_days_per_month"
-> = {
+export const DEFAULT_MERCHANT_PAYROLL_SETTINGS: Pick<MerchantPayrollSettings, "commission_basis_type"> = {
   commission_basis_type: "gross",
-  pay_days_per_month: 30,
 };
 
 // =========================================================================
@@ -74,12 +72,12 @@ export function useMerchantPayrollSettings(
 
 export interface UpsertMerchantPayrollSettingsInput {
   commissionBasisType: CommissionBasisType;
-  payDaysPerMonth: number;
 }
 
 /** §5.1 對外介面:沒有既有列時新增,已有則更新(upsert on primary key merchant_id)。商家端
  * 三項調整規格書 §二 2.2.2:不再寫入 default_commission_rate_percentage(欄位不再使用,抽成
- * 完全改成服務項目層級)。 */
+ * 完全改成服務項目層級)。§十 10.1:不再寫入 pay_days_per_month(欄位已移除,「月折算天數」
+ * 改成系統依當月實際天數自動計算,不是商家可填寫的設定值)。 */
 export async function upsertMerchantPayrollSettings(
   merchantId: string,
   input: UpsertMerchantPayrollSettingsInput,
@@ -88,7 +86,6 @@ export async function upsertMerchantPayrollSettings(
     {
       merchant_id: merchantId,
       commission_basis_type: input.commissionBasisType,
-      pay_days_per_month: input.payDaysPerMonth,
     },
     { onConflict: "merchant_id" },
   );
@@ -383,4 +380,111 @@ export async function recalculateBookingCommission(
   });
   if (error) throw error;
   return data as BookingCommissionRecord;
+}
+
+// =========================================================================
+// 商家端三項調整規格書 §3.6/服務人員端規格書 §15.2:時間篩選從單一年/月改成可選區間(最長一年)。
+// 這三支是對應 3.9/3.10/3.11 的「_by_range」overload,不取代原本按年月查詢的版本(那些繼續給
+// 商家管理員視角的 StaffReportPage.tsx 使用,見服務人員端規格書 §15.2 第 4 點)。三支的 enabled
+// 條件都額外檢查 validateDateRange(...) === null,避免區間不合法(起訖為空/結束早於起始/超過
+// 一年)時還送出注定失敗的請求——跟後端的區間上限保護是「前端也擋一次」的關係,不是取代後端。
+// =========================================================================
+
+export async function fetchMerchantBillingSummaryByRange(
+  merchantId: string,
+  startDate: string,
+  endDate: string,
+): Promise<MerchantBillingSummary> {
+  const { data, error } = await supabase.rpc("get_merchant_billing_summary_by_range", {
+    p_merchant_id: merchantId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return data as unknown as MerchantBillingSummary;
+}
+
+/** §3.6 對外介面:某商家某段區間(最長一年)的營收/成本/抽成/薪資/概估毛利彙整,供 4.3 帳務
+ * 報表頁使用。 */
+export function useMerchantBillingSummaryByRange(
+  merchantId: string | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): UseQueryResult<MerchantBillingSummary> {
+  return useQuery({
+    queryKey: ["payroll-module", "merchant-billing-summary-range", merchantId, startDate, endDate],
+    queryFn: () =>
+      fetchMerchantBillingSummaryByRange(merchantId as string, startDate as string, endDate as string),
+    enabled:
+      Boolean(merchantId) &&
+      Boolean(startDate) &&
+      Boolean(endDate) &&
+      validateDateRange(startDate as string, endDate as string) === null,
+  });
+}
+
+export async function fetchStaffCommissionSummaryByRange(
+  staffId: string,
+  startDate: string,
+  endDate: string,
+): Promise<StaffCommissionSummary> {
+  const { data, error } = await supabase.rpc("get_staff_commission_summary_by_range", {
+    p_staff_id: staffId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return data as unknown as StaffCommissionSummary;
+}
+
+/** §3.6/§15.2 對外介面:某位按件計酬服務人員某段區間(最長一年)的抽成明細+總計。 */
+export function useStaffCommissionSummaryByRange(
+  staffId: string | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): UseQueryResult<StaffCommissionSummary> {
+  return useQuery({
+    queryKey: ["payroll-module", "staff-commission-summary-range", staffId, startDate, endDate],
+    queryFn: () =>
+      fetchStaffCommissionSummaryByRange(staffId as string, startDate as string, endDate as string),
+    enabled:
+      Boolean(staffId) &&
+      Boolean(startDate) &&
+      Boolean(endDate) &&
+      validateDateRange(startDate as string, endDate as string) === null,
+  });
+}
+
+export async function fetchStaffMonthlyPayrollSummaryByRange(
+  staffId: string,
+  startDate: string,
+  endDate: string,
+): Promise<StaffMonthlyPayrollSummary> {
+  const { data, error } = await supabase.rpc("get_staff_monthly_payroll_summary_by_range", {
+    p_staff_id: staffId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return data as unknown as StaffMonthlyPayrollSummary;
+}
+
+/** §3.6/§15.2 對外介面:某位月薪制服務人員某段區間(最長一年)的請假扣款明細與淨額。⚠️
+ * monthly_base_salary/monthly_leave_quota_days 維持單月快照值,不因區間跨月而放大,詳見
+ * migration 20260922130300 的函式註解。 */
+export function useStaffMonthlyPayrollSummaryByRange(
+  staffId: string | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): UseQueryResult<StaffMonthlyPayrollSummary> {
+  return useQuery({
+    queryKey: ["payroll-module", "staff-monthly-payroll-summary-range", staffId, startDate, endDate],
+    queryFn: () =>
+      fetchStaffMonthlyPayrollSummaryByRange(staffId as string, startDate as string, endDate as string),
+    enabled:
+      Boolean(staffId) &&
+      Boolean(startDate) &&
+      Boolean(endDate) &&
+      validateDateRange(startDate as string, endDate as string) === null,
+  });
 }

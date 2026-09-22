@@ -171,7 +171,7 @@ export default function ManagePage() {
   const { data: canManageMemberSettings } = useAgentPermission("member_settings");
   const showMemberSettingsCard = isAdmin || canManageMemberSettings === true;
   // 模組 11(LINE 通知)§4.10:line_notification 這把鑰匙決定「LINE 通知設定」「LINE 發送記錄」
-  // 兩張卡片的顯示權限;「LINE 串接設定」「行銷再通知」永遠只給商家管理員(規則 2.1/2.6)。
+  // 兩張卡片的顯示權限;「LINE 串接設定」「行銷通知」永遠只給商家管理員(規則 2.1/2.6)。
   const { data: canManageLineNotification } = useAgentPermission("line_notification");
   const showLineNotificationCards = isAdmin || canManageLineNotification === true;
   // 模組 15(服務人員推播通知)7.3/7.9:push_notification 這把鑰匙決定「推播通知設定」卡片
@@ -338,7 +338,7 @@ export default function ManagePage() {
     {
       key: "line-marketing",
       to: "/app/line-marketing",
-      label: "行銷再通知",
+      label: "行銷通知",
       description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
       icon: Megaphone,
       visible: isAdmin,

@@ -45,10 +45,10 @@ insert into merchant_admins (merchant_id, user_id, display_name) values
   ('ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000001', 'A店管理員'),
   ('ec000000-0000-4000-8000-000000000022', 'ec000000-0000-4000-8000-000000000002', 'B店管理員');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m11-agent-none@test.local', 'active', now()),
-  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-line通知', 'pgtap-m11-agent-line@test.local', 'active', now()),
-  ('ec000000-0000-4000-8000-000000000053', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000005', '客服-orders', 'pgtap-m11-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('ec000000-0000-4000-8000-000000000051', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m11-agent-none@test.local', 'active', now(), '0900000101'),
+  ('ec000000-0000-4000-8000-000000000052', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000004', '客服-line通知', 'pgtap-m11-agent-line@test.local', 'active', now(), '0900000102'),
+  ('ec000000-0000-4000-8000-000000000053', 'ec000000-0000-4000-8000-000000000021', 'ec000000-0000-4000-8000-000000000005', '客服-orders', 'pgtap-m11-agent-orders@test.local', 'active', now(), '0900000103');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('ec000000-0000-4000-8000-000000000052', 'line_notification', true),

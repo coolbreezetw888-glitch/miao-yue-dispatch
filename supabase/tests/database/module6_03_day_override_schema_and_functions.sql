@@ -46,18 +46,18 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 values ('c3000000-0000-4000-8000-000000000030', 'c3000000-0000-4000-8000-000000000020', '洗髮', 300, 'primary', 60);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
-values ('c3000000-0000-4000-8000-000000000040', 'c3000000-0000-4000-8000-000000000020', '測試師傅', null, true);
+values ('c3000000-0000-4000-8000-000000000040', 'c3000000-0000-4000-8000-000000000020', '測試師傅', '0901000101', true);
 
 -- 客服甲:被授權 business_hours(也順便給 orders,方便布置衝突用的既有預約)。
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at)
-values ('c3000000-0000-4000-8000-000000000050', 'c3000000-0000-4000-8000-000000000020', 'c3000000-0000-4000-8000-000000000002', '客服-營業時間', 'pgtap-m6b-agent-bh@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone)
+values ('c3000000-0000-4000-8000-000000000050', 'c3000000-0000-4000-8000-000000000020', 'c3000000-0000-4000-8000-000000000002', '客服-營業時間', 'pgtap-m6b-agent-bh@test.local', 'active', now(), '0900000101');
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('c3000000-0000-4000-8000-000000000050', 'business_hours', true),
   ('c3000000-0000-4000-8000-000000000050', 'orders', true);
 
 -- 客服乙:只被授權 orders,沒有 business_hours(§5.4 權限邊界的對照組)。
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at)
-values ('c3000000-0000-4000-8000-000000000051', 'c3000000-0000-4000-8000-000000000020', 'c3000000-0000-4000-8000-000000000003', '客服-訂單', 'pgtap-m6b-agent-orders@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone)
+values ('c3000000-0000-4000-8000-000000000051', 'c3000000-0000-4000-8000-000000000020', 'c3000000-0000-4000-8000-000000000003', '客服-訂單', 'pgtap-m6b-agent-orders@test.local', 'active', now(), '0900000101');
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('c3000000-0000-4000-8000-000000000051', 'orders', true);
 

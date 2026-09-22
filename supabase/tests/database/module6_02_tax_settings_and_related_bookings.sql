@@ -38,9 +38,9 @@ insert into merchant_admins (merchant_id, user_id) values
   ('c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000001'),
   ('c2000000-0000-4000-8000-000000000022', 'c2000000-0000-4000-8000-000000000002');
 
-insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at) values
-  ('c2000000-0000-4000-8000-000000000031', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m6b-agent-none@test.local', 'active', now()),
-  ('c2000000-0000-4000-8000-000000000032', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000004', '客服-營業時間', 'pgtap-m6b-agent-bh@test.local', 'active', now());
+insert into merchant_agents (id, merchant_id, user_id, name, invited_email, status, activated_at, phone) values
+  ('c2000000-0000-4000-8000-000000000031', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m6b-agent-none@test.local', 'active', now(), '0900000101'),
+  ('c2000000-0000-4000-8000-000000000032', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000004', '客服-營業時間', 'pgtap-m6b-agent-bh@test.local', 'active', now(), '0900000102');
 
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('c2000000-0000-4000-8000-000000000032', 'business_hours', true),
@@ -133,8 +133,8 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
   ('c2000000-0000-4000-8000-000000000042', 'c2000000-0000-4000-8000-000000000022', '洗髮', 300, 'primary', 30);
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
-  ('c2000000-0000-4000-8000-000000000051', 'c2000000-0000-4000-8000-000000000021', '一店服務人員', null, true),
-  ('c2000000-0000-4000-8000-000000000052', 'c2000000-0000-4000-8000-000000000022', '二店服務人員', null, true);
+  ('c2000000-0000-4000-8000-000000000051', 'c2000000-0000-4000-8000-000000000021', '一店服務人員', '0901000101', true),
+  ('c2000000-0000-4000-8000-000000000052', 'c2000000-0000-4000-8000-000000000022', '二店服務人員', '0901000102', true);
 
 -- 模組 9(支付方式)v2:update_booking_payment_method 的參數已改成 p_payment_method_id(uuid),
 -- 補一筆一店的付款方式供下面 §6.2 測試使用。
