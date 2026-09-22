@@ -112,6 +112,7 @@ function BillingReportPageInner() {
                       <TableHead>計酬類型</TableHead>
                       <TableHead className="text-right">本月訂單筆數</TableHead>
                       <TableHead className="text-right">抽成金額 / 月薪淨額</TableHead>
+                      <TableHead className="text-right">明細</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -126,6 +127,17 @@ function BillingReportPageInner() {
                           {row.compensation_type === "monthly_salary"
                             ? `${row.net_pay ?? 0} 元(淨額)`
                             : `${row.commission_amount ?? 0} 元(抽成)`}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {/* SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):
+                              兩個報表維持分開頁面,但這裡加一個捷徑連結,點下去直接帶著這位服務
+                              人員 + 目前這個年月導到「師傅報表」頁面,不用使用者自己再選一次。 */}
+                          <Link
+                            to={`/app/staff-report?staffId=${encodeURIComponent(row.staff_id)}&year=${year}&month=${month}`}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            查看明細 →
+                          </Link>
                         </TableCell>
                       </TableRow>
                     ))}

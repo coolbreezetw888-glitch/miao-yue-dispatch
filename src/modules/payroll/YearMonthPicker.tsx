@@ -7,15 +7,18 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function useYearMonthState(): {
+export function useYearMonthState(initial?: {
+  year?: number | undefined;
+  month?: number | undefined;
+}): {
   year: number;
   month: number;
   setYear: (year: number) => void;
   setMonth: (month: number) => void;
 } {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(initial?.year ?? now.getFullYear());
+  const [month, setMonth] = useState(initial?.month ?? now.getMonth() + 1);
   return { year, month, setYear, setMonth };
 }
 

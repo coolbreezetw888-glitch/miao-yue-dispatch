@@ -3,7 +3,7 @@
 // 淨額)+ CSV 匯出按鈕。
 
 import { Fragment, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -352,12 +352,31 @@ function StaffReportPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffList } = useMerchantStaffList(merchantId);
-  const { year, month, setYear, setMonth } = useYearMonthState();
-  const [selectedStaffId, setSelectedStaffId] = useState("");
+
+  // SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):從「服務人員明細」
+  // 表格點「查看明細」連結過來時,網址帶 ?staffId=...&year=...&month=...,這裡讀出來當作
+  // 初始選取值,讓使用者不用再手動選一次服務人員跟年月。直接手動進這個頁面(沒帶參數)時,
+  // 這幾個值都是 null,行為跟改版前完全一樣。
+  const [searchParams] = useSearchParams();
+  const initialStaffId = searchParams.get("staffId") ?? "";
+  const initialYearParam = Number(searchParams.get("year"));
+  const initialMonthParam = Number(searchParams.get("month"));
+
+  const { year, month, setYear, setMonth } = useYearMonthState({
+    year: Number.isInteger(initialYearParam) && initialYearParam > 0 ? initialYearParam : undefined,
+    month:
+      Number.isInteger(initialMonthParam) && initialMonthParam >= 1 && initialMonthParam <= 12
+        ? initialMonthParam
+        : undefined,
+  });
+  const [selectedStaffId, setSelectedStaffId] = useState(initialStaffId);
 
   useEffect(() => {
+    // 如果目前選取的服務人員 id 是空的,或(從網址帶來的)id 根本不在名單裡(例如該服務人員
+    // 後來被停用),就退回選名單第一位,避免畫面卡在「請選擇服務人員」的空狀態。
+    if (selectedStaffId && (staffList ?? []).some((s) => s.id === selectedStaffId)) return;
     const firstStaff = staffList?.[0];
-    if (!selectedStaffId && firstStaff) {
+    if (firstStaff) {
       setSelectedStaffId(firstStaff.id);
     }
   }, [staffList, selectedStaffId]);
