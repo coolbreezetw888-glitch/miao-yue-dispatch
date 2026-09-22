@@ -1,5 +1,11 @@
 // 對應模組 10(會員與紅利)規格書 §4.2:會員詳情頁(新路由 /app/members/:id)。
-// 基本資料 + 電話驗證 + 點數區塊(兌換/手動調整)+ 點數異動歷史 + 相關訂單 + 推薦名單。
+// 基本資料 + 電話驗證 + 點數摘要 + 相關訂單 + 推薦名單。
+//
+// #617(.project/specs/會員與紅利.md §10.5「紅利點數獨立化」):點數區塊這次不再是完整的
+// 兌換/手動調整/異動歷史操作面板——那些操作搬到新的獨立頁面 MemberPointsPage.tsx
+// (/app/member-points),這裡只保留精簡摘要(目前餘額 + 「查看完整點數紀錄」連結導到獨立頁面
+// 並帶入這位會員),避免兩邊各維護一份幾乎一樣的點數操作 UI。points_feature_enabled 關閉時
+// 整個「點數」卡片不顯示。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -12,7 +18,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -23,25 +28,19 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
-import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
 
 import {
-  adjustMemberPoints,
-  redeemMemberPoints,
   setMemberPhoneVerified,
   updateMember,
   useMember,
-  useMemberPointHistory,
   useMemberReferrals,
   useMemberRelatedBookings,
+  useMerchantMemberSettings,
 } from "./api";
 import { RequireMembersAccess } from "./RequireMembersAccess";
-import {
-  MEMBER_POINT_TRANSACTION_TYPE_LABELS,
-  MEMBER_STATUS_LABELS,
-  type Member,
-} from "./types";
+import { MEMBER_STATUS_LABELS, type Member } from "./types";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -162,161 +161,15 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
   );
 }
 
-function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [points, setPoints] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const numericPoints = Number(points);
-    if (!Number.isInteger(numericPoints) || numericPoints <= 0) {
-      toast.error("兌換點數必須是大於 0 的整數");
-      return;
-    }
-    if (!note.trim()) {
-      toast.error("請說明這次兌換的用途");
-      return;
-    }
-    setSaving(true);
-    try {
-      await redeemMemberPoints(member.id, numericPoints, note.trim());
-      toast.success("已登記兌換");
-      setOpen(false);
-      setPoints("");
-      setNote("");
-      onSaved();
-    } catch (err) {
-      toast.error("兌換失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          登記兌換
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>登記兌換點數</DialogTitle>
-          <DialogDescription>
-            目前餘額 {member.points_balance} 點。這裡只登記點數異動紀錄,不會自動反映在任何訂單金額上。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="redeem-points">兌換點數 *</Label>
-            <Input
-              id="redeem-points"
-              type="number"
-              min={1}
-              className="mt-2"
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="redeem-note">用途說明 *</Label>
-            <Textarea id="redeem-note" className="mt-2" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "處理中⋯" : "確認兌換"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** 規則 2.6(核心):這個按鈕只有商家管理員看得到,依 merchantRole==='admin' 判斷,不是依
- * useAgentPermission——這個操作本來就不透過 section_key 開放。 */
-function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [delta, setDelta] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const numericDelta = Number(delta);
-    if (!Number.isInteger(numericDelta) || numericDelta === 0) {
-      toast.error("調整點數必須是不為 0 的整數(正數增加、負數扣除)");
-      return;
-    }
-    if (!note.trim()) {
-      toast.error("請填寫調整原因");
-      return;
-    }
-    setSaving(true);
-    try {
-      await adjustMemberPoints(member.id, numericDelta, note.trim());
-      toast.success("已調整點數");
-      setOpen(false);
-      setDelta("");
-      setNote("");
-      onSaved();
-    } catch (err) {
-      toast.error("調整失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          手動調整
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>手動調整點數</DialogTitle>
-          <DialogDescription>目前餘額 {member.points_balance} 點,不能調整成負數。</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="adjust-delta">調整點數 *</Label>
-            <Input
-              id="adjust-delta"
-              type="number"
-              className="mt-2"
-              value={delta}
-              onChange={(e) => setDelta(e.target.value)}
-              placeholder="正數增加、負數扣除"
-            />
-          </div>
-          <div>
-            <Label htmlFor="adjust-note">調整原因 *</Label>
-            <Textarea id="adjust-note" className="mt-2" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "處理中⋯" : "確認調整"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function MemberDetailInner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: merchantRole } = useCurrentMerchantRole();
-  const isAdmin = merchantRole === "admin";
+  const { merchant } = useCurrentMerchant();
+  const { data: memberSettings } = useMerchantMemberSettings(merchant?.id ?? null);
+  const pointsFeatureEnabled = memberSettings?.points_feature_enabled !== false;
 
   const { data: member, isLoading } = useMember(id);
-  const { data: pointHistory } = useMemberPointHistory(id);
   const { data: relatedBookings } = useMemberRelatedBookings(id);
   const { data: referrals } = useMemberReferrals(id);
 
@@ -325,7 +178,6 @@ function MemberDetailInner() {
 
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ["members-module", "member-detail", id] });
-    void queryClient.invalidateQueries({ queryKey: ["members-module", "point-history", id] });
     void queryClient.invalidateQueries({ queryKey: ["members-module", "related-bookings", id] });
     void queryClient.invalidateQueries({ queryKey: ["members-module", "referrals", id] });
     void queryClient.invalidateQueries({ queryKey: ["members-module", "members-list"] });
@@ -452,50 +304,25 @@ function MemberDetailInner() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>點數</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-3xl font-bold text-foreground">{member.points_balance} 點</p>
-          <div className="flex flex-wrap gap-2">
-            <RedeemPointsDialog member={member} onSaved={refetchAll} />
-            {isAdmin ? <AdjustPointsDialog member={member} onSaved={refetchAll} /> : null}
-          </div>
-
-          <div>
-            <p className="mb-2 text-sm font-semibold text-foreground">異動歷史</p>
-            {!pointHistory || pointHistory.length === 0 ? (
-              <p className="text-sm text-muted-foreground">目前沒有任何點數異動紀錄。</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {pointHistory.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-foreground">
-                        {MEMBER_POINT_TRANSACTION_TYPE_LABELS[entry.transactionType]}
-                        {entry.relatedMemberName ? `(${entry.relatedMemberName})` : ""}
-                      </p>
-                      {entry.note ? <p className="text-muted-foreground">{entry.note}</p> : null}
-                      <p className="text-muted-foreground">{formatDateTime(entry.createdAt)}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className={entry.pointsDelta > 0 ? "text-cta" : "text-destructive"}>
-                        {entry.pointsDelta > 0 ? "+" : ""}
-                        {entry.pointsDelta}
-                      </p>
-                      <p className="text-muted-foreground">餘額 {entry.balanceAfter}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* #617:點數區塊這次只保留精簡摘要,完整的兌換/手動調整/異動歷史操作搬到獨立頁面
+          MemberPointsPage.tsx(/app/member-points)。points_feature_enabled 關閉時整張卡片不顯示,
+          既有的點數餘額資料不受影響,只是隱藏。 */}
+      {pointsFeatureEnabled ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>點數</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-3xl font-bold text-foreground">{member.points_balance} 點</p>
+            <Link
+              to={`/app/member-points?member=${member.id}`}
+              className="text-sm text-brand hover:underline"
+            >
+              查看完整點數紀錄 →
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

@@ -54,16 +54,33 @@ test("4.1:服務人員登入後首頁顯示自己的個人資料卡片,看不到
   await expect(page.getByRole("link", { name: "新增分店" })).toHaveCount(0);
 });
 
-test("4.2:服務人員的「功能」分頁籤只看到休假設定/薪資報表兩張卡片", async ({ page }) => {
+test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(首頁/休假設定/薪資報表/行事曆),不再有「功能」分頁籤", async ({
+  page,
+}) => {
+  const bottomNav = page.locator("nav");
+
+  // 4 個分頁籤,順序固定,不再有「功能」。
+  await expect(bottomNav.getByRole("link", { name: "首頁" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(bottomNav.getByRole("link", { name: "休假設定" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "薪資報表" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "行事曆" })).toBeVisible();
+  await expect(bottomNav.getByRole("link", { name: "功能" })).toHaveCount(0);
+  await expect(bottomNav.getByRole("link")).toHaveCount(4);
+
+  // 點「休假設定」分頁籤直接進入既有頁面內容,不再經過「功能」中介頁。
+  await bottomNav.getByRole("link", { name: "休假設定" }).click();
+  await expect(page).toHaveURL(/\/app\/my-availability$/);
+  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  // 點「薪資報表」分頁籤同樣直達。
+  await bottomNav.getByRole("link", { name: "薪資報表" }).click();
+  await expect(page).toHaveURL(/\/app\/my-payroll$/);
+  await expect(page.getByRole("heading", { name: "薪資報表" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  // /app/manage 這個路由對服務人員角色而言已經沒有對應入口,殘留深連結一律導回首頁分頁籤,
+  // 不會看到任何管理員/客服導向的卡片(服務人員、客服管理、訂單管理、商家設定)。
   await page.goto("/app/manage");
-  await expect(page.getByRole("heading", { name: "功能" })).toBeVisible({ timeout: LOAD_TIMEOUT });
-
-  // 模組 14 v2 §10.3.5/§10.4.6:卡片文字從「我的休假設定」/「我的薪資報表」改名成
-  // 「休假設定」/「薪資報表」(ManagePage.tsx 對應調整),這裡同步更新斷言文字。
-  await expect(page.getByText("休假設定")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByText("薪資報表")).toBeVisible();
-
-  // 不會看到任何管理員/客服導向的卡片。
+  await expect(page).toHaveURL(/\/app\/?$/, { timeout: LOAD_TIMEOUT });
   await expect(page.getByText("服務人員", { exact: true })).toHaveCount(0);
   await expect(page.getByText("客服管理")).toHaveCount(0);
   await expect(page.getByText("訂單管理")).toHaveCount(0);

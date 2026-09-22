@@ -3,7 +3,6 @@
 // 開啟/關閉切換),但畫面上只操作「自己」的資料,不需要先選「哪位服務人員」。
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -148,11 +147,9 @@ function MyAvailabilityPageInner() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
+      {/* 商家端調整批次(2026-09-22,#609):這個頁面現在是底部「休假設定」分頁籤直接可達的
+          目的地,不再是「功能」卡片底下的子頁面,不需要「← 返回功能」連結
+          (/app/manage 對服務人員角色而言已經沒有對應入口)。 */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">休假設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">

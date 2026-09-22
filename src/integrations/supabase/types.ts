@@ -1436,6 +1436,7 @@ export type Database = {
           merchant_id: string
           phone_required_to_create: boolean
           points_earn_rate: number
+          points_feature_enabled: boolean
           referral_bonus_points: number
           require_verified_phone_for_rewards: boolean
           updated_at: string
@@ -1446,6 +1447,7 @@ export type Database = {
           merchant_id: string
           phone_required_to_create?: boolean
           points_earn_rate?: number
+          points_feature_enabled?: boolean
           referral_bonus_points?: number
           require_verified_phone_for_rewards?: boolean
           updated_at?: string
@@ -1456,6 +1458,7 @@ export type Database = {
           merchant_id?: string
           phone_required_to_create?: boolean
           points_earn_rate?: number
+          points_feature_enabled?: boolean
           referral_bonus_points?: number
           require_verified_phone_for_rewards?: boolean
           updated_at?: string

@@ -41,6 +41,7 @@ import BillingReportPage from "@/modules/payroll/BillingReportPage";
 import StaffReportPage from "@/modules/payroll/StaffReportPage";
 import MembersListPage from "@/modules/members/MembersListPage";
 import MemberDetailPage from "@/modules/members/MemberDetailPage";
+import MemberPointsPage from "@/modules/members/MemberPointsPage";
 import MemberSettingsPage from "@/modules/members/MemberSettingsPage";
 import LineSettingsPage from "@/modules/line-notifications/LineSettingsPage";
 import LineEventSettingsPage from "@/modules/line-notifications/LineEventSettingsPage";
@@ -111,6 +112,7 @@ export default function App() {
           <Route path="/app/staff-report" element={<StaffReportPage />} />
           <Route path="/app/members" element={<MembersListPage />} />
           <Route path="/app/members/:id" element={<MemberDetailPage />} />
+          <Route path="/app/member-points" element={<MemberPointsPage />} />
           <Route path="/app/member-settings" element={<MemberSettingsPage />} />
           <Route path="/app/line-settings" element={<LineSettingsPage />} />
           <Route path="/app/line-events" element={<LineEventSettingsPage />} />

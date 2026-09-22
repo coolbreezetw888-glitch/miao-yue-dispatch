@@ -32,7 +32,8 @@ export const MEMBER_POINT_TRANSACTION_TYPE_LABELS: Record<MemberPointTransaction
 };
 
 /** 1.1 查無資料時前端一律套用的預設值(財務謹慎設計,第〇節判斷 3——不能自己「幫」商家填入
- * 非零數字)。 */
+ * 非零數字)。points_feature_enabled 預設 true(#617,.project/specs/會員與紅利.md §10.5:
+ * 沿用目前既有商家的實際使用狀況)。 */
 export const DEFAULT_MERCHANT_MEMBER_SETTINGS: Pick<
   MerchantMemberSettings,
   | "phone_required_to_create"
@@ -40,12 +41,14 @@ export const DEFAULT_MERCHANT_MEMBER_SETTINGS: Pick<
   | "points_earn_rate"
   | "referral_bonus_points"
   | "birthday_bonus_points"
+  | "points_feature_enabled"
 > = {
   phone_required_to_create: true,
   require_verified_phone_for_rewards: false,
   points_earn_rate: 0,
   referral_bonus_points: 0,
   birthday_bonus_points: 0,
+  points_feature_enabled: true,
 };
 
 /** §3.12 get_member_point_history 回傳的一筆點數異動明細。 */
