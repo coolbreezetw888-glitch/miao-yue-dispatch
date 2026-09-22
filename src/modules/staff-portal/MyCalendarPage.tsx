@@ -20,12 +20,27 @@ import {
   toDateKey,
 } from "@/modules/booking/dateUtils";
 
-import { useMyBookingSchedule, useMyStaffPermission } from "./context";
+import { useActiveMyStaffRecord, useMyBookingSchedule, useMyStaffPermission } from "./context";
+import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
+import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
 import type { MyBookingScheduleItem } from "./api";
+
+// v2 §10.2.4:「卡片列表」/「時間軸格線」兩種檢視,預設卡片列表(維持 v1 既有行為不變,
+// 新功能是選配的,不是取代)。
+type CalendarViewMode = "list" | "timeline";
 
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
-function BookingListItem({ booking }: { booking: MyBookingScheduleItem }) {
+// v2 §10.2.4:兩種檢視(卡片列表/時間軸格線)點擊任一筆預約都要能開啟同一個唯讀詳情彈窗
+// (MyBookingDetailDialog),所以這裡新增 onClick,原本純展示用的 <li> 改成可點擊的 <button>,
+// 卡片本身的呈現內容完全不變。
+function BookingListItem({
+  booking,
+  onClick,
+}: {
+  booking: MyBookingScheduleItem;
+  onClick: () => void;
+}) {
   const startTime = new Date(booking.start_at).toLocaleTimeString("zh-TW", {
     hour: "2-digit",
     minute: "2-digit",
@@ -38,7 +53,12 @@ function BookingListItem({ booking }: { booking: MyBookingScheduleItem }) {
   });
 
   return (
-    <li className="rounded-md border border-border px-3 py-2.5">
+    <li>
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-md border border-border px-3 py-2.5 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-foreground">
           {startTime} - {endTime}
@@ -79,6 +99,7 @@ function BookingListItem({ booking }: { booking: MyBookingScheduleItem }) {
       {booking.final_amount_snapshot != null ? (
         <p className="mt-1 text-xs text-muted-foreground">金額:{booking.final_amount_snapshot} 元</p>
       ) : null}
+    </button>
     </li>
   );
 }
@@ -88,9 +109,14 @@ export default function MyCalendarPage() {
   const merchantId = merchant?.id ?? null;
   const { data: hasCalendarAccess, isLoading: permissionLoading } =
     useMyStaffPermission("staff_calendar_view");
+  const { data: staffRow } = useActiveMyStaffRecord(merchantId);
 
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(getTaipeiNow()));
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toDateKey(getTaipeiNow()));
+  // v2 §10.2.4:「卡片列表」/「時間軸格線」切換,預設卡片列表(維持 v1 既有行為)。
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("list");
+  // v2 §10.2.4:兩種檢視共用同一份 state 管理目前選中要看詳情的預約,不要兩套獨立的彈窗邏輯。
+  const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
 
   const monthGrid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
   const rangeStartKey = toDateKey(monthGrid[0]!.date);
@@ -128,6 +154,7 @@ export default function MyCalendarPage() {
   }
 
   const selectedDayBookings = bookingsByDate.get(selectedDateKey) ?? [];
+  const detailBooking = (schedule ?? []).find((b) => b.id === detailBookingId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -188,12 +215,38 @@ export default function MyCalendarPage() {
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base">{selectedDateKey} 的預約</CardTitle>
+          {/* v2 §10.2.4:「卡片列表」/「時間軸格線」切換開關。 */}
+          <div className="flex rounded-md border border-border p-0.5">
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "list" ? "default" : "ghost"}
+              onClick={() => setViewMode("list")}
+            >
+              卡片列表
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={viewMode === "timeline" ? "default" : "ghost"}
+              onClick={() => setViewMode("timeline")}
+            >
+              時間軸格線
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {scheduleLoading ? (
             <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : viewMode === "timeline" ? (
+            <MyCalendarTimelineView
+              staffId={staffRow?.id ?? null}
+              selectedDateKey={selectedDateKey}
+              bookings={selectedDayBookings}
+              onSelectBooking={setDetailBookingId}
+            />
           ) : selectedDayBookings.length === 0 ? (
             <p className="text-sm text-muted-foreground">這一天沒有預約。</p>
           ) : (
@@ -202,12 +255,24 @@ export default function MyCalendarPage() {
                 .slice()
                 .sort((a, b) => a.start_at.localeCompare(b.start_at))
                 .map((booking) => (
-                  <BookingListItem key={`${booking.id}-${booking.role_in_booking}`} booking={booking} />
+                  <BookingListItem
+                    key={`${booking.id}-${booking.role_in_booking}`}
+                    booking={booking}
+                    onClick={() => setDetailBookingId(booking.id)}
+                  />
                 ))}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      <MyBookingDetailDialog
+        booking={detailBooking}
+        open={detailBookingId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailBookingId(null);
+        }}
+      />
     </div>
   );
 }

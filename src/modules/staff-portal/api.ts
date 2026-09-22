@@ -16,6 +16,15 @@ import type { MerchantStaffPermission, StaffPermissionSectionKey } from "./types
 
 export type StaffAvailabilityOverride = Tables<"staff_availability_overrides">;
 
+/** v2 §10.2.1 對應規格書:get_my_day_business_hours 回傳形狀,故意跟既有
+ * get_merchant_day_schedule 的 business_hours 物件完全一致,方便前端沿用既有處理邏輯。 */
+export interface MyDayBusinessHours {
+  has_setting: boolean;
+  is_closed: boolean;
+  open_time: string | null;
+  close_time: string | null;
+}
+
 /** 3.15 對應規格書 2.5/2.6:get_my_booking_schedule 回傳的單筆預約明細。 */
 export interface MyBookingScheduleItem {
   id: string;
@@ -145,6 +154,21 @@ export async function fetchMyBookingSchedule(
   });
   if (error) throw error;
   return (data ?? []) as unknown as MyBookingScheduleItem[];
+}
+
+// =========================================================================
+// v2 §10.2.1:我的商家某一天的營業時間(供時間軸格線/時段排休分頁共用)。
+// =========================================================================
+export async function fetchMyDayBusinessHours(
+  staffId: string,
+  date: string,
+): Promise<MyDayBusinessHours> {
+  const { data, error } = await supabase.rpc("get_my_day_business_hours", {
+    p_staff_id: staffId,
+    p_date: date,
+  });
+  if (error) throw error;
+  return data as unknown as MyDayBusinessHours;
 }
 
 // =========================================================================

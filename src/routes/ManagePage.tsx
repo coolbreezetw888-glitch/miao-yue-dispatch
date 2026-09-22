@@ -76,15 +76,15 @@ function StaffManagePage() {
     {
       key: "my-availability",
       to: "/app/my-availability",
-      label: "我的休假設定",
-      description: "設定每週固定接單時段、標記臨時休假(僅按件計酬服務人員)",
+      label: "休假設定",
+      description: "設定每週固定接單時段、整天排休或時段排休(僅按件計酬服務人員)",
       icon: CalendarOff,
       visible: showAvailabilityCard,
     },
     {
       key: "my-payroll",
       to: "/app/my-payroll",
-      label: "我的薪資報表",
+      label: "薪資報表",
       description: "查看自己每個月的抽成明細或薪資扣款明細",
       icon: FileBarChart,
       visible: showPayrollCard,

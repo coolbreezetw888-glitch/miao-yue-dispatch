@@ -28,7 +28,9 @@ import type {
 import {
   fetchMyAvailabilityOverrides,
   fetchMyBookingSchedule,
+  fetchMyDayBusinessHours,
   type MyBookingScheduleItem,
+  type MyDayBusinessHours,
   type StaffAvailabilityOverride,
 } from "./api";
 import type { StaffPermissionSectionKey } from "./types";
@@ -225,4 +227,21 @@ export function useMyStaffMonthlyPayrollSummary(
 ): UseQueryResult<StaffMonthlyPayrollSummary> {
   const { data: staffRow } = useActiveMyStaffRecord(merchantId);
   return useStaffMonthlyPayrollSummary(staffRow?.id ?? null, year, month);
+}
+
+// =========================================================================
+// v2 §10.2.1/§10.3.3(對外介面異動總結第十一節):我的商家某一天的營業時間。跟本檔案其他 hook
+// 不同,這支直接接受呼叫端已經解出來的 staffId(不是 merchantId)——因為呼叫端
+// (MyCalendarTimelineView/DayOffTabsSection)本來就已經從父層拿到 staffId,不需要再繞一次
+// useActiveMyStaffRecord。
+// =========================================================================
+export function useMyDayBusinessHours(
+  staffId: string | null | undefined,
+  date: string | null | undefined,
+): UseQueryResult<MyDayBusinessHours> {
+  return useQuery({
+    queryKey: ["staff-portal-module", "my-day-business-hours", staffId, date],
+    queryFn: () => fetchMyDayBusinessHours(staffId as string, date as string),
+    enabled: Boolean(staffId) && Boolean(date),
+  });
 }

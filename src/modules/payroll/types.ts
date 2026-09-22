@@ -100,6 +100,10 @@ export interface StaffCommissionSummary {
   total_orders: number;
   total_commission_amount: number;
   assistant_booking_count: number;
+  /** 模組 14(服務人員端)v2 §10.4.2:訂單原始總額(sum(bookings.final_amount_snapshot),
+   * 未扣抽成前的訂單實收金額加總)。跟 commission_base_amount(抽成計算基準,已先扣折扣、
+   * 可能還扣稅金/料錢成本)是不同的數字,不要混為一談。 */
+  total_amount: number;
 }
 
 /** §3.10 get_staff_monthly_payroll_summary 回傳形狀(月薪制師傅報表,規則 2.8)。 */

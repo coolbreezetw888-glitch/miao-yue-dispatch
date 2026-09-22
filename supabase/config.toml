@@ -122,6 +122,20 @@ max_frequency = "1s"
 otp_length = 6
 otp_expiry = 3600
 
+# 模組 14(服務人員端)v2 §10.1:三種 Supabase Auth 內建信件樣板中文化(邀請信/忘記密碼信/
+# 改信箱驗證信)。這是全站共用設定,商家管理員/客服/服務人員三種登入身份共用同一套樣板。
+[auth.email.template.invite]
+subject = "你已被加入「秒約」,請設定登入密碼"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "重設你的「秒約」登入密碼"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.email_change]
+subject = "確認變更「秒約」登入信箱"
+content_path = "./supabase/templates/email_change.html"
+
 [auth.sms]
 enable_signup = false
 enable_confirmations = false

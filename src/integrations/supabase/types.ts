@@ -2896,6 +2896,10 @@ export type Database = {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
         Returns: Json
       }
+      get_my_day_business_hours: {
+        Args: { p_date: string; p_staff_id: string }
+        Returns: Json
+      }
       get_staff_commission_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json

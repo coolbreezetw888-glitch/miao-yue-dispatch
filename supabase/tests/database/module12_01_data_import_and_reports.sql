@@ -61,8 +61,8 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
   ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '匯入測試服務人員P', null, true, 'piece_rate');
 
-insert into merchant_payroll_settings (merchant_id, commission_basis_type, default_commission_rate_percentage)
-values ('ec000000-0000-4000-8000-000000000021', 'gross', 10);
+insert into merchant_payroll_settings (merchant_id, commission_basis_type)
+values ('ec000000-0000-4000-8000-000000000021', 'gross');
 
 insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
 values ('ec000000-0000-4000-8000-000000000021', 100, 0, 0);

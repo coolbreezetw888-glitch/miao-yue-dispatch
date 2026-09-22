@@ -26,6 +26,9 @@ import {
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
+// 模組 14(服務人員端)v2 §10.4.4:摘要卡片的金額顯示格式,沿用既有的跨模組共用格式化函式
+// (staff-portal 模組已經有 import booking/dateUtils 的既有先例,這裡是同樣的模式)。
+import { formatAmount } from "@/modules/booking/orderAmount";
 
 import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "./api";
 import { buildCsvContent, downloadCsv } from "./csvExport";
@@ -42,11 +45,19 @@ export function PieceRateStaffReport({
   staffName,
   year,
   month,
+  showCsvExport = true,
+  showSummaryCards = false,
 }: {
   staffId: string;
   staffName: string;
   year: number;
   month: number;
+  /** 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面(MyPayrollPage.tsx)傳 false 拿掉 CSV
+   * 匯出按鈕;商家管理員視角(StaffReportPage.tsx)不傳,吃預設值 true,維持既有行為不變。 */
+  showCsvExport?: boolean;
+  /** 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面傳 true 顯示三張摘要卡片(完成訂單/
+   * 我的抽成/訂單總額);商家管理員視角不傳,吃預設值 false,維持既有版面不變。 */
+  showSummaryCards?: boolean;
 }) {
   const { data: summary, isLoading, error } = useStaffCommissionSummary(staffId, year, month);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -85,19 +96,73 @@ export function PieceRateStaffReport({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
-        </p>
-        <Button variant="outline" size="sm" onClick={handleExportCsv}>
-          匯出這份報表為 CSV
-        </Button>
-      </div>
+      {!showSummaryCards ? (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
+          </p>
+          {showCsvExport ? (
+            <Button variant="outline" size="sm" onClick={handleExportCsv}>
+              匯出這份報表為 CSV
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面新增三張摘要卡片(完成訂單/我的抽成/
+          訂單總額),取代下面 Card 標題底下原本的 CardDescription 文字(避免同一個數字在畫面上
+          出現兩次)。「以助手身份參與...」這行參考文字保留,移到摘要卡片下方,不刪除。 */}
+      {showSummaryCards ? (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>完成訂單</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold text-foreground">{summary.total_orders} 筆</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>我的抽成</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold text-foreground">
+                  {formatAmount(summary.total_commission_amount)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>訂單總額</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-lg font-semibold text-foreground">{formatAmount(summary.total_amount)}</p>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
+            </p>
+            {showCsvExport ? (
+              <Button variant="outline" size="sm" onClick={handleExportCsv}>
+                匯出這份報表為 CSV
+              </Button>
+            ) : null}
+          </div>
+        </>
+      ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>訂單明細</CardTitle>
-          <CardDescription>總計 {summary.total_orders} 筆訂單,抽成合計 {summary.total_commission_amount} 元</CardDescription>
+          {!showSummaryCards ? (
+            <CardDescription>
+              總計 {summary.total_orders} 筆訂單,抽成合計 {summary.total_commission_amount} 元
+            </CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent>
           {summary.details.length === 0 ? (
@@ -177,11 +242,16 @@ export function MonthlySalaryStaffReport({
   staffName,
   year,
   month,
+  showCsvExport = true,
 }: {
   staffId: string;
   staffName: string;
   year: number;
   month: number;
+  /** 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面傳 false 拿掉 CSV 匯出按鈕;商家管理員
+   * 視角不傳,吃預設值 true,維持既有行為不變。這次需求 4 沒有提到要調整月薪制服務人員報表
+   * 的摘要卡片(本來就已經有三張卡片),不新增 showSummaryCards 這個 prop。 */
+  showCsvExport?: boolean;
 }) {
   const { data: summary, isLoading, error } = useStaffMonthlyPayrollSummary(staffId, year, month);
 
@@ -205,9 +275,11 @@ export function MonthlySalaryStaffReport({
           本月休假額度 {summary.monthly_leave_quota_days ?? "未設定"} 天(僅供參考,不影響薪資計算)
           ,實際請假 {summary.total_leave_days} 天
         </p>
-        <Button variant="outline" size="sm" onClick={handleExportCsv}>
-          匯出這份報表為 CSV
-        </Button>
+        {showCsvExport ? (
+          <Button variant="outline" size="sm" onClick={handleExportCsv}>
+            匯出這份報表為 CSV
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">

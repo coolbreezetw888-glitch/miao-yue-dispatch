@@ -189,18 +189,34 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     throw new Error(`建立測試月薪制服務人員失敗:${monthlySalaryStaffError?.message}`);
   }
 
-  // §1.1/§3.12:新商家已經自動種入預設薪資設定(gross/0%/30 天),這裡改成固定 20% 方便斷言。
+  // §1.1/§3.12:新商家已經自動種入預設薪資設定(gross/0%/30 天),這裡只調整 pay_days_per_month
+  // 方便斷言;抽成比例已經改成服務項目層級(商家端三項調整規格書 §二 2.2.2),見下面
+  // staff_service_commission_rates 那筆設定。
   const { error: payrollSettingsError } = await client.from("merchant_payroll_settings").upsert(
     {
       merchant_id: merchantId as string,
       commission_basis_type: "gross",
-      default_commission_rate_percentage: COMMISSION_RATE_PERCENTAGE,
       pay_days_per_month: PAY_DAYS_PER_MONTH,
     },
     { onConflict: "merchant_id" },
   );
   if (payrollSettingsError) {
     throw new Error(`更新測試商家薪資設定失敗:${payrollSettingsError.message}`);
+  }
+
+  // 商家端三項調整規格書 §二 2.2.1:抽成比例改成「服務人員 × 服務項目」層級設定,固定 20% 方便
+  // 斷言(對應 EXPECTED_COMMISSION_AMOUNT)。
+  const { error: commissionRateError } = await client.from("staff_service_commission_rates").upsert(
+    {
+      staff_id: (pieceRateStaff as { id: string }).id,
+      service_item_id: (serviceItem as { id: string }).id,
+      commission_mode: "percentage",
+      commission_value: COMMISSION_RATE_PERCENTAGE,
+    },
+    { onConflict: "staff_id,service_item_id" },
+  );
+  if (commissionRateError) {
+    throw new Error(`更新測試服務人員抽成設定失敗:${commissionRateError.message}`);
   }
 
   const { data: salarySettings, error: salarySettingsError } = await client

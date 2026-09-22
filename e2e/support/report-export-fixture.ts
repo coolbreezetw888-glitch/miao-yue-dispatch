@@ -142,12 +142,26 @@ export async function setupReportExportFixture(): Promise<ReportExportFixture> {
     {
       merchant_id: merchantId as string,
       commission_basis_type: "gross",
-      default_commission_rate_percentage: COMMISSION_RATE_PERCENTAGE,
     },
     { onConflict: "merchant_id" },
   );
   if (payrollSettingsError) {
     throw new Error(`更新測試商家薪資設定失敗:${payrollSettingsError.message}`);
+  }
+
+  // 商家端三項調整規格書 §二 2.2.1:抽成比例改成「服務人員 × 服務項目」層級設定,固定 20% 方便
+  // 斷言(抽成報表需要有非零金額可以顯示)。
+  const { error: commissionRateError } = await client.from("staff_service_commission_rates").upsert(
+    {
+      staff_id: (staff as { id: string }).id,
+      service_item_id: (serviceItem as { id: string }).id,
+      commission_mode: "percentage",
+      commission_value: COMMISSION_RATE_PERCENTAGE,
+    },
+    { onConflict: "staff_id,service_item_id" },
+  );
+  if (commissionRateError) {
+    throw new Error(`更新測試服務人員抽成設定失敗:${commissionRateError.message}`);
   }
 
   const memberName = `E2E報表測試會員${runId}`;
