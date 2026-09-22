@@ -79,6 +79,14 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
   ('b2000000-0000-4000-8000-000000000045', 'b2000000-0000-4000-8000-000000000021', 'D師傅(一店)', '0933900002', true);
 
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。這兩筆用 postgres 超級使用者身分布置(還沒 test_set_auth 任何一間
+-- 商家的角色),避免用「一店管理員」身分插入「二店」的付款方式觸發 RLS 擋下(布置測試資料不應該
+-- 受限於「正在測試中的那個角色」的權限範圍)。
+insert into payment_methods (id, merchant_id, name) values ('edb36a38-23af-53cf-b7fb-7276c865bbd9', 'b2000000-0000-4000-8000-000000000021', '現場付款');
+insert into payment_methods (id, merchant_id, name) values ('a0415a1e-c41e-53dd-958a-50d9b3f2284f', 'b2000000-0000-4000-8000-000000000022', '現場付款');
+
 -- ① 一店管理員先幫 A 師傅(一店)建立 2026-09-22 10:00-11:00 的預約。
 select pg_temp.test_set_auth('b2000000-0000-4000-8000-000000000001');
 
@@ -87,7 +95,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000021', 'b2000000-0000-4000-8000-000000000041',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '一店客戶', '0933000001'
-  )$$,
+  , p_payment_method_id => 'edb36a38-23af-53cf-b7fb-7276c865bbd9')$$,
   '一店管理員幫 A 師傅(一店)建立預約成功'
 );
 
@@ -102,7 +110,7 @@ select throws_ok(
     'b2000000-0000-4000-8000-000000000022', 'b2000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:30:00+08',
     '二店客戶', '0933000002'
-  )$$,
+  , p_payment_method_id => 'a0415a1e-c41e-53dd-958a-50d9b3f2284f')$$,
   'P0001', null,
   '規則 2.6:電話正規化後相同的跨商家服務人員,時段重疊被擋下'
 );
@@ -114,7 +122,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000022', 'b2000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
     '二店客戶2', '0933000003'
-  )$$,
+  , p_payment_method_id => 'a0415a1e-c41e-53dd-958a-50d9b3f2284f')$$,
   '規則 2.6:不重疊的時段,建立成功'
 );
 
@@ -129,7 +137,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000021', 'b2000000-0000-4000-8000-000000000043',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '一店客戶B', '0933000004'
-  )$$,
+  , p_payment_method_id => 'edb36a38-23af-53cf-b7fb-7276c865bbd9')$$,
   '規則 2.6:電話不同的服務人員,即使同時段,不互相影響,建立成功'
 );
 
@@ -140,7 +148,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000021', 'b2000000-0000-4000-8000-000000000045',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
     '一店客戶D', '0933000005'
-  )$$,
+  , p_payment_method_id => 'edb36a38-23af-53cf-b7fb-7276c865bbd9')$$,
   '電話不同的服務人員 D 建立預約成功'
 );
 
@@ -154,7 +162,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000022', 'b2000000-0000-4000-8000-000000000044',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
     '二店客戶C', '0933000006'
-  )$$,
+  , p_payment_method_id => 'a0415a1e-c41e-53dd-958a-50d9b3f2284f')$$,
   '規則 2.6:兩邊電話不同,不比對、不互相影響,建立成功'
 );
 
@@ -180,7 +188,7 @@ select lives_ok(
     'b2000000-0000-4000-8000-000000000021', 'b2000000-0000-4000-8000-000000000041',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '一店客戶重疊', '0933000007'
-  )$$,
+  , p_payment_method_id => 'edb36a38-23af-53cf-b7fb-7276c865bbd9')$$,
   '規則 2.4:strict_conflict_check 關閉時,同一位服務人員同時段允許重疊'
 );
 
@@ -194,7 +202,7 @@ select throws_ok(
     'b2000000-0000-4000-8000-000000000022', 'b2000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','b2000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:30:00+08',
     '二店客戶重疊', '0933000008'
-  )$$,
+  , p_payment_method_id => 'a0415a1e-c41e-53dd-958a-50d9b3f2284f')$$,
   'P0001', null,
   '規則 2.4 對照組:strict_conflict_check 未關閉(預設開啟)的商家,重疊仍被擋下'
 );

@@ -62,6 +62,12 @@ insert into merchant_agents (id, merchant_id, user_id, name, invited_email, stat
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('eb000000-0000-4000-8000-000000000051', 'orders', true);
 
+-- SPECS-INDEX #604(本次同批次疊加):create_booking 新建訂單付款方式改為必填,這個檔案原本所有
+-- create_booking 呼叫都沒有帶 p_payment_method_id,#604 上線後會被必填規則擋下——這裡補一筆
+-- 付款方式,下面所有呼叫統一補上這個參數(用 sed 風格的批次取代,不逐一手動改寫每一段測資)。
+insert into payment_methods (id, merchant_id, name) values
+  ('eb000000-0000-4000-8000-000000000061', 'eb000000-0000-4000-8000-000000000021', '現場付款');
+
 -- 模組 8 抽成設定(用來驗證 3.7/3.8 疊加不互相覆蓋,商家端三項調整規格書改成服務項目層級抽成
 -- 之後,改成針對「按件服務人員P × 洗髮」這個組合設定 10%)。
 insert into merchant_payroll_settings (merchant_id, commission_basis_type)
@@ -95,7 +101,8 @@ select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 -- 成功連結會員。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-01 10:00:00+08',
   p_customer_name => '含稅測試客戶',
@@ -117,7 +124,8 @@ select is(
 -- 不帶 p_member_id 的既有呼叫端行為不變:兩個欄位都是 null。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-01 11:00:00+08',
   p_customer_name => '訪客訂單測試',
@@ -135,6 +143,7 @@ select throws_ok(
   format(
     $$select create_booking(
       p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
+      p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
       p_staff_id => 'eb000000-0000-4000-8000-000000000041',
       p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
       p_start_at => '2026-12-01 12:00:00+08',
@@ -153,6 +162,7 @@ select throws_ok(
   format(
     $$select create_booking(
       p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
+      p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
       p_staff_id => 'eb000000-0000-4000-8000-000000000041',
       p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
       p_start_at => '2026-12-01 13:00:00+08',
@@ -171,6 +181,7 @@ select throws_ok(
   format(
     $$select create_booking(
       p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
+      p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
       p_staff_id => 'eb000000-0000-4000-8000-000000000041',
       p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
       p_start_at => '2026-12-01 14:00:00+08',
@@ -192,6 +203,7 @@ select lives_ok(
   format(
     $$select create_booking(
       p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
+      p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
       p_staff_id => 'eb000000-0000-4000-8000-000000000041',
       p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
       p_start_at => '2026-12-01 15:00:00+08',
@@ -218,6 +230,9 @@ select update_booking(
   p_start_at => '2026-12-01 11:00:00+08',
   p_customer_name => '訪客訂單測試',
   p_customer_phone => '0955030002',
+  -- SPECS-INDEX #604:這筆訂單建立時已經帶了付款方式(見上方 create_booking),update_booking
+  -- 維持原值放行,一樣要帶同一個 payment_method_id,不然預設 null 會被判定成「主動清空」而擋下。
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
   p_member_id => :'plain_member_id'::uuid
 );
 
@@ -284,7 +299,8 @@ select is(
 -- 規則 2.1:紅利點數不受服務人員計酬類型影響——月薪制服務人員的訂單一樣正確核發會員點數。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000042',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000042',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-02 10:00:00+08',
   p_customer_name => '月薪服務人員紅利測試',
@@ -323,7 +339,8 @@ select is(
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-03 10:00:00+08',
   p_customer_name => '規則2.2新比例測試',
@@ -345,7 +362,8 @@ select is(
 -- 沒有連結會員的訂單完全不會產生任何分類帳紀錄(補一筆真正沒有連結會員的訂單來測)。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-03 11:00:00+08',
   p_customer_name => '真正的訪客訂單',
@@ -389,7 +407,8 @@ select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 -- =========================================================================
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-04 10:00:00+08',
   p_customer_name => '被推薦人第一筆消費',
@@ -423,7 +442,8 @@ select isnt(
 -- 同一位被推薦人第二筆訂單完成,推薦人不會重複拿到獎勵。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-04 11:00:00+08',
   p_customer_name => '被推薦人第二筆消費',
@@ -465,7 +485,8 @@ select id from create_member('eb000000-0000-4000-8000-000000000021', '被推薦�
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-05 10:00:00+08',
   p_customer_name => '零獎勵推薦測試',
@@ -496,7 +517,8 @@ where merchant_id = 'eb000000-0000-4000-8000-000000000021';
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-05 11:00:00+08',
   p_customer_name => '零獎勵推薦測試第二筆',
@@ -518,19 +540,23 @@ select is(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ⑦ 規則 2.8:電話驗證政策開關。啟用後,未驗證電話的會員核發路徑被跳過;已驗證的正常核發;
--- 政策關閉時,不論是否驗證都正常核發。
+-- ⑦ 規則 2.8/§10.7(SPECS-INDEX #619 疊加):資格條件判斷改用 reward_condition_mode。這裡沿用
+-- 原本規則 2.8 的測試骨架,只把開關 require_verified_phone_for_rewards(true/false)換成
+-- reward_condition_mode('phone_verified'/'none'),驗證行為完全對應(mode='phone_verified' 等同
+-- 舊版開啟開關,mode='none' 等同舊版關閉開關)。mode='line_bound'/'either'/'both' 的完整交集/
+-- 聯集驗證另外在 module10_04_reward_condition_mode.sql 覆蓋。
 -- =========================================================================
 select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 
-update merchant_member_settings set require_verified_phone_for_rewards = true
+update merchant_member_settings set reward_condition_mode = 'phone_verified'
 where merchant_id = 'eb000000-0000-4000-8000-000000000021';
 
 select id from create_member('eb000000-0000-4000-8000-000000000021', '未驗證電話會員', '0966000007') \gset unverified_member_
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-06 10:00:00+08',
   p_customer_name => '未驗證電話測試',
@@ -546,14 +572,15 @@ select complete_booking(:'unverified_booking_id'::uuid);
 select is(
   (select count(*)::int from member_point_transactions where booking_id = :'unverified_booking_id'::uuid),
   0,
-  '規則 2.8:啟用電話驗證政策後,未驗證電話的會員完成訂單,消費核發路徑被跳過(靜默略過,不算錯誤)'
+  '規則 2.8/#619:reward_condition_mode=phone_verified 時,未驗證電話的會員完成訂單,消費核發路徑被跳過(靜默略過,不算錯誤)'
 );
 
 select set_member_phone_verified(:'unverified_member_id'::uuid, true);
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-06 11:00:00+08',
   p_customer_name => '已驗證電話測試',
@@ -569,18 +596,19 @@ select complete_booking(:'verified_booking_id'::uuid);
 select is(
   (select count(*)::int from member_point_transactions where booking_id = :'verified_booking_id'::uuid and transaction_type = 'earn_booking'),
   1,
-  '規則 2.8:標記已驗證電話之後,同一位會員完成新訂單正常核發'
+  '規則 2.8/#619:標記已驗證電話之後,同一位會員完成新訂單正常核發'
 );
 
--- 政策關閉時,不論是否驗證都正常核發。
-update merchant_member_settings set require_verified_phone_for_rewards = false
+-- reward_condition_mode='none' 時,不論是否驗證都正常核發(對應舊版政策關閉行為)。
+update merchant_member_settings set reward_condition_mode = 'none'
 where merchant_id = 'eb000000-0000-4000-8000-000000000021';
 
 select id from create_member('eb000000-0000-4000-8000-000000000021', '政策關閉測試會員', '0966000008') \gset policy_off_member_
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
-  p_staff_id => 'eb000000-0000-4000-8000-000000000041',
+  p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
+  p_staff_id =>'eb000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','eb000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-12-06 12:00:00+08',
   p_customer_name => '政策關閉測試',
@@ -596,7 +624,7 @@ select complete_booking(:'policy_off_booking_id'::uuid);
 select is(
   (select count(*)::int from member_point_transactions where booking_id = :'policy_off_booking_id'::uuid and transaction_type = 'earn_booking'),
   1,
-  '規則 2.8:政策關閉時,即使會員電話未驗證,依然正常核發'
+  '規則 2.8/#619:reward_condition_mode=none 時,即使會員電話未驗證,依然正常核發'
 );
 
 select pg_temp.test_clear_auth();

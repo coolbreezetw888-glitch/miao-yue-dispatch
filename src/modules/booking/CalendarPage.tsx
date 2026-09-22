@@ -50,8 +50,12 @@ import {
   useCurrentMerchantRole,
   useMerchantStaffList,
 } from "@/modules/staff-agent/context";
-import { useMerchantServiceItems } from "@/modules/service-items/context";
-import { MemberPickerField, type SelectedMember } from "@/modules/members/MemberPickerField";
+import { useMerchantServiceCategories, useMerchantServiceItems } from "@/modules/service-items/context";
+import { UNCATEGORIZED_LABEL } from "@/modules/service-items/types";
+import {
+  MemberPhoneMatchPanel,
+  type SelectedMember,
+} from "@/modules/members/MemberPhoneMatchPanel";
 // 模組 15(服務人員推播通知)規則 4.5:訂單內容異動的一句話摘要,由前端在呼叫 update_booking
 // 之前先算好(見下方 handleSubmit),當作參數傳給 updateBooking → dispatchPushNotification。
 import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
@@ -99,10 +103,12 @@ import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   bookingBlockClasses,
   buildPaymentMethodOptions,
+  filterServiceItemsByCategory,
   getTaxModeHelperText,
   type AmountAdjustmentMode,
   type BookingStatus,
   type DayScheduleOwnBooking,
+  type ServiceItemCategoryFilter,
 } from "./types";
 
 const SLOT_MINUTES = 30;
@@ -260,6 +266,9 @@ export function BookingFormDialog({
   const isEdit = Boolean(editingBookingId);
   const { data: staffList } = useMerchantStaffList(merchantId);
   const { data: serviceItems } = useMerchantServiceItems(merchantId);
+  // SPECS-INDEX #598(訂單管理.md §9.2):服務項目勾選區塊上方的分類篩選下拉選單,純前端依既有
+  // 分類值篩選,不新增或調整任何資料結構。
+  const { data: serviceCategories } = useMerchantServiceCategories(merchantId);
   const { data: materialCostItems } = useMerchantMaterialCostItems(merchantId);
   const { data: materialCostEnabled } = useMaterialCostEnabled(merchantId);
   const { data: businessHours } = useMerchantBusinessHours(merchantId);
@@ -288,6 +297,9 @@ export function BookingFormDialog({
 
   const [staffId, setStaffId] = useState("");
   const [serviceItemIds, setServiceItemIds] = useState<string[]>([]);
+  // SPECS-INDEX #598:分類篩選只影響「顯示哪些選項讓你勾」,不影響「已經勾了哪些」(serviceItemIds
+  // 是獨立狀態,不受篩選影響,切換篩選不會弄丟已經勾選的項目)。
+  const [categoryFilter, setCategoryFilter] = useState<ServiceItemCategoryFilter>("all");
   const [assistantStaffIds, setAssistantStaffIds] = useState<string[]>([]);
   const [materialCostItemIds, setMaterialCostItemIds] = useState<string[]>([]);
   const [dateKey, setDateKey] = useState("");
@@ -300,7 +312,7 @@ export function BookingFormDialog({
   // 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到),跟上面的 notes(內部備註,
   // 商家內部看、客戶看不到)分開存放,對應 bookings.customer_notes。
   const [customerNotes, setCustomerNotes] = useState("");
-  // 模組 10(會員與紅利)§4.4:選填的會員連結,不選就是訪客訂單。編輯模式下用既有的
+  // SPECS-INDEX #614(會員與紅利.md §10.2):選填的會員連結,不選就是訪客訂單。編輯模式下用既有的
   // member_id/member_name_snapshot 帶入初始值,避免正常編輯流程意外清空既有連結(判斷 9)。
   const [member, setMember] = useState<SelectedMember | null>(null);
   const [saving, setSaving] = useState(false);
@@ -352,6 +364,7 @@ export function BookingFormDialog({
   // 編輯模式等 editingDetail 載入後帶入既有的金額快照值,不重新查詢商家目前設定。
   useEffect(() => {
     if (!open) return;
+    setCategoryFilter("all"); // #598:每次開啟表單,分類篩選重設為「全部」。
     if (isEdit) {
       if (!editingDetail) return; // 還在載入中,等資料回來再帶入
       setStaffId(editingDetail.staff_id);
@@ -557,6 +570,16 @@ export function BookingFormDialog({
       toast.error("請填寫客戶地址");
       return;
     }
+    // SPECS-INDEX #604:付款方式改為必填。新建訂單一律擋下未選擇;編輯既有訂單只在「維持原值」
+    // (原本就沒有值)時放行,主動把有值改成沒有值一樣擋下。體驗層先擋一次,真正的邊界仍在後端
+    // private.validate_booking_selection(見規格書 §3.1.1)。
+    if (paymentMethodValue === PAYMENT_METHOD_UNSET) {
+      const isMaintainingOriginalNullValue = isEdit && !editingDetail?.payment_method_id;
+      if (!isMaintainingOriginalNullValue) {
+        toast.error("請選擇付款方式");
+        return;
+      }
+    }
     if (amountPreview.error) {
       // §4.8:金額預覽算出來的錯誤(例如折扣超過小計),體驗層先擋一次,避免明知道會被後端
       // 擋下還讓客服白跑一趟(真正的邊界仍在後端 create_booking/update_booking)。
@@ -724,11 +747,36 @@ export function BookingFormDialog({
               即時顯示工時加總(§2.2:duration_minutes × quantity)。 */}
           <div>
             <Label>服務項目(可多選) *</Label>
+            {/* SPECS-INDEX #598(訂單管理.md §9.2):分類篩選下拉選單,「全部」為預設值(等同既有
+                行為)。只影響下面清單顯示哪些選項讓你勾,不影響已經勾選的項目(切換篩選不會弄丟
+                已勾選的項目,見 handleSubmit 附近的 serviceItemIds 獨立狀態)。商家沒有使用分類
+                功能時,下拉只會有「全部」跟「未分類」兩個選項,不影響既有操作流程。 */}
+            {(serviceCategories ?? []).length > 0 ? (
+              <Select
+                value={categoryFilter}
+                onValueChange={(v) => setCategoryFilter(v as ServiceItemCategoryFilter)}
+              >
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部分類</SelectItem>
+                  <SelectItem value="uncategorized">{UNCATEGORIZED_LABEL}</SelectItem>
+                  {(serviceCategories ?? []).map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-md border border-border p-2">
               {(serviceItems ?? []).length === 0 ? (
                 <p className="text-xs text-muted-foreground">目前沒有上架中的服務項目。</p>
+              ) : filterServiceItemsByCategory(serviceItems ?? [], categoryFilter).length === 0 ? (
+                <p className="text-xs text-muted-foreground">這個分類目前沒有服務項目。</p>
               ) : (
-                (serviceItems ?? []).map((item) => {
+                filterServiceItemsByCategory(serviceItems ?? [], categoryFilter).map((item) => {
                   const checked = serviceItemIds.includes(item.id);
                   return (
                     <div key={item.id} className="rounded px-1 py-1 hover:bg-muted/50">
@@ -983,18 +1031,23 @@ export function BookingFormDialog({
               </div>
             ) : null}
 
-            {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)v2 §5.2:付款方式下拉選單,比照
-                「服務人員」欄位樣式(Label + mt-2 間距的 Select)。選項是商家自訂清單裡目前上架中
-                的項目(paymentMethodOptions,含編輯模式下維持原值即使已下架的附加項),
-                「(未選擇/尚未設定)」永遠存在,即使商家把所有項目都下架也不擋單。 */}
+            {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)v2 §5.2/SPECS-INDEX #604(付款方式改為
+                必填):付款方式下拉選單,比照「服務人員」欄位樣式(Label + mt-2 間距的 Select)。
+                選項是商家自訂清單裡目前上架中的項目(paymentMethodOptions,含編輯模式下維持原值
+                即使已下架的附加項)。#604:新建模式下不再提供「(未選擇/尚未設定)」這個選項(拿掉
+                之後客服在新建流程一定會選到一個實際的付款方式);編輯模式維持顯示這個選項——
+                對應後端「維持原值放行,只有主動改成空值才擋」的規則,選了它會在送出時被擋下
+                (見 handleSubmit 的驗證),不是完全禁止選取。 */}
             <div className="border-t border-border pt-3">
-              <Label>付款方式</Label>
+              <Label>付款方式 *</Label>
               <Select value={paymentMethodValue} onValueChange={setPaymentMethodValue}>
                 <SelectTrigger className="mt-2">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={PAYMENT_METHOD_UNSET}>(未選擇/尚未設定)</SelectItem>
+                  {isEdit ? (
+                    <SelectItem value={PAYMENT_METHOD_UNSET}>(未選擇/尚未設定)</SelectItem>
+                  ) : null}
                   {paymentMethodOptions.map((option) => (
                     <SelectItem key={option.id} value={option.id}>
                       {option.name}
@@ -1049,6 +1102,19 @@ export function BookingFormDialog({
                 onChange={(e) => setCustomerPhone(e.target.value)}
               />
             </div>
+            {/* SPECS-INDEX #614(會員與紅利.md §10.2,取代舊版 §4.4 獨立的「會員(選填)」欄位):
+                電話當查詢索引,不當唯一鍵。輸入客戶電話後,這裡列出這支電話底下這個商家既有的所有
+                客戶,可以連結既有客戶或視為新客戶,歸在既有的 orders 權限底下(規則 2.10),不選
+                就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
+            <div className="sm:col-span-2">
+              <MemberPhoneMatchPanel
+                merchantId={merchantId}
+                phone={customerPhone}
+                customerName={customerName}
+                selectedMember={member}
+                onSelectMember={setMember}
+              />
+            </div>
             <div className="sm:col-span-2">
               <Label htmlFor="booking-customer-email">客戶 Email</Label>
               <Input
@@ -1058,14 +1124,6 @@ export function BookingFormDialog({
                 value={customerEmail}
                 onChange={(e) => setCustomerEmail(e.target.value)}
               />
-            </div>
-            {/* 模組 10(會員與紅利)§4.4:選填的會員連結,歸在既有的 orders 權限底下(規則 2.10),
-                不選就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
-            <div className="sm:col-span-2">
-              <Label>會員(選填)</Label>
-              <div className="mt-2">
-                <MemberPickerField merchantId={merchantId} value={member} onChange={setMember} />
-              </div>
             </div>
             {/* 建單表單細節修正第二節:只有 industry_type 需要地址的產業(見
                 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才顯示這個欄位並標記必填,不需要地址的產業

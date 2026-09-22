@@ -246,6 +246,11 @@ set commission_basis_type = 'gross'
 where merchant_id = 'e8000000-0000-4000-8000-000000000021';
 insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
 values ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031', 'percentage', 10);
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59', 'e8000000-0000-4000-8000-000000000021', '現場付款');
+
 
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
@@ -259,7 +264,7 @@ select id from create_booking(
   p_discount_enabled => true,
   p_discount_mode => 'fixed',
   p_discount_value => 100
-) \gset default_rate_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset default_rate_booking_
 
 select confirm_booking(:'default_rate_booking_id'::uuid);
 select complete_booking(:'default_rate_booking_id'::uuid);
@@ -286,7 +291,7 @@ select id from create_booking(
   p_customer_phone => '0955010002',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset override_rate_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset override_rate_booking_
 
 select confirm_booking(:'override_rate_booking_id'::uuid);
 select complete_booking(:'override_rate_booking_id'::uuid);
@@ -308,7 +313,7 @@ select id from create_booking(
   p_assistant_staff_ids => array['e8000000-0000-4000-8000-000000000043']::uuid[],
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset assistant_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset assistant_booking_
 
 select confirm_booking(:'assistant_booking_id'::uuid);
 select complete_booking(:'assistant_booking_id'::uuid);
@@ -335,7 +340,7 @@ select id from create_booking(
   p_customer_phone => '0955010004',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset monthly_staff_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset monthly_staff_booking_
 
 select confirm_booking(:'monthly_staff_booking_id'::uuid);
 select complete_booking(:'monthly_staff_booking_id'::uuid);
@@ -360,7 +365,7 @@ select id from create_booking(
   p_material_cost_item_ids => array['e8000000-0000-4000-8000-000000000032']::uuid[],
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset net_mode_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset net_mode_booking_
 
 select confirm_booking(:'net_mode_booking_id'::uuid);
 select complete_booking(:'net_mode_booking_id'::uuid);
@@ -386,7 +391,7 @@ select id from create_booking(
   p_discount_enabled => true,
   p_discount_mode => 'fixed',
   p_discount_value => 100
-) \gset negative_clip_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset negative_clip_booking_
 
 select confirm_booking(:'negative_clip_booking_id'::uuid);
 select complete_booking(:'negative_clip_booking_id'::uuid);
@@ -418,7 +423,7 @@ select id from create_booking(
   p_customer_phone => '0955020001',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset rule24_booking1_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset rule24_booking1_
 
 select confirm_booking(:'rule24_booking1_id'::uuid);
 select complete_booking(:'rule24_booking1_id'::uuid);
@@ -463,7 +468,7 @@ select id from create_booking(
   p_customer_phone => '0955020002',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset rule24_booking2_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset rule24_booking2_
 
 select confirm_booking(:'rule24_booking2_id'::uuid);
 select complete_booking(:'rule24_booking2_id'::uuid);
@@ -606,7 +611,7 @@ select id from create_booking(
   p_customer_phone => '0955020009',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset after_delete_override_booking_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset after_delete_override_booking_
 
 select confirm_booking(:'after_delete_override_booking_id'::uuid);
 select complete_booking(:'after_delete_override_booking_id'::uuid);
@@ -850,7 +855,7 @@ select id from create_booking(
   p_customer_phone => '0955030001',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset report_booking_r1_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset report_booking_r1_
 
 select confirm_booking(:'report_booking_r1_id'::uuid);
 select complete_booking(:'report_booking_r1_id'::uuid);
@@ -867,7 +872,7 @@ select id from create_booking(
   p_discount_enabled => true,
   p_discount_mode => 'fixed',
   p_discount_value => 500
-) \gset report_booking_r2_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset report_booking_r2_
 
 select confirm_booking(:'report_booking_r2_id'::uuid);
 select complete_booking(:'report_booking_r2_id'::uuid);
@@ -896,7 +901,7 @@ select id from create_booking(
   p_assistant_staff_ids => array['e8000000-0000-4000-8000-000000000048']::uuid[],
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
-) \gset report_booking_r3_
+, p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset report_booking_r3_
 
 select confirm_booking(:'report_booking_r3_id'::uuid);
 select complete_booking(:'report_booking_r3_id'::uuid);

@@ -55,13 +55,18 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
 values ('ba000000-0000-4000-8000-000000000051', 'ba000000-0000-4000-8000-000000000022', '二店師傅F', '0955333333', true);
 
 select pg_temp.test_set_auth('ba000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('f93e6a38-2e60-53f0-8e13-0d8cba51d213', 'ba000000-0000-4000-8000-000000000021', '現場付款');
+
 
 select id from create_booking(
   'ba000000-0000-4000-8000-000000000021', 'ba000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0966000001', null, null,
   array['ba000000-0000-4000-8000-000000000042']::uuid[]
-) \gset booking_
+, p_payment_method_id => 'f93e6a38-2e60-53f0-8e13-0d8cba51d213') \gset booking_
 
 -- ① 規則 3.2:booking_service_items 沒有 INSERT 政策,直接 INSERT 應該被擋下(RLS,42501)。
 select throws_ok(

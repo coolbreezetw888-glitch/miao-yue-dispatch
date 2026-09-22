@@ -64,6 +64,13 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
   ('b7000000-0000-4000-8000-000000000044', 'b7000000-0000-4000-8000-000000000021', '跨店助手D', '0933222222', true);
 
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。用 postgres 超級使用者身分布置(還沒 test_set_auth 任何角色),
+-- 避免用「一店管理員」身分插入「二店」的付款方式時被 RLS 擋下。
+insert into payment_methods (id, merchant_id, name) values ('777fa5c9-cc5c-5897-859f-53bf7504fe18', 'b7000000-0000-4000-8000-000000000021', '現場付款');
+insert into payment_methods (id, merchant_id, name) values ('15c41bd6-3c4e-5823-a33f-9367619ede52', 'b7000000-0000-4000-8000-000000000022', '現場付款');
+
 select pg_temp.test_set_auth('b7000000-0000-4000-8000-000000000001');
 
 -- ① 助手不能跟主要服務人員是同一人。
@@ -73,7 +80,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶一', '0911100001', null, null,
     array['b7000000-0000-4000-8000-000000000041']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   'P0001', null,
   '決策記錄 2/3:助手不能跟主要服務人員是同一人'
 );
@@ -85,7 +92,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶二', '0911100002', null, null,
     array['b7000000-0000-4000-8000-000000000042', 'b7000000-0000-4000-8000-000000000042']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   'P0001', null,
   '決策記錄 3:同一位助手不能在同一筆預約裡被加派兩次'
 );
@@ -98,7 +105,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶三', '0911100003', null, null,
     array['b7000000-0000-4000-8000-000000000042']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   'P0001', null,
   '決策記錄 2:助手個人時段邊界檢查生效,超出助手可預約時段整筆預約被擋下'
 );
@@ -110,7 +117,7 @@ select lives_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
     '客戶四', '0911100004', null, null,
     array['b7000000-0000-4000-8000-000000000042']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   '對照組:落在助手個人時段內,主要人員跟助手都通過驗證,建立成功'
 );
 
@@ -122,7 +129,7 @@ select throws_ok(
     'b7000000-0000-4000-8000-000000000021', 'b7000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:30:00+08',
     '客戶五', '0911100005'
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   'P0001', null,
   '決策記錄 2 第 4 點:助手A已經以助手身份佔用這個時段,即使這次要排她當主要服務人員,重疊仍被擋下'
 );
@@ -138,7 +145,7 @@ select lives_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶六', '0911100006', null, null,
     array['b7000000-0000-4000-8000-000000000043']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   '決策記錄 2/2.3:助手 unlimited_backend_edit=true 時,助手自己的邊界檢查(含規則 2.5 無時段設定)被跳過'
 );
 
@@ -152,7 +159,7 @@ select lives_ok(
     'b7000000-0000-4000-8000-000000000022', 'b7000000-0000-4000-8000-000000000051',
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '二店客戶', '0922000000'
-  )$$,
+  , p_payment_method_id => '15c41bd6-3c4e-5823-a33f-9367619ede52')$$,
   '二店師傅C建立一筆 10:00-11:00 的預約成功'
 );
 
@@ -168,7 +175,7 @@ select throws_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:30:00+08',
     '客戶七', '0911100007', null, null,
     array['b7000000-0000-4000-8000-000000000044']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   'P0001', null,
   '決策記錄 2:跨店助手D電話正規化後跟二店師傅C相同,時段重疊,助手的跨商家電話比對正確擋下'
 );
@@ -180,7 +187,7 @@ select lives_ok(
     jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 15:00:00+08',
     '客戶八', '0911100008', null, null,
     array['b7000000-0000-4000-8000-000000000044']::uuid[]
-  )$$,
+  , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
   '對照組:不重疊的時段,跨店助手D的跨商家電話比對通過,建立成功'
 );
 
@@ -192,7 +199,7 @@ select throws_ok(
       jsonb_build_array(jsonb_build_object('service_item_id','b7000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:00:00+08',
       '客戶九', '0911100009', null, null,
       array['%s']::uuid[]
-    )$$,
+    , p_payment_method_id => '777fa5c9-cc5c-5897-859f-53bf7504fe18')$$,
     'b7000000-0000-4000-8000-000000000099'
   ),
   'P0001', null,

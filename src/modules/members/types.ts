@@ -8,12 +8,28 @@ import type { Tables } from "@/integrations/supabase/types";
 export type Member = Tables<"members">;
 export type MerchantMemberSettings = Tables<"merchant_member_settings">;
 export type MemberPointTransaction = Tables<"member_point_transactions">;
+/** #615(SPECS-INDEX):商家自訂會員等級清單,純分類標籤用途,這次不跟紅利點數倍率或其他權益掛勾。 */
+export type MerchantMemberTier = Tables<"merchant_member_tiers">;
 
 export type MemberStatus = "active" | "removed";
 
 export const MEMBER_STATUS_LABELS: Record<MemberStatus, string> = {
   active: "上架中",
   removed: "已下架",
+};
+
+export type MemberTierStatus = "active" | "removed";
+
+/** #619(SPECS-INDEX):核發獎勵資格判斷條件,取代原本單一的 require_verified_phone_for_rewards
+ * boolean 開關。 */
+export type RewardConditionMode = "none" | "phone_verified" | "line_bound" | "either" | "both";
+
+export const REWARD_CONDITION_MODE_LABELS: Record<RewardConditionMode, string> = {
+  none: "不限制",
+  phone_verified: "只看電話已驗證",
+  line_bound: "只看 LINE 已綁定",
+  either: "電話已驗證或 LINE 已綁定,任一即可",
+  both: "電話已驗證且 LINE 已綁定,兩者都要符合",
 };
 
 export type MemberPointTransactionType =
@@ -32,20 +48,24 @@ export const MEMBER_POINT_TRANSACTION_TYPE_LABELS: Record<MemberPointTransaction
 };
 
 /** 1.1 查無資料時前端一律套用的預設值(財務謹慎設計,第〇節判斷 3——不能自己「幫」商家填入
- * 非零數字)。 */
+ * 非零數字)。#618/#619(SPECS-INDEX)疊加:phone_required_to_create/
+ * require_verified_phone_for_rewards 兩個開關已移除,新增 reward_condition_mode/policy_enabled/
+ * policy_content 的預設值。 */
 export const DEFAULT_MERCHANT_MEMBER_SETTINGS: Pick<
   MerchantMemberSettings,
-  | "phone_required_to_create"
-  | "require_verified_phone_for_rewards"
   | "points_earn_rate"
   | "referral_bonus_points"
   | "birthday_bonus_points"
+  | "reward_condition_mode"
+  | "policy_enabled"
+  | "policy_content"
 > = {
-  phone_required_to_create: true,
-  require_verified_phone_for_rewards: false,
   points_earn_rate: 0,
   referral_bonus_points: 0,
   birthday_bonus_points: 0,
+  reward_condition_mode: "none",
+  policy_enabled: false,
+  policy_content: null,
 };
 
 /** §3.12 get_member_point_history 回傳的一筆點數異動明細。 */
@@ -82,7 +102,8 @@ export interface MemberReferral {
   createdAt: string;
 }
 
-/** 4.1 會員列表搜尋用的最小欄位集合。 */
+/** 4.1 會員列表搜尋用的最小欄位集合。#615/#616(SPECS-INDEX)疊加:新增 tierId/isBlacklisted
+ * 供列表頁顯示/篩選。 */
 export interface MemberSummary {
   id: string;
   name: string;
@@ -90,4 +111,17 @@ export interface MemberSummary {
   referralCode: string;
   pointsBalance: number;
   status: MemberStatus;
+  tierId: string | null;
+  isBlacklisted: boolean;
+}
+
+/** §10.2.1(SPECS-INDEX #614)get_members_by_phone 回傳的一筆同電話既有客戶。電話不當唯一鍵,
+ * 只當查詢索引——同一支電話底下可能有多筆不同客戶(例如家庭成員共用市話)。 */
+export interface MemberPhoneMatchCandidate {
+  memberId: string;
+  name: string;
+  phone: string | null;
+  lastBookingDate: string | null;
+  isBlacklisted: boolean;
+  blacklistReason: string | null;
 }

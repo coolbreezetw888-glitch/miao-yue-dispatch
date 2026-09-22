@@ -61,6 +61,12 @@ values ('c3000000-0000-4000-8000-000000000051', 'c3000000-0000-4000-8000-0000000
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('c3000000-0000-4000-8000-000000000051', 'orders', true);
 
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking 呼叫補上
+-- p_payment_method_id。用 postgres 超級使用者身分布置(還沒 test_set_auth 任何角色),避免
+-- 後面只被授權 business_hours(沒有 payment_methods/orders)的客服身分插入付款方式時被 RLS 擋下。
+insert into payment_methods (id, merchant_id, name) values ('bca45824-540b-543c-9871-1b0b9cece213', 'c3000000-0000-4000-8000-000000000020', '現場付款');
+
 -- =========================================================================
 -- §5.1:CHECK 約束(直接以 postgres 超級使用者身分插入,略過 RLS,單純測資料表本身的約束)。
 -- =========================================================================
@@ -177,7 +183,6 @@ select is(
   true,
   '§5.2:重複設定同一格子後,is_available 正確覆蓋成最新值(true)'
 );
-
 -- =========================================================================
 -- §5.2 第 4 點:關閉一個已有既有預約的時段,函式正確回傳既有預約筆數(不阻擋操作)。
 -- =========================================================================
@@ -185,7 +190,7 @@ select id from create_booking(
   'c3000000-0000-4000-8000-000000000020', 'c3000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c3000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 100)),
   '2026-09-22 16:00:00+08', '既有客戶', '0977000000'
-) \gset conflict_booking_
+, p_payment_method_id => 'bca45824-540b-543c-9871-1b0b9cece213') \gset conflict_booking_
 
 select is(
   (select set_staff_day_override('c3000000-0000-4000-8000-000000000040', '2026-09-22', '16:00', '17:00', false)),

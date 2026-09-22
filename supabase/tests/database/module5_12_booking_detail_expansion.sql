@@ -76,12 +76,17 @@ values ('bc000000-0000-4000-8000-000000000051', 'bc000000-0000-4000-8000-0000000
 -- (從未被 confirm/update/cancel/complete 這四支函式異動過)。
 -- =========================================================================
 select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('e743225a-fd2a-5a72-8e8d-6fb5cf583db0', 'bc000000-0000-4000-8000-000000000020', '現場付款');
+
 
 select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲'
-) \gset booking1_
+, p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0') \gset booking1_
 
 select is(
   (select customer_notes from bookings where id = :'booking1_id'::uuid),
@@ -127,11 +132,12 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000002');
 
+-- SPECS-INDEX #604:維持原付款方式不變(booking1_ 建立時已帶 payment_method_id)。
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲(改過)'
-);
+, p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0');
 
 select is(
   (select customer_notes from bookings where id = :'booking1_id'::uuid),
@@ -146,11 +152,12 @@ select is(
 );
 
 -- ⑧ update_booking 傳 p_customer_notes = null,客戶備註可以被清空成 null(不是被擋下或報錯)。
+-- SPECS-INDEX #604:維持原付款方式不變。
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, null
-);
+, p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0');
 
 select is(
   (select customer_notes from bookings where id = :'booking1_id'::uuid),
@@ -170,7 +177,7 @@ select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
   '客戶乙', '0988000002'
-) \gset booking2_
+, p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0') \gset booking2_
 
 select cancel_booking(:'booking2_id'::uuid, '測試取消');
 
@@ -193,7 +200,7 @@ select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 12:00:00+08',
   '客戶丙', '0988000003'
-) \gset booking3_
+, p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0') \gset booking3_
 
 select confirm_booking(:'booking3_id'::uuid);
 select complete_booking(:'booking3_id'::uuid);

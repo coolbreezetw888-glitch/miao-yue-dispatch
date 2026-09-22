@@ -76,6 +76,11 @@ values ('e1420000-0000-4000-8000-000000000090', 'e1420000-0000-4000-8000-0000000
 -- 走完整流程,確保 booking_commission_records 是系統自然算出來的,不是手動塞值)。
 -- =========================================================================
 select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('3ca8bfce-3296-5bc8-a6fb-c15c1096c000', 'e1420000-0000-4000-8000-000000000020', '現場付款');
+
 
 -- booking1:X 為主要服務人員,完整跑到 completed(用於 3.15 主要身份 + 3.17 抽成報表)。
 select id from create_booking(
@@ -86,7 +91,7 @@ select id from create_booking(
   p_customer_name => '客戶一',
   p_customer_phone => '0911000001',
   p_customer_address => '測試地址一號'
-) \gset booking1_
+, p_payment_method_id => '3ca8bfce-3296-5bc8-a6fb-c15c1096c000') \gset booking1_
 select confirm_booking(:'booking1_id'::uuid);
 select complete_booking(:'booking1_id'::uuid);
 
@@ -100,7 +105,7 @@ select id from create_booking(
   p_customer_phone => '0911000002',
   p_assistant_staff_ids => array['e1420000-0000-4000-8000-000000000040'::uuid],
   p_customer_address => '測試地址二號'
-) \gset booking2_
+, p_payment_method_id => '3ca8bfce-3296-5bc8-a6fb-c15c1096c000') \gset booking2_
 
 -- booking3:X 為主要服務人員,連結會員(用於規則 2.6 show_member_info=true)。
 select id from create_booking(
@@ -112,7 +117,7 @@ select id from create_booking(
   p_customer_phone => '0911000003',
   p_member_id => 'e1420000-0000-4000-8000-000000000090'::uuid,
   p_customer_address => '測試地址三號'
-) \gset booking3_
+, p_payment_method_id => '3ca8bfce-3296-5bc8-a6fb-c15c1096c000') \gset booking3_
 
 -- booking4:W2 為主要服務人員,連結同一位會員(用於規則 2.6 show_member_info=false)。
 select id from create_booking(
@@ -124,7 +129,7 @@ select id from create_booking(
   p_customer_phone => '0911000004',
   p_member_id => 'e1420000-0000-4000-8000-000000000090'::uuid,
   p_customer_address => '測試地址四號'
-) \gset booking4_
+, p_payment_method_id => '3ca8bfce-3296-5bc8-a6fb-c15c1096c000') \gset booking4_
 
 select pg_temp.test_clear_auth();
 

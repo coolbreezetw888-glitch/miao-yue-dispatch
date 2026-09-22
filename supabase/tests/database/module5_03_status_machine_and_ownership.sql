@@ -52,13 +52,18 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
 values ('b3000000-0000-4000-8000-000000000041', 'b3000000-0000-4000-8000-000000000021', '服務人員', '0901000101', true);
 
 select pg_temp.test_set_auth('b3000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('1bd24d92-9a78-5a52-b297-49fbcfbd7320', 'b3000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- 建立第一筆預約(狀態應直接是 pending_confirmation,決策記錄 5),用 \gset 把 id/status 存成 psql 變數。
 select id, status from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0955000001'
-) \gset first_
+, p_payment_method_id => '1bd24d92-9a78-5a52-b297-49fbcfbd7320') \gset first_
 
 select is(:'first_status'::text, 'pending_confirmation'::text, '決策記錄 5:手動建單這次改成先進 pending_confirmation 狀態,不再直接進 accepted');
 
@@ -138,7 +143,7 @@ select id, status from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
   '客戶乙', '0955000002'
-) \gset second_
+, p_payment_method_id => '1bd24d92-9a78-5a52-b297-49fbcfbd7320') \gset second_
 
 select is(
   (select status from cancel_booking(:'second_id', '客戶臨時取消(待確認階段)')),
@@ -166,7 +171,7 @@ select id from create_booking(
   'b3000000-0000-4000-8000-000000000021', 'b3000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:00:00+08',
   '客戶丙', '0955000003'
-) \gset third_
+, p_payment_method_id => '1bd24d92-9a78-5a52-b297-49fbcfbd7320') \gset third_
 
 select confirm_booking(:'third_id'::uuid);
 

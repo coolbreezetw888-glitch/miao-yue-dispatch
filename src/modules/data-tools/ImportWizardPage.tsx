@@ -49,7 +49,6 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { addMerchantStaff } from "@/modules/staff-agent/api";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
-import { useMerchantMemberSettings } from "@/modules/members/api";
 
 import { importHistoricalBookingsBatch, importMembersBatch, parseErrorReport } from "./api";
 import { RequireDataImportAccess } from "./RequireDataImportAccess";
@@ -78,12 +77,15 @@ function ImportWizardPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffList } = useMerchantStaffList(merchantId);
-  // 品管(2026-09-21)打回的 bug 修正:步驟四預覽必須跟 create_member/update_member 實際會
-  // 執行的驗證邏輯一致,不能只檢查姓名——沿用模組 10 既有的 useMerchantMemberSettings(讀取
-  // merchant_member_settings.phone_required_to_create),查無資料時預設視為必填(比照
-  // DEFAULT_MERCHANT_MEMBER_SETTINGS/create_member 函式內「查無資料視為必填」的既有慣例)。
-  const { data: memberSettings } = useMerchantMemberSettings(merchantId);
-  const phoneRequiredForMembers = memberSettings?.phone_required_to_create ?? true;
+  // ⚠️ 跨模組異動說明(2026-09-22,模組 10 會員與紅利 SPECS-INDEX #618 疊加,由該批次的
+  // engineer 順手修正,已在回報時提出讓主腦知悉,不是本模組自己的規劃):
+  // merchant_member_settings.phone_required_to_create 這個開關已經被 #618 移除(電話不再是
+  // create_member/update_member 的必填欄位,改成純查詢索引,見會員與紅利.md §10.2/§10.6)。
+  // 原本這裡讀取這個設定值來決定步驟四預覽要不要擋下「缺電話」的資料列,現在後端已經不會再擋,
+  // 這裡跟著改成一律不要求電話——不然步驟四預覽會顯示跟後端實際驗證邏輯不一致的錯誤訊息。
+  // 這個常數維持存在(而不是直接刪掉下面的 if 判斷式),是為了在程式碼裡留下清楚的變更紀錄,
+  // 方便之後模組 12 的維護者一眼看懂「這裡曾經有必填檢查,後來因為模組 10 的決策而移除」。
+  const phoneRequiredForMembers = false;
 
   const [step, setStep] = useState<WizardStep>("type");
   const [importKind, setImportKind] = useState<ImportKind | null>(null);

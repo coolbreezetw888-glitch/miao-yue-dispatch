@@ -51,22 +51,29 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
 values ('b9000000-0000-4000-8000-000000000042', 'b9000000-0000-4000-8000-000000000021', '服務人員乙', '0901000102', true);
 
 select pg_temp.test_set_auth('b9000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('f0e56a1b-3240-5d1f-853a-f838fd2b6263', 'b9000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- 建立第一筆預約(10:00-10:30,pending_confirmation)。
 select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶甲', '0988000001'
-) \gset booking_
+, p_payment_method_id => 'f0e56a1b-3240-5d1f-853a-f838fd2b6263') \gset booking_
 
 -- ① 規則 3.5 第 2 點:編輯時服務項目/時段/客戶資料都能改,改完重新算出正確的 end_at。
+-- SPECS-INDEX #604:維持原付款方式不變(booking_ 建立時已帶 payment_method_id)。
 select is(
   (
     select end_at
     from update_booking(
       :'booking_id'::uuid, 'b9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-      '客戶甲(改名)', '0988000009'
+      '客戶甲(改名)', '0988000009',
+      p_payment_method_id => 'f0e56a1b-3240-5d1f-853a-f838fd2b6263'
     )
   ),
   '2026-09-22 11:00:00+08'::timestamptz,
@@ -94,7 +101,8 @@ select lives_ok(
     $$select update_booking(
       '%s', 'b9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000032','quantity',1,'unit_price',100)), '2026-09-22 10:10:00+08',
-      '客戶甲(延後)', '0988000009'
+      '客戶甲(延後)', '0988000009',
+      p_payment_method_id => 'f0e56a1b-3240-5d1f-853a-f838fd2b6263'
     )$$,
     :'booking_id'::text
   ),
@@ -107,7 +115,7 @@ select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 14:00:00+08',
   '客戶乙', '0988000002'
-) \gset second_
+, p_payment_method_id => 'f0e56a1b-3240-5d1f-853a-f838fd2b6263') \gset second_
 
 select throws_ok(
   format(
@@ -158,7 +166,7 @@ select id from create_booking(
   'b9000000-0000-4000-8000-000000000021', 'b9000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 16:00:00+08',
   '客戶丙', '0988000003'
-) \gset third_
+, p_payment_method_id => 'f0e56a1b-3240-5d1f-853a-f838fd2b6263') \gset third_
 
 select cancel_booking(:'third_id'::uuid, '測試取消');
 

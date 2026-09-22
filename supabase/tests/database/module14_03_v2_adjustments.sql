@@ -289,6 +289,11 @@ select pg_temp.test_clear_auth();
 -- 三個數字在有稅金的情境下確實互不相同,不是同一件事。
 -- =========================================================================
 select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000001'); -- 管理員建單
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('15aef921-e273-594b-8059-cb36f52eabc7', 'e1430000-0000-4000-8000-000000000020', '現場付款');
+
 
 -- 小計 1000,無折扣,稅金 10% = 100,最終金額 = 1100;抽成基準(gross,扣折扣不扣稅)= 1000;
 -- 抽成 50% = 500。三個數字:total_amount=1100、commission_base=1000、total_commission_amount=500,
@@ -304,7 +309,7 @@ select id from create_booking(
   p_tax_enabled => true,
   p_tax_mode => 'percentage',
   p_tax_value => 10
-) \gset booking1_
+, p_payment_method_id => '15aef921-e273-594b-8059-cb36f52eabc7') \gset booking1_
 select confirm_booking(:'booking1_id'::uuid);
 select complete_booking(:'booking1_id'::uuid);
 

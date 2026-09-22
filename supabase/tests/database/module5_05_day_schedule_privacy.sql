@@ -83,12 +83,17 @@ values ('b5000000-0000-4000-8000-000000000091', 'b5000000-0000-4000-8000-0000000
 
 -- 一店也幫 A 師傅(一店)建一筆本店預約 10:00-11:00(在時段內)。
 select pg_temp.test_set_auth('b5000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('6d779120-70ad-5a02-8d26-86bc87284b76', 'b5000000-0000-4000-8000-000000000021', '現場付款');
+
 
 select id, status from create_booking(
   'b5000000-0000-4000-8000-000000000021', 'b5000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id','b5000000-0000-4000-8000-000000000031','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '一店的客戶', '0966000000'
-) \gset own_
+, p_payment_method_id => '6d779120-70ad-5a02-8d26-86bc87284b76') \gset own_
 
 -- ① 一店管理員查自己商家的當日行事曆,應該能成功查到(has_setting=true, is_closed=false)。
 select is(

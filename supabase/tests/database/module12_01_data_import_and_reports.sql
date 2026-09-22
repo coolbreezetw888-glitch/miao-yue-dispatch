@@ -180,7 +180,8 @@ select is(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ④ 規則 2.2:電話必填政策沿用(merchant_member_settings 預設 phone_required_to_create=true)。
+-- ④ 規則 2.2:電話必填政策沿用 create_member/update_member 既有驗證邏輯(2026-09-23 起,
+--    這個政策本身已被模組 10 SPECS-INDEX #618 移除,電話不再是必填欄位,見下方斷言的更新說明)。
 -- ⑤ 規則 2.5:insert_only / upsert_by_phone 兩種寫入模式。
 -- ⑥ 規則 2.6:起始點數餘額走既有 adjust_member_points。
 -- =========================================================================
@@ -196,18 +197,23 @@ select import_members_batch(
   )
 ) \gset op1_
 
--- 3 筆資料:甲(有電話+正數起始點數)成功；缺電話這筆因為 phone_required_to_create=true 失敗；
--- 乙(負數起始點數)因為規則 2.6 邊界情況失敗。預期 success=1、failed=2、skipped=0。
+-- ⚠️ 跨模組異動說明(2026-09-23,模組 10 會員與紅利 SPECS-INDEX #618 疊加,由該批次的
+-- engineer 順手修正,已在回報時提出讓主腦知悉,不是本模組自己的規劃):
+-- merchant_member_settings.phone_required_to_create 這個開關已經被 #618 移除(電話不再是
+-- create_member/update_member 的必填欄位,改成純查詢索引,見會員與紅利.md §10.2/§10.6)。
+-- 原本這裡預期「缺電話會員」那筆匯入會因為必填政策失敗,現在後端已經不會再擋,這筆改成成功。
+-- 3 筆資料:甲(有電話+正數起始點數)成功；缺電話會員現在也成功(電話已非必填)；
+-- 乙(負數起始點數)因為規則 2.6 邊界情況失敗。預期 success=2、failed=1、skipped=0。
 select is(
   (select row(total_rows, success_rows, failed_rows, skipped_duplicate_rows) from merchant_bulk_operations where id = :'op1_import_members_batch'::uuid)::text,
-  row(3, 1, 2, 0)::text,
-  '2.2/2.6/3.1:3 筆資料，甲成功(1)，缺電話+負數起始點數各失敗(共 2)，單列失敗不影響其他列，都不計入略過'
+  row(3, 2, 1, 0)::text,
+  '2.2/2.6/3.1:3 筆資料，甲、缺電話會員皆成功(2,#618 電話已非必填)，負數起始點數失敗(1)，單列失敗不影響其他列，都不計入略過'
 );
 
 select is(
   jsonb_array_length((select error_report from merchant_bulk_operations where id = :'op1_import_members_batch'::uuid)),
-  2,
-  '2.2/2.6:error_report 正確記錄 2 筆失敗(缺電話、負數起始點數)的原因'
+  1,
+  '2.2/2.6:error_report 正確記錄 1 筆失敗(負數起始點數)的原因(#618 疊加:缺電話已不再是失敗原因)'
 );
 
 select id from members where merchant_id = 'ec000000-0000-4000-8000-000000000021' and phone = '0911100001' \gset member_甲_
@@ -278,6 +284,11 @@ select pg_temp.test_clear_auth();
 -- ⑦ 規則 2.3(核心必測):歷史訂單匯入不檢查排程衝突，且不影響既有排程驗證邏輯。
 -- =========================================================================
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('6044747d-245c-5c27-ba98-63d61997fb5d', 'ec000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- 先建立一筆真實的預約，佔用 P 服務人員 2026-11-01 10:00-10:30。
 select id from create_booking(
@@ -287,7 +298,7 @@ select id from create_booking(
   p_start_at => '2026-11-01 10:00:00+08',
   p_customer_name => '既有真實訂單',
   p_customer_phone => '0922200001'
-) \gset real_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset real_booking_
 
 -- 匯入一筆跟這筆真實預約完全重疊時段、同一位服務人員的歷史訂單，應該要成功(不做衝突檢查)。
 select import_historical_bookings_batch(
@@ -321,7 +332,7 @@ select throws_ok(
     p_start_at => '2026-11-01 10:00:00+08',
     p_customer_name => '衝突測試',
     p_customer_phone => '0922200003'
-  )$$),
+  , p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d')$$),
   'P0001', null,
   '2.3(核心):匯入之後，同一服務人員同一時段再用 create_booking 建立真實訂單，仍然正常被既有排程衝突驗證擋下(互不干擾)'
 );
@@ -388,7 +399,7 @@ select id from create_booking(
   p_customer_name => '對照組真實訂單',
   p_customer_phone => '0933300002',
   p_member_id => :'commission_member_id'::uuid
-) \gset control_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset control_booking_
 
 select confirm_booking(:'control_booking_id'::uuid);
 select complete_booking(:'control_booking_id'::uuid);
@@ -433,7 +444,7 @@ select create_booking(
   p_customer_name => '佔用復原測試會員的真實訂單',
   p_customer_phone => '0944400099',
   p_member_id => :'rollback_used_member_id'::uuid
-);
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d');
 
 select rollback_bulk_operation(:'op7_import_members_batch'::uuid) \gset rollback1_result_
 
@@ -605,7 +616,7 @@ select id from create_booking(
   p_customer_name => '轉移前既有訂單',
   p_customer_phone => '0966600099',
   p_member_id => :'transfer_member1_id'::uuid
-) \gset transfer_related_booking_
+, p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset transfer_related_booking_
 
 select transfer_members_to_merchant(
   'ec000000-0000-4000-8000-000000000021',

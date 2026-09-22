@@ -192,6 +192,11 @@ select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001');
 
 insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value) values
   ('ed000000-0000-4000-8000-000000000041', 'ed000000-0000-4000-8000-000000000031', 'percentage', 20);
+-- SPECS-INDEX #604(2026-09-23 批次修正,機械性補參數,不改變測試本身要驗證的邏輯):
+-- create_booking 新建訂單付款方式改為必填,下面既有的 create_booking/update_booking 呼叫
+-- 補上 p_payment_method_id。
+insert into payment_methods (id, merchant_id, name) values ('d58ebc73-40eb-5a2b-b8ca-3151a781e8bf', 'ed000000-0000-4000-8000-000000000021', '現場付款');
+
 
 -- 一筆有稅(1000元,10%稅=100元,final=1100)、一筆無稅(500元,final=500)。
 select id from create_booking(
@@ -204,7 +209,7 @@ select id from create_booking(
   p_tax_enabled => true,
   p_tax_mode => 'percentage',
   p_tax_value => 10
-) \gset tax_booking_
+, p_payment_method_id => 'd58ebc73-40eb-5a2b-b8ca-3151a781e8bf') \gset tax_booking_
 
 select confirm_booking(:'tax_booking_id'::uuid);
 select complete_booking(:'tax_booking_id'::uuid);
@@ -216,7 +221,7 @@ select id from create_booking(
   p_start_at => now() + interval '1 hour',
   p_customer_name => '無稅訂單測試客戶',
   p_customer_phone => '0966020002'
-) \gset no_tax_booking_
+, p_payment_method_id => 'd58ebc73-40eb-5a2b-b8ca-3151a781e8bf') \gset no_tax_booking_
 
 select confirm_booking(:'no_tax_booking_id'::uuid);
 select complete_booking(:'no_tax_booking_id'::uuid);

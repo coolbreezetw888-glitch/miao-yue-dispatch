@@ -1,9 +1,15 @@
 // 建單與訂單管理介面優化 §2:稅金說明文字依商家稅金模式(比例/固定金額)切換的邏輯測試。
 // 模組 9(支付方式)v2 §5.2/§5.3/§8.2:付款方式快照顯示文字、下拉選單選項組成邏輯測試。
+// SPECS-INDEX #598(訂單管理.md §9.2):建單表單服務項目分類篩選邏輯測試。
 
 import { describe, expect, it } from "vitest";
 
-import { buildPaymentMethodOptions, getPaymentMethodLabel, getTaxModeHelperText } from "./types";
+import {
+  buildPaymentMethodOptions,
+  filterServiceItemsByCategory,
+  getPaymentMethodLabel,
+  getTaxModeHelperText,
+} from "./types";
 
 describe("getTaxModeHelperText", () => {
   it("比例模式顯示稅率百分比說明文字", () => {
@@ -78,5 +84,41 @@ describe("buildPaymentMethodOptions(模組 9 v2 §5.2/§8.2)", () => {
     const options = buildPaymentMethodOptions(activeMethods, "m3", null);
     const appended = options.find((o) => o.id === "m3");
     expect(appended?.name).toBe("(已刪除的付款方式)(已下架)");
+  });
+});
+
+describe("filterServiceItemsByCategory(SPECS-INDEX #598)", () => {
+  const items = [
+    { id: "i1", name: "洗髮", category_id: "c1" },
+    { id: "i2", name: "剪髮", category_id: "c1" },
+    { id: "i3", name: "染髮", category_id: "c2" },
+    { id: "i4", name: "雜項服務", category_id: null },
+  ];
+
+  it("filter='all' 時顯示全部服務項目(預設值,等同既有行為)", () => {
+    expect(filterServiceItemsByCategory(items, "all")).toEqual(items);
+  });
+
+  it("filter=某個分類 id 時,只顯示屬於該分類的項目", () => {
+    const result = filterServiceItemsByCategory(items, "c1");
+    expect(result.map((i) => i.id)).toEqual(["i1", "i2"]);
+  });
+
+  it("filter='uncategorized' 時,只顯示 category_id 為 null 的項目(§4.1 既有的「未分類」虛擬分類)", () => {
+    const result = filterServiceItemsByCategory(items, "uncategorized");
+    expect(result.map((i) => i.id)).toEqual(["i4"]);
+  });
+
+  it("查無符合分類的項目時回傳空陣列,不報錯", () => {
+    expect(filterServiceItemsByCategory(items, "c-not-exist")).toEqual([]);
+  });
+
+  it("商家完全沒有使用分類功能(全部 category_id 皆為 null)時,filter='all' 顯示全部、'uncategorized' 也顯示全部", () => {
+    const allUncategorized = [
+      { id: "j1", name: "服務甲", category_id: null },
+      { id: "j2", name: "服務乙", category_id: null },
+    ];
+    expect(filterServiceItemsByCategory(allUncategorized, "all")).toEqual(allUncategorized);
+    expect(filterServiceItemsByCategory(allUncategorized, "uncategorized")).toEqual(allUncategorized);
   });
 });
