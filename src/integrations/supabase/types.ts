@@ -50,13 +50,67 @@ export type Database = {
           },
         ]
       }
+      booking_commission_item_records: {
+        Row: {
+          booking_service_item_id: string
+          commission_amount: number
+          commission_base_amount_snapshot: number
+          commission_mode_snapshot: string
+          commission_record_id: string
+          commission_value_snapshot: number
+          created_at: string
+          id: string
+          quantity_snapshot: number
+          service_item_name_snapshot: string
+        }
+        Insert: {
+          booking_service_item_id: string
+          commission_amount: number
+          commission_base_amount_snapshot?: number
+          commission_mode_snapshot: string
+          commission_record_id: string
+          commission_value_snapshot: number
+          created_at?: string
+          id?: string
+          quantity_snapshot: number
+          service_item_name_snapshot: string
+        }
+        Update: {
+          booking_service_item_id?: string
+          commission_amount?: number
+          commission_base_amount_snapshot?: number
+          commission_mode_snapshot?: string
+          commission_record_id?: string
+          commission_value_snapshot?: number
+          created_at?: string
+          id?: string
+          quantity_snapshot?: number
+          service_item_name_snapshot?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_commission_item_records_booking_service_item_id_fkey"
+            columns: ["booking_service_item_id"]
+            isOneToOne: false
+            referencedRelation: "booking_service_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_commission_item_records_commission_record_id_fkey"
+            columns: ["commission_record_id"]
+            isOneToOne: false
+            referencedRelation: "booking_commission_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_commission_records: {
         Row: {
           booking_id: string
           commission_amount: number
           commission_base_amount_snapshot: number
           commission_basis_type_snapshot: string
-          commission_rate_percentage_snapshot: number
+          commission_rate_percentage_snapshot: number | null
           computed_at: string
           created_at: string
           id: string
@@ -71,7 +125,7 @@ export type Database = {
           commission_amount: number
           commission_base_amount_snapshot: number
           commission_basis_type_snapshot: string
-          commission_rate_percentage_snapshot: number
+          commission_rate_percentage_snapshot?: number | null
           computed_at?: string
           created_at?: string
           id?: string
@@ -86,7 +140,7 @@ export type Database = {
           commission_amount?: number
           commission_base_amount_snapshot?: number
           commission_basis_type_snapshot?: string
-          commission_rate_percentage_snapshot?: number
+          commission_rate_percentage_snapshot?: number | null
           computed_at?: string
           created_at?: string
           id?: string
@@ -1328,7 +1382,6 @@ export type Database = {
         Row: {
           commission_basis_type: string
           created_at: string
-          default_commission_rate_percentage: number
           merchant_id: string
           pay_days_per_month: number
           updated_at: string
@@ -1336,7 +1389,6 @@ export type Database = {
         Insert: {
           commission_basis_type?: string
           created_at?: string
-          default_commission_rate_percentage?: number
           merchant_id: string
           pay_days_per_month?: number
           updated_at?: string
@@ -1344,7 +1396,6 @@ export type Database = {
         Update: {
           commission_basis_type?: string
           created_at?: string
-          default_commission_rate_percentage?: number
           merchant_id?: string
           pay_days_per_month?: number
           updated_at?: string
@@ -1354,6 +1405,47 @@ export type Database = {
             foreignKeyName: "merchant_payroll_settings_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_push_event_settings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          message_body: string
+          message_title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          event_type: string
+          id?: string
+          merchant_id: string
+          message_body?: string
+          message_title?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          message_body?: string
+          message_title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_push_event_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -1705,6 +1797,102 @@ export type Database = {
         }
         Relationships: []
       }
+      push_notification_log: {
+        Row: {
+          attempted_at: string
+          booking_id: string | null
+          device_count: number
+          error_detail: string | null
+          event_type: string
+          id: string
+          merchant_id: string
+          rendered_body: string | null
+          rendered_title: string | null
+          skip_reason: string | null
+          staff_id: string | null
+          status: string
+          success_count: number
+        }
+        Insert: {
+          attempted_at?: string
+          booking_id?: string | null
+          device_count?: number
+          error_detail?: string | null
+          event_type: string
+          id?: string
+          merchant_id: string
+          rendered_body?: string | null
+          rendered_title?: string | null
+          skip_reason?: string | null
+          staff_id?: string | null
+          status: string
+          success_count?: number
+        }
+        Update: {
+          attempted_at?: string
+          booking_id?: string | null
+          device_count?: number
+          error_detail?: string | null
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          rendered_body?: string | null
+          rendered_title?: string | null
+          skip_reason?: string | null
+          staff_id?: string | null
+          status?: string
+          success_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_notification_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_notification_log_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_notification_log_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_reminder_dedupe_log: {
+        Row: {
+          booking_id: string
+          reminder_date: string
+          sent_at: string
+        }
+        Insert: {
+          booking_id: string
+          reminder_date: string
+          sent_at?: string
+        }
+        Update: {
+          booking_id?: string
+          reminder_date?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_reminder_dedupe_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_categories: {
         Row: {
           created_at: string
@@ -1867,38 +2055,6 @@ export type Database = {
           },
         ]
       }
-      staff_commission_rates: {
-        Row: {
-          created_at: string
-          id: string
-          rate_percentage: number
-          staff_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          rate_percentage: number
-          staff_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          rate_percentage?: number
-          staff_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "staff_commission_rates_staff_id_fkey"
-            columns: ["staff_id"]
-            isOneToOne: true
-            referencedRelation: "merchant_staff"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       staff_leave_records: {
         Row: {
           cancelled_at: string | null
@@ -1959,6 +2115,57 @@ export type Database = {
           },
         ]
       }
+      staff_push_subscriptions: {
+        Row: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_seen_at: string | null
+          merchant_id: string
+          p256dh_key: string
+          staff_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_seen_at?: string | null
+          merchant_id: string
+          p256dh_key: string
+          staff_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_seen_at?: string | null
+          merchant_id?: string
+          p256dh_key?: string
+          staff_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_push_subscriptions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_push_subscriptions_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_salary_settings: {
         Row: {
           created_at: string
@@ -1989,6 +2196,51 @@ export type Database = {
             foreignKeyName: "staff_salary_settings_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: true
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_service_commission_rates: {
+        Row: {
+          commission_mode: string
+          commission_value: number
+          created_at: string
+          id: string
+          service_item_id: string
+          staff_id: string
+          updated_at: string
+        }
+        Insert: {
+          commission_mode?: string
+          commission_value?: number
+          created_at?: string
+          id?: string
+          service_item_id: string
+          staff_id: string
+          updated_at?: string
+        }
+        Update: {
+          commission_mode?: string
+          commission_value?: number
+          created_at?: string
+          id?: string
+          service_item_id?: string
+          staff_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_service_commission_rates_service_item_id_fkey"
+            columns: ["service_item_id"]
+            isOneToOne: false
+            referencedRelation: "service_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_service_commission_rates_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
             referencedRelation: "merchant_staff"
             referencedColumns: ["id"]
           },
@@ -2035,6 +2287,15 @@ export type Database = {
       am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      batch_apply_staff_service_commission_rates: {
+        Args: {
+          p_commission_mode: string
+          p_commission_value: number
+          p_service_item_ids: string[]
+          p_staff_id: string
+        }
         Returns: undefined
       }
       can_dispatch_line_notification: {
@@ -2652,6 +2913,10 @@ export type Database = {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
       }
+      get_staff_push_subscription_count: {
+        Args: { p_staff_id: string }
+        Returns: number
+      }
       get_staff_schedule_overview: {
         Args: {
           p_end_date: string
@@ -2786,13 +3051,13 @@ export type Database = {
         }
       }
       recalculate_booking_commission: {
-        Args: { p_booking_id: string; p_override_rate_percentage?: number }
+        Args: { p_booking_id: string }
         Returns: {
           booking_id: string
           commission_amount: number
           commission_base_amount_snapshot: number
           commission_basis_type_snapshot: string
-          commission_rate_percentage_snapshot: number
+          commission_rate_percentage_snapshot: number | null
           computed_at: string
           created_at: string
           id: string
@@ -2920,6 +3185,10 @@ export type Database = {
         Returns: undefined
       }
       seed_default_payroll_settings: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      seed_default_push_event_settings: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
@@ -3225,6 +3494,31 @@ export type Database = {
           p_staff_id: string
         }
         Returns: undefined
+      }
+      update_push_event_setting: {
+        Args: {
+          p_enabled: boolean
+          p_event_type: string
+          p_merchant_id: string
+          p_message_body: string
+          p_message_title: string
+        }
+        Returns: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          message_body: string
+          message_title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "merchant_push_event_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {

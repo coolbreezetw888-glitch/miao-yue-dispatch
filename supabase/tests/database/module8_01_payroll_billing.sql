@@ -2,7 +2,7 @@
 -- 核心必測:規則 2.4(抽成快照建立後不自動重算)、規則 2.6(手動重算僅限管理員)。
 begin;
 
-select plan(77);
+select plan(75);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -100,13 +100,6 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$insert into merchant_payroll_settings (merchant_id, default_commission_rate_percentage)
-    values ('e8000000-0000-4000-8000-000000000021', 150)$$,
-  '23514', null,
-  '1.1:default_commission_rate_percentage 超過 100 被 CHECK 約束擋下'
-);
-
-select throws_ok(
   $$insert into merchant_payroll_settings (merchant_id, pay_days_per_month)
     values ('e8000000-0000-4000-8000-000000000021', 0)$$,
   '23514', null,
@@ -116,35 +109,40 @@ select throws_ok(
 insert into merchant_payroll_settings (merchant_id) values ('e8000000-0000-4000-8000-000000000021');
 
 select is(
-  (select row(commission_basis_type, default_commission_rate_percentage, pay_days_per_month)
+  (select row(commission_basis_type, pay_days_per_month)
    from merchant_payroll_settings where merchant_id = 'e8000000-0000-4000-8000-000000000021')::text,
-  row('gross', 0.00, 30)::text,
-  '1.1:不指定任何欄位時,預設值為 gross/0/30(第〇節開頭原則:預設不套用非零抽成比例)'
+  row('gross', 30)::text,
+  '1.1:不指定任何欄位時,預設值為 gross/30(商家端三項調整規格書 §二 2.2.2 拿掉商家層級預設抽成比例欄位之後,不再有預設抽成比例這件事,抽成完全改成服務項目層級——見商家端三項調整規格書 §二 1.2 的 CHECK 約束測試)'
 );
 
--- 1.2
+-- 1.2(商家端三項調整規格書 §二 2.2.1):服務項目層級抽成設定表的 CHECK 約束,取代原本
+-- 一人一個籠統比例的 staff_commission_rates(該表已經 drop)。逐項情境的完整測試在
+-- module16_01_service_item_level_commission.sql,這裡只保留最基本的存在性檢查,確保
+-- 這張表能被本檔案後續的抽成計算測試正常使用。
 select throws_ok(
   format(
-    $$insert into staff_commission_rates (staff_id, rate_percentage) values ('%s', 150)$$,
-    'e8000000-0000-4000-8000-000000000041'
+    $$insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+      values ('%s', '%s', 'percentage', 150)$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
   ),
   '23514', null,
-  '1.2:rate_percentage 超過 100 被 CHECK 約束擋下'
+  '1.2:commission_mode=percentage 時 commission_value 超過 100 被 CHECK 約束擋下'
 );
 
-insert into staff_commission_rates (staff_id, rate_percentage)
-values ('e8000000-0000-4000-8000-000000000041', 30);
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+values ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031', 'percentage', 30);
 
 select throws_ok(
   format(
-    $$insert into staff_commission_rates (staff_id, rate_percentage) values ('%s', 40)$$,
-    'e8000000-0000-4000-8000-000000000041'
+    $$insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+      values ('%s', '%s', 'percentage', 40)$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
   ),
   '23505', null,
-  '1.2:同一位服務人員只能有一筆覆寫(unique staff_id)'
+  '1.2:同一個 (staff_id, service_item_id) 組合只能有一筆(unique 約束)'
 );
 
-delete from staff_commission_rates where staff_id = 'e8000000-0000-4000-8000-000000000041';
+delete from staff_service_commission_rates where staff_id = 'e8000000-0000-4000-8000-000000000041';
 
 -- 1.3
 select throws_ok(
@@ -212,14 +210,18 @@ select throws_ok(
 );
 
 -- =========================================================================
--- ② 規則 2.1/2.2/2.3/2.5:核心抽成計算(gross/net、個人覆寫優先、按件才產生、不含助手)。
+-- ② 規則 2.1/2.3/2.5:核心抽成計算(gross/net、按件才產生、不含助手)。服務項目層級抽成的
+-- 逐項分攤/多項目/混用模式/決策2預設0元等完整情境測試在
+-- module16_01_service_item_level_commission.sql,這裡維持單一服務項目(洗髮)的既有回歸覆蓋。
 -- =========================================================================
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
--- 2.2:無個人覆寫,套用商家預設 10%。base = 1000(自訂總額) - 100(固定折扣) = 900。
+-- 2.1:針對「按件服務人員P × 洗髮」設定 10%。base = 1000(自訂總額) - 100(固定折扣) = 900。
 update merchant_payroll_settings
-set commission_basis_type = 'gross', default_commission_rate_percentage = 10, pay_days_per_month = 30
+set commission_basis_type = 'gross', pay_days_per_month = 30
 where merchant_id = 'e8000000-0000-4000-8000-000000000021';
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+values ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031', 'percentage', 10);
 
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
@@ -241,13 +243,15 @@ select complete_booking(:'default_rate_booking_id'::uuid);
 select is(
   (select row(commission_basis_type_snapshot, commission_base_amount_snapshot, commission_rate_percentage_snapshot, commission_amount, material_cost_deducted_snapshot)
    from booking_commission_records where booking_id = :'default_rate_booking_id'::uuid)::text,
-  row('gross', 900.00, 10.00, 90.00, 0.00)::text,
-  '規則 2.1/2.2:gross 模式排除稅金、無覆寫套用商家預設 10%,900 × 10% = 90.00'
+  row('gross', 900.00, null, 90.00, 0.00)::text,
+  '規則 2.1:gross 模式排除稅金,套用服務項目層級設定的 10%,900 × 10% = 90.00;commission_rate_percentage_snapshot 一律為 null(服務項目層級抽成之下不再是單一比例)'
 );
 
--- 2.2:個人覆寫優先於商家預設。P 設定覆寫 20%。base = 1000(無折扣)。
-insert into staff_commission_rates (staff_id, rate_percentage)
-values ('e8000000-0000-4000-8000-000000000041', 20);
+-- 改成 20%(取代原本「個人覆寫優先於商家預設」的舊測試——服務項目層級抽成之下,一個
+-- (staff, service_item) 組合本來就只有一筆設定,沒有「個人覆寫 vs 商家預設」的層次可言,
+-- 這裡改成驗證「調整設定後,新完成的訂單套用新數值」)。base = 1000(無折扣)。
+update staff_service_commission_rates set commission_value = 20
+where staff_id = 'e8000000-0000-4000-8000-000000000041' and service_item_id = 'e8000000-0000-4000-8000-000000000031';
 
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
@@ -266,7 +270,7 @@ select complete_booking(:'override_rate_booking_id'::uuid);
 select is(
   (select commission_amount from booking_commission_records where booking_id = :'override_rate_booking_id'::uuid),
   200.00,
-  '規則 2.2:個人覆寫(20%)優先於商家預設(10%),1000 × 20% = 200.00'
+  '規則 2.1:調整服務項目層級抽成設定(10%→20%)後,新完成的訂單套用新數值,1000 × 20% = 200.00'
 );
 
 -- 規則 2.5:主要服務人員 P + 助手 AST,只有 P 產生抽成紀錄,AST 完全沒有。
@@ -370,16 +374,17 @@ select is(
   '規則 2.1:扣除料錢成本後小於 0,以 0 計,不出現負的抽成基準'
 );
 
--- 還原成 gross 模式、清除覆寫,供後續 ③ 規則 2.4 測試從乾淨狀態開始。
+-- 還原成 gross 模式、把服務項目層級設定改回 10%,供後續 ③ 規則 2.4 測試從乾淨狀態開始。
 update merchant_payroll_settings
-set commission_basis_type = 'gross', default_commission_rate_percentage = 10
+set commission_basis_type = 'gross'
 where merchant_id = 'e8000000-0000-4000-8000-000000000021';
-delete from staff_commission_rates where staff_id = 'e8000000-0000-4000-8000-000000000041';
+update staff_service_commission_rates set commission_value = 10
+where staff_id = 'e8000000-0000-4000-8000-000000000041' and service_item_id = 'e8000000-0000-4000-8000-000000000031';
 
 -- =========================================================================
 -- ③ 規則 2.4(核心必測):抽成快照建立後不自動重算。
 -- =========================================================================
--- booking1:完成當下商家預設 10%,base=1000(無折扣)→ commission=100.00。
+-- booking1:完成當下設定 10%,base=1000(無折扣)→ commission=100.00。
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
   p_staff_id => 'e8000000-0000-4000-8000-000000000041',
@@ -400,14 +405,14 @@ select is(
   '規則 2.4 步驟①:booking1 完成當下,commission_amount = 1000 × 10% = 100.00'
 );
 
--- 調整商家預設抽成比例(10% → 50%)。
-update merchant_payroll_settings set default_commission_rate_percentage = 50
-where merchant_id = 'e8000000-0000-4000-8000-000000000021';
+-- 調整服務項目層級抽成設定(10% → 50%)。
+update staff_service_commission_rates set commission_value = 50
+where staff_id = 'e8000000-0000-4000-8000-000000000041' and service_item_id = 'e8000000-0000-4000-8000-000000000031';
 
 select is(
   (select commission_amount from booking_commission_records where booking_id = :'rule24_booking1_id'::uuid),
   100.00,
-  '規則 2.4 步驟①(核心):調整商家預設抽成比例後,booking1 的舊紀錄金額完全沒有變動(仍是 100.00)'
+  '規則 2.4 步驟①(核心):調整服務項目層級抽成設定後,booking1 的舊紀錄金額完全沒有變動(仍是 100.00)'
 );
 
 -- 直接呼叫 compute_booking_commission(模擬「萬一被重複觸發」的極端情境,驗證 on conflict do
@@ -460,45 +465,32 @@ select throws_ok(
 -- 對照組:同一個被擋下的客服,呼叫本模組其他一般設定功能(commission_settings 涵蓋範圍)可以成功——
 -- 證明不是整個模組都鎖死,只有這一支函式特別敏感。
 select lives_ok(
-  $$update merchant_payroll_settings set default_commission_rate_percentage = 15
-    where merchant_id = 'e8000000-0000-4000-8000-000000000021'$$,
-  '規則 2.6 對照組:同一個被 recalculate_booking_commission 擋下的客服,仍然可以正常操作 merchant_payroll_settings(一般設定功能沒有被連坐鎖死)'
+  format(
+    $$update staff_service_commission_rates set commission_value = 15
+      where staff_id = '%s' and service_item_id = '%s'$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
+  ),
+  '規則 2.6 對照組:同一個被 recalculate_booking_commission 擋下的客服,仍然可以正常操作 staff_service_commission_rates(一般設定功能沒有被連坐鎖死)'
 );
 
-update merchant_payroll_settings set default_commission_rate_percentage = 50
-where merchant_id = 'e8000000-0000-4000-8000-000000000021';
+update staff_service_commission_rates set commission_value = 50
+where staff_id = 'e8000000-0000-4000-8000-000000000041' and service_item_id = 'e8000000-0000-4000-8000-000000000031';
 
 select pg_temp.test_clear_auth();
 
--- 商家管理員呼叫成功,金額依目前設定重算(目前商家預設已改為 50%),recalculated_at 正確寫入。
+-- 商家管理員呼叫成功,金額依目前設定重算(目前設定已改為 50%),recalculated_at 正確寫入。
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
 select lives_ok(
   format($$select recalculate_booking_commission('%s')$$, :'rule24_booking1_id'::text),
-  '規則 2.6:商家管理員呼叫 recalculate_booking_commission 成功'
+  '規則 2.6:商家管理員呼叫 recalculate_booking_commission(新簽章,無 override 參數)成功'
 );
 
 select is(
   (select row(commission_rate_percentage_snapshot, commission_amount, recalculated_at is not null)
    from booking_commission_records where booking_id = :'rule24_booking1_id'::uuid)::text,
-  row(50.00, 500.00, true)::text,
-  '規則 2.6:管理員重算後,booking1 改採目前設定(50%),金額變成 500.00,recalculated_at 正確寫入'
-);
-
--- 帶入 p_override_rate_percentage 時採用指定比例(個案調整)。
-select recalculate_booking_commission(:'rule24_booking1_id'::uuid, 25);
-
-select is(
-  (select row(commission_rate_percentage_snapshot, commission_amount)
-   from booking_commission_records where booking_id = :'rule24_booking1_id'::uuid)::text,
-  row(25.00, 250.00)::text,
-  '規則 2.6:帶入 p_override_rate_percentage=25 時,直接採用這個指定比例,不查詢設定值'
-);
-
-select throws_ok(
-  format($$select recalculate_booking_commission('%s', 150)$$, :'rule24_booking1_id'::text),
-  'P0001', '指定的抽成比例必須介於 0~100 之間',
-  '規則 2.6 邊界情況:p_override_rate_percentage 超過 100 被擋下'
+  row(null, 500.00, true)::text,
+  '規則 2.6:管理員重算後,booking1 改採目前設定(50%),金額變成 500.00,recalculated_at 正確寫入,commission_rate_percentage_snapshot 固定為 null'
 );
 
 -- 邊界情況:對月薪制訂單(完全沒有抽成紀錄)呼叫 recalculate_booking_commission 應該被擋下。
@@ -517,22 +509,23 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000003');
 
 -- UPDATE 沒有命中任何 RLS 可見的列時,Postgres 不會拋例外,只會 0 筆受影響——比照模組 7
 -- §234 回歸測試的既有寫法,用「更新後數值沒有真的變動」驗證,而不是 throws_ok。
-update merchant_payroll_settings set default_commission_rate_percentage = 99
+update merchant_payroll_settings set commission_basis_type = 'net_of_material_cost'
   where merchant_id = 'e8000000-0000-4000-8000-000000000021';
 
 select isnt(
-  (select default_commission_rate_percentage from merchant_payroll_settings where merchant_id = 'e8000000-0000-4000-8000-000000000021'),
-  99.00,
+  (select commission_basis_type from merchant_payroll_settings where merchant_id = 'e8000000-0000-4000-8000-000000000021'),
+  'net_of_material_cost',
   '規則 2.9:無授權客服的 UPDATE 因 RLS 看不到寫入條件而 0 筆受影響,merchant_payroll_settings 沒有被改到'
 );
 
 select throws_ok(
   format(
-    $$insert into staff_commission_rates (staff_id, rate_percentage) values ('%s', 5)$$,
-    'e8000000-0000-4000-8000-000000000041'
+    $$insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+      values ('%s', '%s', 'percentage', 5)$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
   ),
   '42501', null,
-  '規則 2.9:無授權客服不能新增 staff_commission_rates'
+  '規則 2.9:無授權客服不能新增 staff_service_commission_rates'
 );
 
 select pg_temp.test_clear_auth();
@@ -541,10 +534,12 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000004');
 
 select lives_ok(
   format(
-    $$insert into staff_commission_rates (staff_id, rate_percentage) values ('%s', 20)$$,
-    'e8000000-0000-4000-8000-000000000041'
+    $$insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+      values ('%s', '%s', 'percentage', 20)
+      on conflict (staff_id, service_item_id) do update set commission_value = 20$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
   ),
-  '規則 2.9:被授權 commission_settings 的客服可以新增 staff_commission_rates'
+  '規則 2.9:被授權 commission_settings 的客服可以新增/更新 staff_service_commission_rates'
 );
 
 select pg_temp.test_clear_auth();
@@ -556,11 +551,12 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
 select throws_ok(
   format(
-    $$insert into staff_commission_rates (staff_id, rate_percentage) values ('%s', 10)$$,
-    'e8000000-0000-4000-8000-000000000042'
+    $$insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+      values ('%s', '%s', 'percentage', 10)$$,
+    'e8000000-0000-4000-8000-000000000042', 'e8000000-0000-4000-8000-000000000031'
   ),
   '42501', null,
-  '§3.3:對月薪制服務人員(M)寫入 staff_commission_rates 被 RLS WITH CHECK 擋下'
+  '§3.3:對月薪制服務人員(M)寫入 staff_service_commission_rates 被 RLS WITH CHECK 擋下'
 );
 
 select throws_ok(
@@ -572,15 +568,17 @@ select throws_ok(
   '§3.4:對按件計酬服務人員(P)寫入 staff_salary_settings 被 RLS WITH CHECK 擋下'
 );
 
--- §3.3 測試:刪除覆寫後,新完成的訂單改採商家預設比例。
-delete from staff_commission_rates where staff_id = 'e8000000-0000-4000-8000-000000000041';
+-- §3.3 測試(判斷2):刪除服務項目層級抽成設定後,新完成的訂單視為 0%(不是回退到任何商家
+-- 層級預設值——商家端三項調整規格書拿掉了「商家預設抽成比例」這個概念)。
+delete from staff_service_commission_rates
+where staff_id = 'e8000000-0000-4000-8000-000000000041' and service_item_id = 'e8000000-0000-4000-8000-000000000031';
 
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
   p_staff_id => 'e8000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','e8000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
   p_start_at => '2026-11-06 16:00:00+08',
-  p_customer_name => '刪除覆寫測試客戶',
+  p_customer_name => '刪除設定測試客戶',
   p_customer_phone => '0955020009',
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
@@ -591,9 +589,12 @@ select complete_booking(:'after_delete_override_booking_id'::uuid);
 
 select is(
   (select commission_amount from booking_commission_records where booking_id = :'after_delete_override_booking_id'::uuid),
-  500.00,
-  '§3.3:刪除個人覆寫後,新完成的訂單改採商家目前預設比例(50%),1000 × 50% = 500.00'
+  0.00,
+  '§3.3/判斷2:刪除服務項目層級抽成設定後,新完成的訂單視為查無設定=0%,不會回退到任何商家層級預設值'
 );
+
+update merchant_payroll_settings set commission_basis_type = 'gross'
+where merchant_id = 'e8000000-0000-4000-8000-000000000021';
 
 -- =========================================================================
 -- ⑦ 規則 2.10:五張表的 DELETE 政策盤點。
@@ -620,16 +621,19 @@ select is(
   '規則 2.10:booking_commission_records 唯一的政策是 SELECT,一律透過內部函式寫入'
 );
 select is(
-  (select count(*)::int from pg_policies where schemaname = 'public' and tablename = 'staff_commission_rates' and cmd = 'DELETE'),
-  1, '規則 2.10:staff_commission_rates 允許 DELETE(恢復預設值,不是危險操作)'
+  (select count(*)::int from pg_policies where schemaname = 'public' and tablename = 'staff_service_commission_rates' and cmd = 'DELETE'),
+  1, '規則 2.10:staff_service_commission_rates 允許 DELETE(恢復成「尚未設定=0元」,不是危險操作)'
 );
 
-insert into staff_commission_rates (staff_id, rate_percentage)
-values ('e8000000-0000-4000-8000-000000000041', 20);
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+values ('e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031', 'percentage', 20);
 
 select lives_ok(
-  format($$delete from staff_commission_rates where staff_id = '%s'$$, 'e8000000-0000-4000-8000-000000000041'),
-  '規則 2.10:staff_commission_rates 的 DELETE 實際可以成功執行(恢復套用商家預設值)'
+  format(
+    $$delete from staff_service_commission_rates where staff_id = '%s' and service_item_id = '%s'$$,
+    'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
+  ),
+  '規則 2.10:staff_service_commission_rates 的 DELETE 實際可以成功執行(恢復成「尚未設定=0元」)'
 );
 
 select pg_temp.test_clear_auth();
@@ -765,8 +769,8 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
-insert into staff_commission_rates (staff_id, rate_percentage)
-values ('e8000000-0000-4000-8000-000000000048', 20);
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+values ('e8000000-0000-4000-8000-000000000048', 'e8000000-0000-4000-8000-000000000031', 'percentage', 20);
 
 select id from create_booking(
   p_merchant_id => 'e8000000-0000-4000-8000-000000000021',
@@ -834,11 +838,19 @@ select is(
   '規則 2.5/§3.9:P2 本月以助手身份參與 1 筆訂單(只是參考資訊,不影響上面的抽成總計 500.00)'
 );
 
--- §3.11:店家帳務報表(2026-12,只含 R1/R2/R3 三筆訂單 + P2 覆寫比例造成的抽成)。
+-- §3.11:店家帳務報表(2026-12,只含 R1/R2/R3 三筆訂單 + P2 服務項目層級抽成造成的金額)。
+-- 商家端三項調整規格書 §三 3.1:total_revenue 拆成 total_revenue_excl_tax + total_tax_amount,
+-- 這三筆訂單都沒有開稅金,所以 excl_tax 金額跟原本含稅口徑的數字相同。
 select is(
-  (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_revenue')::numeric,
+  (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_revenue_excl_tax')::numeric,
   3500.00,
-  '§3.11:total_revenue = 1000(R1) + 1500(R2,已折扣500) + 1000(R3) = 3500.00(含稅口徑,用 final_amount_snapshot)'
+  '§3.11:total_revenue_excl_tax = 1000(R1) + 1500(R2,已折扣500) + 1000(R3) = 3500.00(這三筆都沒開稅金)'
+);
+
+select is(
+  (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_tax_amount')::numeric,
+  0.00,
+  '§3.1:total_tax_amount = 0.00(這三筆訂單都沒有開稅金)'
 );
 
 -- total_commission_payout 用 computed_at(抽成實際「產生」的當下時間,即測試執行當下的 now(),
@@ -975,10 +987,10 @@ select is(
 );
 
 select is(
-  (select row(commission_basis_type, default_commission_rate_percentage, pay_days_per_month)
+  (select row(commission_basis_type, pay_days_per_month)
    from merchant_payroll_settings where merchant_id = :'seed_group_merchant_create_group_and_merchant'::uuid)::text,
-  row('gross', 0.00, 30)::text,
-  '§3.12:種入的預設薪資設定為 gross/0%/30 天(第〇節開頭原則)'
+  row('gross', 30)::text,
+  '§3.12:種入的預設薪資設定為 gross/30 天(商家層級不再有預設抽成比例這個概念)'
 );
 
 select is(

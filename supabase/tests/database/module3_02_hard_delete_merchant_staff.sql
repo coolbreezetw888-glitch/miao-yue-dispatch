@@ -111,8 +111,8 @@ insert into staff_availability_overrides (staff_id, override_date, slot_start_ti
   ('aa150000-0000-4000-8000-000000000035', current_date, '09:00', true);
 insert into merchant_staff_permissions (staff_id, section_key) values
   ('aa150000-0000-4000-8000-000000000035', 'staff_calendar_view');
-insert into staff_commission_rates (staff_id, rate_percentage) values
-  ('aa150000-0000-4000-8000-000000000035', 15);
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value) values
+  ('aa150000-0000-4000-8000-000000000035', 'aa150000-0000-4000-8000-000000000050', 'percentage', 15);
 insert into staff_salary_settings (staff_id, monthly_base_salary) values
   ('aa150000-0000-4000-8000-000000000035', 30000);
 
@@ -235,9 +235,9 @@ select is(
   '⑥:merchant_staff_permissions 透過 cascade 一併清掉'
 );
 select is(
-  (select count(*)::int from staff_commission_rates where staff_id = 'aa150000-0000-4000-8000-000000000035'),
+  (select count(*)::int from staff_service_commission_rates where staff_id = 'aa150000-0000-4000-8000-000000000035'),
   0,
-  '⑥:staff_commission_rates 透過 cascade 一併清掉'
+  '⑥:staff_service_commission_rates 透過 cascade 一併清掉'
 );
 select is(
   (select count(*)::int from staff_salary_settings where staff_id = 'aa150000-0000-4000-8000-000000000035'),

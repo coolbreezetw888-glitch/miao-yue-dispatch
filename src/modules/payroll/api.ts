@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type {
   BookingCommissionRecord,
   CommissionBasisType,
+  CommissionMode,
   DeductionMode,
   LeaveTypeDeductionRule,
   MerchantBillingSummary,
@@ -25,18 +26,19 @@ import type {
   StaffCommissionSummary,
   StaffMonthlyPayrollSummary,
   StaffSalarySettings,
+  StaffServiceCommissionRate,
 } from "./types";
 
 // =========================================================================
 // §1.1 的預設值(查無資料時前端一律套用,對應規格書「查無資料時的預設值」段落——
-// 財務謹慎設計,不能自己在這裡「幫」商家填入非零數字)。
+// 財務謹慎設計,不能自己在這裡「幫」商家填入非零數字)。商家端三項調整規格書 §二 2.2.2 拿掉
+// 商家層級預設抽成比例欄位之後,這裡的預設值不再包含它。
 // =========================================================================
 export const DEFAULT_MERCHANT_PAYROLL_SETTINGS: Pick<
   MerchantPayrollSettings,
-  "commission_basis_type" | "default_commission_rate_percentage" | "pay_days_per_month"
+  "commission_basis_type" | "pay_days_per_month"
 > = {
   commission_basis_type: "gross",
-  default_commission_rate_percentage: 0,
   pay_days_per_month: 30,
 };
 
@@ -72,11 +74,12 @@ export function useMerchantPayrollSettings(
 
 export interface UpsertMerchantPayrollSettingsInput {
   commissionBasisType: CommissionBasisType;
-  defaultCommissionRatePercentage: number;
   payDaysPerMonth: number;
 }
 
-/** §5.1 對外介面:沒有既有列時新增,已有則更新(upsert on primary key merchant_id)。 */
+/** §5.1 對外介面:沒有既有列時新增,已有則更新(upsert on primary key merchant_id)。商家端
+ * 三項調整規格書 §二 2.2.2:不再寫入 default_commission_rate_percentage(欄位不再使用,抽成
+ * 完全改成服務項目層級)。 */
 export async function upsertMerchantPayrollSettings(
   merchantId: string,
   input: UpsertMerchantPayrollSettingsInput,
@@ -85,7 +88,6 @@ export async function upsertMerchantPayrollSettings(
     {
       merchant_id: merchantId,
       commission_basis_type: input.commissionBasisType,
-      default_commission_rate_percentage: input.defaultCommissionRatePercentage,
       pay_days_per_month: input.payDaysPerMonth,
     },
     { onConflict: "merchant_id" },
@@ -94,50 +96,83 @@ export async function upsertMerchantPayrollSettings(
 }
 
 // =========================================================================
-// §3.3/§5.2:staff_commission_rates 讀寫(按件計酬服務人員個人抽成比例覆寫)。
+// 商家端三項調整規格書 §二:staff_service_commission_rates 讀寫(服務項目層級抽成設定),
+// 取代原本一人一個籠統比例的 staff_commission_rates(該表已經 drop)。
 // =========================================================================
-export interface StaffCommissionRateInfo {
-  hasOverride: boolean;
-  ratePercentage: number | null;
-}
 
-/** §5.2 對外介面:查詢單一服務人員目前的抽成比例覆寫,唯讀。查無資料代表沒有個人覆寫,套用
- * 商家預設值(呼叫端自己拿 useMerchantPayrollSettings 的 defaultCommissionRatePercentage 顯示)。 */
-export function useStaffCommissionRate(
+/** 查詢某位服務人員目前所有服務項目層級的抽成設定,唯讀。查無資料的服務項目一律視為
+ * commission_mode='percentage', commission_value=0(規則 2.4,財務保守預設)。回傳一個以
+ * service_item_id 為 key 的 map,方便畫面逐項查詢。 */
+export function useStaffServiceCommissionRates(
   staffId: string | null | undefined,
-): UseQueryResult<StaffCommissionRateInfo> {
+): UseQueryResult<Map<string, StaffServiceCommissionRate>> {
   return useQuery({
-    queryKey: ["payroll-module", "staff-commission-rate", staffId],
+    queryKey: ["payroll-module", "staff-service-commission-rates", staffId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("staff_commission_rates")
-        .select("rate_percentage")
-        .eq("staff_id", staffId as string)
-        .maybeSingle();
+        .from("staff_service_commission_rates")
+        .select("*")
+        .eq("staff_id", staffId as string);
       if (error) throw error;
-      return data
-        ? { hasOverride: true, ratePercentage: Number(data.rate_percentage) }
-        : { hasOverride: false, ratePercentage: null };
+      return new Map((data ?? []).map((row) => [row.service_item_id, row]));
     },
     enabled: Boolean(staffId),
   });
 }
 
-/** 新增/更新個人抽成比例覆寫。RLS WITH CHECK 只允許 compensation_type=piece_rate 的服務人員
- * (§3.3),對月薪制服務人員呼叫會被資料庫擋下,錯誤訊息由呼叫端用 getErrorMessage() 顯示。 */
-export async function upsertStaffCommissionRate(
+export interface UpsertStaffServiceCommissionRateInput {
+  commissionMode: CommissionMode;
+  commissionValue: number;
+}
+
+/** 新增/更新單一「服務人員 × 服務項目」的抽成設定。RLS WITH CHECK 只允許
+ * compensation_type=piece_rate 的服務人員,對月薪制服務人員呼叫會被資料庫擋下,錯誤訊息由
+ * 呼叫端用 getErrorMessage() 顯示。 */
+export async function upsertStaffServiceCommissionRate(
   staffId: string,
-  ratePercentage: number,
+  serviceItemId: string,
+  input: UpsertStaffServiceCommissionRateInput,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("staff_commission_rates")
-    .upsert({ staff_id: staffId, rate_percentage: ratePercentage }, { onConflict: "staff_id" });
+  const { error } = await supabase.from("staff_service_commission_rates").upsert(
+    {
+      staff_id: staffId,
+      service_item_id: serviceItemId,
+      commission_mode: input.commissionMode,
+      commission_value: input.commissionValue,
+    },
+    { onConflict: "staff_id,service_item_id" },
+  );
   if (error) throw error;
 }
 
-/** 移除個人覆寫,恢復套用商家預設值(規則 2.10:允許 DELETE,不是危險操作)。 */
-export async function removeStaffCommissionRate(staffId: string): Promise<void> {
-  const { error } = await supabase.from("staff_commission_rates").delete().eq("staff_id", staffId);
+/** 移除單一「服務人員 × 服務項目」的抽成設定,恢復成「尚未設定=0元」(規則 2.10:允許
+ * DELETE,不是危險操作)。 */
+export async function removeStaffServiceCommissionRate(
+  staffId: string,
+  serviceItemId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("staff_service_commission_rates")
+    .delete()
+    .eq("staff_id", staffId)
+    .eq("service_item_id", serviceItemId);
+  if (error) throw error;
+}
+
+/** 商家端三項調整規格書 §二 2.7.4:批量套用抽成——用一支資料庫函式一次寫完全部項目,
+ * 不是前端迴圈呼叫 N 次個別 upsert,避免半套用狀態。 */
+export async function batchApplyStaffServiceCommissionRates(
+  staffId: string,
+  serviceItemIds: string[],
+  commissionMode: CommissionMode,
+  commissionValue: number,
+): Promise<void> {
+  const { error } = await supabase.rpc("batch_apply_staff_service_commission_rates", {
+    p_staff_id: staffId,
+    p_service_item_ids: serviceItemIds,
+    p_commission_mode: commissionMode,
+    p_commission_value: commissionValue,
+  });
   if (error) throw error;
 }
 
@@ -337,16 +372,14 @@ export function useMerchantBillingSummary(
 // §3.8/§5.6:手動重新計算抽成(僅商家管理員,規則 2.6)。
 // =========================================================================
 /** §5.6 對外介面:重新計算某筆已完成訂單的抽成金額。只有商家管理員能成功(規則 2.6,資料庫層
- * 用 private.is_merchant_admin 檢查,這裡不重複判斷,前端只需要把管理員以外的人擋在按鈕外)。 */
+ * 用 private.is_merchant_admin 檢查,這裡不重複判斷,前端只需要把管理員以外的人擋在按鈕外)。
+ * 商家端三項調整規格書 §二 2.7.3:拿掉「臨時指定一個特別比例」的參數,語意改成「依商家目前
+ * 最新的 staff_service_commission_rates 設定,重新算一次」。 */
 export async function recalculateBookingCommission(
   bookingId: string,
-  overrideRatePercentage?: number | null,
 ): Promise<BookingCommissionRecord> {
   const { data, error } = await supabase.rpc("recalculate_booking_commission", {
     p_booking_id: bookingId,
-    ...(overrideRatePercentage !== undefined && overrideRatePercentage !== null
-      ? { p_override_rate_percentage: overrideRatePercentage }
-      : {}),
   });
   if (error) throw error;
   return data as BookingCommissionRecord;

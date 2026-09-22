@@ -2,7 +2,7 @@
 // 年月選擇器,依選中服務人員的計酬類型顯示不同版面(按件計酬:訂單明細+總計;月薪制:扣款明細+
 // 淨額)+ CSV 匯出按鈕。
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,7 @@ import { useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "./api";
 import { buildCsvContent, downloadCsv } from "./csvExport";
+import { formatStaffCommissionItemBreakdown } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
 
@@ -48,15 +49,28 @@ export function PieceRateStaffReport({
   month: number;
 }) {
   const { data: summary, isLoading, error } = useStaffCommissionSummary(staffId, year, month);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(bookingId: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookingId)) {
+        next.delete(bookingId);
+      } else {
+        next.add(bookingId);
+      }
+      return next;
+    });
+  }
 
   function handleExportCsv() {
     if (!summary) return;
-    const headers = ["日期", "客戶", "抽成基準", "比例(%)", "抽成金額", "已被人工重算"];
+    const headers = ["日期", "客戶", "抽成基準", "服務項目明細", "抽成金額", "已被人工重算"];
     const rows = summary.details.map((d) => [
       d.order_date,
       d.customer_name,
       d.commission_base_amount,
-      d.commission_rate_percentage,
+      formatStaffCommissionItemBreakdown(d),
       d.commission_amount,
       d.recalculated ? "是" : "否",
     ]);
@@ -95,23 +109,60 @@ export function PieceRateStaffReport({
                   <TableHead>日期</TableHead>
                   <TableHead>客戶</TableHead>
                   <TableHead className="text-right">抽成基準</TableHead>
-                  <TableHead className="text-right">比例</TableHead>
                   <TableHead className="text-right">抽成金額</TableHead>
+                  <TableHead className="text-right">明細</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {summary.details.map((d) => (
-                  <TableRow key={d.booking_id}>
-                    <TableCell>{new Date(d.order_date).toLocaleDateString("zh-TW")}</TableCell>
-                    <TableCell>{d.customer_name}</TableCell>
-                    <TableCell className="text-right">{d.commission_base_amount}</TableCell>
-                    <TableCell className="text-right">{d.commission_rate_percentage}%</TableCell>
-                    <TableCell className="text-right">
-                      {d.commission_amount}
-                      {d.recalculated ? <span className="ml-1 text-xs text-warn">(已重算)</span> : null}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {summary.details.map((d) => {
+                  const expanded = expandedIds.has(d.booking_id);
+                  return (
+                    <Fragment key={d.booking_id}>
+                      <TableRow>
+                        <TableCell>{new Date(d.order_date).toLocaleDateString("zh-TW")}</TableCell>
+                        <TableCell>{d.customer_name}</TableCell>
+                        <TableCell className="text-right">{d.commission_base_amount}</TableCell>
+                        <TableCell className="text-right">
+                          {d.commission_amount}
+                          {d.recalculated ? <span className="ml-1 text-xs text-warn">(已重算)</span> : null}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" onClick={() => toggleExpanded(d.booking_id)}>
+                            {expanded ? "收合" : "展開"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      {expanded ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="bg-muted/30">
+                            {d.item_breakdown.length === 0 && d.legacy_rate_percentage !== null ? (
+                              <p className="text-sm text-muted-foreground">
+                                這筆是改版前的舊制紀錄,抽成比例 {d.legacy_rate_percentage}%
+                              </p>
+                            ) : d.item_breakdown.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">沒有抽成明細</p>
+                            ) : (
+                              <ul className="space-y-1 text-sm text-foreground">
+                                {d.item_breakdown.map((item, idx) => (
+                                  <li key={idx} className="flex flex-wrap items-center justify-between gap-2">
+                                    <span>
+                                      {item.service_item_name} × {item.quantity}(
+                                      {item.commission_mode === "percentage"
+                                        ? `${item.commission_value}%`
+                                        : `${item.commission_value} 元/件`}
+                                      )
+                                    </span>
+                                    <span className="font-medium">{item.commission_amount} 元</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

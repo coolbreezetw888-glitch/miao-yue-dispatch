@@ -50,6 +50,7 @@ import ImportWizardPage from "@/modules/data-tools/ImportWizardPage";
 import ImportHistoryPage from "@/modules/data-tools/ImportHistoryPage";
 import ReportExportCenterPage from "@/modules/data-tools/ReportExportCenterPage";
 import IndustryTransferWizardPage from "@/modules/data-tools/IndustryTransferWizardPage";
+import PushEventSettingsPage from "@/modules/push-notifications/PushEventSettingsPage";
 
 function NotFound() {
   return (
@@ -115,6 +116,7 @@ export default function App() {
           <Route path="/app/line-events" element={<LineEventSettingsPage />} />
           <Route path="/app/line-logs" element={<LineLogsPage />} />
           <Route path="/app/line-marketing" element={<LineMarketingPage />} />
+          <Route path="/app/push-events" element={<PushEventSettingsPage />} />
           <Route path="/app/data-import" element={<ImportWizardPage />} />
           <Route path="/app/data-import/history" element={<ImportHistoryPage />} />
           <Route path="/app/reports" element={<ReportExportCenterPage />} />

@@ -52,6 +52,9 @@ import {
 } from "@/modules/staff-agent/context";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 import { MemberPickerField, type SelectedMember } from "@/modules/members/MemberPickerField";
+// 模組 15(服務人員推播通知)規則 4.5:訂單內容異動的一句話摘要,由前端在呼叫 update_booking
+// 之前先算好(見下方 handleSubmit),當作參數傳給 updateBooking → dispatchPushNotification。
+import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
 
 import {
   createBooking,
@@ -609,7 +612,33 @@ export function BookingFormDialog({
       };
 
       if (isEdit && editingBookingId) {
-        await updateBooking({ bookingId: editingBookingId, ...shared });
+        // 模組 15(服務人員推播通知)規則 4.5:送出前比較「原始訂單資料」(editingDetail,查詢
+        // 當下的既有值)跟「這次要送出的新值」(shared),算出一句話摘要,RPC 成功後由
+        // updateBooking 內部疊加呼叫 dispatchPushNotification 用。
+        const changeSummary = editingDetail
+          ? computeBookingChangeSummary({
+              original: {
+                startAt: editingDetail.start_at,
+                serviceItemIds: editingDetail.serviceItems.map((item) => item.id),
+                staffId: editingDetail.staff_id,
+              },
+              next: {
+                startAt: shared.startAt,
+                serviceItemIds,
+                staffId,
+                staffName: staffList?.find((s) => s.id === staffId)?.name ?? null,
+                formattedStartAt: `${dateKey} ${time}`,
+                serviceNames: serviceItemIds
+                  .map((id) => serviceItems?.find((si) => si.id === id)?.name)
+                  .filter((name): name is string => Boolean(name)),
+              },
+            })
+          : undefined;
+        await updateBooking({
+          bookingId: editingBookingId,
+          ...shared,
+          ...(changeSummary ? { changeSummary } : {}),
+        });
         toast.success("已更新預約");
       } else {
         await createBooking({ merchantId, ...shared });

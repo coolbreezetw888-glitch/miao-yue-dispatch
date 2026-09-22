@@ -12,10 +12,22 @@ export function roundToCents(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-/** 抽成金額試算(對應規則 2.2):基準 × 比例,四捨五入到分。 */
-export function previewCommissionAmount(baseAmount: number, ratePercentage: number): number {
-  if (!Number.isFinite(baseAmount) || !Number.isFinite(ratePercentage)) return 0;
-  return roundToCents((baseAmount * ratePercentage) / 100);
+/** 商家端三項調整規格書 §二 2.8.2:服務項目層級抽成的即時預覽計算機,取代原本只支援單一百分比
+ * 模式的 previewCommissionAmount。percentage 模式:基準 × 比例;fixed_amount 模式:固定金額 ×
+ * 件數,不受基準金額影響。四捨五入到分,跟資料庫 calculate_booking_staff_commission 的公式對齊。 */
+export function previewServiceCommission(
+  basePrice: number,
+  mode: "percentage" | "fixed_amount",
+  value: number,
+  quantity = 1,
+): number {
+  if (!Number.isFinite(basePrice) || !Number.isFinite(value) || !Number.isFinite(quantity)) {
+    return 0;
+  }
+  if (mode === "fixed_amount") {
+    return roundToCents(value * quantity);
+  }
+  return roundToCents((basePrice * quantity * value) / 100);
 }
 
 /** 月折算天數換算成「一天薪水」(對應規則 2.7 的 day_rate)。pay_days_per_month <= 0 時視為 0,

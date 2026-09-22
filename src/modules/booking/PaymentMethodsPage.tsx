@@ -22,6 +22,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -33,13 +40,103 @@ import {
   reactivatePaymentMethod,
   removePaymentMethod,
   updatePaymentMethod,
+  upsertMerchantTaxSettings,
   type UpsertPaymentMethodInput,
 } from "./api";
+import { useMerchantTaxSettings } from "./context";
 import { RequirePaymentMethodsAccess } from "./RequirePaymentMethodsAccess";
-import type { PaymentMethod } from "./types";
+import { AMOUNT_ADJUSTMENT_MODE_LABELS, type AmountAdjustmentMode, type PaymentMethod } from "./types";
 
 const methodsQueryKey = (merchantId: string) =>
   ["booking-module", "payment-methods-admin", merchantId] as const;
+
+// 商家端三項調整規格書 §一 1.2/1.3:稅金設定,從 BusinessHoursPage.tsx 搬過來,放在
+// 這個頁面最下方(付款方式清單 Card 之後)。RLS 已放寬成同時允許 can_manage_payment_methods,
+// 不再要求 can_manage_business_hours,所以這裡不需要額外的權限判斷——能進到這個頁面的人
+// (RequirePaymentMethodsAccess 已擋過一次)就能操作這個設定。查無資料時 fallback 成
+// DEFAULT_MERCHANT_TAX_SETTINGS(useMerchantTaxSettings 已經處理過)。
+function TaxSettingsCard({ merchantId }: { merchantId: string }) {
+  const queryClient = useQueryClient();
+  const { data: taxSettings, isLoading } = useMerchantTaxSettings(merchantId);
+
+  const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
+  const [taxValue, setTaxValue] = useState("5");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!taxSettings) return;
+    setTaxMode(taxSettings.taxMode);
+    setTaxValue(String(taxSettings.taxValue));
+  }, [taxSettings]);
+
+  async function handleSave() {
+    const numericValue = Number(taxValue);
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+      toast.error("請輸入正確的數字");
+      return;
+    }
+    if (taxMode === "percentage" && numericValue > 100) {
+      toast.error("百分比模式下,數字必須介於 0~100 之間");
+      return;
+    }
+    setSaving(true);
+    try {
+      await upsertMerchantTaxSettings(merchantId, { taxMode, taxValue: numericValue });
+      await queryClient.invalidateQueries({
+        queryKey: ["booking-module", "merchant-tax-settings", merchantId],
+      });
+      toast.success("已更新稅金設定");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>稅金設定</CardTitle>
+        <CardDescription>
+          建單表單開啟稅金開關時,預設帶入這裡的模式跟數字(客服可以針對個別訂單再調整數字,但不能
+          改變模式)。模式要改成別種,只能在這裡改。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">載入中⋯</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={taxMode} onValueChange={(v) => setTaxMode(v as AmountAdjustmentMode)}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
+                <SelectItem value="percentage">{AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              min={0}
+              max={taxMode === "percentage" ? 100 : undefined}
+              step="0.01"
+              className="w-32"
+              value={taxValue}
+              onChange={(e) => setTaxValue(e.target.value)}
+            />
+            <span className="text-sm text-muted-foreground">
+              {taxMode === "percentage" ? "%(0~100 的數字)" : "元(固定金額)"}
+            </span>
+            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+              {saving ? "儲存中⋯" : "儲存"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 // =========================================================================
 // 新增/編輯表單
@@ -288,6 +385,8 @@ function PaymentMethodsPageInner() {
           )}
         </CardContent>
       </Card>
+
+      <TaxSettingsCard merchantId={merchantId} />
     </main>
   );
 }

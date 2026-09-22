@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateDayRate,
-  previewCommissionAmount,
   previewLeaveDeductionPerDay,
+  previewServiceCommission,
   roundToCents,
 } from "./previewCalculators";
 
@@ -19,26 +19,39 @@ describe("roundToCents", () => {
   });
 });
 
-describe("previewCommissionAmount(規則 2.2)", () => {
-  it("基準 1000、比例 10% → 100.00", () => {
-    expect(previewCommissionAmount(1000, 10)).toBe(100);
+describe("previewServiceCommission(商家端三項調整規格書 §二 2.8.2)", () => {
+  it("percentage 模式:原價 1000、比例 10%、1 件 → 100.00", () => {
+    expect(previewServiceCommission(1000, "percentage", 10, 1)).toBe(100);
   });
 
-  it("比例 0% → 0(第〇節開頭原則:商家還沒設定比例前,預覽也應該顯示 0,不是隨便給一個非零數字)", () => {
-    expect(previewCommissionAmount(1000, 0)).toBe(0);
+  it("percentage 模式,比例 0% → 0(尚未設定前,預覽也應該顯示 0,不是隨便給一個非零數字)", () => {
+    expect(previewServiceCommission(1000, "percentage", 0, 1)).toBe(0);
   });
 
-  it("基準 0 → 0", () => {
-    expect(previewCommissionAmount(0, 50)).toBe(0);
+  it("percentage 模式,原價 0 → 0", () => {
+    expect(previewServiceCommission(0, "percentage", 50, 1)).toBe(0);
+  });
+
+  it("percentage 模式,四捨五入到分:900 × 33.33% = 299.97", () => {
+    expect(previewServiceCommission(900, "percentage", 33.33, 1)).toBe(299.97);
+  });
+
+  it("percentage 模式會乘上件數(基準本身就含件數,呼應 calculate_booking_staff_commission 的 raw_i)", () => {
+    expect(previewServiceCommission(500, "percentage", 20, 2)).toBe(200);
+  });
+
+  it("fixed_amount 模式:固定 50 元/件、2 件 → 100(不受原價影響)", () => {
+    expect(previewServiceCommission(1000, "fixed_amount", 50, 2)).toBe(100);
+  });
+
+  it("fixed_amount 模式,預設件數 1 → 直接等於固定金額", () => {
+    expect(previewServiceCommission(1000, "fixed_amount", 75)).toBe(75);
   });
 
   it("非數字輸入時安全返回 0,不拋錯", () => {
-    expect(previewCommissionAmount(Number.NaN, 10)).toBe(0);
-    expect(previewCommissionAmount(1000, Number.NaN)).toBe(0);
-  });
-
-  it("四捨五入到分:900 × 33.33% = 299.97", () => {
-    expect(previewCommissionAmount(900, 33.33)).toBe(299.97);
+    expect(previewServiceCommission(Number.NaN, "percentage", 10)).toBe(0);
+    expect(previewServiceCommission(1000, "percentage", Number.NaN)).toBe(0);
+    expect(previewServiceCommission(1000, "fixed_amount", Number.NaN)).toBe(0);
   });
 });
 

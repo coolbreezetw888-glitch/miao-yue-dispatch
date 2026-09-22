@@ -51,6 +51,9 @@ import { addStaffAvailabilityWindow, removeStaffAvailabilityWindow } from "@/mod
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
 import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 import { StaffLineBindingSection } from "@/modules/line-notifications/StaffLineBindingSection";
+// 模組 15(服務人員推播通知)§7.5(選配):服務人員詳情頁疊加顯示已開通推播裝置數,比照上面
+// StaffLineBindingSection 同樣的掛載模式,純唯讀顯示。
+import { StaffPushSubscriptionSummary } from "@/modules/push-notifications/StaffPushSubscriptionSummary";
 // 模組 14(服務人員端)規格書 4.7 第 1/2 點:邀請服務人員登入的入口,直接呼叫模組 14 對外暴露的
 // Edge Function 包裝(inviteMerchantStaff)。這是本檔案唯一一處依賴模組 14 的地方,方向是
 // 「模組 3 既有畫面疊加模組 14 的功能」,規格書 4.7 明講要在這個既有檔案上擴充,不是另起新檔案。
@@ -658,6 +661,8 @@ function StaffFormDialog({
           {/* 模組 11(LINE 通知)§4.6:服務人員詳情/編輯頁疊加「LINE 綁定」區塊,只有編輯既有
               服務人員(已經有 staff.id)時才顯示,新增流程還沒有 id 可以綁定。 */}
           {isEdit && staff ? <StaffLineBindingSection staffId={staff.id} /> : null}
+          {/* 模組 15(服務人員推播通知)§7.5(選配):同樣只在編輯既有服務人員時顯示。 */}
+          {isEdit && staff ? <StaffPushSubscriptionSummary staffId={staff.id} /> : null}
 
           <DialogFooter>
             <Button type="submit" disabled={saving}>

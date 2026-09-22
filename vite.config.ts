@@ -46,6 +46,13 @@ export default defineConfig({
         // 不設定 navigateFallback:SPA 的路由 fallback 已經由 vercel.json 的 rewrites 在 CDN
         // 層級處理,不需要 service worker 也做一次,避免兩層 fallback 邏輯互相打架。
         cleanupOutdatedCaches: true,
+        // 模組 15(服務人員推播通知)§7.1:在產出的 sw.js 最上方插入一行
+        // `importScripts('/push-sw.js')`,讓 public/push-sw.js 裡的 push/notificationclick
+        // 事件監聽器註冊在同一個 service worker 執行環境下。這是 workbox generateSW 模式官方
+        // 支援的設定項,不需要改成 injectManifest 模式自己完全手刻 service worker,不會影響上面
+        // 這段自動更新偵測邏輯(已用 `npm run build` 實際確認 dist/sw.js 內容正確包含這行,
+        // 見 §7.1 邊界情況、6.4 節既有的建置產物實測習慣)。
+        importScripts: ["/push-sw.js"],
         // ⚠️ 實測踩坑記錄(2026-09-20,務必保留這個設定跟這段說明):預設(false)會把
         // workbox 執行時期程式碼拆成獨立的 workbox-xxxx.js,sw.js 用一段自製的 shim 透過
         // importScripts 非同步載入它,`self.skipWaiting()` 因此被延後到一個 microtask 裡才真正

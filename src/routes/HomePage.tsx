@@ -46,6 +46,9 @@ import { supabase } from "@/integrations/supabase/client";
 // 這是本檔案唯一一處依賴模組 14 的地方。
 import { EditMyStaffProfileDialog } from "@/modules/staff-portal/EditMyStaffProfileDialog";
 import { useActiveMyStaffRecord, useMyStaffPermission } from "@/modules/staff-portal/context";
+// 模組 15(服務人員推播通知)§7.2:比照模組 11 MyLineBindingCard 的既有做法,掛在服務人員本來
+// 就會經過的個人設定區域,不強制新增一個獨立路由。
+import { PushSubscriptionCard } from "@/modules/push-notifications/PushSubscriptionCard";
 
 import { useAppLayoutContext } from "./AppLayout";
 
@@ -316,6 +319,7 @@ export default function HomePage() {
         // 模組 14 規格書 4.1:服務人員版本的個人資料卡片(姓名/暱稱/電話/對外聯絡 email/簡介/
         // 頭像),不顯示上面管理員/客服版本的卡片內容。「編輯」依 staff_profile_edit 權限決定
         // 是否顯示(規則 2.8:檢視自己的資料永遠可以,編輯需要額外開通)。
+        <>
         <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
@@ -362,6 +366,10 @@ export default function HomePage() {
           {/* 對應規格書(帳號登入安全性優化)2.5.1 第 1-3 點:三種角色共用的登入信箱區塊。 */}
           <LoginEmailSection email={email} newEmail={newEmail} />
         </div>
+        {/* 模組 15(服務人員推播通知)§7.2:比照模組 11 MyLineBindingCard 的既有做法,掛在服務
+            人員本來就會經過的個人設定區域。 */}
+        <PushSubscriptionCard merchantId={merchantId} staffId={staffRow.id} />
+        </>
       ) : (
         <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">

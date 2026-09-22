@@ -31,6 +31,7 @@ import {
   Percent,
   Receipt,
   Settings,
+  Smartphone,
   TrendingUp,
   Upload,
   UserMinus,
@@ -173,6 +174,10 @@ export default function ManagePage() {
   // 兩張卡片的顯示權限;「LINE 串接設定」「行銷再通知」永遠只給商家管理員(規則 2.1/2.6)。
   const { data: canManageLineNotification } = useAgentPermission("line_notification");
   const showLineNotificationCards = isAdmin || canManageLineNotification === true;
+  // 模組 15(服務人員推播通知)7.3/7.9:push_notification 這把鑰匙決定「推播通知設定」卡片
+  // 的顯示權限,完全比照模組 11 line_notification 的既有模式。
+  const { data: canManagePushNotification } = useAgentPermission("push_notification");
+  const showPushNotificationCard = isAdmin || canManagePushNotification === true;
   // 模組 12(資料匯入與報表匯出)§4.6:「資料匯入」「產業轉移」永遠只給商家管理員(規則 2.1/2.10，
   // 不透過 section_key 開放客服)；「報表匯出中心」沿用一般客服權限開關模式(report_export，規則 2.9)。
   const { data: canExportReports } = useAgentPermission("report_export");
@@ -337,6 +342,14 @@ export default function ManagePage() {
       description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
       icon: Megaphone,
       visible: isAdmin,
+    },
+    {
+      key: "push-events",
+      to: "/app/push-events",
+      label: "推播通知設定",
+      description: "設定服務人員手機/瀏覽器推播要不要開、文案內容",
+      icon: Smartphone,
+      visible: showPushNotificationCard,
     },
     {
       key: "data-import",

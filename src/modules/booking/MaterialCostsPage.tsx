@@ -20,9 +20,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { getFeatureFlag, setFeatureFlag } from "@/modules/merchant/api";
 
 import {
   addMaterialCostItem,
@@ -30,6 +32,7 @@ import {
   reactivateMaterialCostItem,
   removeMaterialCostItem,
   updateMaterialCostItem,
+  MATERIAL_COST_ENABLED_FEATURE_KEY,
   type UpsertMaterialCostItemInput,
 } from "./api";
 import { RequireMaterialCostsAccess } from "./RequireMaterialCostsAccess";
@@ -37,6 +40,53 @@ import type { MaterialCostItem } from "./types";
 
 const itemsQueryKey = (merchantId: string) =>
   ["booking-module", "material-cost-items-admin", merchantId] as const;
+
+// 商家端三項調整規格書 §一 1.2/1.3:料錢成本功能開關,從 BusinessHoursPage.tsx 搬過來,
+// 放在這個頁面最上方(料錢成本品項清單 Card 之前)。RLS 已放寬成同時允許
+// can_manage_material_costs,不再要求 can_manage_business_hours,所以這裡不需要額外的
+// 權限判斷——能進到這個頁面的人(RequireMaterialCostsAccess 已擋過一次)就能操作這個開關。
+function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
+  const featureFlagQueryKey = ["booking-module", "material-cost-enabled", merchantId] as const;
+  const queryClient = useQueryClient();
+  const { data: enabled, isLoading } = useQuery({
+    queryKey: featureFlagQueryKey,
+    queryFn: async () => {
+      const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
+      // 規格書(建單功能擴充)2.3:查無資料一律視為關閉(預設值關閉)。
+      return value ?? false;
+    },
+  });
+
+  async function handleToggle(checked: boolean) {
+    try {
+      await setFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY, checked);
+      await queryClient.invalidateQueries({ queryKey: featureFlagQueryKey });
+      toast.success("已更新設定");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>料錢成本功能</CardTitle>
+        <CardDescription>
+          開啟後,建單/編輯表單會出現「料錢成本」勾選區塊,可以記錄這次服務預期會用掉的材料成本
+          (不是訂單金額計算)。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <label className="flex items-center justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+          <span className="text-sm text-foreground">
+            {isLoading ? "載入中⋯" : enabled ? "已開啟" : "已關閉"}
+          </span>
+          <Switch checked={enabled ?? false} disabled={isLoading} onCheckedChange={handleToggle} />
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
 
 // =========================================================================
 // 新增/編輯表單
@@ -208,6 +258,8 @@ function MaterialCostsPageInner() {
           「{merchant!.name}」自訂的料錢成本品項清單,建單時可選用。這是成本記錄,不是訂單金額計算。
         </p>
       </div>
+
+      <MaterialCostEnabledToggle merchantId={merchantId} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">

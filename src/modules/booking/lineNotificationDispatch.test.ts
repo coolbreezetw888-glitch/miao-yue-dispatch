@@ -25,6 +25,15 @@ vi.mock("@/modules/line-notifications/api", () => ({
   dispatchLineNotification: (...args: unknown[]) => dispatchLineNotificationMock(...args),
 }));
 
+// 模組 15(服務人員推播通知)§7.8/§9:createBooking/cancelBooking/updateBooking 現在也疊加呼叫
+// dispatchPushNotification(見 src/modules/booking/pushNotificationDispatch.test.ts 專門驗證
+// 這個疊加點本身),這裡只需要 mock 掉,避免這個檔案原本測 dispatchLineNotification 疊加的案例
+// 意外因為真正的 dispatchPushNotification 呼叫 supabase.functions.invoke(這個檔案的假
+// supabase client 沒有 .functions)而噴例外。
+vi.mock("@/modules/push-notifications/api", () => ({
+  dispatchPushNotification: vi.fn(),
+}));
+
 async function importBookingApi() {
   return import("./api");
 }

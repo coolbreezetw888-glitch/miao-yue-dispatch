@@ -10,6 +10,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { dispatchLineNotification } from "@/modules/line-notifications/api";
+import { dispatchPushNotification } from "@/modules/push-notifications/api";
 import type {
   AmountAdjustmentMode,
   Booking,
@@ -243,6 +244,13 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     bookingId: booking.id,
     eventType: "booking_created",
   });
+  // 模組 15(服務人員推播通知)§7.8/§9:同樣的成功回呼位置再疊加一行呼叫
+  // dispatchPushNotification,兩個獨立的 fire-and-forget 呼叫互不影響。
+  dispatchPushNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_created",
+  });
   return booking;
 }
 
@@ -267,6 +275,11 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
    * 目前的 member_id(即使不變更),否則後端會把它清空成 null——編輯表單已在開啟時把既有
    * member_id 帶入初始狀態,確保正常編輯流程不會意外清空會員連結(對應判斷 9)。 */
   memberId?: string | null;
+  /** 模組 15(服務人員推播通知)規則 4.5:訂單內容異動的一句話摘要,由呼叫端(編輯表單)在
+   * 送出前算好(比較原始訂單資料 vs 這次要送出的新值),RPC 呼叫成功後當作 change_summary 參數
+   * 傳給 dispatchPushNotification。選填——不帶的話 booking_updated 事件的推播內文就不會替換
+   * {{change_summary}} 變數(維持原樣顯示 {{change_summary}} 字面文字,不影響其他功能)。 */
+  changeSummary?: string | null;
 }
 
 export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
@@ -317,7 +330,17 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     p_member_id: (input.memberId ?? null) as string,
   });
   if (error) throw error;
-  return data as Booking;
+  const booking = data as Booking;
+  // 模組 15(服務人員推播通知)§7.8/§9:update_booking 目前完全沒有涵蓋任何通知疊加(模組 11
+  // 沒有涵蓋這個事件),這次是第一次在這個 RPC 的前端呼叫點疊加通知。不等待、吞掉錯誤,絕不影響
+  // 這裡原本的編輯成功結果。
+  dispatchPushNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_updated",
+    ...(input.changeSummary ? { changeSummary: input.changeSummary } : {}),
+  });
+  return booking;
 }
 
 /** 模組 9(支付方式)v2:單獨更新付款方式,不需要傳服務項目/金額等其餘欄位。 */
@@ -351,6 +374,13 @@ export async function cancelBooking(bookingId: string, reason?: string | null): 
   const booking = data as Booking;
   // 模組 11(LINE 通知)§3.11:同 createBooking,不等待、吞掉錯誤。
   dispatchLineNotification({
+    merchantId: booking.merchant_id,
+    bookingId: booking.id,
+    eventType: "booking_cancelled",
+  });
+  // 模組 15(服務人員推播通知)§7.8/§9:同 createBooking,跟既有的 dispatchLineNotification
+  // 並列,不等待、吞掉錯誤。
+  dispatchPushNotification({
     merchantId: booking.merchant_id,
     bookingId: booking.id,
     eventType: "booking_cancelled",

@@ -69,7 +69,8 @@ function BillingReportPageInner() {
       ) : summary ? (
         <>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <SummaryCard label="總營收(含稅)" value={summary.total_revenue} />
+            <SummaryCard label="總營收(未稅)" value={summary.total_revenue_excl_tax} />
+            <SummaryCard label="稅金小計" value={summary.total_tax_amount} />
             <SummaryCard label="總料錢成本" value={summary.total_material_cost} />
             <SummaryCard label="總抽成支出" value={summary.total_commission_payout} />
             <SummaryCard label="月薪基本額合計" value={summary.total_monthly_salary_base} />
@@ -82,9 +83,10 @@ function BillingReportPageInner() {
 
           <Card>
             <CardHeader>
-              <CardTitle>概估毛利</CardTitle>
+              <CardTitle>商家總淨利</CardTitle>
               <CardDescription>
-                只是概估,不含房租/水電等其他營運成本,不是完整的財務損益表。
+                總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。只是
+                概估,不含房租/水電等其他營運成本,不是完整的財務損益表。
               </CardDescription>
             </CardHeader>
             <CardContent>

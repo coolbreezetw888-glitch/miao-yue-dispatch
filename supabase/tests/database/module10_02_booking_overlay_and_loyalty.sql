@@ -62,9 +62,12 @@ insert into merchant_agents (id, merchant_id, user_id, name, invited_email, stat
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('eb000000-0000-4000-8000-000000000051', 'orders', true);
 
--- 模組 8 抽成設定(用來驗證 3.7/3.8 疊加不互相覆蓋):按件服務人員 P 商家預設 10%。
-insert into merchant_payroll_settings (merchant_id, commission_basis_type, default_commission_rate_percentage)
-values ('eb000000-0000-4000-8000-000000000021', 'gross', 10);
+-- 模組 8 抽成設定(用來驗證 3.7/3.8 疊加不互相覆蓋,商家端三項調整規格書改成服務項目層級抽成
+-- 之後,改成針對「按件服務人員P × 洗髮」這個組合設定 10%)。
+insert into merchant_payroll_settings (merchant_id, commission_basis_type)
+values ('eb000000-0000-4000-8000-000000000021', 'gross');
+insert into staff_service_commission_rates (staff_id, service_item_id, commission_mode, commission_value)
+values ('eb000000-0000-4000-8000-000000000041', 'eb000000-0000-4000-8000-000000000031', 'percentage', 10);
 
 -- 模組 10 會員設定:每消費 100 元得 1 點,推薦獎勵 50 點。
 insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)

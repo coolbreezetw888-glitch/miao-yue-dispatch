@@ -1,12 +1,18 @@
 // 對應模組 8(薪資與帳務)規格書 §4.1:抽成與薪資設定頁(新路由 /app/payroll-settings)。
-// 三個區塊:商家層級設定(抽成基準/商家預設抽成比例/月折算天數)、按件計酬服務人員清單(個人
-// 抽成比例覆寫)、月薪制服務人員清單(月薪/月休天數參考)。每個區塊都附帶前端純函式的即時預覽
-// 計算機(previewCalculators.ts),純粹輔助理解,不影響任何實際計算——真正的計算永遠以資料庫
+// 三個區塊:商家層級設定(抽成基準/月折算天數)、按件計酬服務人員清單(服務項目層級抽成設定)、
+// 月薪制服務人員清單(月薪/月休天數參考)。每個區塊都附帶前端純函式的即時預覽計算機
+// (previewCalculators.ts),純粹輔助理解,不影響任何實際計算——真正的計算永遠以資料庫
 // 函式(compute_booking_commission/get_staff_monthly_payroll_summary)為準。
+//
+// 商家端三項調整規格書 §二 2.8.1/2.8.2:「商家預設抽成比例」欄位已經拿掉,按件計酬服務人員的
+// 抽成改成逐一服務項目分開設定(StaffServiceCommissionDialog),取代原本單一比例的
+// StaffCommissionRateDialog。可接服務開關直接複用模組 3 既有的 addStaffServiceItem/
+// removeStaffServiceItem/fetchStaffServiceItemIds(src/modules/staff-agent/api.ts,決策4——
+// 複用既有介面,不重新發明)。
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -23,27 +29,47 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import { addStaffServiceItem, fetchStaffServiceItemIds, removeStaffServiceItem } from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
+import { useMerchantServiceItems } from "@/modules/service-items/context";
+import type { ServiceItem } from "@/modules/service-items/types";
 
 import {
-  removeStaffCommissionRate,
+  batchApplyStaffServiceCommissionRates,
   upsertMerchantPayrollSettings,
-  upsertStaffCommissionRate,
   upsertStaffSalarySettings,
+  upsertStaffServiceCommissionRate,
   useMerchantPayrollSettings,
-  useStaffCommissionRate,
   useStaffSalarySettings,
+  useStaffServiceCommissionRates,
 } from "./api";
-import { previewCommissionAmount, calculateDayRate } from "./previewCalculators";
-import { COMMISSION_BASIS_TYPE_LABELS, type CommissionBasisType } from "./types";
+import { previewServiceCommission, calculateDayRate } from "./previewCalculators";
+import {
+  COMMISSION_BASIS_TYPE_LABELS,
+  COMMISSION_MODE_LABELS,
+  type CommissionBasisType,
+  type CommissionMode,
+  type StaffServiceCommissionRate,
+} from "./types";
 import { RequireCommissionSettingsAccess } from "./RequireCommissionSettingsAccess";
 
 const payrollSettingsQueryKey = (merchantId: string) =>
   ["payroll-module", "merchant-payroll-settings", merchantId] as const;
+
+const staffServiceItemIdsQueryKey = (staffId: string) =>
+  ["payroll-module", "staff-service-item-ids", staffId] as const;
 
 // =========================================================================
 // 區塊一:商家層級設定。
@@ -53,25 +79,18 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
   const { data: settings, isLoading } = useMerchantPayrollSettings(merchantId);
 
   const [basisType, setBasisType] = useState<CommissionBasisType>("gross");
-  const [defaultRate, setDefaultRate] = useState("0");
   const [payDays, setPayDays] = useState("30");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
     setBasisType(settings.commission_basis_type as CommissionBasisType);
-    setDefaultRate(String(settings.default_commission_rate_percentage));
     setPayDays(String(settings.pay_days_per_month));
   }, [settings]);
 
-  const numericRate = Number(defaultRate);
   const numericPayDays = Number(payDays);
 
   async function handleSave() {
-    if (Number.isNaN(numericRate) || numericRate < 0 || numericRate > 100) {
-      toast.error("商家預設抽成比例必須介於 0~100 之間");
-      return;
-    }
     if (!Number.isInteger(numericPayDays) || numericPayDays < 1 || numericPayDays > 31) {
       toast.error("月折算天數必須介於 1~31 之間的整數");
       return;
@@ -80,7 +99,6 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
     try {
       await upsertMerchantPayrollSettings(merchantId, {
         commissionBasisType: basisType,
-        defaultCommissionRatePercentage: numericRate,
         payDaysPerMonth: numericPayDays,
       });
       await queryClient.invalidateQueries({ queryKey: payrollSettingsQueryKey(merchantId) });
@@ -97,7 +115,8 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>商家層級設定</CardTitle>
         <CardDescription>
-          這裡的設定是所有按件計酬服務人員的預設值,沒有個人覆寫時套用這裡的數字。
+          抽成計算基準,套用到所有按件計酬服務人員;每個人實際抽成多少,到下方「按件計酬服務人員」
+          逐一設定。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -139,24 +158,6 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
             </div>
 
             <div>
-              <Label htmlFor="default-rate">商家預設抽成比例(%)</Label>
-              <Input
-                id="default-rate"
-                className="mt-2 w-32"
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={defaultRate}
-                onChange={(e) => setDefaultRate(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                沒有個人覆寫比例的按件計酬服務人員,套用這個比例。目前是 0%,代表還沒設定——請填入
-                實際比例,系統不會自動幫你套用任何數字。
-              </p>
-            </div>
-
-            <div>
               <Label htmlFor="pay-days">月折算天數</Label>
               <Input
                 id="pay-days"
@@ -174,14 +175,6 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
               </p>
             </div>
 
-            {!Number.isNaN(numericRate) ? (
-              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                範例試算:一筆服務金額 1000 元的訂單,套用商家預設比例 {numericRate}%,服務人員可以
-                拿到 <strong>{previewCommissionAmount(1000, numericRate)}</strong> 元抽成(僅供參考,
-                實際金額以訂單完成時系統計算為準)。
-              </p>
-            ) : null}
-
             <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
               {saving ? "儲存中⋯" : "儲存"}
             </Button>
@@ -193,152 +186,330 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
 }
 
 // =========================================================================
-// 區塊二:按件計酬服務人員清單(個人抽成比例覆寫)。
+// 區塊二:按件計酬服務人員清單(服務項目層級抽成設定)。
 // =========================================================================
-function StaffCommissionRateDialog({
-  staff,
-  merchantDefaultRate,
-  trigger,
-  onSaved,
+
+/** 單一服務項目那一列:開關(可接服務)+ 開關=開時顯示模式下拉選單/數值輸入框(決策6:
+ * 開關=關時直接不渲染這兩個欄位,不是顯示但 disable)。 */
+function ServiceCommissionRow({
+  staffId,
+  item,
+  checked,
+  rate,
+  onToggle,
+  onRateChanged,
 }: {
-  staff: MerchantStaff;
-  merchantDefaultRate: number;
-  trigger: React.ReactNode;
-  onSaved: () => void;
+  staffId: string;
+  item: ServiceItem;
+  checked: boolean;
+  rate: StaffServiceCommissionRate | null | undefined;
+  onToggle: (checked: boolean) => void;
+  onRateChanged: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const { data: info, isLoading } = useStaffCommissionRate(open ? staff.id : null);
-  const [useOverride, setUseOverride] = useState(false);
-  const [rate, setRate] = useState("0");
+  const [mode, setMode] = useState<CommissionMode>(
+    (rate?.commission_mode as CommissionMode) ?? "percentage",
+  );
+  const [value, setValue] = useState(rate ? String(rate.commission_value) : "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
-    if (info?.hasOverride && info.ratePercentage !== null) {
-      setUseOverride(true);
-      setRate(String(info.ratePercentage));
-    } else {
-      setUseOverride(false);
-      setRate(String(merchantDefaultRate));
-    }
-  }, [open, info, merchantDefaultRate]);
+    setMode((rate?.commission_mode as CommissionMode) ?? "percentage");
+    setValue(rate ? String(rate.commission_value) : "");
+  }, [rate]);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  const hasRate = Boolean(rate);
+  const numericValue = Number(value);
+  const previewAmount = previewServiceCommission(
+    Number(item.price),
+    mode,
+    Number.isFinite(numericValue) ? numericValue : 0,
+    1,
+  );
+
+  async function persist(nextMode: CommissionMode, nextValueRaw: string) {
+    if (nextValueRaw.trim() === "") return; // 空白視為還在輸入,onBlur 空白時不強制寫入 0
+    const numeric = Number(nextValueRaw);
+    if (Number.isNaN(numeric) || numeric < 0) {
+      toast.error("抽成數值必須是不小於 0 的數字");
+      return;
+    }
+    if (nextMode === "percentage" && numeric > 100) {
+      toast.error("百分比模式下,數字必須介於 0~100 之間");
+      return;
+    }
     setSaving(true);
     try {
-      if (useOverride) {
-        const numericRate = Number(rate);
-        if (Number.isNaN(numericRate) || numericRate < 0 || numericRate > 100) {
-          toast.error("抽成比例必須介於 0~100 之間");
-          setSaving(false);
-          return;
-        }
-        await upsertStaffCommissionRate(staff.id, numericRate);
-      } else {
-        await removeStaffCommissionRate(staff.id);
-      }
-      toast.success("已更新抽成比例設定");
-      setOpen(false);
-      onSaved();
+      await upsertStaffServiceCommissionRate(staffId, item.id, {
+        commissionMode: nextMode,
+        commissionValue: numeric,
+      });
+      onRateChanged();
     } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
+      toast.error("更新抽成設定失敗", { description: getErrorMessage(err) });
     } finally {
       setSaving(false);
     }
   }
 
-  const previewRate = useOverride ? Number(rate) : merchantDefaultRate;
+  return (
+    <li className="space-y-2 rounded-md border border-border px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
+          <p className="text-xs text-muted-foreground">原價 {Number(item.price)} 元</p>
+        </div>
+        <Switch checked={checked} onCheckedChange={onToggle} />
+      </div>
+
+      {checked ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={mode}
+            disabled={saving}
+            onValueChange={(v) => {
+              const nextMode = v as CommissionMode;
+              setMode(nextMode);
+              void persist(nextMode, value);
+            }}
+          >
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="percentage">{COMMISSION_MODE_LABELS.percentage}</SelectItem>
+              <SelectItem value="fixed_amount">{COMMISSION_MODE_LABELS.fixed_amount}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            min={0}
+            max={mode === "percentage" ? 100 : undefined}
+            step="0.01"
+            className="w-28"
+            disabled={saving}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => void persist(mode, value)}
+          />
+          <span className="text-xs text-muted-foreground">
+            {mode === "percentage" ? "%" : "元/件"}
+          </span>
+          {!hasRate ? (
+            <span className="text-xs text-warn">尚未設定,目前抽成 0 元</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              試算:1 件約 {previewAmount} 元
+            </span>
+          )}
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function StaffServiceCommissionDialog({
+  merchantId,
+  staff,
+  trigger,
+  onSaved,
+}: {
+  merchantId: string;
+  staff: MerchantStaff;
+  trigger: React.ReactNode;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const serviceItemIdsKey = staffServiceItemIdsQueryKey(staff.id);
+  const { data: serviceItemIds } = useQuery({
+    queryKey: serviceItemIdsKey,
+    queryFn: () => fetchStaffServiceItemIds(staff.id),
+    enabled: open,
+  });
+
+  // 決策4/§2.8.2:逐一列出這間商家所有 status='active' 的服務項目(對外介面
+  // useMerchantServiceItems),不是只列這位服務人員已經接的項目——商家可能想直接在這裡新增
+  // 這位服務人員可以接的項目。
+  const { data: activeServiceItems, isLoading: itemsLoading } = useMerchantServiceItems(
+    open ? merchantId : null,
+  );
+  const { data: ratesMap } = useStaffServiceCommissionRates(open ? staff.id : null);
+
+  const [batchMode, setBatchMode] = useState<CommissionMode>("percentage");
+  const [batchValue, setBatchValue] = useState("0");
+  const [batchApplying, setBatchApplying] = useState(false);
+
+  const selectedIds = useMemo(() => new Set(serviceItemIds ?? []), [serviceItemIds]);
+
+  async function refetchAll() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: serviceItemIdsKey }),
+      queryClient.invalidateQueries({
+        queryKey: ["payroll-module", "staff-service-commission-rates", staff.id],
+      }),
+    ]);
+    onSaved();
+  }
+
+  async function handleToggleServiceItem(serviceItemId: string, checked: boolean) {
+    try {
+      if (checked) {
+        await addStaffServiceItem(staff.id, serviceItemId);
+      } else {
+        await removeStaffServiceItem(staff.id, serviceItemId);
+      }
+      await refetchAll();
+    } catch (err) {
+      toast.error("更新可接服務失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  async function handleBatchApply() {
+    const numericValue = Number(batchValue);
+    if (Number.isNaN(numericValue) || numericValue < 0) {
+      toast.error("請輸入不小於 0 的數字");
+      return;
+    }
+    if (batchMode === "percentage" && numericValue > 100) {
+      toast.error("百分比模式下,數字必須介於 0~100 之間");
+      return;
+    }
+    const targetIds = Array.from(selectedIds);
+    if (targetIds.length === 0) {
+      toast.error("這位服務人員目前沒有任何可接服務項目,請先開啟下方的可接服務開關");
+      return;
+    }
+    setBatchApplying(true);
+    try {
+      await batchApplyStaffServiceCommissionRates(staff.id, targetIds, batchMode, numericValue);
+      await refetchAll();
+      toast.success("已批量套用抽成設定");
+    } catch (err) {
+      toast.error("批量套用失敗", { description: getErrorMessage(err) });
+    } finally {
+      setBatchApplying(false);
+    }
+  }
+
+  const numericBatchValue = Number(batchValue);
+  const batchPreviewAmount = previewServiceCommission(
+    1000,
+    batchMode,
+    Number.isFinite(numericBatchValue) ? numericBatchValue : 0,
+    1,
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{staff.name} 的抽成比例</DialogTitle>
+          <DialogTitle>{staff.name} 的抽成設定</DialogTitle>
           <DialogDescription>
-            可以個別覆寫這位服務人員的抽成比例,不覆寫則套用商家預設比例({merchantDefaultRate}%)。
+            逐一設定「可接服務」開關與每個服務項目的抽成,或先用下方批量套用一個統一的比例/金額,
+            再個別調整成不同的比例或金額。
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-5">
+          <div className="space-y-3 rounded-md border border-border p-4">
+            <p className="text-sm font-medium text-foreground">整體抽成(批量套用)</p>
             <RadioGroup
-              value={useOverride ? "override" : "default"}
-              onValueChange={(v) => setUseOverride(v === "override")}
-              className="space-y-2"
+              className="flex flex-wrap gap-4"
+              value={batchMode}
+              onValueChange={(v) => setBatchMode(v as CommissionMode)}
             >
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="default" id="commission-mode-default" />
-                <Label htmlFor="commission-mode-default" className="font-normal">
-                  套用商家預設比例({merchantDefaultRate}%)
+                <RadioGroupItem value="percentage" id="batch-mode-percentage" />
+                <Label htmlFor="batch-mode-percentage" className="font-normal">
+                  {COMMISSION_MODE_LABELS.percentage}
                 </Label>
               </div>
               <div className="flex items-center gap-2">
-                <RadioGroupItem value="override" id="commission-mode-override" />
-                <Label htmlFor="commission-mode-override" className="font-normal">
-                  個別設定比例
+                <RadioGroupItem value="fixed_amount" id="batch-mode-fixed" />
+                <Label htmlFor="batch-mode-fixed" className="font-normal">
+                  {COMMISSION_MODE_LABELS.fixed_amount}
                 </Label>
               </div>
             </RadioGroup>
-
-            {useOverride ? (
-              <div>
-                <Label htmlFor="staff-rate">個人抽成比例(%)</Label>
-                <Input
-                  id="staff-rate"
-                  className="mt-2 w-32"
-                  type="number"
-                  min={0}
-                  max={100}
-                  step="0.01"
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                />
-              </div>
-            ) : null}
-
-            {!Number.isNaN(previewRate) ? (
-              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                範例試算:一筆服務金額 1000 元的訂單,{staff.name} 可以拿到{" "}
-                <strong>{previewCommissionAmount(1000, previewRate)}</strong> 元抽成。
-              </p>
-            ) : null}
-
-            <DialogFooter>
-              <Button type="submit" disabled={saving}>
-                {saving ? "儲存中⋯" : "儲存"}
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="number"
+                min={0}
+                max={batchMode === "percentage" ? 100 : undefined}
+                step="0.01"
+                className="w-32"
+                value={batchValue}
+                onChange={(e) => setBatchValue(e.target.value)}
+              />
+              <span className="text-sm text-muted-foreground">
+                {batchMode === "percentage" ? "%" : "元/件"}
+              </span>
+              <Button type="button" size="sm" disabled={batchApplying} onClick={handleBatchApply}>
+                {batchApplying ? "套用中⋯" : "批量套用"}
               </Button>
-            </DialogFooter>
-          </form>
-        )}
+            </div>
+            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              範例:一筆原價 1000 元、1 件的服務,套用這個設定可以拿到{" "}
+              <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考;只會套用到目前開關=開的
+              項目,關掉的項目不受影響)。
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">可接服務 & 抽成設定</p>
+            {itemsLoading ? (
+              <p className="text-sm text-muted-foreground">載入中⋯</p>
+            ) : !activeServiceItems || activeServiceItems.length === 0 ? (
+              <p className="text-sm text-muted-foreground">這間商家目前沒有上架中的服務項目。</p>
+            ) : (
+              <ul className="space-y-2">
+                {activeServiceItems.map((item) => (
+                  <ServiceCommissionRow
+                    key={item.id}
+                    staffId={staff.id}
+                    item={item}
+                    checked={selectedIds.has(item.id)}
+                    rate={ratesMap?.get(item.id)}
+                    onToggle={(checked) => handleToggleServiceItem(item.id, checked)}
+                    onRateChanged={refetchAll}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" size="sm" onClick={() => setOpen(false)}>
+            完成
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-function PieceRateStaffSection({
-  merchantId,
-  merchantDefaultRate,
-}: {
-  merchantId: string;
-  merchantDefaultRate: number;
-}) {
+function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
   const { data: staffList, isLoading } = useMerchantStaffList(merchantId);
   const pieceRateStaff = (staffList ?? []).filter((s) => s.compensation_type === "piece_rate");
 
   function refetch() {
-    return queryClient.invalidateQueries({ queryKey: ["payroll-module", "staff-commission-rate"] });
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["payroll-module", "staff-service-item-ids"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["payroll-module", "staff-service-commission-rates"],
+      }),
+    ]);
   }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>按件計酬服務人員</CardTitle>
-        <CardDescription>逐位設定個人抽成比例,沒有設定的人套用商家預設比例</CardDescription>
+        <CardDescription>逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -350,8 +521,8 @@ function PieceRateStaffSection({
             {pieceRateStaff.map((staff) => (
               <StaffCommissionRateRow
                 key={staff.id}
+                merchantId={merchantId}
                 staff={staff}
-                merchantDefaultRate={merchantDefaultRate}
                 onSaved={refetch}
               />
             ))}
@@ -363,30 +534,37 @@ function PieceRateStaffSection({
 }
 
 function StaffCommissionRateRow({
+  merchantId,
   staff,
-  merchantDefaultRate,
   onSaved,
 }: {
+  merchantId: string;
   staff: MerchantStaff;
-  merchantDefaultRate: number;
   onSaved: () => void;
 }) {
-  const { data: info } = useStaffCommissionRate(staff.id);
-  const displayRate = info?.hasOverride ? info.ratePercentage : merchantDefaultRate;
+  const { data: serviceItemIds } = useQuery({
+    queryKey: staffServiceItemIdsQueryKey(staff.id),
+    queryFn: () => fetchStaffServiceItemIds(staff.id),
+  });
+  const { data: ratesMap } = useStaffServiceCommissionRates(staff.id);
+
+  const total = serviceItemIds?.length ?? 0;
+  const configured = (serviceItemIds ?? []).filter((id) => ratesMap?.has(id)).length;
+  const unconfigured = total - configured;
 
   return (
     <li className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium text-foreground">{staff.name}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          {info?.hasOverride
-            ? `個人設定 ${displayRate}%`
-            : `套用商家預設 ${merchantDefaultRate}%`}
+          {total === 0
+            ? "尚未設定任何可接服務項目"
+            : `已設定 ${configured} 項服務的抽成,${unconfigured} 項尚未設定`}
         </p>
       </div>
-      <StaffCommissionRateDialog
+      <StaffServiceCommissionDialog
+        merchantId={merchantId}
         staff={staff}
-        merchantDefaultRate={merchantDefaultRate}
         trigger={
           <Button variant="outline" size="sm">
             編輯
@@ -609,9 +787,6 @@ function PayrollSettingsPageInner() {
   const merchantId = merchant!.id;
   const { data: settings } = useMerchantPayrollSettings(merchantId);
 
-  const merchantDefaultRate = settings
-    ? Number(settings.default_commission_rate_percentage)
-    : 0;
   const payDaysPerMonth = settings ? Number(settings.pay_days_per_month) : 30;
 
   return (
@@ -624,12 +799,13 @@ function PayrollSettingsPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">抽成與薪資設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的抽成計算基準、按件計酬服務人員個人比例、月薪制服務人員薪資設定。
+          「{merchant!.name}」的抽成計算基準、按件計酬服務人員的服務項目抽成、月薪制服務人員薪資
+          設定。
         </p>
       </div>
 
       <MerchantPayrollSettingsCard merchantId={merchantId} />
-      <PieceRateStaffSection merchantId={merchantId} merchantDefaultRate={merchantDefaultRate} />
+      <PieceRateStaffSection merchantId={merchantId} />
       <MonthlySalaryStaffSection merchantId={merchantId} payDaysPerMonth={payDaysPerMonth} />
     </main>
   );

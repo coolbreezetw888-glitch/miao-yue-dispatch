@@ -25,6 +25,7 @@ import { fetchMerchantBookings } from "@/modules/booking/api";
 import { fetchMerchantMembersList } from "@/modules/members/api";
 import { fetchStaffLeaveRecords, fetchMerchantLeaveTypesAll } from "@/modules/scheduling/api";
 import { fetchStaffCommissionSummary } from "@/modules/payroll/api";
+import { formatStaffCommissionItemBreakdown } from "@/modules/payroll/types";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { RequireReportExportAccess } from "./RequireReportExportAccess";
@@ -119,7 +120,7 @@ function ReportExportCenterPageInner() {
       const targets = (staffList ?? []).filter(
         (s) => commissionStaffId === "__all__" || s.id === commissionStaffId,
       );
-      const allRows: Array<[string, string, string, string, number, number, number]> = [];
+      const allRows: Array<[string, string, string, string, number, string, number]> = [];
       for (const staff of targets) {
         try {
           const summary = await fetchStaffCommissionSummary(
@@ -134,7 +135,7 @@ function ReportExportCenterPageInner() {
               d.order_date,
               d.customer_name,
               d.commission_base_amount,
-              d.commission_rate_percentage,
+              formatStaffCommissionItemBreakdown(d),
               d.commission_amount,
             ]);
           }
@@ -144,7 +145,7 @@ function ReportExportCenterPageInner() {
         }
       }
       const csv = buildCsvContent(
-        ["服務人員", "訂單編號", "訂單日期", "客戶姓名", "抽成基準金額", "抽成比例(%)", "抽成金額"],
+        ["服務人員", "訂單編號", "訂單日期", "客戶姓名", "抽成基準金額", "服務項目明細", "抽成金額"],
         allRows,
       );
       downloadCsv(
