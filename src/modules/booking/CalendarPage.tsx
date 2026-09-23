@@ -1203,13 +1203,20 @@ export function BookingFormDialog({
 // 想要左右滑動瀏覽不同服務人員時,手指一碰到格子就會被 Radix 判定成「按下」而立刻彈出選單,
 // 打斷原生的橫向捲動手勢,體驗上就是「滑動誤觸建單/開關時段」。
 //
-// 修法:把 DropdownMenu 改成受控元件(open/onOpenChange 自己管),觸控時(pointerType==="touch")
-// 攔下 Radix 這次自動開啟的請求,改成自己用 pointerdown/pointermove/pointerup 量測這次觸控的
-// 移動距離——超過閾值視為「拖曳滑動」,不開啟選單(交給瀏覽器原生橫向捲動繼續跑,這裡完全不對
-// pointermove/touchmove 呼叫 preventDefault,不會擋到原生捲動);沒有超過閾值、手指放開時才是
-// 真正的「點擊」,這時候才真的呼叫 setOpen(true) 開啟選單。滑鼠/觸控筆(pointerType !== "touch")
-// 完全不受影響,維持原本「按下就開啟」的桌面行為,不影響既有 Playwright 測試(桌面 Chromium,
-// 用滑鼠事件模擬點擊,見 playwright.config.ts 只有一個 desktop chromium project)。
+// 修法:把 DropdownMenu 改成受控元件(open/onOpenChange 自己管),攔下 Radix 這次自動開啟的
+// 請求,改成自己用 pointerdown/pointermove/pointerup 量測這次的移動距離——超過閾值視為「拖曳
+// 滑動」,不開啟選單(交給瀏覽器原生橫向捲動繼續跑,這裡完全不對 pointermove/touchmove 呼叫
+// preventDefault,不會擋到原生捲動);沒有超過閾值、放開時才是真正的「點擊」,這時候才真的
+// 呼叫 setOpen(true) 開啟選單。
+//
+// 2026-09-24 使用者回報後擴大適用範圍:原本這套判斷只在 pointerType==="touch" 時生效,滑鼠
+// 維持 Radix 原本「按下就開啟」的行為。實際使用後使用者明確要求滑鼠也要一致——「要放掉左鍵
+// 才出現,按住則可左右橫移」,所以現在**不分指標裝置**(滑鼠/觸控/觸控筆)一律套用同一套
+// 判斷。附帶效果:桌面用滑鼠按住格子左右拖曳時不會再彈出選單,可以直接拖曳瀏覽時間軸。
+//
+// 邊界情況(拖曳到格子外面才放開):該格子收不到 pointerup,選單不會開啟——這正是想要的行為;
+// 而且下一次重新按下時 onPointerDown 會重設狀態、放開時 onPointerUp 會直接 setOpen(true),
+// 不會被上一次殘留的攔截旗標卡住(見 onPointerUp 的實作)。
 const SLOT_TAP_VS_DRAG_THRESHOLD_PX = 10;
 
 /** 這裡指的「指標事件」只取用 pointerType/clientX/clientY 三個欄位,故意不寫成
@@ -1238,15 +1245,16 @@ export function useTapVsDragOpenState(thresholdPx: number = SLOT_TAP_VS_DRAG_THR
     setOpen(next);
   }
 
+  // 2026-09-24 起不分指標裝置一律套用(見上方 DaySlotCell 區塊註解的說明),所以這三支
+  // handler 不再有 pointerType 的提前 return。
   function onPointerDown(e: MinimalPointerEvent) {
-    if (e.pointerType !== "touch") return;
     suppressAutoOpenRef.current = true;
     draggedRef.current = false;
     touchStartRef.current = { x: e.clientX, y: e.clientY };
   }
 
   function onPointerMove(e: MinimalPointerEvent) {
-    if (e.pointerType !== "touch" || !touchStartRef.current) return;
+    if (!touchStartRef.current) return;
     const dx = Math.abs(e.clientX - touchStartRef.current.x);
     const dy = Math.abs(e.clientY - touchStartRef.current.y);
     if (dx > thresholdPx || dy > thresholdPx) {
@@ -1254,8 +1262,7 @@ export function useTapVsDragOpenState(thresholdPx: number = SLOT_TAP_VS_DRAG_THR
     }
   }
 
-  function onPointerUp(e: MinimalPointerEvent) {
-    if (e.pointerType !== "touch") return;
+  function onPointerUp() {
     const wasTap = touchStartRef.current !== null && !draggedRef.current;
     touchStartRef.current = null;
     suppressAutoOpenRef.current = false;

@@ -6,9 +6,9 @@
 //   1. 觸控「點擊」(pointerdown 後幾乎沒有移動就 pointerup)→ 開啟選單。
 //   2. 觸控「拖曳滑動」(pointerdown 後移動距離超過閾值)→ 不開啟選單,讓原生橫向捲動接手。
 //   3. 瀏覽器把這次觸控判定成原生捲動而發 pointercancel(不會再有 pointerup)→ 不開啟選單。
-//   4. 滑鼠(pointerType "mouse")完全不受這套攔截邏輯影響,維持原本「按下就開啟」的桌面行為
-//      (這裡的 hook 對滑鼠事件是no-op,不覆寫,實際开啟邏輯留給 Radix 內建行為,所以這裡驗證的
-//      是「hook 不會把滑鼠事件誤判成需要攔截」)。
+//   4. 2026-09-24 使用者回報後擴大適用範圍:滑鼠(pointerType "mouse")現在跟觸控**行為一致**
+//      ——按下不開啟、放開才開啟;按住拖曳超過閾值則完全不開啟(可以直接拖曳瀏覽時間軸)。
+//      原本「滑鼠維持 Radix 按下就開啟」的設計已被使用者明確推翻。
 
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,7 @@ describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
       result.current.onPointerMove({ pointerType: "touch", clientX: 102, clientY: 101 });
     });
     act(() => {
-      result.current.onPointerUp({ pointerType: "touch", clientX: 102, clientY: 101 });
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(true);
@@ -46,7 +46,7 @@ describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
       result.current.onPointerMove({ pointerType: "touch", clientX: 140, clientY: 101 });
     });
     act(() => {
-      result.current.onPointerUp({ pointerType: "touch", clientX: 140, clientY: 101 });
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(false);
@@ -62,7 +62,7 @@ describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
       result.current.onPointerMove({ pointerType: "touch", clientX: 101, clientY: 140 });
     });
     act(() => {
-      result.current.onPointerUp({ pointerType: "touch", clientX: 101, clientY: 140 });
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(false);
@@ -85,7 +85,7 @@ describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
       result.current.onPointerDown({ pointerType: "touch", clientX: 200, clientY: 200 });
     });
     act(() => {
-      result.current.onPointerUp({ pointerType: "touch", clientX: 200, clientY: 200 });
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(true);
@@ -102,23 +102,67 @@ describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
       result.current.onPointerMove({ pointerType: "touch", clientX: 20, clientY: 0 });
     });
     act(() => {
-      result.current.onPointerUp({ pointerType: "touch", clientX: 20, clientY: 0 });
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(true);
   });
 
-  it("滑鼠事件(pointerType !== touch)完全不觸發攔截邏輯——onOpenChange 直接放行,維持 Radix 原本桌面行為", () => {
+  it("滑鼠點擊:按下當下不開啟(攔下 Radix 的自動開啟),放開左鍵才開啟", () => {
     const { result } = renderHook(() => useTapVsDragOpenState());
 
-    // 滑鼠按下:hook 對非 touch 事件是 no-op,不會設定攔截旗標。
     act(() => {
       result.current.onPointerDown({ pointerType: "mouse", clientX: 100, clientY: 100 });
     });
-    // Radix 桌面版行為是 pointerdown 當下呼叫 onOpenChange(true)——因為上面沒有設定攔截旗標,
-    // 這裡應該直接放行開啟,不會被誤攔下來。
+    // Radix 桌面版行為是 pointerdown 當下就呼叫 onOpenChange(true),這裡要被攔下來。
     act(() => {
       result.current.onOpenChange(true);
+    });
+    expect(result.current.open).toBe(false);
+
+    act(() => {
+      result.current.onPointerUp();
+    });
+    expect(result.current.open).toBe(true);
+  });
+
+  it("滑鼠按住拖曳超過閾值(左右橫移瀏覽時間軸)—— 放開時不開啟選單", () => {
+    const { result } = renderHook(() => useTapVsDragOpenState());
+
+    act(() => {
+      result.current.onPointerDown({ pointerType: "mouse", clientX: 100, clientY: 100 });
+    });
+    act(() => {
+      result.current.onOpenChange(true);
+    });
+    act(() => {
+      result.current.onPointerMove({ pointerType: "mouse", clientX: 160, clientY: 103 });
+    });
+    act(() => {
+      result.current.onPointerUp();
+    });
+
+    expect(result.current.open).toBe(false);
+  });
+
+  it("拖曳到格子外面才放開(該格子收不到 pointerup)—— 選單不開啟,而且下一次點擊不會被殘留旗標卡住", () => {
+    const { result } = renderHook(() => useTapVsDragOpenState());
+
+    act(() => {
+      result.current.onPointerDown({ pointerType: "mouse", clientX: 100, clientY: 100 });
+    });
+    act(() => {
+      result.current.onPointerMove({ pointerType: "mouse", clientX: 300, clientY: 100 });
+    });
+    // 這裡刻意不呼叫 onPointerUp,模擬「放開時滑鼠已經離開這個格子」。
+    expect(result.current.open).toBe(false);
+
+    // 下一次完整的點擊仍然要正常開啟。
+    act(() => {
+      result.current.onPointerDown({ pointerType: "mouse", clientX: 100, clientY: 100 });
+    });
+    act(() => {
+      result.current.onPointerUp();
     });
 
     expect(result.current.open).toBe(true);
