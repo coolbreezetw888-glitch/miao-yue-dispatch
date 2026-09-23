@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import {
@@ -71,6 +72,10 @@ import { MerchantAdminList } from "./MerchantAdminList";
 import { ThemePresetPicker } from "./ThemePresetPicker";
 import { INDUSTRY_TYPES, INDUSTRY_TYPE_LABELS } from "./types";
 import type { IndustryType } from "./types";
+
+/** 「基本資料/主題色系/公告」那一份主表單的 id——頁面底部固定提示列裡的儲存按鈕用 form 屬性
+ * 指向它,兩顆按鈕送出的是同一份表單。 */
+const MERCHANT_SETTINGS_FORM_ID = "merchant-settings-form";
 
 function MerchantSettingsPageInner() {
   const { merchant, isLoading } = useCurrentMerchant();
@@ -119,6 +124,23 @@ function MerchantSettingsPageInner() {
     );
   }
 
+  // 使用者回報(2026-09-24):「儲存變更」按鈕在頁面最下方(要捲過地址/電話/主題色/公告/管理員
+  // 名單才看得到),而上方的「產業模組」下拉選單改完之後沒有任何提示,使用者以為選了就生效,
+  // 結果根本沒存到。這裡比對表單目前的值跟資料庫存的值,只要有任何一項不一樣就顯示一條固定在
+  // 畫面底部的提示列(見下方 render),讓「你還沒儲存」這件事不可能被忽略。
+  // LOGO 不列入比對——它在上傳成功的當下就已經自己存檔了(見 handleLogoUpload),不走這個表單。
+  const hasUnsavedChanges =
+    name !== merchant.name ||
+    industryType !== merchant.industry_type ||
+    address !== (merchant.address ?? "") ||
+    phone !== (merchant.phone ?? "") ||
+    contactEmail !== (merchant.contact_email ?? "") ||
+    intro !== (merchant.intro ?? "") ||
+    themePreset !== merchant.theme_preset ||
+    themeCustomColor !== merchant.theme_custom_color ||
+    announcementEnabled !== merchant.announcement_enabled ||
+    announcementContent !== (merchant.announcement_content ?? "");
+
   async function handleLogoUpload(file: File) {
     const url = await uploadMerchantLogo(merchant!.id, file);
     await updateMerchantSettings(merchant!.id, { logoUrl: url });
@@ -151,7 +173,8 @@ function MerchantSettingsPageInner() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
+    // 有未儲存提示列時多留一段底部空間,避免最後一張卡片被那條固定提示列蓋住。
+    <main className={cn("mx-auto max-w-3xl space-y-6 px-5 py-12", hasUnsavedChanges && "pb-32")}>
       <div>
         <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
           ← 返回功能
@@ -164,7 +187,9 @@ function MerchantSettingsPageInner() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {/* 下方固定提示列的「儲存變更」按鈕靠這個 id 送出同一份表單(HTML 原生的 form 屬性),
+          不用把按鈕真的塞進表單裡面,也就不會影響既有版面。 */}
+      <form id={MERCHANT_SETTINGS_FORM_ID} onSubmit={handleSubmit} className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>基本資料</CardTitle>
@@ -325,8 +350,14 @@ function MerchantSettingsPageInner() {
           </CardContent>
         </Card>
 
-        <Button type="submit" variant="cta" size="lg" className="w-full" disabled={saving}>
-          {saving ? "儲存中⋯" : "儲存變更"}
+        <Button
+          type="submit"
+          variant="cta"
+          size="lg"
+          className="w-full"
+          disabled={saving || !hasUnsavedChanges}
+        >
+          {saving ? "儲存中⋯" : hasUnsavedChanges ? "儲存變更" : "沒有需要儲存的變更"}
         </Button>
       </form>
 
@@ -353,6 +384,26 @@ function MerchantSettingsPageInner() {
           <Link to="/app/new-merchant">新增分店</Link>
         </Button>
       </div>
+
+      {/* 使用者回報(2026-09-24):原本唯一的「儲存變更」按鈕在頁面最下方,使用者在上方改完
+          「產業模組」之後,沒有任何提示告訴他還沒儲存,結果以為選了就生效。這條提示列只在真的
+          有未儲存變更時才出現,固定在畫面底部(疊在底部分頁籤上方,bottom-16 讓開分頁籤的高度),
+          不管捲到哪裡都看得到,而且直接附一顆儲存按鈕,不用再捲回去找。 */}
+      {hasUnsavedChanges ? (
+        <div className="fixed inset-x-0 bottom-16 z-40 border-y border-border bg-background shadow-[0_-4px_12px_rgba(0,0,0,0.1)]">
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
+            <p className="text-sm font-medium text-foreground">尚未儲存變更</p>
+            <Button
+              type="submit"
+              form={MERCHANT_SETTINGS_FORM_ID}
+              variant="cta"
+              disabled={saving}
+            >
+              {saving ? "儲存中⋯" : "儲存變更"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
