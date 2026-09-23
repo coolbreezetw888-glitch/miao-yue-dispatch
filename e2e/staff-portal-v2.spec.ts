@@ -139,6 +139,9 @@ test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整
   await injectAdminSession(adminPage, fixture);
   await adminPage.goto("/app");
   await adminPage.goto(`/app/calendar?date=${fixture.wholeDayOffDateKey}`);
+  // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡要測的是週檢視底下的服務人員時間軸,
+  // 先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
+  await adminPage.getByRole("button", { name: "週檢視" }).click();
   await expect(adminPage.getByText(fixture.staffName, { exact: false })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
@@ -200,6 +203,9 @@ test("10.3.3:時段排休依營業時間顯示,商家管理員視角看到一致
   await injectAdminSession(adminPage, fixture);
   await adminPage.goto("/app");
   await adminPage.goto(`/app/calendar?date=${fixture.slotOffDateKey}`);
+  // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡要測的是週檢視底下的服務人員時間軸,
+  // 先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
+  await adminPage.getByRole("button", { name: "週檢視" }).click();
   const staffColumn = adminPage.getByTestId(`staff-column-${fixture.staffId}`);
   await expect(staffColumn).toBeVisible({ timeout: LOAD_TIMEOUT });
 

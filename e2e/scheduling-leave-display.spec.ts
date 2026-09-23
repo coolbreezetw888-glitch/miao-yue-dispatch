@@ -99,6 +99,9 @@ test("行事曆(§4.5):請假當天整欄灰底不可建單,非請假日期/其�
 
   await page.goto(`/app/calendar?date=${fixture.todayDateKey}`);
   await expect(page.getByRole("button", { name: "週檢視" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡要測的是週檢視底下的服務人員欄位,
+  // 先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
+  await page.getByRole("button", { name: "週檢視" }).click();
   await expect(page.getByText(fixture.staffOnLeaveName, { exact: false })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
