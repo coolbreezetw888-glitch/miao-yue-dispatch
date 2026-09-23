@@ -289,6 +289,9 @@ test("料錢成本管理頁 /app/material-costs", async ({ page }) => {
 test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預約)", async ({ page }) => {
   await page.goto("/app/calendar");
   await expect(page.getByRole("button", { name: "週檢視" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡接下來要測的是週檢視底下的服務人員
+  // 時間軸格線,所以先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
+  await page.getByRole("button", { name: "週檢視" }).click();
   // 等格線真的渲染出服務人員欄位(營業時間已經整週開放,格線應該出現,不是「尚未設定」訊息)。
   await expect(page.getByText(LONG_STAFF_NAME_PREFIX, { exact: false }).first()).toBeVisible({
     timeout: LOAD_TIMEOUT,

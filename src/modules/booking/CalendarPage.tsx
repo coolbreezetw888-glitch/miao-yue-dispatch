@@ -6,7 +6,7 @@
 // 一律以 Asia/Taipei 的日曆日/時鐘時間為準,送往後端的 start_at 一律明確帶 +08:00 偏移量,
 // 不依賴瀏覽器本機時區(避免使用者瀏覽器時區設定不是台灣時導致算錯)。
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -1192,6 +1192,148 @@ export function BookingFormDialog({
 // 而且 OrdersPage.tsx 也需要用到,放在 types.ts 讓兩邊都能 import,不用互相依賴對方的內部實作)。
 
 // ---------------------------------------------------------------------------
+// SPECS-INDEX #641:服務人員時間軸單一時段格子——手機版橫向滑動誤觸建單/開關時段修復。
+//
+// 背景:格子本身是 Radix DropdownMenuTrigger(asChild 包一個 <button>),Radix 內建行為是
+// 「pointerdown 當下就開啟選單」,這是為了桌面版滑鼠點擊的即時回饋設計的。但在手機上,使用者
+// 想要左右滑動瀏覽不同服務人員時,手指一碰到格子就會被 Radix 判定成「按下」而立刻彈出選單,
+// 打斷原生的橫向捲動手勢,體驗上就是「滑動誤觸建單/開關時段」。
+//
+// 修法:把 DropdownMenu 改成受控元件(open/onOpenChange 自己管),觸控時(pointerType==="touch")
+// 攔下 Radix 這次自動開啟的請求,改成自己用 pointerdown/pointermove/pointerup 量測這次觸控的
+// 移動距離——超過閾值視為「拖曳滑動」,不開啟選單(交給瀏覽器原生橫向捲動繼續跑,這裡完全不對
+// pointermove/touchmove 呼叫 preventDefault,不會擋到原生捲動);沒有超過閾值、手指放開時才是
+// 真正的「點擊」,這時候才真的呼叫 setOpen(true) 開啟選單。滑鼠/觸控筆(pointerType !== "touch")
+// 完全不受影響,維持原本「按下就開啟」的桌面行為,不影響既有 Playwright 測試(桌面 Chromium,
+// 用滑鼠事件模擬點擊,見 playwright.config.ts 只有一個 desktop chromium project)。
+const SLOT_TAP_VS_DRAG_THRESHOLD_PX = 10;
+
+/** 這裡指的「指標事件」只取用 pointerType/clientX/clientY 三個欄位,故意不寫成
+ * `React.PointerEvent`——這樣 Vitest 測試(touchTapVsDragOpen.test.ts)可以直接傳一般物件
+ * 呼叫這個 hook 回傳的 handler,不需要真的建立一個瀏覽器 PointerEvent 才能測。 */
+interface MinimalPointerEvent {
+  pointerType: string;
+  clientX: number;
+  clientY: number;
+}
+
+/** SPECS-INDEX #641:把「觸控點擊 vs 拖曳滑動」的判斷邏輯抽成獨立的 hook,好處是可以直接用
+ * Vitest + @testing-library/react 的 renderHook 單獨測試這段手勢判斷邏輯,不需要整個渲染
+ * CalendarPage(牽動大量 context/react-query mocking)。實際的行為說明見 DaySlotCell 元件
+ * 上方註解。 */
+export function useTapVsDragOpenState(thresholdPx: number = SLOT_TAP_VS_DRAG_THRESHOLD_PX) {
+  const [open, setOpen] = useState(false);
+  // 這次的開啟請求是不是 Radix 對觸控 pointerdown 的內建自動反應——是的話先攔下來,改由
+  // onPointerUp 依照這次觸控實際有沒有拖曳超過閾值,再決定要不要真的開啟。
+  const suppressAutoOpenRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
+
+  function onOpenChange(next: boolean) {
+    if (next && suppressAutoOpenRef.current) return;
+    setOpen(next);
+  }
+
+  function onPointerDown(e: MinimalPointerEvent) {
+    if (e.pointerType !== "touch") return;
+    suppressAutoOpenRef.current = true;
+    draggedRef.current = false;
+    touchStartRef.current = { x: e.clientX, y: e.clientY };
+  }
+
+  function onPointerMove(e: MinimalPointerEvent) {
+    if (e.pointerType !== "touch" || !touchStartRef.current) return;
+    const dx = Math.abs(e.clientX - touchStartRef.current.x);
+    const dy = Math.abs(e.clientY - touchStartRef.current.y);
+    if (dx > thresholdPx || dy > thresholdPx) {
+      draggedRef.current = true;
+    }
+  }
+
+  function onPointerUp(e: MinimalPointerEvent) {
+    if (e.pointerType !== "touch") return;
+    const wasTap = touchStartRef.current !== null && !draggedRef.current;
+    touchStartRef.current = null;
+    suppressAutoOpenRef.current = false;
+    if (wasTap) setOpen(true);
+  }
+
+  function onPointerCancel() {
+    // 瀏覽器判定這次觸控變成原生捲動手勢時會直接發 pointercancel,不會再有 pointerup——
+    // 一併重置狀態,避免下一次觸控被誤判成延續上一次的拖曳/攔截狀態。
+    touchStartRef.current = null;
+    suppressAutoOpenRef.current = false;
+    draggedRef.current = false;
+  }
+
+  return { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel };
+}
+
+function DaySlotCell({
+  top,
+  height,
+  cellClassName,
+  ariaLabel,
+  badgeText,
+  showCreateOption,
+  onCreateBooking,
+  showOverrideOption,
+  overrideOptionLabel,
+  onToggleOverride,
+  showClearOverrideOption,
+  onClearOverride,
+}: {
+  top: number;
+  height: number;
+  cellClassName: string;
+  ariaLabel: string;
+  badgeText: string;
+  showCreateOption: boolean;
+  onCreateBooking: () => void;
+  showOverrideOption: boolean;
+  overrideOptionLabel: string;
+  onToggleOverride: () => void;
+  showClearOverrideOption: boolean;
+  onClearOverride: () => void;
+}) {
+  const { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
+    useTapVsDragOpenState();
+
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
+            cellClassName,
+          )}
+          style={{ top, height }}
+          aria-label={ariaLabel}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+        >
+          {badgeText}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {showCreateOption ? (
+          <DropdownMenuItem onClick={onCreateBooking}>新增預約</DropdownMenuItem>
+        ) : null}
+        {showOverrideOption ? (
+          <DropdownMenuItem onClick={onToggleOverride}>{overrideOptionLabel}</DropdownMenuItem>
+        ) : null}
+        {showClearOverrideOption ? (
+          <DropdownMenuItem onClick={onClearOverride}>清除例外(恢復預設)</DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4.3:主頁面
 // ---------------------------------------------------------------------------
 function CalendarPageInner() {
@@ -1228,7 +1370,9 @@ function CalendarPageInner() {
   }, [staffList]);
 
   // 1.1:月/週檢視切換。
-  const [viewMode, setViewMode] = useState<CalendarViewMode>("week");
+  // SPECS-INDEX #640:預設開啟行事曆時要先看到月檢視,使用者要看週檢視自己再切換過去
+  // (這個切換功能本身不變,只改初始值)。
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("month");
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     initialDateParam ? new Date(`${initialDateParam}T00:00:00`) : getTaipeiNow(),
   );
@@ -1611,71 +1755,48 @@ function CalendarPageInner() {
                         ? "bg-destructive/10 ring-1 ring-inset ring-destructive/40 hover:bg-destructive/15"
                         : "bg-muted/40 hover:bg-muted/60";
 
+                    // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
+                    // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
                     return (
-                      <DropdownMenu key={slot.start}>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
-                              cellClassName,
-                            )}
-                            style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                            aria-label={finalAvailable ? "可預約" : "不可預約"}
-                          >
-                            {isOverride ? (finalAvailable ? "例外開啟" : "例外關閉") : ""}
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          {/* §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
-                              「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
-                              實際可預約時才提供。 */}
-                          {finalAvailable ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                openCreateForm({
-                                  staffId: s.staff_id,
-                                  dateKey: selectedDateKey,
-                                  time: slot.start,
-                                })
-                              }
-                            >
-                              新增預約
-                            </DropdownMenuItem>
-                          ) : null}
-                          {/* §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,
-                              跟上面的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:
-                              文字依這一格目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是
-                              目前這一格半小時,不再跳對話框選時間範圍。 */}
-                          {canManageDayOverride ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                handleToggleDayOverride(
-                                  s.staff_id,
-                                  slot.start,
-                                  slot.end,
-                                  finalAvailable,
-                                )
-                              }
-                            >
-                              {finalAvailable ? "關閉時段" : "開啟時段"}
-                            </DropdownMenuItem>
-                          ) : null}
-                          {canManageDayOverride && isOverride && matchedOverride ? (
-                            <DropdownMenuItem
-                              onClick={() =>
-                                handleClearOverride(
-                                  s.staff_id,
-                                  matchedOverride.start_time,
-                                  matchedOverride.end_time,
-                                )
-                              }
-                            >
-                              清除例外(恢復預設)
-                            </DropdownMenuItem>
-                          ) : null}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <DaySlotCell
+                        key={slot.start}
+                        top={i * SLOT_PX}
+                        height={SLOT_PX}
+                        cellClassName={cellClassName}
+                        ariaLabel={finalAvailable ? "可預約" : "不可預約"}
+                        badgeText={isOverride ? (finalAvailable ? "例外開啟" : "例外關閉") : ""}
+                        // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
+                        // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
+                        // 實際可預約時才提供。
+                        showCreateOption={finalAvailable}
+                        onCreateBooking={() =>
+                          openCreateForm({
+                            staffId: s.staff_id,
+                            dateKey: selectedDateKey,
+                            time: slot.start,
+                          })
+                        }
+                        // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
+                        // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
+                        // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
+                        // 不再跳對話框選時間範圍。
+                        showOverrideOption={canManageDayOverride}
+                        overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
+                        onToggleOverride={() =>
+                          handleToggleDayOverride(s.staff_id, slot.start, slot.end, finalAvailable)
+                        }
+                        showClearOverrideOption={
+                          canManageDayOverride && isOverride && Boolean(matchedOverride)
+                        }
+                        onClearOverride={() => {
+                          if (!matchedOverride) return;
+                          handleClearOverride(
+                            s.staff_id,
+                            matchedOverride.start_time,
+                            matchedOverride.end_time,
+                          );
+                        }}
+                      />
                     );
                   })}
 
