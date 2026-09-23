@@ -20,6 +20,7 @@ import {
   fetchMerchantBookings,
   fetchMerchantBookingStatusColors,
   fetchMerchantBusinessHours,
+  fetchMerchantCalendarStateStyles,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
   fetchMerchantPaymentMethods,
@@ -29,6 +30,7 @@ import {
   getBookingStatusChangeLogs as apiGetBookingStatusChangeLogs,
   getCustomerRelatedBookings as apiGetCustomerRelatedBookings,
   updateMerchantBookingStatusColors as apiUpdateMerchantBookingStatusColors,
+  updateMerchantCalendarStateStyles as apiUpdateMerchantCalendarStateStyles,
   upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
   type BookingAmountSummary,
   type BookingCardExtra,
@@ -43,6 +45,7 @@ import type {
   BookingDetail,
   BookingStatusChangeLog,
   BookingStatusColorMap,
+  CalendarStateStyleMap,
   CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
@@ -274,4 +277,27 @@ export async function updateMerchantBookingStatusColors(
   colors: BookingStatusColorMap,
 ): Promise<void> {
   return apiUpdateMerchantBookingStatusColors(merchantId, colors);
+}
+
+/** SPECS-INDEX #644 對外介面:商家目前設定的 3 種行事曆排程狀態代表色(全天休假/時段排休/
+ * 跨店佔用),查無資料時 fallback 成 DEFAULT_CALENDAR_STATE_STYLES(見 api.ts)。供
+ * CalendarPage.tsx、商家設定頁(MerchantSettingsPage.tsx)使用。服務人員自助端
+ * (MyCalendarTimelineView.tsx)不呼叫這支——一般服務人員不符合 can_manage_bookings,讀不到
+ * merchant_calendar_state_styles 這張表,改用 staff-portal 模組自己的
+ * useMyCalendarStateStyles(呼叫 SECURITY DEFINER 的 get_my_calendar_state_styles)。 */
+export function useMerchantCalendarStateStyles(
+  merchantId: string | null | undefined,
+): UseQueryResult<CalendarStateStyleMap> {
+  return useQuery({
+    queryKey: ["booking-module", "merchant-calendar-state-styles", merchantId],
+    queryFn: () => fetchMerchantCalendarStateStyles(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export async function updateMerchantCalendarStateStyles(
+  merchantId: string,
+  styles: CalendarStateStyleMap,
+): Promise<void> {
+  return apiUpdateMerchantCalendarStateStyles(merchantId, styles);
 }

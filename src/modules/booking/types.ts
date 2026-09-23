@@ -246,6 +246,77 @@ export function bookingCardAccentBorderStyle(
   return { borderLeftColor: getBookingStatusColor(colors, status) };
 }
 
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #644:行事曆排程狀態顏色設定(全天休假/時段排休/跨店佔用)。跟上面§10.5的
+// 「訂單狀態顏色」(BookingStatusColorMap)是平行但完全獨立的新功能——這次對應的是行事曆本身的
+// 排程狀態,不是訂單狀態,資料表(merchant_calendar_state_styles)也是完全獨立的一張表。
+// CalendarPage.tsx(商家/客服端)/MyCalendarTimelineView.tsx(服務人員自助端)都讀這裡的純函式,
+// 兩邊套用同一套「顏色 + 固定圖樣」渲染規則,不各自維護一份。
+// ---------------------------------------------------------------------------
+
+/** 對應資料表 merchant_calendar_state_styles.state_type 的三個枚舉值。 */
+export type CalendarStateType = "full_day_leave" | "partial_leave" | "cross_store_occupied";
+
+/** 商家目前設定的 3 種行事曆排程狀態代表色。查無資料(還沒特別設定過)時,呼叫端一律 fallback
+ * 成 DEFAULT_CALENDAR_STATE_STYLES,不回傳 undefined 欄位。 */
+export interface CalendarStateStyleMap {
+  fullDayLeave: string;
+  partialLeave: string;
+  crossStoreOccupied: string;
+}
+
+/** 查無資料時的預設值,跟資料庫 seed 函式(20260923020100_req644_...)的預設色碼逐字一致。
+ * 刻意跟 DEFAULT_BOOKING_STATUS_COLORS 的既有 4 色區隔開(暖灰色系 + 深赭橘,不是冷灰藍/淺黃橘),
+ * 避免兩套獨立的顏色設定在同一張行事曆上撞色造成混淆。 */
+export const DEFAULT_CALENDAR_STATE_STYLES: CalendarStateStyleMap = {
+  fullDayLeave: "#78716c",
+  partialLeave: "#a8a29e",
+  crossStoreOccupied: "#c2410c",
+};
+
+/** 依狀態值從顏色表挑出對應色碼。 */
+export function getCalendarStateColor(colors: CalendarStateStyleMap, state: CalendarStateType): string {
+  if (state === "full_day_leave") return colors.fullDayLeave;
+  if (state === "partial_leave") return colors.partialLeave;
+  return colors.crossStoreOccupied;
+}
+
+/** 三種狀態各自固定搭配的圖樣(不是純色塊,肉眼要能一眼分辨是哪一種狀態,不能只靠顏色):
+ * 全天休假 = 密集 45 度斜線、時段排休 = 稀疏 45 度斜線(比全天休假稀疏,視覺上比較「輕」)、
+ * 跨店佔用 = 交叉網格紋(45 度 + 135 度疊加,跟斜線類明顯不同,一眼就能分辨是「別的原因」造成
+ * 的占用,不是休假)。純 CSS repeating-linear-gradient 做,不需要圖片資源。商家允許輸入任意合法
+ * CSS color 字串(不強制 hex),hexToRgba 對非 hex 字串會原樣回傳(退化成不透明實色,不會噴錯),
+ * 這裡沿用同一個既有函式,不另外重寫一套顏色格式判斷。 */
+export function calendarStateBlockStyle(
+  colors: CalendarStateStyleMap,
+  state: CalendarStateType,
+): { backgroundColor: string; backgroundImage: string; borderColor: string; color: string } {
+  const color = getCalendarStateColor(colors, state);
+  const line = hexToRgba(color, 0.55);
+  const base = hexToRgba(color, 0.12);
+  const borderColor = hexToRgba(color, 0.55);
+
+  if (state === "cross_store_occupied") {
+    return {
+      backgroundColor: base,
+      backgroundImage:
+        `repeating-linear-gradient(45deg, ${line} 0px, ${line} 2px, transparent 2px, transparent 9px), ` +
+        `repeating-linear-gradient(135deg, ${line} 0px, ${line} 2px, transparent 2px, transparent 9px)`,
+      borderColor,
+      color,
+    };
+  }
+
+  // 全天休假:斜線間距 6px(密集)。時段排休:斜線間距 12px(稀疏,視覺上比較「輕」)。
+  const period = state === "full_day_leave" ? 6 : 12;
+  return {
+    backgroundColor: base,
+    backgroundImage: `repeating-linear-gradient(45deg, ${line} 0px, ${line} 2px, transparent 2px, transparent ${period}px)`,
+    borderColor,
+    color,
+  };
+}
+
 /** 0=星期日...6=星期六,對應 merchant_business_hours.day_of_week /
  * staff_availability_windows.day_of_week 跟 Postgres extract(dow from ...) 的回傳值。 */
 export const DAY_OF_WEEK_LABELS = ["日", "一", "二", "三", "四", "五", "六"] as const;

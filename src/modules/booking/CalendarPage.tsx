@@ -74,6 +74,7 @@ import {
   useMerchantBookings,
   useMerchantBookingStatusColors,
   useMerchantBusinessHours,
+  useMerchantCalendarStateStyles,
   useMerchantDaySchedule,
   useMerchantMaterialCostItems,
   useMerchantPaymentMethods,
@@ -104,11 +105,14 @@ import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   bookingBlockStyle,
   buildPaymentMethodOptions,
+  calendarStateBlockStyle,
   DEFAULT_BOOKING_STATUS_COLORS,
+  DEFAULT_CALENDAR_STATE_STYLES,
   filterServiceItemsByCategory,
   getTaxModeHelperText,
   type AmountAdjustmentMode,
   type BookingStatus,
+  type CalendarStateStyleMap,
   type DayScheduleOwnBooking,
   type ServiceItemCategoryFilter,
 } from "./types";
@@ -1273,6 +1277,7 @@ function DaySlotCell({
   top,
   height,
   cellClassName,
+  cellStyle,
   ariaLabel,
   badgeText,
   showCreateOption,
@@ -1286,6 +1291,12 @@ function DaySlotCell({
   top: number;
   height: number;
   cellClassName: string;
+  // SPECS-INDEX #644:時段排休(單日例外關閉)這一格改讀商家自訂顏色 + 圖樣,不能只靠
+  // Tailwind class(build-time 就固定,無法接受任意動態色碼),所以額外開這個可選的 inline style
+  // 插槽,查無資料的其他分支繼續維持純 className,不受影響。
+  cellStyle?:
+    | { backgroundColor: string; backgroundImage: string; borderColor: string; color: string }
+    | undefined;
   ariaLabel: string;
   badgeText: string;
   showCreateOption: boolean;
@@ -1308,7 +1319,7 @@ function DaySlotCell({
             "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
             cellClassName,
           )}
-          style={{ top, height }}
+          style={{ top, height, ...cellStyle }}
           aria-label={ariaLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
@@ -1362,6 +1373,12 @@ function CalendarPageInner() {
   // 還沒回來而短暫顯示錯誤的顏色。
   const { data: statusColors } = useMerchantBookingStatusColors(merchantId);
   const effectiveStatusColors = statusColors ?? DEFAULT_BOOKING_STATUS_COLORS;
+
+  // SPECS-INDEX #644:全天休假/時段排休/跨店佔用三種排程狀態改讀商家自訂顏色表,查無資料/
+  // 載入中時 fallback 成 DEFAULT_CALENDAR_STATE_STYLES,做法比照上面訂單狀態顏色的既有慣例。
+  const { data: calendarStateStyles } = useMerchantCalendarStateStyles(merchantId);
+  const effectiveCalendarStateStyles: CalendarStateStyleMap =
+    calendarStateStyles ?? DEFAULT_CALENDAR_STATE_STYLES;
 
   const staffNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -1677,13 +1694,16 @@ function CalendarPageInner() {
                   ) : null}
                 </div>
                 <div className="relative" style={{ height: gridTotalPx }}>
-                  {/* 模組 7 §4.5:請假整天,整欄改成灰底不可點擊建單——不進入下面複雜的
-                      背景格線/DropdownMenu 邏輯,直接渲染一個涵蓋全高的灰底區塊。既有的預約
-                      (s.bookings)仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己
-                      判斷處理(規則 2.6:系統只警示不代為處理),但不能再新增新的預約。 */}
+                  {/* 模組 7 §4.5:請假整天,整欄改成不可點擊建單——不進入下面複雜的背景格線/
+                      DropdownMenu 邏輯,直接渲染一個涵蓋全高的區塊。既有的預約(s.bookings)
+                      仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己判斷處理
+                      (規則 2.6:系統只警示不代為處理),但不能再新增新的預約。
+                      SPECS-INDEX #644:底色/圖樣改讀商家自訂的「全天休假」設定(密集 45 度斜線),
+                      不再是寫死的 bg-muted/60。 */}
                   {s.on_leave ? (
                     <div
-                      className="absolute inset-0 bg-muted/60"
+                      className="absolute inset-0"
+                      style={calendarStateBlockStyle(effectiveCalendarStateStyles, "full_day_leave")}
                       aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
                     />
                   ) : null}
@@ -1721,11 +1741,17 @@ function CalendarPageInner() {
                     });
 
                     if (foreignBusy) {
+                      // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
+                      // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
                       return (
                         <div
                           key={slot.start}
-                          className="absolute inset-x-0 border-b border-border bg-warn/15 p-1 text-[10px] text-warn"
-                          style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                          className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
+                          style={{
+                            top: i * SLOT_PX,
+                            height: SLOT_PX,
+                            ...calendarStateBlockStyle(effectiveCalendarStateStyles, "cross_store_occupied"),
+                          }}
                         >
                           外店預約中
                         </div>
@@ -1747,13 +1773,20 @@ function CalendarPageInner() {
 
                     // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
                     // 管理員一眼看出這是臨時調整過的,不是預設狀態。
+                    // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
+                    // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
+                    // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
                     const cellClassName = finalAvailable
                       ? isOverride
                         ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
                         : "bg-background hover:bg-brand-soft/40"
                       : isOverride
-                        ? "bg-destructive/10 ring-1 ring-inset ring-destructive/40 hover:bg-destructive/15"
+                        ? "hover:opacity-80"
                         : "bg-muted/40 hover:bg-muted/60";
+                    const cellStyle =
+                      isOverride && !finalAvailable
+                        ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
+                        : undefined;
 
                     // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
                     // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
@@ -1763,6 +1796,7 @@ function CalendarPageInner() {
                         top={i * SLOT_PX}
                         height={SLOT_PX}
                         cellClassName={cellClassName}
+                        cellStyle={cellStyle}
                         ariaLabel={finalAvailable ? "可預約" : "不可預約"}
                         badgeText={isOverride ? (finalAvailable ? "例外開啟" : "例外關閉") : ""}
                         // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫

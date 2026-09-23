@@ -16,7 +16,7 @@ import {
   type AddStaffAvailabilityWindowInput,
 } from "@/modules/booking/api";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
-import type { StaffAvailabilityWindow } from "@/modules/booking/types";
+import type { CalendarStateStyleMap, StaffAvailabilityWindow } from "@/modules/booking/types";
 import { fetchMyStaffRow } from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
 import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "@/modules/payroll/api";
@@ -28,9 +28,12 @@ import type {
 import {
   fetchMyAvailabilityOverrides,
   fetchMyBookingSchedule,
+  fetchMyCalendarStateStyles,
   fetchMyDayBusinessHours,
+  fetchMyDayScheduleState,
   type MyBookingScheduleItem,
   type MyDayBusinessHours,
+  type MyDayScheduleState,
   type StaffAvailabilityOverride,
 } from "./api";
 import type { StaffPermissionSectionKey } from "./types";
@@ -243,5 +246,32 @@ export function useMyDayBusinessHours(
     queryKey: ["staff-portal-module", "my-day-business-hours", staffId, date],
     queryFn: () => fetchMyDayBusinessHours(staffId as string, date as string),
     enabled: Boolean(staffId) && Boolean(date),
+  });
+}
+
+// =========================================================================
+// SPECS-INDEX #644:服務人員自助行事曆的「全天休假/時段排休/跨店佔用」狀態(供
+// MyCalendarTimelineView.tsx 渲染用)+ 對應的商家顏色設定,兩支都直接接受呼叫端已經解出來的
+// staffId,跟上面 useMyDayBusinessHours 同一個既有慣例(呼叫端本來就已經從父層拿到 staffId,
+// 不需要再繞一次 useActiveMyStaffRecord)。
+// =========================================================================
+export function useMyDayScheduleState(
+  staffId: string | null | undefined,
+  date: string | null | undefined,
+): UseQueryResult<MyDayScheduleState> {
+  return useQuery({
+    queryKey: ["staff-portal-module", "my-day-schedule-state", staffId, date],
+    queryFn: () => fetchMyDayScheduleState(staffId as string, date as string),
+    enabled: Boolean(staffId) && Boolean(date),
+  });
+}
+
+export function useMyCalendarStateStyles(
+  staffId: string | null | undefined,
+): UseQueryResult<CalendarStateStyleMap> {
+  return useQuery({
+    queryKey: ["staff-portal-module", "my-calendar-state-styles", staffId],
+    queryFn: () => fetchMyCalendarStateStyles(staffId as string),
+    enabled: Boolean(staffId),
   });
 }
