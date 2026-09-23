@@ -18,6 +18,7 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 import { addDays, buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -222,6 +223,24 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
   const wholeDayOffDateKey = toDateKey(addDays(today, 10));
   const slotOffDateKey = toDateKey(addDays(today, 11));
 
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
+  // exception「請選擇付款方式」。create_group_and_merchant 建立商家時已經自動呼叫
+  // seed_default_payment_methods(),這裡直接查一筆該商家目前的啟用中付款方式來用(比照
+  // e2e/support/line-notifications-fixture.ts 既有做法)。
+  const { data: paymentMethod, error: paymentMethodError } = await adminClient
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", merchantId as string)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   // 10.2.4/10.4.6 共用:今天一筆已完成訂單,自訂總金額 1000、抽成 50% = 500,方便斷言
   // 「服務人員自助視角」與「商家管理員視角」看到的是同一個數字(跨視角一致性)。
   const { data: bookingRow, error: bookingError } = await adminClient.rpc("create_booking", {
@@ -234,6 +253,7 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
     p_customer_address: "測試地址一號",
     p_custom_total_amount_enabled: true,
     p_custom_total_amount: BOOKING_SUBTOTAL,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
   });
   if (bookingError || !bookingRow) {
     throw new Error(`建立測試訂單失敗:${bookingError?.message}`);
@@ -326,13 +346,7 @@ export async function teardownStaffPortalV2Fixture(fixture: StaffPortalV2Fixture
       : "已刪除 fixture 營業時間設定",
   );
 
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }

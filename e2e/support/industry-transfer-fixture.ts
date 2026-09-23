@@ -18,6 +18,7 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -174,6 +175,24 @@ export async function setupIndustryTransferFixture(): Promise<IndustryTransferFi
   const todayDateKey = toDateKey(today);
   const sourceBookingCustomerPhone = "0955555099";
 
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
+  // exception「請選擇付款方式」。create_group_and_merchant 建立商家時已經自動呼叫
+  // seed_default_payment_methods(),這裡直接查一筆該商家目前的啟用中付款方式來用(比照
+  // e2e/support/line-notifications-fixture.ts 既有做法)。
+  const { data: paymentMethod, error: paymentMethodError } = await client
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", merchantId as string)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   const { data: bookingRow, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: (staff as { id: string }).id,
@@ -190,6 +209,7 @@ export async function setupIndustryTransferFixture(): Promise<IndustryTransferFi
     p_custom_total_amount_enabled: true,
     p_custom_total_amount: 500,
     p_member_id: memberId,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
   });
   if (bookingError || !bookingRow) {
     throw new Error(`建立測試訂單失敗:${bookingError?.message}`);
@@ -238,16 +258,14 @@ export async function teardownIndustryTransferFixture(
 
   const actions: string[] = [];
 
+  // 來源商家跟測試中建立的目標商家各自是「自己集團裡僅存的一間商家」(分別由
+  // create_group_and_merchant/轉移精靈流程各自建立在不同集團底下),不能合併成一次
+  // `.in("id", merchantIds)` 停用——disableFixtureMerchant 需要針對每一間各自查詢自己的
+  // group_id、各自建立佔位商家,所以這裡逐一呼叫。
   const merchantIds = [fixture.sourceMerchantId, ...(createdTargetMerchantId ? [createdTargetMerchantId] : [])];
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .in("id", merchantIds);
-  actions.push(
-    disableError
-      ? `停用 fixture 商家失敗:${disableError.message}`
-      : `已停用 fixture 商家(軟刪除,含來源商家${createdTargetMerchantId ? "+ 測試中建立的目標商家" : ""})`,
-  );
+  for (const merchantId of merchantIds) {
+    actions.push(await disableFixtureMerchant(client, merchantId));
+  }
 
   return actions;
 }

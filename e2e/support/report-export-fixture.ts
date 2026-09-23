@@ -11,6 +11,7 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -182,6 +183,24 @@ export async function setupReportExportFixture(): Promise<ReportExportFixture> {
   const todayDateKey = toDateKey(today);
   const customerName = `E2E報表測試客戶${runId}`;
 
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
+  // exception「請選擇付款方式」。create_group_and_merchant 建立商家時已經自動呼叫
+  // seed_default_payment_methods(),這裡直接查一筆該商家目前的啟用中付款方式來用(比照
+  // e2e/support/line-notifications-fixture.ts 既有做法)。
+  const { data: paymentMethod, error: paymentMethodError } = await client
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", merchantId as string)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   const { data: bookingRow, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: (staff as { id: string }).id,
@@ -197,6 +216,7 @@ export async function setupReportExportFixture(): Promise<ReportExportFixture> {
     p_customer_phone: "0955444099",
     p_custom_total_amount_enabled: true,
     p_custom_total_amount: BOOKING_SUBTOTAL,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
   });
   if (bookingError || !bookingRow) {
     throw new Error(`建立測試訂單失敗:${bookingError?.message}`);
@@ -268,13 +288,7 @@ export async function teardownReportExportFixture(fixture: ReportExportFixture):
       : "已移除 fixture 服務人員(軟刪除)",
   );
 
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }
