@@ -187,7 +187,16 @@ function MerchantSettingsPageInner() {
               <Label htmlFor="settings-industry-type">產業模組</Label>
               <Select
                 value={industryType}
-                onValueChange={(v) => setIndustryType(v as IndustryType)}
+                // Radix Select 內部會額外渲染一個隱藏的原生 <select>(給表單相容用)。實測發現:
+                // 受控的 value 在「掛載之後」才被 useEffect 從資料庫灌進新值時(這個頁面正是這種
+                // 情況——初始值是 on_site_dispatch,資料載入後才改成商家實際的值),瀏覽器會對那個
+                // 隱藏的原生 select 補發一次 change 事件,把空字串回傳進 onValueChange,瞬間把剛
+                // 灌好的值洗成空白,畫面上的產業模組就變成沒有選取任何東西的空欄位。
+                // 這裡只接受合法的產業類型,把這種假事件忽略掉。
+                onValueChange={(v) => {
+                  if (!INDUSTRY_TYPES.includes(v as IndustryType)) return;
+                  setIndustryType(v as IndustryType);
+                }}
               >
                 <SelectTrigger id="settings-industry-type" className="mt-2">
                   <SelectValue />
