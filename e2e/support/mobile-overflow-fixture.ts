@@ -32,6 +32,7 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -86,6 +87,13 @@ function createFixtureSupabaseClient(): SupabaseClient {
 // 數字/英文」模擬真實會出問題的情境(長電話號碼組合字串、長 email、地址裡的長網址片段、
 // 長姓名的英文拼音),比照使用者原始回報的「客戶欄位」「客戶地址欄位」被撐開的實際樣態。
 // ---------------------------------------------------------------------------
+// #636/#637(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)
+// (#595/#596,見 supabase/migrations/20260922140000_req595_596_staff_agent_phone_not_null_check.sql),
+// 這個 40 碼組合字串不再是合法值,寫入 merchant_staff.phone 會直接被 CHECK 擋下。這裡繼續保留
+// 常數本身(仍然可以合法用在 bookings.customer_phone——該欄位沒有格式 CHECK),但主要服務人員
+// 的「電話欄位測溢出」情境改用下面的 LONG_STAFF_INTRO(merchant_staff.intro,純文字、無格式
+// 限制),測的是同一個編輯對話框裡的另一個自由文字欄位,不影響原本要驗證「畫面會不會溢出」的
+// 情境本身。
 export const LONG_PHONE_COMBO = "0912345678" + "0987654321" + "0223456789" + "0955667788";
 export const LONG_ADDRESS =
   "台北市信義區松仁路100號附近(地圖連結:" +
@@ -109,6 +117,9 @@ export const LONG_CATEGORY_NAME =
 export const LONG_MATERIAL_NAME =
   "E2E測試超長料錢成本品項名稱WithAnUnbrokenEnglishSuffixForOverflowStressTesting";
 export const LONG_NOTES = "備註內容刻意加長方便測試:" + "測試撐開容器".repeat(15);
+export const LONG_STAFF_INTRO =
+  "E2E測試服務人員簡介刻意加長方便測試撐開容器:" +
+  "WithAnUnbrokenEnglishSuffixForOverflowStressTesting1234567890".repeat(3);
 
 export interface MobileOverflowFixture {
   runId: string;
@@ -202,12 +213,19 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
   // 3.4:服務人員。unlimited_backend_edit=true 讓 create_booking 略過營業時間/可預約時段/
   // 跨日檢查(見 supabase/migrations/20260917100200_booking_expansion_functions.sql 的
   // check_staff_booking_slot),測試只在意「畫面會不會溢出」,不需要額外處理時段邊界。
+  // #636/#637(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)
+  // (#595/#596),原本刻意塞在這裡測「電話欄位超長文字溢出」的 LONG_PHONE_COMBO(40 碼組合
+  // 字串)已經不符合這個格式,寫入會直接被 CHECK 擋下。改用合法格式的佔位電話,同一個編輯
+  // 對話框裡改用 LONG_STAFF_INTRO(merchant_staff.intro,自由文字、無格式限制)延續原本
+  // 「這個對話框裡也有一個超長文字欄位」的測試情境。
+  const staffMainPhone = `09${runId.slice(-7)}0`;
   const { data: staffMain, error: staffMainError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: LONG_STAFF_NAME,
-      phone: LONG_PHONE_COMBO,
+      phone: staffMainPhone,
+      intro: LONG_STAFF_INTRO,
       contact_email: email,
       is_listed: true,
       no_time_slot_limit: true,
@@ -218,12 +236,9 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
   if (staffMainError || !staffMain)
     throw new Error(`建立測試主要服務人員失敗:${staffMainError?.message}`);
 
-  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
-  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼)——注意這一位助手用的是
-  // 一般合法格式的佔位電話,不是上面 staffMain 刻意用來測試「超長電話文字溢出」的
-  // LONG_PHONE_COMBO(那個 40 碼的組合值本身已經不符合新的 CHECK 約束,是這次順手盤點時
-  // 額外發現、範圍外的既有問題,已另外回報主腦,不在這裡處理)。
-  const staffAssistantPhone = `09${runId.slice(-8)}`;
+  // 助手用另一組合法格式的佔位電話,跟上面 staffMain 的電話區分開來,避免同一次測試 run
+  // 建立的兩位服務人員撞號。
+  const staffAssistantPhone = `09${runId.slice(-7)}1`;
   const { data: staffAssistant, error: staffAssistantError } = await client
     .from("merchant_staff")
     .insert({
@@ -300,6 +315,25 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
   // unlimited_backend_edit 的服務人員,不需要煩惱測試執行當下實際是星期幾。
   const bookingDateKey = toDateKey(getTaipeiNow());
   const startAt = buildTaipeiIso(bookingDateKey, "10:00");
+
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
+  // exception「請選擇付款方式」。create_group_and_merchant 建立商家時已經自動呼叫
+  // seed_default_payment_methods(),這裡直接查一筆該商家目前的啟用中付款方式來用(比照
+  // e2e/support/line-notifications-fixture.ts 既有做法)。
+  const { data: paymentMethod, error: paymentMethodError } = await client
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", merchantId as string)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   const { data: booking, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: (staffMain as { id: string }).id,
@@ -318,6 +352,7 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
     p_assistant_staff_ids: [(staffAssistant as { id: string }).id],
     p_material_cost_item_ids: [(materialItem as { id: string }).id],
     p_customer_address: LONG_ADDRESS,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
   });
   if (bookingError || !booking) throw new Error(`建立測試預約失敗:${bookingError?.message}`);
 
@@ -458,13 +493,10 @@ export async function teardownMobileOverflowFixture(
 
   // merchants 沒有真刪除的管道(規則 8:分店只能停用不能真刪除),這裡做到停用是 client 端
   // 能做到的最大程度,底層資料列的真刪除留給有資料庫直接存取權限的人工清理(見檔案開頭註解)。
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  // #638:直接停用會被「集團底下至少要保留一間啟用中商家」擋下(這裡建立時是集團裡唯一一間),
+  // disableFixtureMerchant 會先建立同集團的空殼佔位商家繞開這條規則,見
+  // e2e/support/merchant-teardown-helper.ts 開頭說明。
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }

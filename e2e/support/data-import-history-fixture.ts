@@ -11,6 +11,7 @@ import { createClient, type Session, type SupabaseClient } from "@supabase/supab
 import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -146,13 +147,7 @@ export async function teardownDataImportHistoryFixture(
       : "已下架 fixture 商家底下剩餘會員(軟刪除，如果復原有成功執行，這裡預期已經沒有資料列)",
   );
 
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }

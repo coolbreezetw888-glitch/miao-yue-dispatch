@@ -25,6 +25,7 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { addDays, buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -306,13 +307,7 @@ export async function teardownLineNotificationsFixture(
     staffError ? `移除 fixture 服務人員失敗:${staffError.message}` : "已移除 fixture 服務人員(軟刪除)",
   );
 
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }

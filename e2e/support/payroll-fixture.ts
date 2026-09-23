@@ -25,6 +25,7 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -74,8 +75,22 @@ export const COMMISSION_RATE_PERCENTAGE = 20; // 商家預設抽成比例,固定
 export const BOOKING_SUBTOTAL = 1000; // 自訂總金額,固定用這個數字方便斷言。
 export const EXPECTED_COMMISSION_AMOUNT = (BOOKING_SUBTOTAL * COMMISSION_RATE_PERCENTAGE) / 100; // 200
 export const MONTHLY_BASE_SALARY = 3000;
-export const PAY_DAYS_PER_MONTH = 30;
-export const EXPECTED_LEAVE_DEDUCTION = MONTHLY_BASE_SALARY / PAY_DAYS_PER_MONTH; // 100(請 1 天)
+// #578(SPECS-INDEX,對應 supabase/migrations/20260922130200_req578_drop_pay_days_per_month_column.sql):
+// merchant_payroll_settings.pay_days_per_month 欄位已經整個移除,「月折算天數」改成後端
+// private.compute_staff_payroll 依「這筆扣款實際落在的年月」呼叫 private.get_days_in_month
+// 動態算出(28~31,含閏年判斷),不再是商家可以填寫的固定值。這裡改成用跟後端相同的邏輯
+// (JS 版的「當月實際天數」)在測試執行當下(Asia/Taipei)動態算出,取代原本寫死的 30,
+// 讓斷言在任何月份執行都能對得上後端的真實計算結果。
+const payDaysNow = getTaipeiNow();
+export const PAY_DAYS_PER_MONTH = new Date(
+  payDaysNow.getFullYear(),
+  payDaysNow.getMonth() + 1,
+  0,
+).getDate();
+// 比照後端 round(v_day_rate * overlap_days, 2) 的四捨五入方式(overlap_days 固定請假 1 天),
+// 避免非 30 天的月份(例如 31 天)算出來的小數位跟後端顯示的四捨五入結果對不上。
+export const EXPECTED_LEAVE_DEDUCTION =
+  Math.round((MONTHLY_BASE_SALARY / PAY_DAYS_PER_MONTH) * 100) / 100;
 
 export interface PayrollFixture {
   runId: string;
@@ -197,14 +212,15 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     throw new Error(`建立測試月薪制服務人員失敗:${monthlySalaryStaffError?.message}`);
   }
 
-  // §1.1/§3.12:新商家已經自動種入預設薪資設定(gross/0%/30 天),這裡只調整 pay_days_per_month
-  // 方便斷言;抽成比例已經改成服務項目層級(商家端三項調整規格書 §二 2.2.2),見下面
-  // staff_service_commission_rates 那筆設定。
+  // §1.1/§3.12:新商家已經自動種入預設薪資設定(gross),這裡明確 upsert 確保
+  // commission_basis_type='gross' 不受其他測試/預設值變動影響,方便斷言;抽成比例已經改成
+  // 服務項目層級(商家端三項調整規格書 §二 2.2.2),見下面 staff_service_commission_rates
+  // 那筆設定。#578:pay_days_per_month 欄位已移除,不再寫入這個欄位(見上面 PAY_DAYS_PER_MONTH
+  // 常數的說明,「月折算天數」改成後端動態計算)。
   const { error: payrollSettingsError } = await client.from("merchant_payroll_settings").upsert(
     {
       merchant_id: merchantId as string,
       commission_basis_type: "gross",
-      pay_days_per_month: PAY_DAYS_PER_MONTH,
     },
     { onConflict: "merchant_id" },
   );
@@ -267,6 +283,24 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
   const today = getTaipeiNow();
   const todayDateKey = toDateKey(today);
 
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
+  // exception「請選擇付款方式」。create_group_and_merchant 建立商家時已經自動呼叫
+  // seed_default_payment_methods(),這裡直接查一筆該商家目前的啟用中付款方式來用(比照
+  // e2e/support/line-notifications-fixture.ts 既有做法)。
+  const { data: paymentMethod, error: paymentMethodError } = await client
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", merchantId as string)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   // §3.6/§3.7:建單 → 確認 → 完成,完成當下觸發 compute_booking_commission 產生抽成快照。
   const { data: bookingRow, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
@@ -283,6 +317,7 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     p_customer_phone: "0955999000",
     p_custom_total_amount_enabled: true,
     p_custom_total_amount: BOOKING_SUBTOTAL,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
   });
   if (bookingError || !bookingRow) {
     throw new Error(`建立測試訂單失敗:${bookingError?.message}`);
@@ -362,13 +397,7 @@ export async function teardownPayrollFixture(fixture: PayrollFixture): Promise<s
       : "已移除 fixture 服務人員(軟刪除)",
   );
 
-  const { error: disableError } = await client
-    .from("merchants")
-    .update({ status: "disabled" })
-    .eq("id", fixture.merchantId);
-  actions.push(
-    disableError ? `停用 fixture 商家失敗:${disableError.message}` : "已停用 fixture 商家(軟刪除)",
-  );
+  actions.push(await disableFixtureMerchant(client, fixture.merchantId));
 
   return actions;
 }
