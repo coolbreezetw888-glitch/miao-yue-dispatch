@@ -259,6 +259,8 @@ function MembersListInner() {
   const [statusFilter, setStatusFilter] = useState<MemberStatus | "all">("active");
   // #615(SPECS-INDEX):會員等級篩選,"all" 顯示全部。
   const [tierFilter, setTierFilter] = useState<string>("all");
+  // #643(SPECS-INDEX):黑名單篩選,比照上面會員等級篩選的既有模式(Select,"all" 顯示全部)。
+  const [blacklistFilter, setBlacklistFilter] = useState<"all" | "blacklisted" | "not_blacklisted">("all");
   const [birthdayNotice, setBirthdayNotice] = useState<number | null>(null);
 
   const { data: members, isLoading } = useQuery({
@@ -309,6 +311,8 @@ function MembersListInner() {
 
   const visibleMembers: MemberSummary[] = (members ?? []).filter((m) => {
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
+    if (blacklistFilter === "blacklisted" && !m.isBlacklisted) return false;
+    if (blacklistFilter === "not_blacklisted" && m.isBlacklisted) return false;
     if (tierFilter === "all") return true;
     if (tierFilter === UNASSIGNED_TIER_VALUE) return m.tierId === null;
     return m.tierId === tierFilter;
@@ -368,6 +372,21 @@ function MembersListInner() {
                 {tier.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        {/* #643(SPECS-INDEX):黑名單篩選,比照上面會員等級篩選的既有 Select 模式,方便商家查看
+            自己之前標記過哪些黑名單客戶。 */}
+        <Select
+          value={blacklistFilter}
+          onValueChange={(v) => setBlacklistFilter(v as "all" | "blacklisted" | "not_blacklisted")}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部會員</SelectItem>
+            <SelectItem value="blacklisted">只看黑名單</SelectItem>
+            <SelectItem value="not_blacklisted">不含黑名單</SelectItem>
           </SelectContent>
         </Select>
       </div>
