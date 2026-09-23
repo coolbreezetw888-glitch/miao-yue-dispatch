@@ -7,6 +7,15 @@
 //   5. 點數設定(消費點數比例/推薦獎勵/生日贈點)用連結導去既有的會員系統設定頁,不重複維護
 //      一份 UI(避免會員系統設定頁跟這裡兩邊都要維護一份設定表單)。
 //
+// #639(.project/specs/會員與紅利.md §10.5,推翻 #617 當初這條判斷):使用者實測後認為「啟用
+// 開關留在會員系統設定頁、這裡只放連結」體驗不好,改成「啟用紅利點數功能」開關(讀寫
+// merchant_member_settings.points_feature_enabled)搬進這頁的「點數設定」卡片直接操作,消費
+// 點數比例/推薦獎勵/生日贈點三個數字欄位仍留在會員系統設定頁(連結過去調整),避免兩邊都要
+// 維護一份完整表單。資料庫欄位、upsertMerchantMemberSettings() 這個 API 完全沒變,upsert 是整列
+// 覆蓋,所以這裡切換開關時要把 settings 目前其他欄位原樣帶回去,不能只送 pointsFeatureEnabled。
+// 停用時這頁本身仍可操作(查看/調整既有點數資料方便帳務校正)的既有行為不受影響——只有隱藏
+// 建單表單/會員詳情頁的點數入口,這條規則維持不變。
+//
 // 支援 ?member=<id> query 參數直接帶入某位會員(會員詳情頁「查看完整點數紀錄」連結會這樣用)。
 //
 // RedeemPointsDialog/AdjustPointsDialog 這兩個 Dialog 元件是從 MemberDetailPage.tsx 搬過來的
@@ -31,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -40,13 +50,19 @@ import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 import {
   adjustMemberPoints,
   redeemMemberPoints,
+  upsertMerchantMemberSettings,
   useMember,
   useMemberPointHistory,
   useMerchantMemberSettings,
   useMerchantMembersList,
 } from "./api";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
-import { MEMBER_POINT_TRANSACTION_TYPE_LABELS, type Member, type MemberSummary } from "./types";
+import {
+  MEMBER_POINT_TRANSACTION_TYPE_LABELS,
+  type Member,
+  type MemberSummary,
+  type RewardConditionMode,
+} from "./types";
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return "";
@@ -278,11 +294,13 @@ function MemberPointsDetail({ memberId }: { memberId: string }) {
 function MemberPointsPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
+  const [savingFeatureToggle, setSavingFeatureToggle] = useState(false);
 
   const selectedMemberId = searchParams.get("member");
-  const { data: settings } = useMerchantMemberSettings(merchantId);
+  const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
   const { data: members, isLoading } = useMerchantMembersList(merchantId, search);
   const activeMembers: MemberSummary[] = (members ?? []).filter((m) => m.status === "active");
 
@@ -292,6 +310,34 @@ function MemberPointsPageInner() {
       next.set("member", memberId);
       return next;
     });
+  }
+
+  // #639(.project/specs/會員與紅利.md §10.5):啟用開關搬到這頁,但 upsertMerchantMemberSettings
+  // 是整列 upsert,不是局部更新——切開關時必須把 settings 目前其他欄位(消費點數比例/推薦獎勵/
+  // 生日贈點/核發資格條件/會員政策)原樣帶回去,只換 pointsFeatureEnabled 這一格,否則會把其他
+  // 設定值覆蓋成空。
+  async function handleToggleFeatureEnabled(next: boolean) {
+    if (!settings) return;
+    setSavingFeatureToggle(true);
+    try {
+      await upsertMerchantMemberSettings(merchantId, {
+        pointsEarnRate: settings.points_earn_rate,
+        referralBonusPoints: settings.referral_bonus_points,
+        birthdayBonusPoints: settings.birthday_bonus_points,
+        pointsFeatureEnabled: next,
+        rewardConditionMode: settings.reward_condition_mode as RewardConditionMode,
+        policyEnabled: settings.policy_enabled,
+        policyContent: settings.policy_content,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["members-module", "merchant-member-settings", merchantId],
+      });
+      toast.success(next ? "已啟用紅利點數功能" : "已停用紅利點數功能");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSavingFeatureToggle(false);
+    }
   }
 
   return (
@@ -311,22 +357,42 @@ function MemberPointsPageInner() {
       {settings && settings.points_feature_enabled === false ? (
         <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
           目前紅利點數功能已關閉,建單表單跟會員詳情頁不會顯示任何點數相關內容給客戶/服務人員看,
-          但你仍然可以在這裡查看/調整既有點數資料。要重新開放,請到{" "}
-          <Link to="/app/member-settings" className="text-brand hover:underline">
-            會員系統設定
-          </Link>
-          。
+          但你仍然可以在這裡查看/調整既有點數資料。要重新開啟,請到下方「點數設定」切換開關。
         </div>
       ) : null}
 
+      {/* #639(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關從 MemberSettingsPage.tsx
+          搬過來這裡直接操作;消費點數比例/推薦獎勵/生日贈點三個數字欄位仍在會員系統設定頁維護,
+          這裡用連結導過去,避免兩邊都要維護一份完整表單。 */}
       <Card>
         <CardHeader>
           <CardTitle>點數設定</CardTitle>
-          <CardDescription>啟用開關、消費點數比例、推薦獎勵、生日贈點</CardDescription>
+          <CardDescription>
+            啟用/停用紅利點數功能的開關在這裡;消費點數比例、推薦獎勵、生日贈點請到會員系統設定頁調整。
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {settingsLoading ? (
+            <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : (
+            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
+                <p className="text-xs text-muted-foreground">
+                  關閉後,建單表單跟會員詳情頁不再顯示任何點數相關的操作入口與數字;這個管理頁
+                  本身仍可以查看/調整既有點數資料,方便帳務校正。既有的點數餘額/異動歷史資料
+                  不會被清空,重新開啟後會完整還原顯示。
+                </p>
+              </div>
+              <Switch
+                checked={settings ? settings.points_feature_enabled : true}
+                disabled={savingFeatureToggle}
+                onCheckedChange={handleToggleFeatureEnabled}
+              />
+            </div>
+          )}
           <Link to="/app/member-settings" className="text-sm text-brand hover:underline">
-            前往會員系統設定 →
+            前往會員系統設定,調整消費點數比例/推薦獎勵/生日贈點 →
           </Link>
         </CardContent>
       </Card>

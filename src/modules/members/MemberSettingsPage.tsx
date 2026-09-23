@@ -8,6 +8,11 @@
 // - #617(合併分支「底部選單改版與功能頁卡片」疊加):「紅利點數」卡片新增「啟用紅利點數功能」
 //   開關(points_feature_enabled),連動 MemberDetailPage.tsx/建單表單/MemberPointsPage.tsx
 //   是否顯示點數相關入口,關閉不清空既有點數資料。
+// - #639(.project/specs/會員與紅利.md §10.5,推翻 #617 當初「開關維持放這頁」的判斷):
+//   「啟用紅利點數功能」開關搬到 MemberPointsPage.tsx 自己的「點數設定」區塊,這頁的「紅利
+//   點數」卡片只保留消費點數比例/推薦獎勵/生日贈點三個欄位。points_feature_enabled 欄位本身、
+//   讀寫 API(upsertMerchantMemberSettings 整列 upsert)完全沒變,這裡的 pointsFeatureEnabled
+//   state 只是讀出來原樣回填進 saveSettings 的 payload,避免這頁儲存其他欄位時把開關值覆蓋掉。
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -511,8 +516,9 @@ function MemberSettingsPageInner() {
         <CardHeader>
           <CardTitle>紅利點數</CardTitle>
           <CardDescription>
-            啟用開關、消費點數比例、推薦獎勵、生日贈點——完整的餘額檢視/兌換/手動調整操作,見
-            「功能」選單的「紅利點數管理」獨立頁面(
+            消費點數比例、推薦獎勵、生日贈點,設定如下。完整的餘額檢視/兌換/手動調整操作,以及
+            「啟用紅利點數功能」開關(#639 搬過去了,不在這頁),見「功能」選單的「紅利點數管理」
+            獨立頁面(
             <Link to="/app/member-points" className="text-brand hover:underline">
               前往紅利點數管理
             </Link>
@@ -524,20 +530,6 @@ function MemberSettingsPageInner() {
             <p className="text-sm text-muted-foreground">載入中⋯</p>
           ) : (
             <>
-              {/* #617(.project/specs/會員與紅利.md §10.5):商家決定要不要啟用紅利點數功能。
-                  關閉後建單表單/會員詳情頁不再顯示任何點數相關的操作入口與數字,既有的點數餘額
-                  資料不受影響,只是隱藏,重新開啟後完整還原顯示。 */}
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
-                  <p className="text-xs text-muted-foreground">
-                    關閉後,會員詳情頁跟紅利點數管理頁不再顯示任何點數相關的操作入口與數字,既有的
-                    點數餘額/異動歷史資料不會被清空,重新開啟後會完整還原顯示。
-                  </p>
-                </div>
-                <Switch checked={pointsFeatureEnabled} onCheckedChange={setPointsFeatureEnabled} />
-              </div>
-
               <div>
                 <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
                 <Input
