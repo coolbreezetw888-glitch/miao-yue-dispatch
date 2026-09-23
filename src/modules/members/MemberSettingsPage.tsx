@@ -13,6 +13,13 @@
 //   點數」卡片只保留消費點數比例/推薦獎勵/生日贈點三個欄位。points_feature_enabled 欄位本身、
 //   讀寫 API(upsertMerchantMemberSettings 整列 upsert)完全沒變,這裡的 pointsFeatureEnabled
 //   state 只是讀出來原樣回填進 saveSettings 的 payload,避免這頁儲存其他欄位時把開關值覆蓋掉。
+// - #642(.project/specs/會員與紅利.md §10.5,#639 的延續收尾):消費點數比例/推薦獎勵/生日贈點
+//   這三個欄位跟儲存邏輯,這次也整個搬到 MemberPointsPage.tsx 的「點數設定」區塊,跟 #639 已經
+//   搬過去的啟用開關放在一起。這頁的「紅利點數」卡片(原本只剩三個欄位+一個連回自己的連結)
+//   因此已無殘留內容,整張卡片一併移除。pointsEarnRate/referralBonusPoints/birthdayBonusPoints
+//   在這頁保留成「只讀回填用」的 state(比照既有 pointsFeatureEnabled 的做法):從 settings 讀出來
+//   原樣帶回 saveSettings() 的 payload,確保這頁儲存「會員政策」「核發獎勵資格條件」時不會把
+//   這三個欄位覆蓋掉,但這頁本身完全沒有 UI 讓人編輯這三個值。
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -56,7 +63,6 @@ import {
   useMerchantMemberSettings,
   type UpsertMemberTierInput,
 } from "./api";
-import { previewLoyaltyPoints } from "./previewCalculators";
 import { RequireMemberSettingsAccess } from "./RequireMemberSettingsAccess";
 import { REWARD_CONDITION_MODE_LABELS, type MerchantMemberTier, type RewardConditionMode } from "./types";
 
@@ -335,36 +341,34 @@ function MemberSettingsPageInner() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useMerchantMemberSettings(merchantId);
 
+  // #642:這三個欄位這頁已經沒有任何 UI 可以編輯,只保留「讀出來原樣回填」的 state,
+  // 避免這頁儲存「會員政策」「核發獎勵資格條件」時,把 MemberPointsPage.tsx 那邊維護的
+  // 消費點數比例/推薦獎勵/生日贈點覆蓋掉(upsertMerchantMemberSettings 是整列 upsert)。
   const [pointsFeatureEnabled, setPointsFeatureEnabled] = useState(true);
+  const [pointsEarnRate, setPointsEarnRate] = useState(0);
+  const [referralBonusPoints, setReferralBonusPoints] = useState(0);
+  const [birthdayBonusPoints, setBirthdayBonusPoints] = useState(0);
   const [policyEnabled, setPolicyEnabled] = useState(false);
   const [policyContent, setPolicyContent] = useState("");
   const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
-  const [pointsEarnRate, setPointsEarnRate] = useState("0");
-  const [referralBonusPoints, setReferralBonusPoints] = useState("0");
-  const [birthdayBonusPoints, setBirthdayBonusPoints] = useState("0");
   const [savingPolicy, setSavingPolicy] = useState(false);
-  const [savingPoints, setSavingPoints] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
     setPointsFeatureEnabled(settings.points_feature_enabled);
+    setPointsEarnRate(settings.points_earn_rate);
+    setReferralBonusPoints(settings.referral_bonus_points);
+    setBirthdayBonusPoints(settings.birthday_bonus_points);
     setPolicyEnabled(settings.policy_enabled);
     setPolicyContent(settings.policy_content ?? "");
     setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
-    setPointsEarnRate(String(settings.points_earn_rate));
-    setReferralBonusPoints(String(settings.referral_bonus_points));
-    setBirthdayBonusPoints(String(settings.birthday_bonus_points));
   }, [settings]);
-
-  const numericRate = Number(pointsEarnRate);
-  const numericReferral = Number(referralBonusPoints);
-  const numericBirthday = Number(birthdayBonusPoints);
 
   async function saveSettings(overrides: Partial<Parameters<typeof upsertMerchantMemberSettings>[1]>) {
     await upsertMerchantMemberSettings(merchantId, {
-      pointsEarnRate: numericRate,
-      referralBonusPoints: numericReferral,
-      birthdayBonusPoints: numericBirthday,
+      pointsEarnRate,
+      referralBonusPoints,
+      birthdayBonusPoints,
       pointsFeatureEnabled,
       rewardConditionMode,
       policyEnabled,
@@ -396,30 +400,6 @@ function MemberSettingsPageInner() {
     }
   }
 
-  async function handleSavePoints() {
-    if (Number.isNaN(numericRate) || numericRate < 0) {
-      toast.error("消費點數比例不可為負數");
-      return;
-    }
-    if (!Number.isInteger(numericReferral) || numericReferral < 0) {
-      toast.error("推薦獎勵點數必須是不小於 0 的整數");
-      return;
-    }
-    if (!Number.isInteger(numericBirthday) || numericBirthday < 0) {
-      toast.error("生日贈點必須是不小於 0 的整數");
-      return;
-    }
-    setSavingPoints(true);
-    try {
-      await saveSettings({});
-      toast.success("已更新紅利點數設定");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSavingPoints(false);
-    }
-  }
-
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <div>
@@ -430,7 +410,8 @@ function MemberSettingsPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">會員系統設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的會員政策、核發獎勵資格條件、消費點數比例、推薦與生日獎勵、會員等級。
+          「{merchant!.name}」的會員政策、核發獎勵資格條件、會員等級。紅利點數(啟用開關、消費
+          點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。
         </p>
       </div>
 
@@ -508,89 +489,6 @@ function MemberSettingsPageInner() {
                 ))}
               </SelectContent>
             </Select>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>紅利點數</CardTitle>
-          <CardDescription>
-            消費點數比例、推薦獎勵、生日贈點,設定如下。完整的餘額檢視/兌換/手動調整操作,以及
-            「啟用紅利點數功能」開關(#639 搬過去了,不在這頁),見「功能」選單的「紅利點數管理」
-            獨立頁面(
-            <Link to="/app/member-points" className="text-brand hover:underline">
-              前往紅利點數管理
-            </Link>
-            )。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
-          ) : (
-            <>
-              <div>
-                <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
-                <Input
-                  id="points-earn-rate"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={pointsEarnRate}
-                  onChange={(e) => setPointsEarnRate(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你
-                  套用任何數字。
-                </p>
-                {!Number.isNaN(numericRate) ? (
-                  <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
-                    <strong>{previewLoyaltyPoints(1000, numericRate)}</strong> 點(僅供參考,實際
-                    點數以訂單完成時系統計算為準,計算基準是含稅總額)。
-                  </p>
-                ) : null}
-              </div>
-
-              <div>
-                <Label htmlFor="referral-bonus-points">推薦獎勵點數</Label>
-                <Input
-                  id="referral-bonus-points"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={referralBonusPoints}
-                  onChange={(e) => setReferralBonusPoints(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  被推薦人完成第一筆訂單時,推薦人可以拿到的點數。
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="birthday-bonus-points">生日贈點</Label>
-                <Input
-                  id="birthday-bonus-points"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={birthdayBonusPoints}
-                  onChange={(e) => setBirthdayBonusPoints(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員
-                  管理列表頁時系統才會補發)。
-                </p>
-              </div>
-
-              <Button type="button" size="sm" disabled={savingPoints} onClick={handleSavePoints}>
-                {savingPoints ? "儲存中⋯" : "儲存"}
-              </Button>
-            </>
           )}
         </CardContent>
       </Card>

@@ -4,24 +4,29 @@
 //   2. 點擊個別會員可以看到完整點數異動歷史(複用既有 get_member_point_history)。
 //   3. 「手動調整」入口(複用既有 adjust_member_points,維持「僅商家管理員」的既有權限邊界)。
 //   4. 「登記兌換」入口(複用既有 redeem_member_points)。
-//   5. 點數設定(消費點數比例/推薦獎勵/生日贈點)用連結導去既有的會員系統設定頁,不重複維護
-//      一份 UI(避免會員系統設定頁跟這裡兩邊都要維護一份設定表單)。
+//   5. 點數設定(消費點數比例/推薦獎勵/生日贈點)——此項描述已被下方 #642 取代,見該段說明。
 //
 // #639(.project/specs/會員與紅利.md §10.5,推翻 #617 當初這條判斷):使用者實測後認為「啟用
 // 開關留在會員系統設定頁、這裡只放連結」體驗不好,改成「啟用紅利點數功能」開關(讀寫
-// merchant_member_settings.points_feature_enabled)搬進這頁的「點數設定」卡片直接操作,消費
-// 點數比例/推薦獎勵/生日贈點三個數字欄位仍留在會員系統設定頁(連結過去調整),避免兩邊都要
-// 維護一份完整表單。資料庫欄位、upsertMerchantMemberSettings() 這個 API 完全沒變,upsert 是整列
-// 覆蓋,所以這裡切換開關時要把 settings 目前其他欄位原樣帶回去,不能只送 pointsFeatureEnabled。
-// 停用時這頁本身仍可操作(查看/調整既有點數資料方便帳務校正)的既有行為不受影響——只有隱藏
-// 建單表單/會員詳情頁的點數入口,這條規則維持不變。
+// merchant_member_settings.points_feature_enabled)搬進這頁的「點數設定」卡片直接操作。資料庫
+// 欄位、upsertMerchantMemberSettings() 這個 API 完全沒變,upsert 是整列覆蓋,所以這裡切換開關時
+// 要把 settings 目前其他欄位原樣帶回去,不能只送 pointsFeatureEnabled。停用時這頁本身仍可操作
+// (查看/調整既有點數資料方便帳務校正)的既有行為不受影響——只有隱藏建單表單/會員詳情頁的點數
+// 入口,這條規則維持不變。
+//
+// #642(.project/specs/會員與紅利.md §10.5,#639 的延續收尾):消費點數比例/推薦獎勵/生日贈點
+// 三個數字欄位(含說明文字、範例試算、儲存按鈕)這次也從會員系統設定頁整個搬過來這頁的「點數
+// 設定」卡片,跟 #639 已經搬過去的啟用開關放在一起,不再有連回會員系統設定頁的連結——「點數
+// 設定」卡片現在一次管理 4 個欄位(啟用開關+消費點數比例+推薦獎勵+生日贈點),共用同一套
+// saveSettingsRow() 整列 upsert helper,啟用開關切換跟三個數字欄位的「儲存」按鈕各自都會把
+// settings 目前其他欄位原樣帶回去,避免互相覆蓋。
 //
 // 支援 ?member=<id> query 參數直接帶入某位會員(會員詳情頁「查看完整點數紀錄」連結會這樣用)。
 //
 // RedeemPointsDialog/AdjustPointsDialog 這兩個 Dialog 元件是從 MemberDetailPage.tsx 搬過來的
 // (該頁面的「點數」卡片這次簡化成摘要 + 連結,完整操作集中到這裡,避免兩邊重複維護)。
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -55,7 +60,9 @@ import {
   useMemberPointHistory,
   useMerchantMemberSettings,
   useMerchantMembersList,
+  type UpsertMerchantMemberSettingsInput,
 } from "./api";
+import { previewLoyaltyPoints } from "./previewCalculators";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
 import {
   MEMBER_POINT_TRANSACTION_TYPE_LABELS,
@@ -299,10 +306,27 @@ function MemberPointsPageInner() {
   const [search, setSearch] = useState("");
   const [savingFeatureToggle, setSavingFeatureToggle] = useState(false);
 
+  // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的編輯 state,從 MemberSettingsPage.tsx 搬過來。
+  const [pointsEarnRate, setPointsEarnRate] = useState("0");
+  const [referralBonusPoints, setReferralBonusPoints] = useState("0");
+  const [birthdayBonusPoints, setBirthdayBonusPoints] = useState("0");
+  const [savingPoints, setSavingPoints] = useState(false);
+
   const selectedMemberId = searchParams.get("member");
   const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
   const { data: members, isLoading } = useMerchantMembersList(merchantId, search);
   const activeMembers: MemberSummary[] = (members ?? []).filter((m) => m.status === "active");
+
+  useEffect(() => {
+    if (!settings) return;
+    setPointsEarnRate(String(settings.points_earn_rate));
+    setReferralBonusPoints(String(settings.referral_bonus_points));
+    setBirthdayBonusPoints(String(settings.birthday_bonus_points));
+  }, [settings]);
+
+  const numericRate = Number(pointsEarnRate);
+  const numericReferral = Number(referralBonusPoints);
+  const numericBirthday = Number(birthdayBonusPoints);
 
   function selectMember(memberId: string) {
     setSearchParams((prev) => {
@@ -312,31 +336,66 @@ function MemberPointsPageInner() {
     });
   }
 
-  // #639(.project/specs/會員與紅利.md §10.5):啟用開關搬到這頁,但 upsertMerchantMemberSettings
-  // 是整列 upsert,不是局部更新——切開關時必須把 settings 目前其他欄位(消費點數比例/推薦獎勵/
-  // 生日贈點/核發資格條件/會員政策)原樣帶回去,只換 pointsFeatureEnabled 這一格,否則會把其他
-  // 設定值覆蓋成空。
-  async function handleToggleFeatureEnabled(next: boolean) {
+  // #639/#642(.project/specs/會員與紅利.md §10.5):「點數設定」卡片現在一次管理 4 個欄位(啟用
+  // 開關+消費點數比例+推薦獎勵+生日贈點),但 upsertMerchantMemberSettings 是整列 upsert,不是
+  // 局部更新——不管改的是哪一格,都要把 settings 目前其他欄位(含核發資格條件/會員政策)原樣
+  // 帶回去,只換有異動的那幾格,否則會把其他設定值覆蓋掉。
+  async function saveSettingsRow(overrides: Partial<UpsertMerchantMemberSettingsInput>) {
     if (!settings) return;
+    await upsertMerchantMemberSettings(merchantId, {
+      pointsEarnRate: settings.points_earn_rate,
+      referralBonusPoints: settings.referral_bonus_points,
+      birthdayBonusPoints: settings.birthday_bonus_points,
+      pointsFeatureEnabled: settings.points_feature_enabled,
+      rewardConditionMode: settings.reward_condition_mode as RewardConditionMode,
+      policyEnabled: settings.policy_enabled,
+      policyContent: settings.policy_content,
+      ...overrides,
+    });
+    await queryClient.invalidateQueries({
+      queryKey: ["members-module", "merchant-member-settings", merchantId],
+    });
+  }
+
+  async function handleToggleFeatureEnabled(next: boolean) {
     setSavingFeatureToggle(true);
     try {
-      await upsertMerchantMemberSettings(merchantId, {
-        pointsEarnRate: settings.points_earn_rate,
-        referralBonusPoints: settings.referral_bonus_points,
-        birthdayBonusPoints: settings.birthday_bonus_points,
-        pointsFeatureEnabled: next,
-        rewardConditionMode: settings.reward_condition_mode as RewardConditionMode,
-        policyEnabled: settings.policy_enabled,
-        policyContent: settings.policy_content,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["members-module", "merchant-member-settings", merchantId],
-      });
+      await saveSettingsRow({ pointsFeatureEnabled: next });
       toast.success(next ? "已啟用紅利點數功能" : "已停用紅利點數功能");
     } catch (err) {
       toast.error("更新失敗", { description: getErrorMessage(err) });
     } finally {
       setSavingFeatureToggle(false);
+    }
+  }
+
+  // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的驗證+儲存邏輯,從 MemberSettingsPage.tsx 的
+  // handleSavePoints() 原樣搬過來。
+  async function handleSavePoints() {
+    if (Number.isNaN(numericRate) || numericRate < 0) {
+      toast.error("消費點數比例不可為負數");
+      return;
+    }
+    if (!Number.isInteger(numericReferral) || numericReferral < 0) {
+      toast.error("推薦獎勵點數必須是不小於 0 的整數");
+      return;
+    }
+    if (!Number.isInteger(numericBirthday) || numericBirthday < 0) {
+      toast.error("生日贈點必須是不小於 0 的整數");
+      return;
+    }
+    setSavingPoints(true);
+    try {
+      await saveSettingsRow({
+        pointsEarnRate: numericRate,
+        referralBonusPoints: numericReferral,
+        birthdayBonusPoints: numericBirthday,
+      });
+      toast.success("已更新紅利點數設定");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSavingPoints(false);
     }
   }
 
@@ -361,39 +420,99 @@ function MemberPointsPageInner() {
         </div>
       ) : null}
 
-      {/* #639(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關從 MemberSettingsPage.tsx
-          搬過來這裡直接操作;消費點數比例/推薦獎勵/生日贈點三個數字欄位仍在會員系統設定頁維護,
-          這裡用連結導過去,避免兩邊都要維護一份完整表單。 */}
+      {/* #639/#642(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關,以及消費點數
+          比例/推薦獎勵/生日贈點三個數字欄位,都從 MemberSettingsPage.tsx 搬過來這裡一次操作,
+          不再需要連結導去會員系統設定頁調整。 */}
       <Card>
         <CardHeader>
           <CardTitle>點數設定</CardTitle>
           <CardDescription>
-            啟用/停用紅利點數功能的開關在這裡;消費點數比例、推薦獎勵、生日贈點請到會員系統設定頁調整。
+            啟用/停用紅利點數功能,以及消費點數比例、推薦獎勵、生日贈點,都在這裡一次設定。
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-5">
           {settingsLoading ? (
             <p className="text-sm text-muted-foreground">載入中⋯</p>
           ) : (
-            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+            <>
+              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                <div>
+                  <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
+                  <p className="text-xs text-muted-foreground">
+                    關閉後,建單表單跟會員詳情頁不再顯示任何點數相關的操作入口與數字;這個管理頁
+                    本身仍可以查看/調整既有點數資料,方便帳務校正。既有的點數餘額/異動歷史資料
+                    不會被清空,重新開啟後會完整還原顯示。
+                  </p>
+                </div>
+                <Switch
+                  checked={settings ? settings.points_feature_enabled : true}
+                  disabled={savingFeatureToggle}
+                  onCheckedChange={handleToggleFeatureEnabled}
+                />
+              </div>
+
               <div>
-                <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
-                <p className="text-xs text-muted-foreground">
-                  關閉後,建單表單跟會員詳情頁不再顯示任何點數相關的操作入口與數字;這個管理頁
-                  本身仍可以查看/調整既有點數資料,方便帳務校正。既有的點數餘額/異動歷史資料
-                  不會被清空,重新開啟後會完整還原顯示。
+                <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
+                <Input
+                  id="points-earn-rate"
+                  className="mt-2 w-40"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={pointsEarnRate}
+                  onChange={(e) => setPointsEarnRate(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你
+                  套用任何數字。
+                </p>
+                {!Number.isNaN(numericRate) ? (
+                  <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                    範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
+                    <strong>{previewLoyaltyPoints(1000, numericRate)}</strong> 點(僅供參考,實際
+                    點數以訂單完成時系統計算為準,計算基準是含稅總額)。
+                  </p>
+                ) : null}
+              </div>
+
+              <div>
+                <Label htmlFor="referral-bonus-points">推薦獎勵點數</Label>
+                <Input
+                  id="referral-bonus-points"
+                  className="mt-2 w-40"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={referralBonusPoints}
+                  onChange={(e) => setReferralBonusPoints(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  被推薦人完成第一筆訂單時,推薦人可以拿到的點數。
                 </p>
               </div>
-              <Switch
-                checked={settings ? settings.points_feature_enabled : true}
-                disabled={savingFeatureToggle}
-                onCheckedChange={handleToggleFeatureEnabled}
-              />
-            </div>
+
+              <div>
+                <Label htmlFor="birthday-bonus-points">生日贈點</Label>
+                <Input
+                  id="birthday-bonus-points"
+                  className="mt-2 w-40"
+                  type="number"
+                  min={0}
+                  step="1"
+                  value={birthdayBonusPoints}
+                  onChange={(e) => setBirthdayBonusPoints(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員
+                  管理列表頁時系統才會補發)。
+                </p>
+              </div>
+
+              <Button type="button" size="sm" disabled={savingPoints} onClick={handleSavePoints}>
+                {savingPoints ? "儲存中⋯" : "儲存"}
+              </Button>
+            </>
           )}
-          <Link to="/app/member-settings" className="text-sm text-brand hover:underline">
-            前往會員系統設定,調整消費點數比例/推薦獎勵/生日贈點 →
-          </Link>
         </CardContent>
       </Card>
 
