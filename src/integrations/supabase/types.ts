@@ -1275,6 +1275,38 @@ export type Database = {
           },
         ]
       }
+      merchant_calendar_state_styles: {
+        Row: {
+          color: string
+          created_at: string
+          merchant_id: string
+          state_type: string
+          updated_at: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          merchant_id: string
+          state_type: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          merchant_id?: string
+          state_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_calendar_state_styles_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_feature_flags: {
         Row: {
           created_at: string
@@ -3134,7 +3166,15 @@ export type Database = {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
         Returns: Json
       }
+      get_my_calendar_state_styles: {
+        Args: { p_staff_id: string }
+        Returns: Json
+      }
       get_my_day_business_hours: {
+        Args: { p_date: string; p_staff_id: string }
+        Returns: Json
+      }
+      get_my_day_schedule_state: {
         Args: { p_date: string; p_staff_id: string }
         Returns: Json
       }
@@ -3441,6 +3481,10 @@ export type Database = {
         Returns: undefined
       }
       seed_default_member_settings: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      seed_default_merchant_calendar_state_styles: {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
@@ -3768,6 +3812,27 @@ export type Database = {
           to: "merchant_booking_status_colors"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      update_merchant_calendar_state_styles: {
+        Args: {
+          p_cross_store_occupied_color: string
+          p_full_day_leave_color: string
+          p_merchant_id: string
+          p_partial_leave_color: string
+        }
+        Returns: {
+          color: string
+          created_at: string
+          merchant_id: string
+          state_type: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "merchant_calendar_state_styles"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       update_my_admin_profile: {

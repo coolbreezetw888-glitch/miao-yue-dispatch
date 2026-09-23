@@ -17,6 +17,7 @@ import type {
   BookingDetail,
   BookingStatusChangeLog,
   BookingStatusColorMap,
+  CalendarStateStyleMap,
   CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
@@ -24,7 +25,11 @@ import type {
   PaymentMethod,
   StaffAvailabilityWindow,
 } from "./types";
-import { DEFAULT_MERCHANT_TAX_SETTINGS, DEFAULT_BOOKING_STATUS_COLORS } from "./types";
+import {
+  DEFAULT_MERCHANT_TAX_SETTINGS,
+  DEFAULT_BOOKING_STATUS_COLORS,
+  DEFAULT_CALENDAR_STATE_STYLES,
+} from "./types";
 import { bookingMatchesKeyword } from "./ordersPageLogic";
 
 // =========================================================================
@@ -1063,6 +1068,47 @@ export async function updateMerchantBookingStatusColors(
     p_accepted_color: colors.accepted,
     p_completed_color: colors.completed,
     p_cancelled_color: colors.cancelled,
+  });
+  if (error) throw error;
+}
+
+// =========================================================================
+// SPECS-INDEX #644:商家行事曆排程狀態顏色設定讀寫(全天休假/時段排休/跨店佔用)。跟上面
+// merchant_booking_status_colors(訂單狀態顏色)是平行但完全獨立的新表
+// (merchant_calendar_state_styles),一狀態一列,查無資料時前端一律 fallback 成
+// DEFAULT_CALENDAR_STATE_STYLES,不回傳 undefined 欄位——同樣是刻意比照
+// fetchMerchantBookingStatusColors 的既有 fallback 慣例。
+// =========================================================================
+export async function fetchMerchantCalendarStateStyles(
+  merchantId: string,
+): Promise<CalendarStateStyleMap> {
+  const { data, error } = await supabase
+    .from("merchant_calendar_state_styles")
+    .select("state_type, color")
+    .eq("merchant_id", merchantId);
+  if (error) throw error;
+
+  const result: CalendarStateStyleMap = { ...DEFAULT_CALENDAR_STATE_STYLES };
+  for (const row of data ?? []) {
+    if (row.state_type === "full_day_leave") result.fullDayLeave = row.color;
+    else if (row.state_type === "partial_leave") result.partialLeave = row.color;
+    else if (row.state_type === "cross_store_occupied") result.crossStoreOccupied = row.color;
+  }
+  return result;
+}
+
+/** 顏色設定畫面用:upsert 商家的三筆 merchant_calendar_state_styles,三個顏色一次全部帶入
+ * (資料庫函式簽章要求三個都要有值,不支援局部更新單一狀態的顏色,比照
+ * updateMerchantBookingStatusColors 的既有設計)。 */
+export async function updateMerchantCalendarStateStyles(
+  merchantId: string,
+  styles: CalendarStateStyleMap,
+): Promise<void> {
+  const { error } = await supabase.rpc("update_merchant_calendar_state_styles", {
+    p_merchant_id: merchantId,
+    p_full_day_leave_color: styles.fullDayLeave,
+    p_partial_leave_color: styles.partialLeave,
+    p_cross_store_occupied_color: styles.crossStoreOccupied,
   });
   if (error) throw error;
 }

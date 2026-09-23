@@ -44,10 +44,16 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import {
   updateMerchantBookingStatusColors,
   useMerchantBookingStatusColors,
+  updateMerchantCalendarStateStyles,
+  useMerchantCalendarStateStyles,
 } from "@/modules/booking/context";
 import {
   DEFAULT_BOOKING_STATUS_COLORS,
+  DEFAULT_CALENDAR_STATE_STYLES,
+  calendarStateBlockStyle,
   type BookingStatusColorMap,
+  type CalendarStateStyleMap,
+  type CalendarStateType,
 } from "@/modules/booking/types";
 import { RequireMerchantAdmin } from "@/modules/staff-agent/RequireMerchantAdmin";
 
@@ -283,6 +289,11 @@ function MerchantSettingsPageInner() {
           (merchant_booking_status_colors),自己有自己的「儲存」按鈕跟載入/儲存狀態,不跟著
           主表單的 handleSubmit 一起送出。 */}
       <BookingStatusColorsCard merchantId={merchant.id} />
+
+      {/* SPECS-INDEX #644:行事曆排程狀態顏色設定(全天休假/時段排休/跨店佔用)——跟上面訂單
+          狀態顏色設定平行但完全獨立的新區塊,寫入的是完全不同的一張表
+          (merchant_calendar_state_styles),自己的「儲存」按鈕跟載入/儲存狀態。 */}
+      <CalendarStateStylesCard merchantId={merchant.id} />
     </main>
   );
 }
@@ -362,6 +373,99 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
                   style={{ backgroundColor: form[key], color: "#ffffff" }}
                 >
                   預覽文字
+                </span>
+              </div>
+            ))}
+            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+              {saving ? "儲存中⋯" : "儲存"}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #644:行事曆排程狀態顏色設定卡片。3 個狀態各自一個 <input type="color">
+// (原生色彩選擇器)+ 色碼文字輸入框 + 即時預覽色塊——這次的預覽色塊直接套用
+// calendarStateBlockStyle(跟 CalendarPage.tsx/MyCalendarTimelineView.tsx 實際渲染時完全同一支
+// 函式),讓商家在設定畫面就能看到跟行事曆上一模一樣的圖樣效果(斜線/交叉網格),不是只看到
+// 純色塊。這個元件只在 RequireMerchantAdmin 通過後才會渲染,不需要再重複判斷一次權限。
+// ---------------------------------------------------------------------------
+const CALENDAR_STATE_FIELDS: { key: keyof CalendarStateStyleMap; state: CalendarStateType; label: string; hint: string }[] = [
+  { key: "fullDayLeave", state: "full_day_leave", label: "全天休假", hint: "密集 45 度斜線" },
+  { key: "partialLeave", state: "partial_leave", label: "時段排休", hint: "稀疏 45 度斜線" },
+  { key: "crossStoreOccupied", state: "cross_store_occupied", label: "跨店佔用", hint: "交叉網格紋" },
+];
+
+function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
+  const queryClient = useQueryClient();
+  const { data: styles, isLoading } = useMerchantCalendarStateStyles(merchantId);
+  const [form, setForm] = useState<CalendarStateStyleMap>(DEFAULT_CALENDAR_STATE_STYLES);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (styles) setForm(styles);
+  }, [styles]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateMerchantCalendarStateStyles(merchantId, form);
+      await queryClient.invalidateQueries({
+        queryKey: ["booking-module", "merchant-calendar-state-styles", merchantId],
+      });
+      toast.success("已更新行事曆排程狀態顏色設定");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>行事曆排程狀態顏色設定</CardTitle>
+        <CardDescription>
+          自訂「全天休假」「時段排休」「跨店佔用」這 3 種行事曆排程狀態的底色,同時套用到商家/
+          客服端行事曆跟服務人員自己的行事曆,兩邊看到的顏色一致。每種狀態固定搭配一種圖樣
+          (不是純色塊),方便一眼分辨是哪一種狀態,不用只靠顏色判斷。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">載入中⋯</p>
+        ) : (
+          <>
+            {CALENDAR_STATE_FIELDS.map(({ key, state, label, hint }) => (
+              <div
+                key={key}
+                className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+              >
+                <div className="w-20 shrink-0">
+                  <span className="block text-sm font-medium text-foreground">{label}</span>
+                  <span className="block text-[11px] text-muted-foreground">{hint}</span>
+                </div>
+                <input
+                  type="color"
+                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-input bg-background p-0.5"
+                  value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : "#000000"}
+                  onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                />
+                <Input
+                  className="w-32"
+                  value={form[key]}
+                  onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                />
+                {/* 即時預覽:直接套用實際渲染時用的同一支函式,商家看到的圖樣效果跟行事曆上
+                    一模一樣。 */}
+                <span
+                  className="ml-auto flex h-8 w-24 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium"
+                  style={calendarStateBlockStyle(form, state)}
+                >
+                  預覽
                 </span>
               </div>
             ))}

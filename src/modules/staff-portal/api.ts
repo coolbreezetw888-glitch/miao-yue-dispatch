@@ -12,6 +12,13 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import {
+  DEFAULT_CALENDAR_STATE_STYLES,
+  type CalendarStateStyleMap,
+  type DayScheduleAvailabilityOverride,
+  type DayScheduleForeignBooking,
+  type DayScheduleOnLeave,
+} from "@/modules/booking/types";
 import type { MerchantStaffPermission, StaffPermissionSectionKey } from "./types";
 
 export type StaffAvailabilityOverride = Tables<"staff_availability_overrides">;
@@ -169,6 +176,49 @@ export async function fetchMyDayBusinessHours(
   });
   if (error) throw error;
   return data as unknown as MyDayBusinessHours;
+}
+
+// =========================================================================
+// SPECS-INDEX #644:服務人員自助讀取自己某一天的「全天休假/時段排休/跨店佔用」狀態明細
+// (供 MyCalendarTimelineView.tsx 渲染用)。型別直接重用 booking 模組(CalendarPage.tsx 也是讀
+// 同一組資料形狀)匯出的 DayScheduleOnLeave/DayScheduleAvailabilityOverride/
+// DayScheduleForeignBooking,不重新定義一份重複的型別。
+// =========================================================================
+export interface MyDayScheduleState {
+  on_leave: DayScheduleOnLeave | null;
+  availability_overrides: DayScheduleAvailabilityOverride[];
+  foreign_bookings: DayScheduleForeignBooking[];
+}
+
+export async function fetchMyDayScheduleState(
+  staffId: string,
+  date: string,
+): Promise<MyDayScheduleState> {
+  const { data, error } = await supabase.rpc("get_my_day_schedule_state", {
+    p_staff_id: staffId,
+    p_date: date,
+  });
+  if (error) throw error;
+  return data as unknown as MyDayScheduleState;
+}
+
+/** SPECS-INDEX #644:服務人員自助讀取自己所屬商家的行事曆排程狀態顏色設定(全天休假/時段排休/
+ * 跨店佔用)。一般服務人員不符合 can_manage_bookings,讀不到 merchant_calendar_state_styles
+ * 表本身的 RLS SELECT 政策,所以改呼叫 SECURITY DEFINER 的 get_my_calendar_state_styles
+ * (只檢查 is_own_staff_row),不是直接 supabase.from(...) 查表。查無資料的 key fallback 成
+ * DEFAULT_CALENDAR_STATE_STYLES,跟商家設定頁讀取用的 fetchMerchantCalendarStateStyles
+ * 保持同一套 fallback 慣例,兩邊看到的顏色最終一致。 */
+export async function fetchMyCalendarStateStyles(staffId: string): Promise<CalendarStateStyleMap> {
+  const { data, error } = await supabase.rpc("get_my_calendar_state_styles", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+  const raw = (data ?? {}) as unknown as Record<string, string>;
+  return {
+    fullDayLeave: raw["full_day_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.fullDayLeave,
+    partialLeave: raw["partial_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.partialLeave,
+    crossStoreOccupied: raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
+  };
 }
 
 // =========================================================================
