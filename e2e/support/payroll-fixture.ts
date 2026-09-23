@@ -159,12 +159,19 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     throw new Error(`建立測試服務項目失敗:${serviceItemError?.message}`);
   }
 
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補合法格式的佔位電話(用 runId 後 7 碼 + 一碼區分兩位服務人員,湊成 09 開頭 10 碼,
+  // 避免同一次測試 run 建立的兩位服務人員撞號)。
+  const pieceRateStaffPhone = `09${runId.slice(-7)}0`;
+  const monthlySalaryStaffPhone = `09${runId.slice(-7)}1`;
+
   const pieceRateStaffName = `${PIECE_RATE_STAFF_NAME_PREFIX}${runId}`;
   const { data: pieceRateStaff, error: pieceRateStaffError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: pieceRateStaffName,
+      phone: pieceRateStaffPhone,
       no_time_slot_limit: true,
       // compensation_type 不填,沿用預設值 piece_rate。
     })
@@ -180,6 +187,7 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     .insert({
       merchant_id: merchantId as string,
       name: monthlySalaryStaffName,
+      phone: monthlySalaryStaffPhone,
       no_time_slot_limit: true,
       compensation_type: "monthly_salary",
     })

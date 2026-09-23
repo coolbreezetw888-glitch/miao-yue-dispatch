@@ -368,24 +368,47 @@ export function useLineNotificationLog(
 
 // =========================================================================
 // 3.15:行銷通知(規則 2.6,僅商家管理員)。
+// §10.2(SPECS-INDEX #612)疊加:tierId/isBlacklisted 供 LineMarketingPage.tsx 做「依會員分類
+// 批量選擇」「排除清單(黑名單預設自動排除)」用。tier_id/is_blacklisted 是模組 10(會員與紅利)
+// 的欄位,這裡選擇直接跟著既有的 line_bound 查詢一起讀(這個查詢本來就已經直接查 members 表,
+// 對應規格書 §5.4 說明「模組 11 可以直接讀 members.line_bound/line_user_id」的既有例外),
+// 而不是另外呼叫模組 10 的介面重新查一次同一批會員,避免兩次查詢對不齊。「等級名稱清單」本身
+// (merchant_member_tiers)仍然透過模組 10 對外匯出的 useMerchantMemberTiers 取得,不在這裡
+// 直接查詢那張表,維持模組 10 對那張表的所有權。
 // =========================================================================
 export interface MarketableMember {
   id: string;
   name: string;
   phone: string | null;
+  tierId: string | null;
+  isBlacklisted: boolean;
+}
+
+interface RawMarketableMember {
+  id: string;
+  name: string;
+  phone: string | null;
+  tier_id: string | null;
+  is_blacklisted: boolean;
 }
 
 /** 規則 2.6:只有 line_bound=true 的會員才會出現在可選名單裡,避免管理員誤以為選了就會送到。 */
 export async function fetchMarketableMembers(merchantId: string): Promise<MarketableMember[]> {
   const { data, error } = await supabase
     .from("members")
-    .select("id, name, phone")
+    .select("id, name, phone, tier_id, is_blacklisted")
     .eq("merchant_id", merchantId)
     .eq("line_bound", true)
     .eq("status", "active")
     .order("name", { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return ((data ?? []) as RawMarketableMember[]).map((m) => ({
+    id: m.id,
+    name: m.name,
+    phone: m.phone,
+    tierId: m.tier_id,
+    isBlacklisted: m.is_blacklisted,
+  }));
 }
 
 export function useMarketableMembers(

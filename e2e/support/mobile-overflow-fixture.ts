@@ -218,11 +218,18 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
   if (staffMainError || !staffMain)
     throw new Error(`建立測試主要服務人員失敗:${staffMainError?.message}`);
 
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼)——注意這一位助手用的是
+  // 一般合法格式的佔位電話,不是上面 staffMain 刻意用來測試「超長電話文字溢出」的
+  // LONG_PHONE_COMBO(那個 40 碼的組合值本身已經不符合新的 CHECK 約束,是這次順手盤點時
+  // 額外發現、範圍外的既有問題,已另外回報主腦,不在這裡處理)。
+  const staffAssistantPhone = `09${runId.slice(-8)}`;
   const { data: staffAssistant, error: staffAssistantError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: LONG_ASSISTANT_NAME,
+      phone: staffAssistantPhone,
       is_listed: true,
       no_time_slot_limit: true,
       unlimited_backend_edit: true,

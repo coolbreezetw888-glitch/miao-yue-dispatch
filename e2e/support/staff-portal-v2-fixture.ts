@@ -143,11 +143,16 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
   if (hoursError) throw new Error(`寫入測試商家營業時間失敗:${hoursError.message}`);
 
   const staffName = `${STAFF_NAME_PREFIX}${runId}`;
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼),避免建立 fixture 時
+  // 直接違反資料庫層約束。
+  const staffPhone = `09${runId.slice(-8)}`;
   const { data: staffRow, error: addStaffErr } = await adminClient
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: staffName,
+      phone: staffPhone,
       compensation_type: "piece_rate",
       no_time_slot_limit: true,
     })

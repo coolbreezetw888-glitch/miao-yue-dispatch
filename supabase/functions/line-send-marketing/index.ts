@@ -89,18 +89,25 @@ export interface MarketingMemberRow {
   name: string;
   line_bound: boolean;
   line_user_id: string | null;
+  // §10.2(SPECS-INDEX #612 問題 2):黑名單「無例外」規則的伺服器端第二道防線——不能只信任
+  // 前端已經把黑名單會員從勾選名單濾掉,這裡查回會員資料時一併帶出 is_blacklisted,
+  // buildMarketingDispatchPlan 會用這個欄位強制擋下,不管呼叫端(不管是不是正常的前端畫面)
+  // 傳了哪些 member_id 進來。
+  is_blacklisted: boolean;
 }
 
 export interface MarketingDispatchPlanItem {
   memberId: string;
-  status: "will_send" | "skipped_not_bound";
+  status: "will_send" | "skipped_not_bound" | "skipped_blacklisted";
   name: string;
   lineUserId: string | null;
 }
 
 /**
- * 3.15 純函式:依查回來的會員資料,決定每個 member_id 的處理計畫(要發送/因未綁定而跳過)。
- * 跟實際的資料庫/LINE API 呼叫分離,方便測試(未綁定會員被跳過且記錄 skip_reason='target_not_bound')。
+ * 3.15 純函式:依查回來的會員資料,決定每個 member_id 的處理計畫(要發送/因未綁定而跳過/
+ * 因黑名單而跳過)。跟實際的資料庫/LINE API 呼叫分離,方便測試(未綁定會員被跳過且記錄
+ * skip_reason='target_not_bound';§10.2 黑名單會員一律跳過,而且優先權比「有沒有綁定」更高
+ * ——即使黑名單會員剛好也已經綁定 LINE,一樣不會被標記成 will_send)。
  */
 export function buildMarketingDispatchPlan(
   requestedMemberIds: string[],
@@ -109,6 +116,16 @@ export function buildMarketingDispatchPlan(
   const byId = new Map(members.map((m) => [m.id, m]));
   return requestedMemberIds.map((memberId) => {
     const member = byId.get(memberId);
+    // §10.2(SPECS-INDEX #612 問題 2):黑名單「無例外」——這個判斷放在最前面,優先權高於
+    // 「有沒有綁定 LINE」,不管前端傳了什麼進來都一律擋下,不會被標記成 will_send。
+    if (member?.is_blacklisted) {
+      return {
+        memberId,
+        status: "skipped_blacklisted",
+        name: member.name,
+        lineUserId: null,
+      };
+    }
     if (!member || !member.line_bound || !member.line_user_id) {
       return {
         memberId,
@@ -184,9 +201,11 @@ async function handleRequest(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
+  // §10.2(SPECS-INDEX #612 問題 2):一併查 is_blacklisted,不能只信任前端已經把黑名單會員
+  // 濾掉——見 buildMarketingDispatchPlan 的強制擋下邏輯。
   const { data: members, error: membersError } = await adminClient
     .from("members")
-    .select("id, name, line_bound, line_user_id")
+    .select("id, name, line_bound, line_user_id, is_blacklisted")
     .eq("merchant_id", merchantId)
     .in("id", memberIds);
 
@@ -209,6 +228,25 @@ async function handleRequest(req: Request): Promise<Response> {
   let skippedCount = 0;
 
   for (const item of plan) {
+    if (item.status === "skipped_blacklisted") {
+      // §10.2(SPECS-INDEX #612 問題 2):黑名單「無例外」規則的伺服器端第二道防線——不管
+      // 前端傳了什麼進來,is_blacklisted=true 的會員一律不會被發送。skip_reason 的 CHECK
+      // 約束目前只允許 not_configured/event_disabled/target_not_bound/no_target 四種列舉值,
+      // 沒有『黑名單』這個選項(新增列舉值需要另外一次資料庫 migration,這次先只做「絕對擋下
+      // 發送」這件事本身,不擅自更動 schema),所以這裡 skip_reason 留 null(CHECK 允許
+      // null),可讀的原因改寫進沒有額外限制的 error_detail,確保這筆跳過依然留下稽核紀錄。
+      skippedCount += 1;
+      await adminClient.from("line_notification_log").insert({
+        merchant_id: merchantId,
+        event_type: "marketing_manual",
+        target_type: "member",
+        target_id: item.memberId,
+        status: "skipped",
+        error_detail: "黑名單客戶,系統自動排除,不會發送(伺服器端強制擋下,不論前端是否已經濾掉)",
+        created_by_user_id: createdByUserId,
+      });
+      continue;
+    }
     if (item.status === "skipped_not_bound") {
       skippedCount += 1;
       await adminClient.from("line_notification_log").insert({
