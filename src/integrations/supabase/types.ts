@@ -1029,7 +1029,7 @@ export type Database = {
           pending_admin_login_email: string | null
           pending_admin_login_email_requested_at: string | null
           pending_admin_login_email_requested_by: string | null
-          phone: string | null
+          phone: string
           status: string
           updated_at: string
           user_id: string | null
@@ -1050,7 +1050,7 @@ export type Database = {
           pending_admin_login_email?: string | null
           pending_admin_login_email_requested_at?: string | null
           pending_admin_login_email_requested_by?: string | null
-          phone?: string | null
+          phone: string
           status?: string
           updated_at?: string
           user_id?: string | null
@@ -1071,7 +1071,7 @@ export type Database = {
           pending_admin_login_email?: string | null
           pending_admin_login_email_requested_at?: string | null
           pending_admin_login_email_requested_by?: string | null
-          phone?: string | null
+          phone?: string
           status?: string
           updated_at?: string
           user_id?: string | null
@@ -1668,7 +1668,7 @@ export type Database = {
           pending_admin_login_email: string | null
           pending_admin_login_email_requested_at: string | null
           pending_admin_login_email_requested_by: string | null
-          phone: string | null
+          phone: string
           show_member_info: boolean
           status: string
           unlimited_backend_edit: boolean
@@ -1704,7 +1704,7 @@ export type Database = {
           pending_admin_login_email?: string | null
           pending_admin_login_email_requested_at?: string | null
           pending_admin_login_email_requested_by?: string | null
-          phone?: string | null
+          phone: string
           show_member_info?: boolean
           status?: string
           unlimited_backend_edit?: boolean
@@ -1740,7 +1740,7 @@ export type Database = {
           pending_admin_login_email?: string | null
           pending_admin_login_email_requested_at?: string | null
           pending_admin_login_email_requested_by?: string | null
-          phone?: string | null
+          phone?: string
           show_member_info?: boolean
           status?: string
           unlimited_backend_edit?: boolean
@@ -2302,6 +2302,60 @@ export type Database = {
           },
         ]
       }
+      staff_payroll_status_history: {
+        Row: {
+          compensation_type: string
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          is_backfill_seed: boolean
+          merchant_id: string
+          monthly_base_salary: number
+          staff_id: string
+          status: string
+        }
+        Insert: {
+          compensation_type: string
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_backfill_seed?: boolean
+          merchant_id: string
+          monthly_base_salary?: number
+          staff_id: string
+          status: string
+        }
+        Update: {
+          compensation_type?: string
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          is_backfill_seed?: boolean
+          merchant_id?: string
+          monthly_base_salary?: number
+          staff_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_payroll_status_history_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_payroll_status_history_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_push_subscriptions: {
         Row: {
           auth_key: string
@@ -2835,54 +2889,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      get_members_by_phone: {
-        Args: {
-          p_merchant_id: string
-          p_phone: string
-        }
-        Returns: Json
-      }
-      set_member_blacklist_status: {
-        Args: {
-          p_is_blacklisted: boolean
-          p_member_id: string
-          p_reason?: string
-        }
-        Returns: {
-          birthday: string | null
-          blacklist_reason: string | null
-          blacklisted_at: string | null
-          blacklisted_by_user_id: string | null
-          created_at: string
-          created_by_user_id: string | null
-          email: string | null
-          id: string
-          is_blacklisted: boolean
-          last_birthday_bonus_year: number | null
-          line_bound: boolean
-          line_user_id: string | null
-          merchant_id: string
-          name: string
-          notes: string | null
-          phone: string | null
-          phone_verified: boolean
-          phone_verified_at: string | null
-          points_balance: number
-          referral_code: string
-          referral_rewarded_at: string | null
-          referred_by_member_id: string | null
-          status: string
-          tier_id: string | null
-          updated_at: string
-          user_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "members"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       create_merchant_in_group: {
         Args: {
           p_address?: string
@@ -3103,6 +3109,10 @@ export type Database = {
           start_at: string
           status: string
         }[]
+      }
+      get_members_by_phone: {
+        Args: { p_merchant_id: string; p_phone: string }
+        Returns: Json
       }
       get_merchant_admin_users: {
         Args: { p_merchant_id: string }
@@ -3507,6 +3517,47 @@ export type Database = {
       set_agent_permission: {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
+      }
+      set_member_blacklist_status: {
+        Args: {
+          p_is_blacklisted: boolean
+          p_member_id: string
+          p_reason?: string
+        }
+        Returns: {
+          birthday: string | null
+          blacklist_reason: string | null
+          blacklisted_at: string | null
+          blacklisted_by_user_id: string | null
+          created_at: string
+          created_by_user_id: string | null
+          email: string | null
+          id: string
+          is_blacklisted: boolean
+          last_birthday_bonus_year: number | null
+          line_bound: boolean
+          line_user_id: string | null
+          merchant_id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          phone_verified: boolean
+          phone_verified_at: string | null
+          points_balance: number
+          referral_code: string
+          referral_rewarded_at: string | null
+          referred_by_member_id: string | null
+          status: string
+          tier_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_member_phone_verified: {
         Args: { p_member_id: string; p_verified: boolean }
