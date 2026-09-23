@@ -1798,7 +1798,11 @@ function CalendarPageInner() {
                         cellClassName={cellClassName}
                         cellStyle={cellStyle}
                         ariaLabel={finalAvailable ? "可預約" : "不可預約"}
-                        badgeText={isOverride ? (finalAvailable ? "例外開啟" : "例外關閉") : ""}
+                        // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
+                        // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
+                        // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
+                        // 「這是被別家佔用,不是本店自己的例外設定」這件事。
+                        badgeText=""
                         // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
                         // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
                         // 實際可預約時才提供。

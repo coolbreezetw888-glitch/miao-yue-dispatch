@@ -37,6 +37,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -62,7 +69,7 @@ import { useCurrentMerchant, useRefetchAccessibleMerchants } from "./context";
 import { LogoUploader } from "./LogoUploader";
 import { MerchantAdminList } from "./MerchantAdminList";
 import { ThemePresetPicker } from "./ThemePresetPicker";
-import { INDUSTRY_TYPE_LABELS } from "./types";
+import { INDUSTRY_TYPES, INDUSTRY_TYPE_LABELS } from "./types";
 import type { IndustryType } from "./types";
 
 function MerchantSettingsPageInner() {
@@ -70,7 +77,9 @@ function MerchantSettingsPageInner() {
   const refetchAccessibleMerchants = useRefetchAccessibleMerchants();
 
   const [name, setName] = useState("");
+  const [industryType, setIndustryType] = useState<IndustryType>("on_site_dispatch");
   const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [intro, setIntro] = useState("");
   const [themePreset, setThemePreset] = useState<string | null>(null);
@@ -83,7 +92,9 @@ function MerchantSettingsPageInner() {
   useEffect(() => {
     if (!merchant) return;
     setName(merchant.name);
+    setIndustryType(merchant.industry_type as IndustryType);
     setAddress(merchant.address ?? "");
+    setPhone(merchant.phone ?? "");
     setContactEmail(merchant.contact_email ?? "");
     setIntro(merchant.intro ?? "");
     setThemePreset(merchant.theme_preset);
@@ -120,7 +131,9 @@ function MerchantSettingsPageInner() {
     try {
       await updateMerchantSettings(merchant!.id, {
         name,
+        industryType,
         address: address || null,
+        phone: phone || null,
         contactEmail: contactEmail || null,
         intro: intro || null,
         themePreset,
@@ -155,7 +168,7 @@ function MerchantSettingsPageInner() {
         <Card>
           <CardHeader>
             <CardTitle>基本資料</CardTitle>
-            <CardDescription>LOGO、店名、地址、對外聯絡信箱與簡介</CardDescription>
+            <CardDescription>LOGO、店名、地址、電話、對外聯絡信箱與簡介</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <LogoUploader currentLogoUrl={merchant.logo_url} onUpload={handleLogoUpload} />
@@ -171,11 +184,25 @@ function MerchantSettingsPageInner() {
             </div>
 
             <div>
-              <Label>產業模組</Label>
-              <p className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                {INDUSTRY_TYPE_LABELS[merchant.industry_type as IndustryType] ??
-                  merchant.industry_type}
-                <span className="ml-2 text-xs">(建立後無法修改)</span>
+              <Label htmlFor="settings-industry-type">產業模組</Label>
+              <Select
+                value={industryType}
+                onValueChange={(v) => setIndustryType(v as IndustryType)}
+              >
+                <SelectTrigger id="settings-industry-type" className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INDUSTRY_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {INDUSTRY_TYPE_LABELS[type]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                可隨時切換,只影響之後新增/編輯預約時「客戶地址」欄位要不要顯示/必填(到府派工要填、
+                到店服務不用),不會更動已經建立的訂單資料。
               </p>
             </div>
 
@@ -186,6 +213,16 @@ function MerchantSettingsPageInner() {
                 className="mt-2"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="settings-phone">電話</Label>
+              <Input
+                id="settings-phone"
+                className="mt-2"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
               />
             </div>
 
@@ -294,6 +331,19 @@ function MerchantSettingsPageInner() {
           狀態顏色設定平行但完全獨立的新區塊,寫入的是完全不同的一張表
           (merchant_calendar_state_styles),自己的「儲存」按鈕跟載入/儲存狀態。 */}
       <CalendarStateStylesCard merchantId={merchant.id} />
+
+      {/* 使用者決策(2026-09-23):「新增分店」從舊版 HomePage.tsx 搬到這裡最下方——這個頁面
+          整頁已經套用 RequireMerchantAdmin,自然滿足「只有管理員這個角色時才會出現」,不需要
+          另外加角色判斷。 */}
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
+        <div>
+          <p className="text-sm font-medium text-foreground">新增分店</p>
+          <p className="mt-1 text-xs text-muted-foreground">在同一個集團底下再開一間新的分店</p>
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/app/new-merchant">新增分店</Link>
+        </Button>
+      </div>
     </main>
   );
 }

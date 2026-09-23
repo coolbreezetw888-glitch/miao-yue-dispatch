@@ -29,7 +29,7 @@
 // 左側色條顯示用,資料表/RLS/RPC 完全不動,寫入邏輯(updateMerchantBookingStatusColors)一併
 // 搬去 MerchantSettingsPage.tsx,不在這個檔案裡重複一份。
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -68,6 +68,7 @@ import {
 import {
   BOOKING_STATUS_LABELS,
   bookingCardAccentBorderStyle,
+  bookingCardHoverBorderColor,
   DEFAULT_BOOKING_STATUS_COLORS,
   type Booking,
   type BookingStatus,
@@ -366,8 +367,13 @@ function OrderCard({
   return (
     <button type="button" onClick={onClick} className="block w-full text-left">
       <div
-        className="min-w-0 rounded-md border-y border-r border-border border-l-4 bg-background p-3 shadow-sm transition-colors hover:border-brand/40"
-        style={bookingCardAccentBorderStyle(statusColors, status)}
+        className="min-w-0 rounded-md border-y border-r border-border border-l-4 bg-background p-3 shadow-sm transition-colors hover:border-[color:var(--order-card-hover-border)]"
+        style={
+          {
+            ...bookingCardAccentBorderStyle(statusColors, status),
+            "--order-card-hover-border": bookingCardHoverBorderColor(statusColors, status),
+          } as CSSProperties
+        }
       >
         <div className="flex items-start justify-between gap-2">
           <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">

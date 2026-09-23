@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { StaffAvatarUploader } from "@/modules/staff-agent/StaffAvatarUploader";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
+import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 
 import { updateMyStaffProfile, uploadMyStaffAvatar } from "./api";
 
@@ -62,16 +63,32 @@ export function EditMyStaffProfileDialog({
     }
   }, [open, staff]);
 
+  // merchant_staff.phone 資料庫層已改為 NOT NULL + 台灣手機號碼格式 CHECK 約束
+  // (SPECS-INDEX #595/#596),這裡比照 StaffListPage.tsx §8.1 的驗證規則,不能讓服務人員
+  // 自己把電話欄位清空或填成不合格式的值送出——否則會直接撞到資料庫約束,跳出不好懂的錯誤訊息。
+  function getPhoneValidationError(): string | null {
+    const trimmedPhone = phone.trim();
+    if (!trimmedPhone) return "請填寫電話";
+    if (!isValidTaiwanMobilePhone(trimmedPhone)) return TW_MOBILE_PHONE_ERROR_MESSAGE;
+    return null;
+  }
+
   async function handleAvatarUpload(file: File) {
     const url = await uploadMyStaffAvatar(merchantId, staff.id, file);
     setAvatarUrl(url);
     // 頭像跟其他欄位不同,上傳成功就直接存檔,避免關掉對話框後遺失剛上傳的圖片
-    // (比照既有 StaffFormDialog 的既有做法)。
+    // (比照既有 StaffFormDialog 的既有做法)。但存檔前一樣要先過電話驗證,不然這裡會比
+    // 主表單送出更早撞到資料庫約束。
+    const phoneError = getPhoneValidationError();
+    if (phoneError) {
+      toast.error(phoneError, { description: "頭像已上傳,請先修正電話欄位再儲存其他資料" });
+      return;
+    }
     await updateMyStaffProfile({
       staffId: staff.id,
       name,
       nickname,
-      phone,
+      phone: phone.trim(),
       contactEmail,
       avatarUrl: url,
       intro,
@@ -85,13 +102,18 @@ export function EditMyStaffProfileDialog({
       toast.error("請填寫姓名");
       return;
     }
+    const phoneError = getPhoneValidationError();
+    if (phoneError) {
+      toast.error(phoneError);
+      return;
+    }
     setSaving(true);
     try {
       await updateMyStaffProfile({
         staffId: staff.id,
         name,
         nickname,
-        phone,
+        phone: phone.trim(),
         contactEmail,
         avatarUrl,
         intro,
@@ -138,12 +160,13 @@ export function EditMyStaffProfileDialog({
               />
             </div>
             <div>
-              <Label htmlFor="my-staff-phone">電話</Label>
+              <Label htmlFor="my-staff-phone">電話 *</Label>
               <Input
                 id="my-staff-phone"
                 className="mt-2"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                required
               />
             </div>
             <div>

@@ -81,7 +81,9 @@ export async function createMerchantInGroup(input: CreateMerchantInGroupInput): 
 
 export interface UpdateMerchantSettingsInput {
   name?: string;
+  industryType?: IndustryType;
   address?: string | null;
+  phone?: string | null;
   contactEmail?: string | null;
   intro?: string | null;
   themePreset?: string | null;
@@ -92,8 +94,12 @@ export interface UpdateMerchantSettingsInput {
 }
 
 /**
- * 4.2 商家設定頁存檔。刻意不接受 industryType 參數 —— industry_type 建立後鎖定(規則 2.1),
- * 這裡連欄位都不開放傳入，從介面設計上直接排除誤用的可能，資料庫層的 trigger 是最後一道防線。
+ * 4.2 商家設定頁存檔。
+ * 2026-09-23 使用者推翻原本的規則 2.1(industry_type 建立後鎖定):資料庫層的
+ * merchants_lock_industry_type trigger 已拿掉(見 migration
+ * 20260923040000_allow_industry_type_change),這裡因此開放接受 industryType 參數,
+ * 商家管理員可在設定頁隨時切換。唯一受影響的既有行為是 private.industry_requires_customer_address()
+ * (新增/編輯預約時客戶地址欄位是否顯示/必填),不影響既有訂單資料。
  */
 export async function updateMerchantSettings(
   merchantId: string,
@@ -101,7 +107,9 @@ export async function updateMerchantSettings(
 ): Promise<void> {
   const payload: TablesUpdate<"merchants"> = {
     ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.industryType !== undefined ? { industry_type: input.industryType } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
     ...(input.contactEmail !== undefined ? { contact_email: input.contactEmail } : {}),
     ...(input.intro !== undefined ? { intro: input.intro } : {}),
     ...(input.themePreset !== undefined ? { theme_preset: input.themePreset } : {}),

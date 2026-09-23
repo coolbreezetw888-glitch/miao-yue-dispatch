@@ -24,23 +24,39 @@
 //      的個人資料卡片需要 userId 查詢自己的管理員/客服紀錄),子路由不用重新呼叫一次登入驗證。
 //
 // 商家端調整批次(2026-09-22,對應 .project/SPECS-INDEX.md #609/#610,.project/specs/
-// 後台導覽外殼.md 該批次章節 + .project/specs/服務人員端.md §15.1):底部分頁籤數量從 3 個
-// 改成 4 個,而且**依角色不同**——這是這次改版唯一新增的分岐點,之前是全角色共用同一份靜態
-// TABS 陣列,現在改成依 useCurrentMerchantRole() 的結果挑選對應的分頁籤組合:
-//   - 商家管理員/客服(role !== 'staff',含角色還在載入中的預設情況):首頁/功能(拿掉訂單管理
-//     卡片,見 ManagePage.tsx)/訂單管理(新增,原本「功能」卡片獨立升級)/行事曆。
+// 後台導覽外殼.md 該批次章節 + .project/specs/服務人員端.md §15.1):底部分頁籤依角色不同,
+// 依 useCurrentMerchantRole() 的結果挑選對應的分頁籤組合:
+//   - 商家管理員/客服(role !== 'staff',含角色還在載入中的預設情況)。
 //   - 服務人員(role === 'staff'):首頁/休假設定(原「功能」卡片獨立升級)/薪資報表(原「功能」
 //     卡片獨立升級)/行事曆。服務人員不再看到「功能」分頁籤,ManagePage.tsx 對服務人員角色而言
-//     已經沒有對應的分頁籤入口(見該檔案 isStaff 分支)。
+//     已經沒有對應的分頁籤入口。
 // 「分頁籤永遠顯示、不因角色/權限隱藏」這條既有規則延續適用(.project/SPECS-INDEX.md #118)——
-// 這次只是「永遠顯示的分頁籤數量」從 3 變成 4,不是推翻這條規則;「訂單管理」分頁籤沒有 orders
-// 權限的客服一樣看得到分頁籤本身,點進去由 OrdersPage.tsx 顯示空狀態文字,不是分頁籤消失。
+// 「訂單管理」「店家報表」這兩個分頁籤沒有對應權限的客服一樣看得到分頁籤本身,點進去分別由
+// OrdersPage.tsx/BillingReportPage.tsx 顯示空狀態文字,不是分頁籤消失。
+//
+// 使用者決策(2026-09-23,大改版,詳見各檔案自己的說明):
+//   - 拔掉「首頁」分頁籤(商家管理員/客服視角)——內容分散到「功能」頁最上方(個人資料卡片)/
+//     「商家設定」頁最下方(新增分店),見 HomePage.tsx/ManagePage.tsx/MerchantSettingsPage.tsx。
+//     服務人員視角維持有「首頁」分頁籤,HomePage.tsx(/app)現在專職服務人員自己的個人資料首頁。
+//   - 商家管理員/客服分頁籤順序改成:功能/行事曆/訂單管理/店家報表(原「店家帳務報表」卡片
+//     獨立升級成分頁籤並改名「店家報表」)。
+//   - 新增雙重身份切換(管理員/客服同時也是這間商家的服務人員時,可以在 MerchantSwitcher 的
+//     下拉選單裡手動切換要看商家端還是服務人員端內容),見下方 isDualRoleEligible/forcedStaffView/
+//     isStaffView 三個變數的說明,以及 MerchantSwitcher.tsx 的切換選項渲染。
 //
 // 例外(不套用這個外殼,見規格書「例外」一節):/app/onboarding、/app/agent-invite-complete
 // 維持獨立全螢幕流程,在 src/App.tsx 裡刻意放在 <AppLayout> 巢狀路由之外。
 
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CalendarOff, FileBarChart, Home, LayoutGrid, Receipt } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarOff,
+  FileBarChart,
+  Home,
+  LayoutGrid,
+  Receipt,
+  TrendingUp,
+} from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -60,6 +76,10 @@ import { applyThemeColorToDocument, resolveMerchantThemeColor } from "@/modules/
 // #609/#610:底部分頁籤這次依角色不同(商家管理員/客服 vs 服務人員),需要在外殼層級就知道
 // 目前使用者的角色。
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
+// 使用者決策(2026-09-23):管理員/客服同時也是服務人員時的雙重身份切換——直接查自己的
+// merchant_staff 紀錄(不透過 useCurrentMerchantRole 的角色優先權判斷),判斷「除了目前解析出來
+// 的角色之外,我是不是也能切到服務人員端」。
+import { useActiveMyStaffRecord } from "@/modules/staff-portal/context";
 
 export interface AppLayoutContext {
   email: string | null;
@@ -68,6 +88,10 @@ export interface AppLayoutContext {
    * 信箱(auth.users.new_email)。三種角色共用,不用各自重新呼叫一次 getVerifiedUser()。 */
   newEmail: string | null;
   onSignOut: () => void;
+  /** 使用者決策(2026-09-23):目前實際要不要顯示服務人員端內容——純服務人員角色永遠 true;
+   * 管理員/客服同時也是服務人員時,依 MerchantSwitcher 的雙重身份切換選擇決定。HomePage.tsx
+   * 用這個值決定要渲染服務人員自己的個人資料首頁,還是導去 /app/manage。 */
+  isStaffView: boolean;
 }
 
 /** 給「首頁」分頁籤(HomePage)用,取得共用外殼已經驗證好的 email 跟登出函式,
@@ -97,11 +121,12 @@ const CALENDAR_TAB: TabDef = {
   isActive: (pathname) => pathname.startsWith("/app/calendar"),
 };
 
-// 商家管理員/客服(以及角色還在載入中時的預設值,避免第一次 render 就顯示錯誤的分頁籤組合
-// 後又跳成服務人員版——多數使用者是管理員/客服,以這組當預設風險最低):
-// 首頁/功能(#610 拿掉了訂單管理卡片)/訂單管理(#610 新增獨立分頁籤)/行事曆。
+// 使用者決策(2026-09-23):拔掉「首頁」分頁籤(內容搬到功能頁最上方/商家設定頁最下方,見
+// HomePage.tsx/ManagePage.tsx/MerchantSettingsPage.tsx 開頭的說明),順序改成
+// 功能/行事曆/訂單管理/店家報表(原本「店家帳務報表」卡片獨立升級成分頁籤,同時改名「店家報表」,
+// 比照訂單管理當初升級成分頁籤的既有模式——沒有 billing 權限的客服一樣看得到分頁籤本身,點進去由
+// BillingReportPage.tsx 顯示空狀態文字,不會被導離,見 RequireBillingAccess.tsx 的對應調整)。
 const MERCHANT_TABS: TabDef[] = [
-  HOME_TAB,
   {
     to: "/app/manage",
     label: "功能",
@@ -113,13 +138,19 @@ const MERCHANT_TABS: TabDef[] = [
       pathname.startsWith("/app/service-items") ||
       pathname.startsWith("/app/settings"),
   },
+  CALENDAR_TAB,
   {
     to: "/app/orders",
     label: "訂單管理",
     icon: Receipt,
     isActive: (pathname) => pathname.startsWith("/app/orders"),
   },
-  CALENDAR_TAB,
+  {
+    to: "/app/billing-report",
+    label: "店家報表",
+    icon: TrendingUp,
+    isActive: (pathname) => pathname.startsWith("/app/billing-report"),
+  },
 ];
 
 // 服務人員(#609,.project/specs/服務人員端.md §15.1):首頁/休假設定/薪資報表/行事曆——原本
@@ -158,7 +189,22 @@ export default function AppLayout() {
   // 客服那組當預設——多數使用者是管理員/客服,先顯示那組風險最低,role 一解出來是 'staff'
   // 馬上就會切換,不會卡在錯的分頁籤組合太久。
   const { data: merchantRole } = useCurrentMerchantRole();
-  const tabs = merchantRole === "staff" ? STAFF_TABS : MERCHANT_TABS;
+
+  // 使用者決策(2026-09-23):管理員/客服同時也是服務人員時,可以在 MerchantSwitcher 的下拉選單
+  // 裡手動切換要看商家端還是服務人員端——直接查自己的 merchant_staff 紀錄(不透過
+  // useCurrentMerchantRole 的角色優先權判斷,那支 hook 身兼多重角色時永遠回傳較高權限角色,
+  // 見該檔案註解「規則 2.10」),判斷「除了目前解析出來的角色之外,我是不是也能切到服務人員端」。
+  const { data: myStaffRow } = useActiveMyStaffRecord(currentMerchant?.id ?? null);
+  const isDualRoleEligible =
+    (merchantRole === "admin" || merchantRole === "agent") && myStaffRow != null;
+  const [forcedStaffView, setForcedStaffView] = useState(false);
+  // 切換商家時重置回預設檢視,避免帶著「在 A 店選擇服務人員端」的狀態誤套用到剛切過去的 B 店
+  // (B 店不一定也有這位使用者的服務人員身份)。
+  useEffect(() => {
+    setForcedStaffView(false);
+  }, [currentMerchant?.id]);
+  const isStaffView = merchantRole === "staff" || (isDualRoleEligible && forcedStaffView);
+  const tabs = isStaffView ? STAFF_TABS : MERCHANT_TABS;
 
   // 以下這段登入驗證/導向邏輯,原封不動搬自舊版 src/routes/app.tsx(AppShell),行為完全不變,
   // 只多存一份 userId(user.id)供 1.2 首頁個人資料卡片查詢自己的管理員/客服紀錄使用。
@@ -227,16 +273,27 @@ export default function AppLayout() {
     );
   }
 
-  const outletContext: AppLayoutContext = { email, userId, newEmail, onSignOut: handleSignOut };
+  const outletContext: AppLayoutContext = {
+    email,
+    userId,
+    newEmail,
+    onSignOut: handleSignOut,
+    isStaffView,
+  };
 
   return (
     <div className="min-h-screen bg-surface font-sans antialiased">
       {/* 對應規格書「首頁外殼與主題色優化」一、1.1:商家切換器(含商家 LOGO)取代秒約 LOGO,
-          常駐在頂端列左側;登出按鈕搬到同一列右側。不管切到「首頁/功能/行事曆」哪一個分頁籤,
-          頂端都能直接切換商家、直接登出。 */}
+          常駐在頂端列左側;登出按鈕搬到同一列右側。不管切到哪一個分頁籤,頂端都能直接切換商家、
+          直接登出。2026-09-23:雙重身份(管理員/客服同時也是服務人員)的切換入口也掛在這個
+          下拉選單裡(見 MerchantSwitcher.tsx),不是另外的按鈕。 */}
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-5">
-          <MerchantSwitcher />
+          <MerchantSwitcher
+            canSwitchToStaffView={isDualRoleEligible}
+            isStaffView={isStaffView}
+            onToggleView={() => setForcedStaffView((prev) => !prev)}
+          />
           <Button variant="outline" size="sm" onClick={handleSignOut}>
             登出
           </Button>

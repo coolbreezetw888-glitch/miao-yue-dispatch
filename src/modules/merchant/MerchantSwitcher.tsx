@@ -47,7 +47,20 @@ function MerchantLogo({ logoUrl, name }: { logoUrl: string | null; name: string 
   );
 }
 
-export function MerchantSwitcher() {
+interface MerchantSwitcherProps {
+  /** 使用者決策(2026-09-23):目前這位使用者除了解析出來的角色之外,是不是也能切到服務人員端
+   * (管理員/客服同時也是這間商家的服務人員)。true 才會在下拉選單底部多出切換選項。 */
+  canSwitchToStaffView?: boolean;
+  /** 目前是否正顯示服務人員端內容,決定切換選項的文字方向。 */
+  isStaffView?: boolean;
+  onToggleView?: () => void;
+}
+
+export function MerchantSwitcher({
+  canSwitchToStaffView = false,
+  isStaffView = false,
+  onToggleView,
+}: MerchantSwitcherProps) {
   const { merchants, currentMerchantId, setCurrentMerchantId, isLoading } =
     useMerchantSwitcherState();
 
@@ -56,10 +69,21 @@ export function MerchantSwitcher() {
   }
 
   const currentMerchant = merchants.find((m) => m.id === currentMerchantId);
+  const hasMultipleMerchants = merchants.length > 1;
 
-  // 只有一間可管理的商家時，不需要顯示切換 UI，直接顯示店名即可。
-  const onlyMerchant = merchants.length === 1 ? merchants[0] : undefined;
-  if (onlyMerchant) {
+  /** 2026-09-23:切換服務人員端/商家端這個選項,附加在下拉選單最下方(見 image 132)。 */
+  const viewToggleItem = canSwitchToStaffView ? (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={() => onToggleView?.()}>
+        {isStaffView ? "切換商家端" : "切換服務人員端"}
+      </DropdownMenuItem>
+    </>
+  ) : null;
+
+  // 只有一間可管理的商家、也沒有雙重身份可切換時，不需要顯示下拉選單，直接顯示店名即可。
+  if (!hasMultipleMerchants && !canSwitchToStaffView) {
+    const onlyMerchant = merchants[0]!;
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm">
         <MerchantLogo logoUrl={onlyMerchant.logo_url} name={onlyMerchant.name} />
@@ -90,33 +114,42 @@ export function MerchantSwitcher() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
-        {Array.from(groupedByGroupId.entries()).map(([groupId, groupMerchants], index) => {
-          const firstInGroup = groupMerchants[0];
-          if (!firstInGroup) return null;
-          return (
-            <div key={groupId}>
-              {index > 0 ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuLabel className="text-xs text-muted-foreground">
-                {groupLabelFor(firstInGroup, groupMerchants)}
-              </DropdownMenuLabel>
-              {groupMerchants.map((merchant) => (
-                <DropdownMenuItem
-                  key={merchant.id}
-                  onSelect={() => setCurrentMerchantId(merchant.id)}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="truncate">{merchant.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {INDUSTRY_TYPE_LABELS[
-                      merchant.industry_type as keyof typeof INDUSTRY_TYPE_LABELS
-                    ] ?? merchant.industry_type}
-                    {merchant.status === "disabled" ? "・已停用" : ""}
-                  </span>
-                </DropdownMenuItem>
-              ))}
-            </div>
-          );
-        })}
+        {hasMultipleMerchants ? (
+          Array.from(groupedByGroupId.entries()).map(([groupId, groupMerchants], index) => {
+            const firstInGroup = groupMerchants[0];
+            if (!firstInGroup) return null;
+            return (
+              <div key={groupId}>
+                {index > 0 ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  {groupLabelFor(firstInGroup, groupMerchants)}
+                </DropdownMenuLabel>
+                {groupMerchants.map((merchant) => (
+                  <DropdownMenuItem
+                    key={merchant.id}
+                    onSelect={() => setCurrentMerchantId(merchant.id)}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="truncate">{merchant.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {INDUSTRY_TYPE_LABELS[
+                        merchant.industry_type as keyof typeof INDUSTRY_TYPE_LABELS
+                      ] ?? merchant.industry_type}
+                      {merchant.status === "disabled" ? "・已停用" : ""}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            );
+          })
+        ) : (
+          // 只有一間商家、但有雙重身份可切換時：下拉選單只是為了裝下面的切換選項,
+          // 商家名稱純粹當標籤顯示,不需要可點選。
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            {currentMerchant?.name ?? "目前商家"}
+          </DropdownMenuLabel>
+        )}
+        {viewToggleItem}
       </DropdownMenuContent>
     </DropdownMenu>
   );

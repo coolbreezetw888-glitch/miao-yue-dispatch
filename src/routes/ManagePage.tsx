@@ -23,7 +23,7 @@
 //   服務人員角色(模組 14/15.1):「功能」分頁籤底下原本的「休假設定」「薪資報表」兩張卡片
 //   已經各自獨立升級成 AppLayout 底部分頁籤,服務人員不再看到這個頁面,見下方 isStaff 分支。
 
-import { useEffect, type ComponentType } from "react";
+import { useEffect, useState, type ComponentType, type FormEvent } from "react";
 import {
   Award,
   Bell,
@@ -32,6 +32,7 @@ import {
   CalendarRange,
   ClipboardList,
   Coins,
+  Copy,
   Download,
   FileBarChart,
   Gift,
@@ -42,7 +43,6 @@ import {
   Percent,
   Settings,
   Smartphone,
-  TrendingUp,
   Upload,
   UserMinus,
   UserRound,
@@ -50,10 +50,166 @@ import {
   Wallet,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useCurrentMerchantRole, useAgentPermission } from "@/modules/staff-agent/context";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import { updateMyAdminProfile } from "@/modules/merchant/api";
+import { useCurrentMerchant, useMyAdminProfile } from "@/modules/merchant/context";
+import {
+  clearAgentPendingLoginEmail,
+  updateMyAgentProfile,
+} from "@/modules/staff-agent/api";
+import {
+  useCurrentMerchantRole,
+  useAgentPermission,
+  useMyAgentProfile,
+} from "@/modules/staff-agent/context";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
+
+import { useAppLayoutContext } from "./AppLayout";
+import { emailNamePrefix, LoginEmailSection, PendingAdminLoginEmailSuggestionCard } from "./ProfileCardShared";
+
+interface EditProfileDialogProps {
+  role: "admin" | "agent";
+  merchantId: string;
+  nameLabel: string;
+  currentName: string;
+  currentJobTitle: string;
+  onSaved: () => void;
+}
+
+/** 使用者決策(2026-09-23):從舊版 HomePage.tsx 原封不動搬過來——「編輯個人資料」按鈕點擊開啟
+ * 的小對話框,可以編輯姓名/暱稱、職位兩個欄位,儲存後由呼叫端 onSaved() 重新整理卡片顯示的資料。
+ * 服務人員版本(EditMyStaffProfileDialog)不在這裡,那個留在 HomePage.tsx 給服務人員自己用。 */
+function EditProfileDialog({
+  role,
+  merchantId,
+  nameLabel,
+  currentName,
+  currentJobTitle,
+  onSaved,
+}: EditProfileDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(currentName);
+  const [jobTitle, setJobTitle] = useState(currentJobTitle);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(currentName);
+      setJobTitle(currentJobTitle);
+    }
+  }, [open, currentName, currentJobTitle]);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (role === "admin") {
+        await updateMyAdminProfile(merchantId, name, jobTitle);
+      } else {
+        await updateMyAgentProfile(merchantId, name, jobTitle);
+      }
+      onSaved();
+      setOpen(false);
+      toast.success("個人資料已更新");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          編輯個人資料
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>編輯個人資料</DialogTitle>
+          <DialogDescription>只會更新你自己的資料,不會影響到其他人。</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="profile-name">{nameLabel}</Label>
+            <Input
+              id="profile-name"
+              className="mt-2"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="profile-job-title">職位</Label>
+            <Input
+              id="profile-job-title"
+              className="mt-2"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={saving}>
+              {saving ? "儲存中⋯" : "儲存"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** 使用者決策(2026-09-23):「預約網址」獨立卡片——搬自商家設定頁「基本資料」區塊,那裡原本
+ * 直接印出整段 booking_slug 純文字,這裡改成用「複製連結」按鈕操作,不在畫面上顯示整段網址。
+ * 商家設定頁原本那個區塊保留不移除(使用者原話:「原本商家設定內的保留不移除」)。
+ * 實際的客戶預約頁面要等「客戶端自助預約」模組(模組 13)推出才會真正上線,這裡先讓連結可以複製
+ * 起來備用,不是本模組新增的功能承諾。 */
+function BookingUrlCard() {
+  const { merchant } = useCurrentMerchant();
+  const bookingSlug = merchant?.booking_slug ?? null;
+
+  function handleCopy() {
+    if (!bookingSlug) return;
+    const url = `${window.location.origin}/booking/${bookingSlug}`;
+    void navigator.clipboard.writeText(url).then(
+      () => toast.success("已複製預約網址"),
+      () => toast.error("複製失敗,請手動到商家設定頁查看"),
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
+      <div>
+        <p className="text-sm font-medium text-foreground">預約網址</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          顧客預約用的專屬連結,實際頁面會在「客戶端自助預約」模組推出後才能使用。
+        </p>
+      </div>
+      <Button variant="outline" size="sm" onClick={handleCopy} disabled={!bookingSlug}>
+        <Copy className="mr-1.5 h-3.5 w-3.5" />
+        複製連結
+      </Button>
+    </div>
+  );
+}
 
 interface FunctionCardDef {
   key: string;
@@ -68,23 +224,71 @@ export default function ManagePage() {
   const navigate = useNavigate();
   const { data: merchantRole, isLoading: roleLoading } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
-  const isStaff = merchantRole === "staff";
+  const isAgent = merchantRole === "agent";
+  const { email, newEmail, userId, isStaffView } = useAppLayoutContext();
+  const { merchant: currentMerchant } = useCurrentMerchant();
+  const merchantId = currentMerchant?.id ?? null;
 
   // 商家端調整批次(2026-09-22,.project/SPECS-INDEX.md #609,.project/specs/服務人員端.md
   // §15.1):服務人員角色原本在這裡看到的「功能」分頁籤(只有休假設定/薪資報表兩張卡片,舊版
   // StaffManagePage)已經作廢——這兩張卡片各自升級成 AppLayout 底部分頁籤(/app/my-availability、
   // /app/my-payroll),服務人員的底部導覽不再連到這個路由。這裡只保留防呆:萬一服務人員透過
   // 殘留的深連結/書籤仍然打到 /app/manage,直接導回「首頁」分頁籤,不留下一個空的/過期的畫面。
+  // 2026-09-23:改用 isStaffView(涵蓋純服務人員角色 + 雙重身份選擇切到服務人員端檢視兩種情境)
+  // 判斷,不是只看原始角色——雙重身份的人選了服務人員端之後,不應該還能停留在這個商家管理頁面。
   // 這段 useEffect 故意放在所有 useAgentPermission hook 呼叫「之前」宣告、但實際的提早 return
-  // 放在全部 hooks 呼叫「之後」(見下面 isStaff 判斷式)——確保不管 isStaff 是 true/false,
+  // 放在全部 hooks 呼叫「之後」(見下面 isStaffView 判斷式)——確保不管 isStaffView 是 true/false,
   // 每次 render 呼叫的 hooks 數量/順序都一樣,不違反 React hooks 規則。
   useEffect(() => {
     if (roleLoading) return;
-    if (isStaff) {
+    if (isStaffView) {
       navigate("/app", { replace: true });
     }
-  }, [roleLoading, isStaff, navigate]);
+  }, [roleLoading, isStaffView, navigate]);
 
+  // 使用者決策(2026-09-23):「首頁」分頁籤拔掉,個人資料卡片(姓名/職位/登入信箱)搬到這裡
+  // 最上方,邏輯原封不動搬自舊版 HomePage.tsx(服務人員版本留在 HomePage.tsx,這裡只有
+  // 管理員/客服兩種)。
+  const adminProfileQuery = useMyAdminProfile(merchantId, userId, isAdmin);
+  const agentProfileQuery = useMyAgentProfile(merchantId, userId, isAgent);
+
+  const emailPrefix = emailNamePrefix(email);
+  const displayName = isAdmin
+    ? adminProfileQuery.data?.displayName || emailPrefix
+    : isAgent
+      ? agentProfileQuery.data?.nickname || emailPrefix
+      : emailPrefix;
+  const jobTitleFallback = isAgent ? "客服" : "商家管理員";
+  const jobTitle = isAdmin
+    ? adminProfileQuery.data?.jobTitle || jobTitleFallback
+    : isAgent
+      ? agentProfileQuery.data?.job_title || jobTitleFallback
+      : jobTitleFallback;
+  const rawName = isAdmin
+    ? (adminProfileQuery.data?.displayName ?? "")
+    : isAgent
+      ? (agentProfileQuery.data?.nickname ?? "")
+      : "";
+  const rawJobTitle = isAdmin
+    ? (adminProfileQuery.data?.jobTitle ?? "")
+    : isAgent
+      ? (agentProfileQuery.data?.job_title ?? "")
+      : "";
+
+  function refetchProfile() {
+    if (isAdmin) void adminProfileQuery.refetch();
+    else if (isAgent) void agentProfileQuery.refetch();
+  }
+
+  async function clearAgentPendingSuggestion() {
+    if (!agentProfileQuery.data) return;
+    await clearAgentPendingLoginEmail(agentProfileQuery.data.id);
+    await agentProfileQuery.refetch();
+  }
+
+  // 使用者決策(2026-09-23):服務人員管理開放給有 staff_management 權限的客服使用。
+  const { data: canManageStaff } = useAgentPermission("staff_management");
+  const showStaffCard = isAdmin || canManageStaff === true;
   // 模組 4 規格書 4.3/2.5 既有邏輯:商家管理員一律顯示,客服則透過這支 hook 判斷。
   const { data: canManageServiceItems } = useAgentPermission("service_items");
   const showServiceItemsCard = isAdmin || canManageServiceItems === true;
@@ -108,12 +312,12 @@ export default function ManagePage() {
   const showTeamLeaveCards = isAdmin || canManageTeamLeave === true;
   const { data: canViewScheduling } = useAgentPermission("scheduling");
   const showSchedulingCard = isAdmin || canViewScheduling === true;
-  // 模組 8(薪資與帳務)§4.6:commission_settings/billing/staff_report 三把獨立鑰匙,分別決定
-  // 「抽成與薪資設定」「店家帳務報表」「師傅報表」三張卡片的顯示權限。
+  // 模組 8(薪資與帳務)§4.6:commission_settings/staff_report 兩把獨立鑰匙,分別決定
+  // 「抽成與薪資設定」「師傅報表」兩張卡片的顯示權限。「店家帳務報表」(billing)2026-09-23
+  // 已升級成底部分頁籤(見 AppLayout.tsx),billing 這個 section_key 的判斷邏輯搬到
+  // RequireBillingAccess.tsx,不再是這個頁面的卡片。
   const { data: canManageCommissionSettings } = useAgentPermission("commission_settings");
   const showPayrollSettingsCard = isAdmin || canManageCommissionSettings === true;
-  const { data: canViewBilling } = useAgentPermission("billing");
-  const showBillingReportCard = isAdmin || canViewBilling === true;
   const { data: canViewStaffReport } = useAgentPermission("staff_report");
   const showStaffReportCard = isAdmin || canViewStaffReport === true;
   // 模組 10(會員與紅利)§4.7:members/member_settings 兩把獨立鑰匙,分別決定「會員管理」
@@ -141,9 +345,9 @@ export default function ManagePage() {
   // 權限項目(規格書「涉及元件」一節明講由 engineer 決定歸在 members 還是 member_settings,
   // 這裡選 members)。
 
-  // 所有 useAgentPermission hook 都呼叫完畢,這裡才做服務人員角色的提早 return(見上面 useEffect
+  // 所有 useAgentPermission hook 都呼叫完畢,這裡才做服務人員端檢視的提早 return(見上面 useEffect
   // 旁的說明),不影響 hooks 呼叫順序的一致性。
-  if (isStaff) {
+  if (isStaffView) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
         <p className="text-sm text-muted-foreground">載入中⋯</p>
@@ -158,7 +362,7 @@ export default function ManagePage() {
       label: "服務人員",
       description: "管理師傅/服務人員名錄與可承接的服務項目",
       icon: Users,
-      visible: isAdmin,
+      visible: showStaffCard,
     },
     {
       key: "agents",
@@ -231,14 +435,6 @@ export default function ManagePage() {
       description: "設定抽成基準/比例、月薪與月休天數",
       icon: Percent,
       visible: showPayrollSettingsCard,
-    },
-    {
-      key: "billing-report",
-      to: "/app/billing-report",
-      label: "店家帳務報表",
-      description: "查看月度營收、成本、抽成支出與概估毛利",
-      icon: TrendingUp,
-      visible: showBillingReportCard,
     },
     {
       key: "staff-report",
@@ -347,10 +543,41 @@ export default function ManagePage() {
         <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>
       </div>
 
-      {/* 模組 11(LINE 通知)§4.5:「我的 LINE 綁定」個人設定區塊,商家管理員/客服都會經過這個
-          頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上
-          不會發生)或還沒有選定商家時回傳 null。 */}
-      <MyLineBindingCard />
+      {/* 使用者決策(2026-09-23):「首頁」分頁籤拔掉,個人資料卡片搬到這裡最上方
+          (原封不動搬自舊版 HomePage.tsx,服務人員版本留在 HomePage.tsx)。 */}
+      <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-12 w-12">
+              <AvatarFallback className="bg-brand-soft text-lg font-semibold text-brand">
+                {displayName.slice(0, 1)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-lg font-semibold text-foreground">{displayName}</p>
+              <p className="text-sm text-muted-foreground">{jobTitle}</p>
+            </div>
+          </div>
+          {merchantId && (isAdmin || isAgent) ? (
+            <EditProfileDialog
+              role={isAdmin ? "admin" : "agent"}
+              merchantId={merchantId}
+              nameLabel={isAdmin ? "姓名/暱稱" : "暱稱"}
+              currentName={rawName}
+              currentJobTitle={rawJobTitle}
+              onSaved={refetchProfile}
+            />
+          ) : null}
+        </div>
+        <LoginEmailSection email={email} newEmail={newEmail} />
+      </div>
+
+      {isAgent && agentProfileQuery.data?.pending_admin_login_email ? (
+        <PendingAdminLoginEmailSuggestionCard
+          pendingEmail={agentProfileQuery.data.pending_admin_login_email}
+          onClear={clearAgentPendingSuggestion}
+        />
+      ) : null}
 
       {visibleCards.length === 0 ? (
         <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
@@ -376,6 +603,14 @@ export default function ManagePage() {
           })}
         </div>
       )}
+
+      {/* 使用者決策(2026-09-23):「預約網址」獨立卡片。 */}
+      <BookingUrlCard />
+
+      {/* 模組 11(LINE 通知)§4.5:「我的 LINE 綁定」個人設定區塊,商家管理員/客服都會經過這個
+          頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上
+          不會發生)或還沒有選定商家時回傳 null。2026-09-23:使用者要求移到頁面最下方。 */}
+      <MyLineBindingCard />
     </div>
   );
 }

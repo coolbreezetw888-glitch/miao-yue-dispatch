@@ -62,9 +62,7 @@ function AgentPermissionsInner() {
       <Card>
         <CardHeader>
           <CardTitle>後台功能區塊</CardTitle>
-          <CardDescription>
-            這是先設定,不是現在就能用——大部分區塊對應的實際功能頁面都還沒開發,對應的功能上線後才會實際生效。
-          </CardDescription>
+          <CardDescription>逐項開放這位客服能操作的功能區塊,關掉的區塊會直接看不到對應的入口。</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (

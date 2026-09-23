@@ -135,6 +135,12 @@ export interface AgentPermissionSectionDef {
 
 export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
+    key: "staff_management",
+    label: "服務人員管理",
+    description:
+      "開放後客服可以新增/編輯/軟刪除服務人員、指派可承接的服務項目(對應模組 3)。注意:「真正刪除」(硬刪除已移除的服務人員)這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
+  },
+  {
     key: "service_items",
     label: "服務項目管理",
     description:
@@ -190,7 +196,12 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "line_notification",
     label: "LINE 通知設定",
-    description: "開放後客服可以調整 LINE 通知設定(此功能尚未開發,先設定值)。",
+    description: "開放後客服可以調整每類事件要不要通知、通知誰、文案內容,以及查看發送記錄(對應模組 11 LINE 通知)。",
+  },
+  {
+    key: "push_notification",
+    label: "推播通知設定",
+    description: "開放後客服可以設定服務人員手機/瀏覽器推播要不要開、文案內容(對應模組 15 服務人員推播通知)。",
   },
   {
     key: "payment_methods",
@@ -203,12 +214,6 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     label: "下載報表",
     description:
       "開放後客服可以打開報表匯出中心(對應模組 12 資料匯入與報表匯出)。這個開關只控制「能不能打開這個畫面、按下匯出按鈕」，實際能匯出到什麼資料範圍，完全由訂單/會員/抽成/請假各自來源模組的既有權限決定，不會讓客服多看到原本看不到的資料。",
-  },
-  {
-    key: "data_import",
-    label: "資料匯入(保留，未使用)",
-    description:
-      "模組 12(資料匯入與報表匯出)規劃階段的判斷 14/規則 2.1:批次匯入會員/歷史訂單、一鍵復原、產業轉移這幾項操作屬於高風險的敏感操作，刻意設計成永遠只給商家管理員，不透過 merchant_agent_permissions 開放給客服——這把鑰匙保留在清單裡但不會被任何畫面或函式檢查，避免有人誤以為開了這個開關就能讓客服操作資料匯入。",
   },
   {
     key: "member_settings",

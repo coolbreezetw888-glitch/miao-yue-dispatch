@@ -65,7 +65,10 @@ export async function removeMerchantAdmin(merchantId: string, userId: string): P
 export interface UpsertMerchantStaffInput {
   name: string;
   nickname?: string | null;
-  phone?: string | null;
+  // SPECS-INDEX #595/#596:merchant_staff.phone 資料庫層已改為 NOT NULL + 台灣手機號碼格式
+  // CHECK 約束(20260922140000_req595_596 migration),型別跟著改成不可為 null,呼叫端(表單)
+  // 必須自行保證送進來的是已驗證過的非空字串,這裡不再用 toNullIfEmpty 把空字串靜默轉成 null。
+  phone?: string;
   contactEmail?: string | null;
   intro?: string | null;
   avatarUrl?: string | null;
@@ -108,7 +111,8 @@ export async function addMerchantStaff(
       merchant_id: merchantId,
       name: input.name.trim(),
       nickname: toNullIfEmpty(input.nickname),
-      phone: toNullIfEmpty(input.phone),
+      // phone 現在是 NOT NULL 欄位,不能用 toNullIfEmpty(空字串會變成 null 而違反約束)。
+      phone: input.phone?.trim() ?? "",
       contact_email: toNullIfEmpty(input.contactEmail),
       intro: toNullIfEmpty(input.intro),
       avatar_url: input.avatarUrl ?? null,
@@ -140,7 +144,9 @@ export async function updateMerchantStaff(
   const payload: TablesUpdate<"merchant_staff"> = {
     ...(input.name !== undefined ? { name: input.name.trim() } : {}),
     ...(input.nickname !== undefined ? { nickname: toNullIfEmpty(input.nickname) } : {}),
-    ...(input.phone !== undefined ? { phone: toNullIfEmpty(input.phone) } : {}),
+    // phone 現在是 NOT NULL 欄位,不能用 toNullIfEmpty——呼叫端傳 phone 這個 key 進來時,
+    // 一定要保證是已驗證過的非空字串(見 StaffListPage.tsx §8.1 的表單驗證)。
+    ...(input.phone !== undefined ? { phone: input.phone.trim() } : {}),
     ...(input.contactEmail !== undefined
       ? { contact_email: toNullIfEmpty(input.contactEmail) }
       : {}),

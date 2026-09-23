@@ -1874,6 +1874,7 @@ export type Database = {
           intro: string | null
           logo_url: string | null
           name: string
+          phone: string | null
           status: string
           theme_custom_color: string | null
           theme_preset: string | null
@@ -1892,6 +1893,7 @@ export type Database = {
           intro?: string | null
           logo_url?: string | null
           name: string
+          phone?: string | null
           status?: string
           theme_custom_color?: string | null
           theme_preset?: string | null
@@ -1910,6 +1912,7 @@ export type Database = {
           intro?: string | null
           logo_url?: string | null
           name?: string
+          phone?: string | null
           status?: string
           theme_custom_color?: string | null
           theme_preset?: string | null

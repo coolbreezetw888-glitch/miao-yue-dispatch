@@ -76,8 +76,8 @@ import {
   type UpsertMerchantStaffInput,
 } from "./api";
 import { AdminSuggestLoginEmailDialog, LoginEmailStatusDisplay } from "./AdminLoginEmailManager";
-import { useStaffLoginEmailStatus } from "./context";
-import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
+import { useCurrentMerchantRole, useStaffLoginEmailStatus } from "./context";
+import { RequireStaffManagementAccess } from "./RequireStaffManagementAccess";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
 import {
   countStaffByFilter,
@@ -829,6 +829,13 @@ function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
+  // 使用者決策(2026-09-23):「服務人員管理」開放給有 staff_management 權限的客服使用,但邀請
+  // 服務人員登入(帳號/密碼授權)、指派服務人員權限、真正刪除這三項比照「客服管理」同一類的
+  // 帳號/敏感操作,維持永遠只給商家管理員(見下方各自的 isAdmin 判斷)——底層 Edge Function
+  // invite-merchant-staff、RPC set_staff_permission、hard_delete_merchant_staff 也都還是只認
+  // is_merchant_admin,這裡的 isAdmin 判斷只是提早不顯示這些操作入口,避免客服點了才發現被擋。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const isAdmin = merchantRole === "admin";
   const [listFilter, setListFilter] = useState<StaffListFilter>("all");
 
   const { data: staffList, isLoading } = useQuery({
@@ -985,14 +992,14 @@ function StaffListInner() {
                       <>
                         {/* 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請按鈕。
                             第 3 點(服務人員權限入口)留待該模組後續階段實作,這裡先不加。 */}
-                        {staff.login_status === "not_invited" ? (
+                        {isAdmin && staff.login_status === "not_invited" ? (
                           <InviteStaffLoginDialog
                             merchantId={merchantId}
                             staff={staff}
                             onInvited={refetch}
                           />
                         ) : null}
-                        {staff.login_status === "active" ? (
+                        {isAdmin && staff.login_status === "active" ? (
                           <Button variant="outline" size="sm" asChild>
                             <Link to={`/app/staff/${staff.id}/permissions`}>服務人員權限</Link>
                           </Button>
@@ -1039,33 +1046,38 @@ function StaffListInner() {
                           恢復
                         </Button>
                         {/* 對應規格書「服務人員管理優化與硬刪除」§3.4:只在「已移除」狀態旁顯示,
-                            用 variant="destructive" 讓視覺上明顯跟「恢復」不同,避免手滑點錯。 */}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="sm">
-                              真正刪除
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>確定要真正刪除「{staff.name}」嗎?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
-                                抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
-                                並告訴你原因,這個人會維持「已移除」狀態。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleHardDelete(staff.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                確定真正刪除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                            用 variant="destructive" 讓視覺上明顯跟「恢復」不同,避免手滑點錯。
+                            2026-09-23:「真正刪除」不在服務人員管理開放給客服的範圍內,永遠只給
+                            商家管理員(見上方 isAdmin 判斷,底層 hard_delete_merchant_staff 也是
+                            同一個限制)。 */}
+                        {isAdmin ? (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="sm">
+                                真正刪除
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>確定要真正刪除「{staff.name}」嗎?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
+                                  抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
+                                  並告訴你原因,這個人會維持「已移除」狀態。
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleHardDelete(staff.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  確定真正刪除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : null}
                       </>
                     )}
                   </div>
@@ -1081,8 +1093,8 @@ function StaffListInner() {
 
 export default function StaffListPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireStaffManagementAccess>
       <StaffListInner />
-    </RequireMerchantAdmin>
+    </RequireStaffManagementAccess>
   );
 }

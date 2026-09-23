@@ -1,20 +1,21 @@
-// 模組 8(薪資與帳務)§4.5:店家端帳務報表頁(4.3)的路由守衛。完全比照模組 7
-// RequireTeamLeaveAccess.tsx 的既有寫法。判斷邏輯:merchantRole === 'admin' 一律放行;
-// merchantRole === 'agent' 則要求 useAgentPermission('billing') 回傳 true 才放行。
-// 不符合則導回 /app,不顯示這個頁面存在。
+// 模組 8(薪資與帳務)§4.5:店家端帳務報表頁(4.3)的路由守衛。
 //
-// 這個元件只是體驗層的路由守衛,不是安全邊界——真正擋住未授權讀取的是
+// 使用者決策(2026-09-23):「店家報表」(原名「店家帳務報表」)從「功能」頁的卡片升級成 AppLayout
+// 底部常駐分頁籤(比照訂單管理當初升級成分頁籤的既有模式)。分頁籤規格要求「永遠顯示,沒有權限
+// 就在原地看到提示文字」,不是把分頁籤藏起來或導離——這裡因此從原本的「不符合就 navigate('/app')」
+// 改成完全比照 OrdersPage.tsx::OrdersTabAccessGate 的既有寫法:沒有權限時原地顯示提示文字,不
+// navigate() 離開。
+//
+// 這個元件只是體驗層的顯示邏輯,不是安全邊界——真正擋住未授權讀取的是
 // private.can_view_billing 這支函式落實的 get_merchant_billing_summary 權限檢查(規格書 §3.1/§3.11),
 // 即使有人繞過前端路由直接呼叫 API,也會被資料庫擋下。
 
-import { useEffect, type ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
+import type { ReactNode } from "react";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 export function RequireBillingAccess({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
   const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
   const { data: role, isLoading: roleLoading } = useCurrentMerchantRole();
   const { data: canViewBilling, isLoading: permissionLoading } = useAgentPermission("billing");
@@ -25,17 +26,20 @@ export function RequireBillingAccess({ children }: { children: ReactNode }) {
   const loading = merchantLoading || roleLoading || stillLoadingAgentPermission;
   const allowed = isAdmin || isAuthorizedAgent;
 
-  useEffect(() => {
-    if (loading) return;
-    if (!merchant || !allowed) {
-      navigate("/app", { replace: true });
-    }
-  }, [merchant, allowed, loading, navigate]);
-
-  if (loading || !merchant || !allowed) {
+  if (loading || !merchant) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
         <p className="text-sm text-muted-foreground">載入中⋯</p>
+      </div>
+    );
+  }
+
+  if (!allowed) {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-12">
+        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
+          尚未開放此功能,請洽商家管理員開通「帳務管理」權限。
+        </p>
       </div>
     );
   }

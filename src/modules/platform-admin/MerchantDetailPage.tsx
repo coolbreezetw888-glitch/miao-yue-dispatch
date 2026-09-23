@@ -1,6 +1,8 @@
 // 對應規格書 4.4(商家詳情頁)、4.5(集團管理者設定區塊)。
 // 管理員名單沿用模組 1 現成的 useMerchantAdmins(見規則 2.3:查詢邏輯不重工)。
-// industry_type 這裡也只顯示、不可編輯,理由同模組 1 規則 2.1(建立後鎖定)——超級管理員也不例外。
+// industry_type 這裡維持唯讀顯示(要改請到商家自己的商家設定頁)——2026-09-23 起規則 2.1
+// (建立後鎖定)已被使用者推翻,industry_type 可隨時切換,這裡單純沒有另外做一份編輯控制項,
+// 不是資料庫層還鎖著。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -275,7 +277,7 @@ export default function MerchantDetailPage() {
                 <p className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
                   {INDUSTRY_TYPE_LABELS[merchant.industry_type as IndustryType] ??
                     merchant.industry_type}
-                  <span className="ml-2 text-xs">(建立後無法修改，超級管理員也不例外)</span>
+                  <span className="ml-2 text-xs">(唯讀,可在商家設定頁隨時切換)</span>
                 </p>
               </div>
               <div>

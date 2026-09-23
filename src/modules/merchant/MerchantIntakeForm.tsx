@@ -108,7 +108,7 @@ export function MerchantIntakeForm({
           </p>
         ) : null}
         <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs font-medium text-foreground">
-          注意:產業模組一旦選定送出後就無法修改。如果之後真的要換產業,需要另外開一間新分店重新設定。
+          之後可以隨時到「商家設定」頁重新切換,不影響已經建立的訂單資料。
         </p>
       </div>
 

@@ -246,6 +246,16 @@ export function bookingCardAccentBorderStyle(
   return { borderLeftColor: getBookingStatusColor(colors, status) };
 }
 
+/** 訂單卡片 hover 外框顏色:原本 hover 邊框是寫死的商家主題色(border-brand/40),使用者要求
+ * 改成跟著這筆訂單的狀態色走,跟左側色條同一個狀態色碼,套用跟 bookingBlockStyle.borderColor
+ * 一致的 0.5 透明度(維持既有「邊框比實色淡一點」的視覺慣例)。 */
+export function bookingCardHoverBorderColor(
+  colors: BookingStatusColorMap,
+  status: BookingStatus,
+): string {
+  return hexToRgba(getBookingStatusColor(colors, status), 0.5);
+}
+
 // ---------------------------------------------------------------------------
 // SPECS-INDEX #644:行事曆排程狀態顏色設定(全天休假/時段排休/跨店佔用)。跟上面§10.5的
 // 「訂單狀態顏色」(BookingStatusColorMap)是平行但完全獨立的新功能——這次對應的是行事曆本身的

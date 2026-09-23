@@ -63,7 +63,7 @@ function BillingReportPageInner() {
         </Link>
       </div>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">店家帳務報表</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">店家報表</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           「{merchant!.name}」的營收與成本彙整,可選起訖日期或起訖月份,最長查詢一年範圍
         </p>
