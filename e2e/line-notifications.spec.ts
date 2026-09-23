@@ -18,6 +18,11 @@
 //   5. 行銷通知頁(§4.4,原「行銷再通知頁」,§10.1/SPECS-INDEX #584 改名):目前沒有任何會員
 //      完成 LINE 綁定時的空狀態文字正確顯示;填入含 {{member_name}} 變數的文字,即時預覽正確
 //      顯示替換後的白話文字;可用變數說明清單正確列出。
+//   6. 行銷通知頁會員選擇擴充(§10.2,SPECS-INDEX #612):依會員分類批量選擇/排除清單(黑名單
+//      預設自動排除)。這兩項一樣需要「已綁定 LINE 的會員」才測得出行為,而且還額外依賴 #615
+//      會員分級/#616 會員黑名單的資料——比照第 3 點的既有做法,用 page.route 直接攔截
+//      `members`/`merchant_member_tiers` 這兩個 PostgREST 查詢,注入假資料驗證前端的選取/
+//      排除計算邏輯跟畫面呈現是否正確,不依賴任何真實 LINE 綁定或真實建立的分級/黑名單資料。
 //
 // 範圍外说明(已在回報中向主腦說明):§4.1 的「測試連線成功 → 狀態卡片顯示已連線」、
 // 4.5/4.6/4.7「產生的碼真的被使用完成綁定 → 狀態變成已綁定」、行銷通知頁「真的選取已綁定
@@ -365,4 +370,118 @@ test("行銷通知頁(§10.1,SPECS-INDEX #584):可用變數說明 + 即時預覽
 
   await expect(page.getByText("即時預覽(套用範例假資料)")).toBeVisible();
   await expect(page.getByText("王小姐 您好,本月有優惠活動")).toBeVisible();
+});
+
+// §10.2(SPECS-INDEX #612)假資料:3 位 VIP 等級會員(其中 1 位同時是黑名單)+ 1 位一般等級會員,
+// 全部都是「已綁定 LINE」(這個測試環境沒辦法真的做出已綁定 LINE 的會員,見檔案開頭第 6 點說明,
+// 直接用 page.route 攔截 members/merchant_member_tiers 這兩個 PostgREST 查詢注入假資料)。
+const TIER_TEST_TIERS = [
+  { id: "tier-vip", merchant_id: "mock", name: "VIP會員", sort_order: 0, status: "active" },
+  { id: "tier-general", merchant_id: "mock", name: "一般會員", sort_order: 1, status: "active" },
+];
+const TIER_TEST_MEMBERS = [
+  { id: "vip-1", name: "VIP會員一", phone: "0911111111", tier_id: "tier-vip", is_blacklisted: false },
+  { id: "vip-2", name: "VIP會員二", phone: "0922222222", tier_id: "tier-vip", is_blacklisted: false },
+  {
+    id: "vip-blacklist",
+    name: "VIP黑名單會員",
+    phone: "0933333333",
+    tier_id: "tier-vip",
+    is_blacklisted: true,
+  },
+  {
+    id: "general-1",
+    name: "一般會員一",
+    phone: "0944444444",
+    tier_id: "tier-general",
+    is_blacklisted: false,
+  },
+];
+
+async function mockTierAndMemberQueries(page: import("@playwright/test").Page) {
+  await page.route(/\/rest\/v1\/members\?/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("line_bound") === "eq.true") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(TIER_TEST_MEMBERS),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.route(/\/rest\/v1\/merchant_member_tiers\?/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(TIER_TEST_TIERS),
+    });
+  });
+}
+
+test("行銷通知頁(§10.2,SPECS-INDEX #612):依會員分類批量選擇正確整批勾選該分類的會員,黑名單會員即使被批量選中也自動從最終送出名單排除", async ({
+  page,
+}) => {
+  await mockTierAndMemberQueries(page);
+
+  await page.goto("/app/line-marketing");
+  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  await page.getByRole("tab", { name: "依會員分類批量選擇" }).click();
+  const tierList = page.getByTestId("line-marketing-tier-list");
+  await expect(tierList.getByText("VIP會員")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(tierList.getByText("3 位已綁定 LINE 的會員")).toBeVisible();
+
+  await tierList.getByRole("checkbox").first().click();
+
+  // 目前選取(尚未扣除排除清單/黑名單)應該是這個等級的 3 位全部整批選入。
+  await expect(page.getByText("目前選取 3 位會員", { exact: false })).toBeVisible();
+  // 實際會送出要扣掉黑名單會員(vip-blacklist),所以是 2 位。
+  await expect(page.getByText("實際會送出 2 位會員", { exact: false })).toBeVisible();
+
+  // 切回單獨選擇分頁,確認這個等級的 3 位會員(包含黑名單那一位)都已經被勾選,且黑名單那一位
+  // 有清楚標示「將自動從送出名單排除」。
+  await page.getByRole("tab", { name: "單獨選擇" }).click();
+  const individualList = page.getByTestId("line-marketing-individual-list");
+  const vip1Row = individualList.locator("li", { hasText: "VIP會員一" });
+  await expect(vip1Row.getByRole("checkbox")).toBeChecked();
+  const blacklistRow = individualList.locator("li", { hasText: "VIP黑名單會員" });
+  await expect(blacklistRow.getByRole("checkbox")).toBeChecked();
+  await expect(blacklistRow.getByText("將自動從送出名單排除", { exact: false })).toBeVisible();
+  const generalRow = individualList.locator("li", { hasText: "一般會員一" });
+  await expect(generalRow.getByRole("checkbox")).not.toBeChecked();
+});
+
+test("行銷通知頁(§10.2,SPECS-INDEX #612):黑名單客戶預設自動排除且不出現在手動排除清單裡,手動排除清單正確把選中的會員從最終送出名單移除", async ({
+  page,
+}) => {
+  await mockTierAndMemberQueries(page);
+
+  await page.goto("/app/line-marketing");
+  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 黑名單會員(§10.2 排除清單「系統自動排除」區塊)唯讀顯示,不出現在下面「手動排除」的可勾選
+  // 清單裡(避免同一個人同時出現在兩個排除區塊造成混淆)。
+  const blacklistSection = page.getByTestId("line-marketing-blacklist-list");
+  await expect(blacklistSection.getByText("VIP黑名單會員")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const manualExcludeList = page.getByTestId("line-marketing-manual-exclude-list");
+  await expect(manualExcludeList.getByText("VIP黑名單會員")).toHaveCount(0);
+
+  // 單獨選擇 VIP會員一 + 一般會員一,尚未排除時實際會送出 2 位。
+  const individualList = page.getByTestId("line-marketing-individual-list");
+  await individualList.locator("li", { hasText: "VIP會員一" }).getByRole("checkbox").click();
+  await individualList.locator("li", { hasText: "一般會員一" }).getByRole("checkbox").click();
+  await expect(page.getByText("實際會送出 2 位會員", { exact: false })).toBeVisible();
+
+  // 在手動排除清單裡勾選 VIP會員一,最終送出名單應該只剩一般會員一(1 位)。
+  await manualExcludeList
+    .locator("li", { hasText: "VIP會員一" })
+    .getByRole("checkbox")
+    .click();
+  await expect(page.getByText("實際會送出 1 位會員", { exact: false })).toBeVisible();
 });

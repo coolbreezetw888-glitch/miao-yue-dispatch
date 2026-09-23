@@ -136,12 +136,19 @@ export async function setupSchedulingLeaveFixture(): Promise<SchedulingLeaveFixt
     .upsert(businessHoursRows, { onConflict: "merchant_id,day_of_week" });
   if (hoursError) throw new Error(`寫入測試商家營業時間失敗:${hoursError.message}`);
 
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補合法格式的佔位電話(用 runId 後 7 碼 + 一碼區分兩位服務人員,湊成 09 開頭 10 碼,
+  // 避免同一次測試 run 建立的兩位服務人員撞號)。
+  const staffOnLeavePhone = `09${runId.slice(-7)}0`;
+  const staffNormalPhone = `09${runId.slice(-7)}1`;
+
   const staffOnLeaveName = `${STAFF_ON_LEAVE_NAME_PREFIX}${runId}`;
   const { data: staffOnLeave, error: staffOnLeaveError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: staffOnLeaveName,
+      phone: staffOnLeavePhone,
       is_listed: true,
       no_time_slot_limit: true,
       compensation_type: "monthly_salary", // 規則 2.2:只有月薪制服務人員能登記請假紀錄。
@@ -158,6 +165,7 @@ export async function setupSchedulingLeaveFixture(): Promise<SchedulingLeaveFixt
     .insert({
       merchant_id: merchantId as string,
       name: staffNormalName,
+      phone: staffNormalPhone,
       is_listed: true,
       no_time_slot_limit: true,
       // compensation_type 不填,沿用預設值 piece_rate(按件計酬,規則 2.2 不適用請假)。

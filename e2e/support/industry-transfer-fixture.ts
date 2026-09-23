@@ -153,11 +153,15 @@ export async function setupIndustryTransferFixture(): Promise<IndustryTransferFi
     throw new Error(`建立測試服務項目失敗:${serviceItemError?.message}`);
   }
 
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼)。
+  const staffPhone = `09${runId.slice(-8)}`;
   const { data: staff, error: staffError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: `E2E產業轉移測試服務人員${runId}`,
+      phone: staffPhone,
       no_time_slot_limit: true,
     })
     .select("id")

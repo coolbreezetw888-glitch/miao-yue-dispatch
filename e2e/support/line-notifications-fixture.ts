@@ -139,11 +139,16 @@ export async function setupLineNotificationsFixture(): Promise<LineNotifications
   }
 
   const staffName = `${STAFF_NAME_PREFIX}${runId}`;
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼),避免建立 fixture 時
+  // 直接違反資料庫層約束(這是這次 QA 打回 #612 的阻斷性問題,見回報)。
+  const staffPhone = `09${runId.slice(-8)}`;
   const { data: staff, error: staffError } = await client
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: staffName,
+      phone: staffPhone,
       no_time_slot_limit: true,
     })
     .select("id")
@@ -235,6 +240,26 @@ export async function createPendingBooking(
     `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`,
   );
   const customerPhone = `09558${(90000 + pendingBookingCounter).toString().slice(-5)}`;
+
+  // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
+  // create_booking 這次改成付款方式必填(p_payment_method_id 不能是 null),否則 RPC 直接
+  // raise exception「請選擇付款方式」——這是這次盤點 #636(fixture 缺 phone)時額外發現的
+  // 另一個既有缺口(fixture 沒有跟上 #604 這個規則調整),已在回報中向主腦說明。
+  // create_group_and_merchant 建立商家時已經自動呼叫 seed_default_payment_methods(),
+  // 所以這裡直接查一筆該商家目前的啟用中付款方式來用,不用另外建立。
+  const { data: paymentMethod, error: paymentMethodError } = await client
+    .from("payment_methods")
+    .select("id")
+    .eq("merchant_id", fixture.merchantId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+  if (paymentMethodError || !paymentMethod) {
+    throw new Error(
+      `查詢測試商家的預設付款方式失敗:${paymentMethodError?.message ?? "查無啟用中的付款方式"}`,
+    );
+  }
+
   const { data, error } = await client.rpc("create_booking", {
     p_merchant_id: fixture.merchantId,
     p_staff_id: fixture.staffId,
@@ -242,6 +267,7 @@ export async function createPendingBooking(
     p_start_at: startAt,
     p_customer_name: "E2E測試客戶(LINE通知模組)",
     p_customer_phone: customerPhone,
+    p_payment_method_id: (paymentMethod as { id: string }).id,
     ...(options?.memberId ? { p_member_id: options.memberId } : {}),
   });
   if (error || !data) throw new Error(`建立測試訂單失敗:${error?.message}`);

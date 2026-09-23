@@ -119,11 +119,15 @@ export async function setupStaffPortalFixture(): Promise<StaffPortalFixture> {
   }
 
   const staffName = `${STAFF_NAME_PREFIX}${runId}`;
+  // #636(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)(#595/#596),
+  // 這裡補一個合法格式的佔位電話(用 runId 後 8 碼湊成 09 開頭 10 碼)。
+  const staffPhone = `09${runId.slice(-8)}`;
   const { data: staffRow, error: addStaffErr } = await adminClient
     .from("merchant_staff")
     .insert({
       merchant_id: merchantId as string,
       name: staffName,
+      phone: staffPhone,
       compensation_type: "piece_rate",
     })
     .select("id")
