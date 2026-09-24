@@ -14,6 +14,11 @@
 //            有「已離職」標籤,CSV 也要有對應的欄位文字。少了標籤,商家看到一個名單上早就沒有的人
 //            出現在報表裡,會以為系統壞了。
 //
+//  行為 C —— 同一個 commission_amount 是 null 時,畫面明細表顯示「0 元(抽成)」,CSV 卻寫一個空白格。
+//            使用者裁決 A:兩邊統一 0(「按件計酬的人沒接單時抽成確實就是 0,那是真實數字」)。
+//            會漂移的根本原因是兩條路徑各自寫死 fallback(`?? 0` 對 `?? ""`),所以這裡除了測值,
+//            還有一條「CSV 的值 === 畫面字串裡解析出來的數字」的斷言,專門守住未來的漂移。
+//
 // 反向保護也一樣重要:值真的是 0(這個月扣款真的沒有)或負數(商家總淨利虧損 -5000)時,必須照實
 // 顯示那個數字,不可以被「算不出來」吞掉。只測 happy path + 只測「不適用」都不夠,兩個方向都要測,
 // 否則一個「永遠回傳說明文字」的壞函式也能讓測試全綠。
@@ -21,11 +26,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMMISSION_FALLBACK,
   EMPLOYED_LABEL,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
   type SalarySummaryFields,
   type StaffBreakdownRow,
+  commissionCellText,
+  commissionCsvValue,
   employmentStatusCsvText,
   isStillEmployed,
   monthlySalaryCellText,
@@ -299,6 +307,115 @@ describe("monthlySalaryCsvCell(CSV「月薪淨額」欄)", () => {
     expect(monthlySalaryCsvCell(true, row)).toBe("");
     expect(monthlySalaryCsvCell(false, row)).toBe("");
   });
+});
+
+// =========================================================================
+// 行為 C:抽成是 null 時,畫面跟 CSV 必須顯示同一件事
+// =========================================================================
+
+/**
+ * 把明細表那一格使用者真正看到的字串,反解析回「畫面上顯示的那個數字」。
+ *
+ * 這支小工具是底下「兩條路徑必須一致」那條斷言的關鍵:如果只比對 commissionCsvValue(row) 跟
+ * commissionCsvValue(row),那是拿同一個函式跟自己比,永遠會過、什麼都守不住。要比對的是
+ * 「CSV 寫進去的值」對上「使用者在畫面上看到的那個數字」——這兩個才是當初漂移的那兩條路徑。
+ *
+ * 格式對不上時直接 throw,而不是回傳 NaN:`X 元(抽成)` 這個格式本身也是使用者裁決的一部分
+ * (「畫面那一格的現有格式一個字都不要改」),被動到的話這條測試就該紅。
+ */
+/**
+ * 明細表那一格數字後面固定跟著的字尾。
+ *
+ * ⚠️ 這裡的括號是 **ASCII 的 `(` `)`**(U+0028/U+0029),不是全形的（ ）—— 專案既有的
+ *    「X 元(抽成)」「X 元(淨額)」用的都是 ASCII 括號。兩種括號在編輯器裡長得幾乎一樣,寫錯會
+ *    得到一條「看起來有在測、其實永遠對不上」的斷言(寫這支工具時就真的先踩了一次)。
+ *
+ * ⚠️ 也因為這個原因,這裡用 endsWith + 一個單獨的 `^-?\d+$` 檢查,而不是把整段塞進一條正規表示式:
+ *    在正規表示式裡 `(抽成)` 會被當成 capture group、變成比對「元抽成」而不是「元(抽成)」,
+ *    是另一個同樣不會噴錯、只會靜靜比錯的陷阱。
+ */
+const COMMISSION_CELL_SUFFIX = " 元(抽成)";
+
+function commissionNumberShownOnScreen(row: Pick<StaffBreakdownRow, "commission_amount">): number {
+  const text = commissionCellText(row);
+  if (!text.endsWith(COMMISSION_CELL_SUFFIX)) {
+    throw new Error(`明細表的抽成格式不再是「X${COMMISSION_CELL_SUFFIX}」,實際拿到:${text}`);
+  }
+  const numberPart = text.slice(0, -COMMISSION_CELL_SUFFIX.length);
+  if (!/^-?\d+$/.test(numberPart)) {
+    throw new Error(`明細表的抽成那一格前半不是一個數字,實際拿到:${text}`);
+  }
+  return Number(numberPart);
+}
+
+function pieceRateRow(
+  commissionAmount: number | null,
+): Pick<StaffBreakdownRow, "commission_amount"> {
+  return staffRow({
+    compensation_type: "piece_rate",
+    net_pay: null,
+    commission_amount: commissionAmount,
+  });
+}
+
+describe("抽成金額(行為 C:畫面跟 CSV 的 null fallback 必須是同一個)", () => {
+  it("有抽成 1500 → 畫面「1500 元(抽成)」、CSV 寫數字 1500", () => {
+    const row = pieceRateRow(1500);
+
+    expect(commissionCellText(row)).toBe("1500 元(抽成)");
+    expect(commissionCsvValue(row)).toBe(1500);
+  });
+
+  it("commission_amount = null → 畫面「0 元(抽成)」、CSV 寫 0(**不是空字串**)", () => {
+    // 這條就是 2026-09-24 使用者裁決的核心。裁決前:畫面「0 元(抽成)」、CSV 一個空白格。
+    // 裁決 A:兩邊統一 0,理由是「按件計酬的人沒接單時抽成確實就是 0,那是真實數字,不是不適用」。
+    const row = pieceRateRow(null);
+
+    expect(commissionCellText(row)).toBe("0 元(抽成)");
+    expect(commissionCsvValue(row)).toBe(0);
+    // 明確釘死「不可以退回空白格」——這是改動前 CSV 的實際行為,也是這次要修掉的東西。
+    // 先收成 unknown 再斷言,是因為 commissionCsvValue 的回傳型別是 number,直接寫
+    // `.not.toBe("")` 會被 TypeScript 當成型別錯誤而不是一條測試(既有的
+    // expectNeverLooksLikeZero(actual: unknown) 也是同一個理由)。
+    const csvCell: unknown = commissionCsvValue(row);
+
+    expect(csvCell).not.toBe("");
+    expect(csvCell).not.toBeNull();
+    expect(csvCell).not.toBeUndefined();
+  });
+
+  it("commission_amount = 0 → 兩邊都是 0,跟 null 的結果完全相同(這是刻意的)", () => {
+    // 抽成這個欄位刻意**不**區分「null」跟「真的是 0」——跟上面行為 A 的月薪剛好相反。
+    // 月薪的 null 是資料庫用來說「這次算不出來」;抽成的 null 只是「沒有任何一筆單可以抽」。
+    const zero = pieceRateRow(0);
+    const nul = pieceRateRow(null);
+
+    expect(commissionCellText(zero)).toBe("0 元(抽成)");
+    expect(commissionCsvValue(zero)).toBe(0);
+    expect(commissionCellText(zero)).toBe(commissionCellText(nul));
+    expect(commissionCsvValue(zero)).toBe(commissionCsvValue(nul));
+  });
+
+  it("fallback 常數就是 0,而且是這個欄位唯一一處 fallback", () => {
+    expect(COMMISSION_FALLBACK).toBe(0);
+    expect(commissionCsvValue(pieceRateRow(null))).toBe(COMMISSION_FALLBACK);
+  });
+
+  // ⚠️ 這是真正防止未來漂移的那一條:不管輸入是什麼,「CSV 那一格寫進去的數字」跟「使用者在畫面
+  //    上看到的那個數字」必須相等。當初的 bug 正是這兩者不相等(畫面 0 / CSV 空白),所以只要有人
+  //    以後又只改其中一邊的 fallback,這裡就會紅。
+  it.each([
+    { label: "null(沒接單)", commissionAmount: null },
+    { label: "0", commissionAmount: 0 },
+    { label: "1500", commissionAmount: 1500 },
+  ])(
+    "【防漂移】commission_amount = $label → CSV 的值 === 畫面字串裡的數字",
+    ({ commissionAmount }) => {
+      const row = pieceRateRow(commissionAmount);
+
+      expect(commissionCsvValue(row)).toBe(commissionNumberShownOnScreen(row));
+    },
+  );
 });
 
 // =========================================================================

@@ -38,6 +38,8 @@ import { useMerchantBillingSummaryByRange } from "./api";
 import {
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
+  commissionCellText,
+  commissionCsvValue,
   employmentStatusCsvText,
   monthlySalaryCellText,
   monthlySalaryCsvCell,
@@ -100,7 +102,12 @@ function BillingReportPageInner() {
       row.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬",
       employmentStatusCsvText(row),
       row.order_count,
-      row.commission_amount ?? "",
+      // 2026-09-24 使用者裁決(選項 A):抽成是 null 時這裡原本寫 `?? ""`(空白格),而畫面明細表
+      // 那一格寫 `?? 0`(顯示「0 元(抽成)」)——同一個欄位、同一位服務人員,畫面跟匯出檔說法不一樣。
+      // 裁決是兩邊統一成 0(沒接單的抽成確實就是 0,是真實數字)。現在 fallback 只存在
+      // billingReportDisplay.ts 的 COMMISSION_FALLBACK 一處,畫面那支函式也是呼叫這支拿數字的,
+      // 結構上不可能只改一邊。
+      commissionCsvValue(row),
       // 月薪算不出來時寫進說明文字,不留空白格——CSV 的空白格在 Excel 裡看起來跟 0 很像,
       // 會重演「商家以為這段期間沒有月薪成本」這個誤會。判斷條件跟下面表格那一欄走同一支純函式,
       // 讓畫面跟匯出檔永遠一致。
@@ -278,11 +285,13 @@ function BillingReportPageInner() {
                         <TableCell className="text-right">{row.order_count}</TableCell>
                         {/* 2026-09-24 使用者裁決:月薪制那一欄原本寫 `row.net_pay ?? 0`,
                             區間不是完整月份時會顯示「0 元(淨額)」——這正是要避免的誤導。
-                            改成顯示說明文字。按件計酬的抽成不受影響,維持原本的 `?? 0`。 */}
+                            改成顯示說明文字。按件計酬的抽成裁決是「null 一律當 0」(沒接單的抽成
+                            確實就是 0),顯示格式跟以前完全一樣,只是把「怎麼算出那個數字」搬進
+                            commissionCellText() —— CSV 那一欄也是呼叫同一條路徑,不會再漂移。 */}
                         <TableCell className="text-right">
                           {row.compensation_type === "monthly_salary"
                             ? monthlySalaryCellText(salaryApplicable, row.net_pay)
-                            : `${row.commission_amount ?? 0} 元(抽成)`}
+                            : commissionCellText(row)}
                         </TableCell>
                         <TableCell className="text-right">
                           {/* SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):

@@ -19,6 +19,12 @@
 //    就把紀錄刪除了?」所以明細會列出這些人,那一列必須有標籤,不然商家看到一個名單上早就沒有的
 //    人出現在報表裡,會以為系統壞了。
 //
+//  行為 C(抽成是 null 時,畫面跟 CSV 要顯示同一件事)
+//    2026-09-24 使用者裁決:抽成 null 一律當 0(「按件計酬的人沒接單時抽成確實就是 0」)。這一條是
+//    行為 A 的反面教材而不是重複:同一個 commission_amount,畫面那格寫 `?? 0`、CSV 那格寫 `?? ""`,
+//    老闆在畫面看到 0、匯出到 Excel 卻看到空白。抽出純函式的目的不只是「統一成 0」,更是讓
+//    「以後有人只改其中一邊」在結構上變困難(見 COMMISSION_FALLBACK 的註解)。
+//
 // 本專案已經有既有慣例:這類「該顯示哪一種狀態」的判斷一律抽成純函式 + 單元測試,不寫死在元件裡
 // (見 src/routes/appLayoutLogic.ts、src/modules/staff-agent/staffListLogic.ts、
 //  src/modules/line-notifications/lineBindingViewLogic.ts)。這支檔案只依賴 ./types 這個純型別
@@ -169,6 +175,48 @@ export function monthlySalaryCsvCell(
   }
   const display = resolveSalaryDisplay(salaryApplicable, row.net_pay);
   return display.kind === "value" ? display.value : display.text;
+}
+
+// =========================================================================
+// 行為 C:抽成金額是 null 時,畫面跟 CSV 必須顯示同一件事
+// =========================================================================
+
+/**
+ * 抽成金額(commission_amount)是 null 時要當成多少。
+ *
+ * ⚠️ 2026-09-24 使用者裁決(選項 A:兩邊統一顯示 0)。理由:「按件計酬的人沒接單時抽成確實就是 0,
+ *    那是真實數字,不是『不適用』。」——這一點跟上面行為 A 的月薪剛好相反:月薪的 null 是資料庫刻意
+ *    用來表達「這次算不出來」,所以不能補 0;抽成的 null 只是「沒有任何一筆單可以抽」,補 0 就是正解。
+ *
+ * ⚠️ 這個常數為什麼要存在(這是這一段的重點,不是為了好看):
+ *    在此之前,同一個 commission_amount 有兩條路徑各自寫死自己的 fallback ——
+ *      ・BillingReportPage.tsx 明細表那一格寫 `row.commission_amount ?? 0`   → 畫面顯示「0 元(抽成)」
+ *      ・BillingReportPage.tsx CSV 匯出那一格寫 `row.commission_amount ?? ""` → CSV 是一個空白格
+ *    同一位服務人員、同一個欄位,老闆在畫面上看到 0、把報表匯出到 Excel 卻看到空白,而且兩邊都沒有
+ *    任何錯誤訊息。會漂移成這樣的根本原因不是誰粗心,而是**結構上允許兩邊各寫一次 fallback**。
+ *    所以現在 fallback 只有這一個常數,而且 commissionCellText() 是透過呼叫 commissionCsvValue()
+ *    拿數字的 —— 想只改其中一邊,得先把這兩支函式拆開,不可能「順手」發生。
+ */
+export const COMMISSION_FALLBACK = 0;
+
+/**
+ * CSV「抽成金額」欄的一格,也是這個欄位唯一一處把 null 換成 fallback 的地方。
+ *
+ * 回傳 number(不是字串),Excel 打開後才能繼續加總。
+ */
+export function commissionCsvValue(row: Pick<StaffBreakdownRow, "commission_amount">): number {
+  return row.commission_amount ?? COMMISSION_FALLBACK;
+}
+
+/**
+ * 明細表「抽成金額 / 月薪淨額」欄,按件計酬那一半要顯示的完整文字。
+ *
+ * 格式 `X 元(抽成)` 跟改動前一模一樣(這次只換「X 怎麼算出來」,沒有動畫面用字)。
+ * 數字刻意透過 commissionCsvValue() 取得,而不是自己再寫一次 `?? COMMISSION_FALLBACK`:
+ * 只要這兩支函式之一被改壞,單元測試裡那條「兩條路徑對同一個輸入必須一致」的斷言就會紅。
+ */
+export function commissionCellText(row: Pick<StaffBreakdownRow, "commission_amount">): string {
+  return `${commissionCsvValue(row)} 元(抽成)`;
 }
 
 // =========================================================================
