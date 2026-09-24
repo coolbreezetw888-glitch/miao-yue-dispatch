@@ -19,7 +19,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  EXISTING_MEMBER_NAME_PREFIX,
+  EXISTING_MEMBER_PHONE,
   INITIAL_POINTS_BALANCE,
   injectMembersFixtureSession,
   POINTS_EARN_RATE,
@@ -27,6 +27,7 @@ import {
   teardownMembersFixture,
   type MembersFixture,
 } from "./support/members-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -54,12 +55,10 @@ test.afterAll(async () => {
 test.beforeEach(async ({ page }) => {
   await injectMembersFixtureSession(page, fixture);
 
-  // 已知既有問題(跟這次修正主題無關,e2e/mobile-overflow.spec.ts 開頭同一段說明已記錄):
-  // 全新瀏覽器 session 第一次深連結到受保護頁面時,有機會在 currentMerchantId 還沒被
-  // context.tsx 的 fallback effect 寫進 localStorage 前,就先讀到 merchant === null 而被
-  // Require*Access 誤判導回 /app。先訪問一次 /app 讓「目前操作中商家」正確寫進 localStorage。
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 啟動步驟:先造訪一次後台外殼頁,讓「目前操作中商家」寫進 localStorage,避免後面直接深連結
+  // 到受保護頁面時被 Require*Access 守衛誤判導回 /app。為什麼是這個頁面/這個錨點,見
+  // e2e/support/app-shell.ts 的完整說明。
+  await primeCurrentMerchant(page);
 });
 
 test("會員管理列表頁(§4.1):建立會員、下架後預設篩選看不到、重新上架後恢復", async ({ page }) => {
@@ -185,21 +184,30 @@ test("紅利點數管理頁(§10.5/#617):獨立卡片入口、餘額總覽搜尋
   await expect(page.locator("p.text-3xl")).toHaveText(`${expectedBalance} 點`);
 });
 
-test("建單表單疊加 MemberPickerField(§4.4)+ 訂單詳情頁會員連結(§4.5)", async ({ page }) => {
-  // §4.4:在「新增預約」表單裡搜尋既有會員、選中後欄位正確顯示選中結果。
+test("建單表單電話比對連結既有會員(§10.2)+ 訂單詳情頁會員連結(§4.5)", async ({ page }) => {
+  // 2026-09-24 更新:原本這一段測的是 §4.4 的獨立「會員(選填)」欄位 MemberPickerField
+  //(用姓名/電話搜尋框選會員)。§10.2(SPECS-INDEX #614,git 931f43a/7c602aa)已經把那個欄位
+  // 整個移除,改成「電話當查詢索引、不當唯一鍵」:客服在既有的「客戶電話」欄位輸入電話,下方的
+  // MemberPhoneMatchPanel 列出這支電話底下這個商家的既有客戶,點選其中一位完成連結。
+  // 驗證意圖不變(在建單表單裡找到既有會員、選中後正確顯示連結結果),只是換成新的互動流程。
   await page.goto("/app/calendar");
   await page.getByRole("button", { name: "新增預約" }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { name: "新增預約" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
-  const memberSearchInput = page.getByPlaceholder("輸入姓名/電話搜尋既有會員(選填)");
-  await memberSearchInput.fill(EXISTING_MEMBER_NAME_PREFIX);
-  await page.getByRole("button", { name: new RegExp(fixture.existingMemberName) }).click();
+  // 輸入既有客戶的電話 → 候選名單列出這位客戶(顯示姓名 + 最近消費日期)。
+  await page.locator("#booking-customer-phone").fill(EXISTING_MEMBER_PHONE);
+  const candidateButton = page.getByRole("button", {
+    name: new RegExp(fixture.existingMemberName),
+  });
+  await expect(candidateButton).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await candidateButton.click();
 
-  // 選中後欄位改成顯示選中的會員姓名 + 「清除」按鈕(不再是搜尋輸入框)。
+  // 選中後面板改成顯示「已連結會員:<姓名>」+「清除連結」按鈕(候選名單收起來)。
+  await expect(page.getByText("已連結會員:")).toBeVisible();
   await expect(page.getByText(fixture.existingMemberName).last()).toBeVisible();
-  await expect(page.getByRole("button", { name: "清除" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "清除連結" })).toBeVisible();
 
   // §4.5:訂單詳情頁——fixture 已完成的訂單連結到 existingMember,管理員應該看到可點擊連結。
   await page.goto("/app/orders");

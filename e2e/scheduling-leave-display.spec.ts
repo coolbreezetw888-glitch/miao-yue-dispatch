@@ -23,6 +23,7 @@ import {
   teardownSchedulingLeaveFixture,
   type SchedulingLeaveFixture,
 } from "./support/scheduling-leave-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -52,14 +53,10 @@ test.afterAll(async () => {
 test.beforeEach(async ({ page }) => {
   await injectSchedulingLeaveFixtureSession(page, fixture);
 
-  // **已知既有問題,跟這次修正主題無關**(見 e2e/mobile-overflow.spec.ts 開頭同一段說明):
-  // 全新瀏覽器 session 第一次深連結到受保護頁面時,有機會在 currentMerchantId 還沒被
-  // context.tsx 的 fallback effect 寫進 localStorage 前,就先讀到 merchant === null 而被
-  // RequireSchedulingAccess/RequireTeamLeaveAccess 誤判導回 /app。先訪問一次 /app 讓「目前
-  // 操作中商家」正確寫進 localStorage,之後同一個瀏覽器 context 內再訪問其他頁面就不會再踩到
-  // 這個 race。
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 啟動步驟:先造訪一次後台外殼頁,讓「目前操作中商家」寫進 localStorage,避免後面直接深連結
+  // 到受保護頁面時被 Require*Access 守衛誤判導回 /app。為什麼是這個頁面/這個錨點,見
+  // e2e/support/app-shell.ts 的完整說明。
+  await primeCurrentMerchant(page);
 });
 
 test("排班一覽(§4.4):整天請假顯示灰底+假別名稱,取消後恢復正常", async ({ page }) => {

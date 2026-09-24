@@ -27,6 +27,7 @@ import {
   teardownStaffPortalFixture,
   type StaffPortalFixture,
 } from "./support/staff-portal-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -110,8 +111,7 @@ test("推播通知設定頁(§7.9):管理員切換開關並編輯文案後正確
   page,
 }) => {
   await injectAdminSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 
   await page.goto("/app/push-events");
   await expect(page.getByRole("heading", { name: "推播通知設定" })).toBeVisible({
@@ -140,8 +140,7 @@ test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對
   page,
 }) => {
   await injectAdminSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 
   await page.goto("/app/push-events");
   await expect(page.getByRole("heading", { name: "推播通知設定" })).toBeVisible({
@@ -162,16 +161,29 @@ test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對
 
   // booking_updated 只顯示該事件實際會替換到的變數(change_summary),不混入其他事件才有的
   // service_names(對應 §13.1「不把 4 種事件全部變數混在一起列」)。
+  //
+  // 2026-09-24:原本這兩行是對「整張卡片」找 {{change_summary}},但 booking_updated 的預設
+  // 內文範本本身就是 `{{booking_date}} {{customer_name}}:{{change_summary}}`
+  // (20260922100100_push_notifications_functions.sql:26 種進去的),所以卡片裡的 textarea
+  // 也含有這段文字 → getByText 同時命中「可用變數說明」跟「文案輸入框」兩個節點,
+  // Playwright strict mode 直接判定失敗(這支測試從寫出來就沒有真正通過過,只是之前
+  // beforeEach 的啟動斷言先逾時,整檔垮掉把它蓋住了)。
+  // 驗證意圖完全不變(而且更精準):把斷言限定在「可用變數」那一行說明文字上,確認它列出
+  // change_summary、而且沒有混入 service_names——文案輸入框裡剛好也有這串字不該影響判斷。
   const updatedCard = page.getByTestId("push-event-card-booking_updated");
-  await expect(updatedCard.getByText("{{change_summary}}", { exact: false })).toBeVisible();
-  await expect(updatedCard.getByText("{{service_names}}", { exact: false })).toHaveCount(0);
+  const updatedVariableHint = updatedCard.getByText("可用變數:", { exact: false });
+  await expect(updatedVariableHint).toContainText("{{change_summary}}");
+  await expect(updatedVariableHint).not.toContainText("{{service_names}}");
 
   // 標題/內文分開即時預覽,不合併成一大段文字(§13.1 邊界情況)。
   const createdCard = page.getByTestId("push-event-card-booking_created");
   await createdCard.locator("input").fill("{{customer_name}} 的新預約");
   await createdCard.locator("textarea").fill("{{booking_date}} {{service_names}}");
-  await expect(createdCard.getByText("標題")).toBeVisible();
-  await expect(createdCard.getByText("內文")).toBeVisible();
+  // 2026-09-24:同上,這兩行原本沒有 exact:true,「標題」會同時命中欄位標籤「通知標題」跟
+  // 即時預覽的段落標籤「標題」兩個節點(strict mode 失敗)。這裡要驗的是「即時預覽分成
+  // 標題/內文兩段」,所以用 exact:true 精準指向預覽區的兩個段落標籤。
+  await expect(createdCard.getByText("標題", { exact: true })).toBeVisible();
+  await expect(createdCard.getByText("內文", { exact: true })).toBeVisible();
   await expect(createdCard.getByText("王小姐 的新預約")).toBeVisible();
   await expect(createdCard.getByText("2026-10-01 14:30 手部保養、單色凝膠")).toBeVisible();
 });

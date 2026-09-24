@@ -64,6 +64,10 @@ function createFixtureSupabaseClient(): SupabaseClient {
 
 export const STAFF_NAME_PREFIX = "E2E測試會員模組師傅";
 export const EXISTING_MEMBER_NAME_PREFIX = "E2E測試既有會員";
+/** 既有會員的電話。§10.2(SPECS-INDEX #614)之後,建單表單是用「客戶電話」欄位去比對既有客戶,
+ * 測試需要知道這支電話才能觸發 MemberPhoneMatchPanel 的候選名單,所以從寫死在下面的建立參數
+ * 提升成具名常數。被推薦會員刻意用另一支電話(0955888002),確保這支電話只會比對到一位。 */
+export const EXISTING_MEMBER_PHONE = "0955888001";
 export const REFERRED_MEMBER_NAME_PREFIX = "E2E測試被推薦會員";
 export const BOOKING_SUBTOTAL = 1000;
 export const POINTS_EARN_RATE = 100; // 每 100 元 1 點
@@ -174,7 +178,7 @@ export async function setupMembersFixture(): Promise<MembersFixture> {
   const { data: existingMember, error: existingMemberError } = await client.rpc("create_member", {
     p_merchant_id: merchantId as string,
     p_name: existingMemberName,
-    p_phone: "0955888001",
+    p_phone: EXISTING_MEMBER_PHONE,
   });
   if (existingMemberError || !existingMember) {
     throw new Error(`建立測試既有會員失敗:${existingMemberError?.message}`);

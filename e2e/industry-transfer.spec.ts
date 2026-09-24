@@ -18,6 +18,7 @@ import {
   INITIAL_POINTS_BALANCE,
   type IndustryTransferFixture,
 } from "./support/industry-transfer-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -45,8 +46,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await injectIndustryTransferFixtureSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 });
 
 test("產業轉移精靈完整流程(§4.4):建立新商家 → 選會員 → 確認搬遷 → 結果頁", async ({ page }) => {

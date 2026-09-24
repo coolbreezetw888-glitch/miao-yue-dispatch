@@ -19,6 +19,7 @@ import {
   teardownDataImportHistoryFixture,
   type DataImportHistoryFixture,
 } from "./support/data-import-history-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -47,8 +48,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await injectDataImportHistoryFixtureSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 });
 
 async function mapColumn(page: Page, fieldKey: string, header: string) {
@@ -59,6 +59,11 @@ async function mapColumn(page: Page, fieldKey: string, header: string) {
 
 test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並顯示正確摘要", async ({ page }) => {
   // 先透過匯入精靈建立一個「2 成功 + 1 失敗」的批次(比照品管 2026-09-21 的手動驗證情境)。
+  //
+  // 2026-09-24:第三列(失敗樣本)原本是「有姓名、缺電話」,靠已經被 SPECS-INDEX #618 移除的
+  // 「建立會員時電話必填」開關失敗。現在改成「有電話、缺姓名」——姓名是會員匯入唯一剩下的
+  // 必填欄位,理由見 e2e/support/data-import-history-fixture.ts 的 invalidRowPhone 說明。
+  // 這支測試要驗證的事情完全不變:2 成功 + 1 失敗的批次,統計數字與失敗明細都要正確。
   await page.goto("/app/data-import");
   await page.getByRole("button", { name: "會員資料" }).click();
 
@@ -66,7 +71,7 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
     "姓名,電話",
     `${fixture.validMemberName1},0955333001`,
     `${fixture.validMemberName2},0955333002`,
-    `${fixture.invalidMemberName},`,
+    `,${fixture.invalidRowPhone}`,
   ].join("\n");
   await page.setInputFiles("#csv-file", {
     name: "members.csv",
@@ -101,7 +106,7 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
 
   // 展開失敗明細。
   await card.getByRole("button", { name: /展開失敗明細/ }).click();
-  await expect(card).toContainText("這個商家要求建立會員時必須填寫電話");
+  await expect(card).toContainText("請填寫會員姓名");
 
   // 一鍵復原。
   await card.getByRole("button", { name: "復原" }).click();

@@ -18,6 +18,7 @@ import {
   teardownDataImportMembersFixture,
   type DataImportMembersFixture,
 } from "./support/data-import-members-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -46,8 +47,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await injectDataImportMembersFixtureSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 });
 
 test("資料匯入精靈(§10.1):「← 返回功能」導向 /app/manage,且跟「上一步」是兩顆不同按鈕", async ({

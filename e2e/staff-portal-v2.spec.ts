@@ -24,7 +24,7 @@ import {
   teardownStaffPortalV2Fixture,
   type StaffPortalV2Fixture,
 } from "./support/staff-portal-v2-fixture";
-import { addDays, getTaipeiNow, toDateKey } from "../src/modules/booking/dateUtils";
+import { getTaipeiNow, toDateKey } from "../src/modules/booking/dateUtils";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -151,9 +151,16 @@ test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整
 
   // fixture 營業時間 09:00-18:00 = 18 個半小時格,修正前的 bug 會讓 availability_overrides
   // 合併結果變成 start=00:00/end=00:00(零寬度區間),前端比對邏輯永遠比對不到任何一格,這裡
-  // 應該是 0 格顯示「例外關閉」;修正後應該是全部 18 格都顯示「例外關閉」(含最後一格
+  // 應該是 0 格是「例外關閉」;修正後應該是全部 18 格都是「例外關閉」(含最後一格
   // 17:30-18:00,也就是原本 23:30 這格回捲問題實際影響到的邊界)。
-  await expect(staffColumn.getByText("例外關閉", { exact: true })).toHaveCount(18);
+  //
+  // 2026-09-24:原本這行斷言的是格子上的「例外關閉」文字,但使用者當天明確要求拿掉這段文字
+  //(原話:「不需要有文字說明,只有跨店占用需要有文字顯示說明」),CalendarPage.tsx 已改成
+  // badgeText="",例外開啟/關閉只靠斜線圖樣表示。驗證意圖完全不變(整天排休後,商家管理員
+  // 視角這一天 18 格都要是「例外關閉」狀態),改成斷言視覺狀態本身——CalendarPage.tsx 為此
+  // 在每一格輸出 data-slot-state(見該檔案 DaySlotState 的說明),因為斜線圖樣是商家可自訂的
+  // 動態 inline style(SPECS-INDEX #644),沒有穩定的 class 可以選取。
+  await expect(staffColumn.locator('[data-slot-state="override-closed"]')).toHaveCount(18);
   // 對照組:商家管理員視角完全看不到「新增預約」這個選項——打開其中一格的下拉選單確認。
   await staffColumn.getByRole("button", { name: "不可預約" }).first().click();
   await expect(adminPage.getByRole("menuitem", { name: "新增預約" })).toHaveCount(0);
@@ -210,7 +217,8 @@ test("10.3.3:時段排休依營業時間顯示,商家管理員視角看到一致
   await expect(staffColumn).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   // 只有這一格是「例外關閉」,不是整天(跟 485 那支整天排休測試明確區分開)。
-  await expect(staffColumn.getByText("例外關閉", { exact: true })).toHaveCount(1);
+  // 2026-09-24:同上一支測試,「例外關閉」文字已依使用者要求移除,改斷言 data-slot-state。
+  await expect(staffColumn.locator('[data-slot-state="override-closed"]')).toHaveCount(1);
   // 注意:aria-label 用 exact:true,否則「可預約」會被當成「不可預約」的子字串一併命中。
   await expect(staffColumn.getByLabel("可預約", { exact: true })).toHaveCount(17); // 18 格扣掉這 1 格。
   await expect(staffColumn.getByLabel("不可預約", { exact: true })).toHaveCount(1);
@@ -223,7 +231,7 @@ test("10.3.3:時段排休依營業時間顯示,商家管理員視角看到一致
   await expect(page.getByRole("button", { name: /^12:00-12:30/ })).toContainText("可預約");
 });
 
-test("10.4.6(核心情境,必測):薪資報表頁標題/月份切換/摘要卡片,無 CSV 匯出,且與商家管理員視角抽成數字一致", async ({
+test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡片,無 CSV 匯出,且與商家管理員視角抽成數字一致", async ({
   page,
   browser,
 }: {
@@ -236,26 +244,62 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/月份切換/摘要卡�
   // 找不到 CSV 匯出按鈕。
   await expect(page.getByRole("button", { name: "匯出這份報表為 CSV" })).toHaveCount(0);
 
-  // 月份箭頭切換(這個月->下個月->回這個月),報表資料同步更新——下個月沒有訂單,摘要卡片歸零。
+  // 2026-09-24 更新:商家端三項調整 §3.6 / 服務人員端 §15.2(已上線,git 802ab11)把這個頁面的
+  // 時間篩選從「月份箭頭切換」改成 DateRangePicker 區間篩選(起訖日期或起訖月份,最長一年),
+  // MyYearMonthSwitcher.tsx 已經整個移除。所以原本斷言的「YYYY 年 M 月」標籤、「下個月 →」
+  // 「← 上個月」按鈕都不存在了。驗證意圖完全不變(時間篩選真的會帶動報表重新查詢:切到沒有
+  // 訂單的下個月要歸零,切回來要恢復),改成操作新的區間篩選元件。
   const now = getTaipeiNow();
-  const thisMonthLabel = `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
-  await expect(page.getByText(thisMonthLabel, { exact: true })).toBeVisible();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const thisMonth = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonth = `${nextMonthDate.getFullYear()}-${pad(nextMonthDate.getMonth() + 1)}`;
+  const startInput = page.locator("#date-range-start");
+  const endInput = page.locator("#date-range-end");
+
+  // 預設區間(src/modules/payroll/dateRangeUtils.ts defaultDateRange):本月 1 號 ~ 今天。
+  await expect(startInput).toHaveValue(`${thisMonth}-01`);
 
   // 按件計酬服務人員視角:三張摘要卡片,數字跟明細表格一致。
-  await expect(page.getByText("完成訂單")).toBeVisible();
-  await expect(page.getByText("1 筆", { exact: true })).toBeVisible();
-  await expect(page.getByText("我的抽成")).toBeVisible();
-  await expect(page.getByText(`$${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`)).toBeVisible();
-  await expect(page.getByText("訂單總額")).toBeVisible();
-  await expect(page.getByText("$1,000")).toBeVisible();
+  //
+  // 2026-09-24:這幾行原本是直接對「整頁」找金額文字(page.getByText("$500"))。StaffReportPage
+  // 這次把「訂單明細」表格裡的金額也統一改走 formatAmount(稽核問題 4:同一頁不能一邊印 $500、
+  // 一邊印原始值 500,師傅會以為被扣錢),所以 $500 現在同時出現在摘要卡片跟明細列的抽成欄,
+  // $1,000 同時出現在摘要卡片跟明細列的抽成基數欄 → page.getByText 一次命中兩個節點,
+  // Playwright strict mode 判定失敗。這是格式統一造成的,不是數字算錯。
+  // 驗證意圖不變(而且更精準):斷言限定在「這張摘要卡片」上,確認卡片本身顯示的是正確金額。
+  const doneOrdersCard = page.locator(".rounded-xl.border", { hasText: "完成訂單" });
+  const myCommissionCard = page.locator(".rounded-xl.border", { hasText: "我的抽成" });
+  const totalAmountCard = page.locator(".rounded-xl.border", { hasText: "訂單總額" });
 
-  await page.getByRole("button", { name: "下個月 →" }).click();
-  const nextMonthDate = addDays(new Date(now.getFullYear(), now.getMonth() + 1, 1), 0);
-  const nextMonthLabel = `${nextMonthDate.getFullYear()} 年 ${nextMonthDate.getMonth() + 1} 月`;
-  await expect(page.getByText(nextMonthLabel, { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByText("0 筆", { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await page.getByRole("button", { name: "← 上個月" }).click();
-  await expect(page.getByText(thisMonthLabel, { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(doneOrdersCard).toBeVisible();
+  await expect(doneOrdersCard).toContainText("1 筆");
+  await expect(myCommissionCard).toBeVisible();
+  await expect(myCommissionCard).toContainText(
+    `$${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`,
+  );
+  await expect(totalAmountCard).toBeVisible();
+  await expect(totalAmountCard).toContainText("$1,000");
+
+  // 明細列的金額跟摘要卡片是同一個數字、同一種格式(稽核問題 4 的回歸保護:兩邊都要是 $500,
+  // 不能一邊 $500 一邊 500)。
+  await expect(page.locator("table tbody tr").first()).toContainText(
+    `$${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`,
+  );
+
+  // 切到「按月份」顆粒度,改查下個月——fixture 的訂單在今天,下個月應該是 0 筆。
+  // 刻意先改「訖」再改「起」,中途不會出現「結束日期早於起始日期」這個非法中間狀態
+  // (見 dateRangeUtils.validateDateRange)。
+  await page.getByRole("button", { name: "按月份" }).click();
+  await expect(startInput).toHaveValue(thisMonth);
+  await endInput.fill(nextMonth);
+  await startInput.fill(nextMonth);
+  await expect(doneOrdersCard).toContainText("0 筆", { timeout: LOAD_TIMEOUT });
+
+  // 切回這個月,資料恢復(同樣先改「起」再改「訖」,避開非法中間狀態)。
+  await startInput.fill(thisMonth);
+  await endInput.fill(thisMonth);
+  await expect(doneOrdersCard).toContainText("1 筆", { timeout: LOAD_TIMEOUT });
 
   // ---- 跨視角一致性:商家管理員視角(師傅報表頁)同一位服務人員同一個月的「抽成合計」
   // 要跟服務人員自助視角的「我的抽成」完全一致,而且商家管理員視角回歸測試:CSV 匯出按鈕仍在
@@ -269,8 +313,14 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/月份切換/摘要卡�
   await adminPage.getByLabel("服務人員").click();
   await adminPage.getByRole("option", { name: fixture.staffName }).click();
 
+  // 2026-09-24:商家管理員視角的「抽成合計」原本是直接印原始數字 + 「元」(`抽成合計 500 元`),
+  // 這次稽核問題 4 把它也改走 formatAmount,顯示成 `抽成合計 $500`(跟同一頁的明細列、跟服務
+  // 人員視角的摘要卡片格式一致)。驗證意圖不變:兩個視角的抽成數字必須是同一個值。
   await expect(
-    adminPage.getByText(`抽成合計 ${EXPECTED_COMMISSION_AMOUNT} 元`, { exact: false }),
+    adminPage.getByText(
+      `抽成合計 $${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`,
+      { exact: false },
+    ),
   ).toBeVisible({ timeout: LOAD_TIMEOUT });
   // 商家管理員視角回歸測試(必測):CSV 匯出按鈕仍然存在,沒有被連帶拿掉。
   await expect(adminPage.getByRole("button", { name: "匯出這份報表為 CSV" })).toBeVisible();

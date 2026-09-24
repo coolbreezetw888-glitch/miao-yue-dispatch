@@ -71,7 +71,17 @@ export interface DataImportMembersFixture {
   session: Session;
   merchantId: string;
   validMemberName: string;
-  invalidMemberName: string; // 缺電話，用來驗證預覽/實際匯入判斷一致
+  /** 刻意製造「這一列一定會匯入失敗」的樣本用的電話(這一列只有電話、沒有姓名)。
+   *
+   * 2026-09-24:原本是 `invalidMemberName`(一位「缺電話」的會員)。SPECS-INDEX #618
+   * (2026-09-23,20260923010200 + 20260923010300)已經把「建立會員時電話必填」整個移除——
+   * merchant_member_settings.phone_required_to_create 這個欄位被 drop、create_member 的
+   * 檢查被刪、前端 ImportWizardPage.tsx 的 phoneRequiredForMembers 寫死 false。缺電話現在
+   * 是完全合法的一列,預覽不會標紅、後端也不會擋,原本的斷言永遠不可能成立。
+   *
+   * 會員匯入現在唯一剩下的必填欄位是姓名,所以失敗樣本改成「缺姓名」——測試意圖(預覽階段的
+   * 判斷要跟實際匯入結果一致:同樣那一列在預覽被標成會失敗,結果報告也真的失敗 1 筆)完全不變。 */
+  invalidRowPhone: string;
 }
 
 export async function setupDataImportMembersFixture(): Promise<DataImportMembersFixture> {
@@ -104,7 +114,7 @@ export async function setupDataImportMembersFixture(): Promise<DataImportMembers
     session,
     merchantId: merchantId as string,
     validMemberName: `E2E會員甲${runId}`,
-    invalidMemberName: `E2E會員乙缺電話${runId}`,
+    invalidRowPhone: "0955000009",
   };
 }
 

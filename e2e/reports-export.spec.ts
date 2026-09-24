@@ -12,6 +12,7 @@ import {
   teardownReportExportFixture,
   type ReportExportFixture,
 } from "./support/report-export-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -38,8 +39,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await injectReportExportFixtureSession(page, fixture);
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await primeCurrentMerchant(page);
 });
 
 test("報表匯出中心(§4.3):訂單/會員/抽成三種報表類型皆下載成功", async ({ page }) => {

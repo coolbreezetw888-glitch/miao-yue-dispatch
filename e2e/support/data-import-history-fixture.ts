@@ -62,7 +62,19 @@ export interface DataImportHistoryFixture {
   merchantId: string;
   validMemberName1: string;
   validMemberName2: string;
-  invalidMemberName: string;
+  /** 刻意製造「這一列一定會匯入失敗」的樣本用的電話。
+   *
+   * 2026-09-24:原本這個欄位是 `invalidMemberName`(一位「缺電話」的會員),靠
+   * merchant_member_settings.phone_required_to_create 讓後端 create_member 擋下來。但
+   * SPECS-INDEX #618(2026-09-23,20260923010200 + 20260923010300 兩支 migration)已經
+   * 明確把「建立會員時電話必填」這個開關整個移除(欄位 drop column、create_member 的檢查
+   * 刪掉、前端 ImportWizardPage.tsx 的 phoneRequiredForMembers 寫死 false),缺電話現在是
+   * 完全合法的一列,不會再失敗。
+   *
+   * 會員匯入現在「唯一」剩下的必填欄位是姓名(create_member 仍然 `raise exception
+   * '請填寫會員姓名'`),所以失敗樣本改成「有電話、沒有姓名」這一列。測試要驗證的事情不變:
+   * 一個批次裡同時有成功列與失敗列時,匯入紀錄頁的統計與失敗明細要正確。 */
+  invalidRowPhone: string;
   /** 缺口 1(2026-09-21 品管第二輪複驗):情境②——第二批匯入,其中一位匯入後被手動編輯過,
    * 復原時應該被正確跳過,另一位維持乾淨可以正常復原(刪除)。 */
   editedAfterImportMemberName: string;
@@ -102,7 +114,7 @@ export async function setupDataImportHistoryFixture(): Promise<DataImportHistory
     merchantId: merchantId as string,
     validMemberName1: `E2E會員一${runId}`,
     validMemberName2: `E2E會員二${runId}`,
-    invalidMemberName: `E2E會員三缺電話${runId}`,
+    invalidRowPhone: "0955333009",
     editedAfterImportMemberName: `E2E會員四待編輯${runId}`,
     editedAfterImportMemberPhone: "0955333003",
     cleanSecondBatchMemberName: `E2E會員五維持乾淨${runId}`,

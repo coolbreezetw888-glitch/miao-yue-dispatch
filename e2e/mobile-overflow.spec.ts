@@ -44,6 +44,7 @@ import {
   teardownMobileOverflowFixture,
   type MobileOverflowFixture,
 } from "./support/mobile-overflow-fixture";
+import { primeCurrentMerchant } from "./support/app-shell";
 
 // **重要,踩過的坑**:光是 `page.setViewportSize({width:375,...})` 不夠——那只是把桌面版
 // Chromium 的視窗改窄,不會套用 `isMobile`/`hasTouch` 這些手機模擬旗標。實測發現,Radix
@@ -219,16 +220,10 @@ test.afterAll(async () => {
 test.beforeEach(async ({ page }) => {
   await injectFixtureSession(page, fixture);
 
-  // **已知既有問題,跟這次修正主題無關,不在這次任務範圍內修**(發現後回報主腦,不是這次
-  // 順手改的):`RequireMerchantAdmin`(以及可能其他用同一種寫法的頁面守衛)在「這個瀏覽器
-  // 從來沒有選過商家」時,有機會在 `currentMerchantId` 還沒被 context.tsx 的 fallback effect
-  // 寫進 localStorage 前,就先讀到 `merchant === null` 而誤判成「沒有商家/不是管理員」、
-  // 直接把使用者導回 `/app`——實測會在全新瀏覽器 session 直接深連結到 `/app/settings` 等
-  // 受保護頁面時重現。這裡先訪問一次 `/app` 讓「目前操作中商家」正確寫進 localStorage,
-  // 之後同一個瀏覽器 context 內再訪問其他頁面就不會再踩到這個 race,不影響這次要測的
-  // 「容器寬度會不會溢出」這個主題。
-  await page.goto("/app");
-  await expect(page.getByText("目前操作中的商家")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 啟動步驟:先造訪一次後台外殼頁,讓「目前操作中商家」寫進 localStorage,避免後面直接深連結
+  // 到受保護頁面時被 Require*Access 守衛誤判導回 /app。為什麼是這個頁面/這個錨點,見
+  // e2e/support/app-shell.ts 的完整說明。
+  await primeCurrentMerchant(page);
 });
 
 test("首頁 /app", async ({ page }) => {
