@@ -6,3 +6,9 @@ pnpm-lock.yaml
 package-lock.json
 bun.lock
 routeTree.gen.ts
+
+# Claude Code 的設定/skills/git worktree 暫存副本,不是專案原始碼(見 eslint.config.js 的 ignores)
+.claude
+
+# Supabase CLI 依照資料庫 schema 自動產生的型別檔,每次重新產生都會蓋掉手動格式調整
+src/integrations/supabase/types.ts

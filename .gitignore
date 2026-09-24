@@ -36,6 +36,10 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# Claude Code 的本機設定、skills 與 git worktree 暫存副本(.claude/worktrees/ 底下每一份
+# 都是一整套原始碼複本,不該進版控,也不該被 lint/format 掃到,見 eslint.config.js 的 ignores)
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

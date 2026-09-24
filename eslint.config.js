@@ -6,7 +6,20 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  {
+    ignores: [
+      "dist",
+      ".output",
+      ".vinxi",
+      // .claude/ 底下放的是 Claude Code 的設定、skills、以及 git worktree 的暫存副本
+      // (.claude/worktrees/ 每一份都是一整套原始碼複本)。那些副本不是專案原始碼,
+      // 掃進來會讓 lint 結果暴增到幾十萬筆、把真正的訊號整個淹沒。
+      ".claude",
+      // Supabase CLI 依照資料庫 schema 自動產生的型別檔,每次重新產生都會蓋掉手動調整,
+      // 不該納入 lint/format。同步也寫進 .prettierignore。
+      "src/integrations/supabase/types.ts",
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
