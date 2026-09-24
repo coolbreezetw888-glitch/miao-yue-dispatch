@@ -29,11 +29,13 @@
 // 左側色條顯示用,資料表/RLS/RPC 完全不動,寫入邏輯(updateMerchantBookingStatusColors)一併
 // 搬去 MerchantSettingsPage.tsx,不在這個檔案裡重複一份。
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,7 +49,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { cn } from "@/lib/utils";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import type { IndustryType } from "@/modules/merchant/types";
+import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import {
   useAgentPermission,
   useCurrentMerchantRole,
@@ -64,15 +66,20 @@ import {
 import { addDays, buildTaipeiIso, isoToTaipeiDateTimeWithSeconds, toDateKey } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import {
+  adjustPageForPageSizeChange,
   formatCardDateTime,
   formatGroupDateHeading,
   groupBookingsByDateField,
+  isOrdersPageSize,
   ORDER_STATUS_TABS,
-  ORDERS_RENDER_LIMIT,
+  ORDERS_PAGE_SIZE_OPTIONS,
+  readStoredOrdersPageSize,
+  sliceBookingsForPage,
   sumBookingRevenue,
   tabToStatusFilter,
-  takeLatestBookings,
+  writeStoredOrdersPageSize,
   type OrderDateFieldMode,
+  type OrdersPageSize,
   type OrderStatusTab,
 } from "./ordersPageLogic";
 import {
@@ -128,7 +135,30 @@ function OrdersPageInner() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
+  // 分頁狀態(2026-09-24 使用者裁決:渲染上限改成真正的分頁,見 ordersPageLogic.ts 的說明)。
+  // 每頁筆數用 useState 的初始化函式讀 localStorage,只在第一次掛載時讀一次(不是每次 render 都讀),
+  // 讀不到/值不合法時會拿到 DEFAULT_ORDERS_PAGE_SIZE。
+  const [pageSize, setPageSize] = useState<OrdersPageSize>(() => readStoredOrdersPageSize());
+  const [page, setPage] = useState(1);
+  // 換頁後把畫面捲回列表頂端——不然使用者按了底部的「下一頁」,畫面還停在原本的捲動位置,
+  // 看起來像「按了沒反應」(實際上清單已經換成另一批訂單了)。
+  const listTopRef = useRef<HTMLDivElement>(null);
+
   const statusFilter = tabToStatusFilter(activeTab);
+
+  // 篩選條件(分頁籤/關鍵字/日期/服務人員)一改,筆數與頁數就整批換掉,一律回到第 1 頁,
+  // 否則使用者會停在一個空白的第 5 頁。刻意做成「改篩選的同一個動作順手 setPage(1)」而不是用
+  // useEffect 監看 filters——useEffect 會多一次渲染(先畫出停在舊頁碼的畫面再修正),也比較難
+  // 看出「改這個欄位會連帶重設頁碼」這件事。
+  function updateFilters(updater: (prev: OrderFilters) => OrderFilters) {
+    setFilters(updater);
+    setPage(1);
+  }
+
+  function changeTab(tab: OrderStatusTab) {
+    setActiveTab(tab);
+    setPage(1);
+  }
 
   const { data: bookingsData, isLoading } = useMerchantBookings(merchantId, {
     ...(statusFilter ? { status: statusFilter } : {}),
@@ -153,20 +183,22 @@ function OrdersPageInner() {
     // 這裡改成帶 unpaged:true,直接複用 api.ts 既有的 .range() 分頁迴圈(原本只有模組 12 的
     // 報表匯出在用),把符合篩選條件的訂單全部撈完。
     //
-    // 效能考量已經評估過:撈取不設上限、但**渲染**另外設上限(ORDERS_RENDER_LIMIT,見下方
-    // visibleBookings),所以「資料量大」影響的只有一次查詢的往返次數跟記憶體(每筆訂單是一列
-    // 純欄位資料,幾千筆等級對瀏覽器沒有壓力),不會變成「一次畫出上萬張卡片」把瀏覽器卡死。
+    // 效能考量已經評估過:撈取不設上限、但**渲染**一次只畫一頁(見下方 pageSlice),所以
+    // 「資料量大」影響的只有一次查詢的往返次數跟記憶體(每筆訂單是一列純欄位資料,幾千筆等級
+    // 對瀏覽器沒有壓力),不會變成「一次畫出上萬張卡片」把瀏覽器卡死。
     unpaged: true,
   });
 
   const bookings = useMemo(() => bookingsData ?? [], [bookingsData]);
 
-  // 問題 1:撈全部(統計/搜尋才正確),但只渲染最新的 ORDERS_RENDER_LIMIT 筆(畫面才不會爆)。
-  const visibleBookings = useMemo(
-    () => takeLatestBookings(bookings, filters.dateFieldMode, ORDERS_RENDER_LIMIT),
-    [bookings, filters.dateFieldMode],
+  // 撈全部(統計/搜尋才正確),但只渲染目前這一頁(畫面才不會爆,而且後面的訂單翻頁就看得到,
+  // 不是被硬性截斷)。pageSlice.page 是「夾回合法範圍之後」的頁碼,下面的翻頁按鈕一律用它加減,
+  // 所以就算資料變少(例如改了篩選、或別人取消了訂單)也不會停在超出範圍的空白頁。
+  const pageSlice = useMemo(
+    () => sliceBookingsForPage(bookings, filters.dateFieldMode, page, pageSize),
+    [bookings, filters.dateFieldMode, page, pageSize],
   );
-  const isTruncated = visibleBookings.length < bookings.length;
+  const visibleBookings = pageSlice.bookings;
 
   // §7.5:卡片延伸資訊(服務項目名稱清單、建單客服姓名),批次查詢,不對每一筆訂單各自查一次。
   // 只對「真的會被渲染出來的那些訂單」查延伸資訊——沒被渲染的卡片不需要服務項目名稱,順便避免
@@ -181,12 +213,22 @@ function OrdersPageInner() {
   // §7.4:統計列——N 筆訂單就是目前篩選結果的陣列長度(取消的訂單如果符合目前篩選一樣算進來);
   // 業績加總排除已取消訂單。
   //
-  // 問題 1 修正後,「本頁業績」跟「總業績」不再永遠是同一個值:總業績 = 符合篩選條件的**全部**
-  // 訂單加總(這正是這次要修的重點,金額不能少報),本頁業績 = 目前這一頁實際畫出來的那些訂單
-  // 加總。沒有超過渲染上限時兩者一樣,跟改版前的畫面完全一致。
-  const totalCount = bookings.length;
+  // 「總業績」跟「本頁業績」是兩個不同意義的數字,畫面上必須看得出差別:
+  //   總業績 = 符合篩選條件的**全部**訂單加總(全量統計,不受分頁影響,金額不能少報);
+  //   本頁業績 = 目前這一頁實際畫出來的那些訂單加總(所以下面顯示時一定要附上「這一頁是第幾筆到
+  //             第幾筆」,使用者才不會把它誤讀成全部)。
+  // 只有一頁時兩者當然一樣。
+  const totalCount = pageSlice.totalCount;
   const revenueTotal = useMemo(() => sumBookingRevenue(bookings), [bookings]);
   const visibleRevenue = useMemo(() => sumBookingRevenue(visibleBookings), [visibleBookings]);
+
+  // 任務 2(2026-09-24 使用者裁決):商家切成「到店服務」之後,既有訂單的客戶地址要隱藏。
+  // 判斷用商家**目前**的產業設定(industry_type 現在可以隨時切換,見 merchant/api.ts
+  // 2026-09-23 的說明),不是只看「這筆訂單有沒有地址值」。
+  // 資料庫裡的地址值刻意不動(使用者只說「隱藏」):所以商家如果再切回「到府派工」,舊訂單的
+  // 地址會重新顯示出來——這是預期中的正確行為,不是漏改。
+  const showCustomerAddress =
+    INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[merchant!.industry_type as IndustryType] === true;
 
   // §7.5:依 §7.3 選定的日期欄位分組,日期新到舊排序。
   const dateGroups = useMemo(
@@ -196,6 +238,20 @@ function OrdersPageInner() {
 
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ["booking-module"] });
+  }
+
+  function goToPage(nextPage: number) {
+    setPage(nextPage);
+    // 捲回列表頂端。optional call:jsdom(Vitest)沒有實作 scrollIntoView,直接呼叫會丟錯。
+    listTopRef.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }
+
+  function changePageSize(nextPageSize: OrdersPageSize) {
+    // 每頁筆數改變時,讓「目前這一頁的第一筆」在新的每頁筆數下仍然落在畫面上(見
+    // adjustPageForPageSizeChange 的說明),不要把使用者彈回第 1 頁或彈到不相干的位置。
+    setPage((prev) => adjustPageForPageSizeChange(prev, pageSize, nextPageSize));
+    setPageSize(nextPageSize);
+    writeStoredOrdersPageSize(nextPageSize);
   }
 
   function openEditForm(bookingId: string) {
@@ -221,7 +277,7 @@ function OrdersPageInner() {
 
       {/* §7.1:狀態分頁籤。h-auto + flex-wrap:手機寬度(375px)放不下五個分頁籤時自動換行,
           不用水平捲動,避免捲動容器超出畫面寬度。 */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as OrderStatusTab)}>
+      <Tabs value={activeTab} onValueChange={(v) => changeTab(v as OrderStatusTab)}>
         <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
           {ORDER_STATUS_TABS.map((tab) => (
             <TabsTrigger key={tab.key} value={tab.key}>
@@ -235,7 +291,7 @@ function OrdersPageInner() {
       <Input
         placeholder="搜尋姓名/手機/地址/單號/建單內容..."
         value={filters.keyword}
-        onChange={(e) => setFilters((prev) => ({ ...prev, keyword: e.target.value }))}
+        onChange={(e) => updateFilters((prev) => ({ ...prev, keyword: e.target.value }))}
       />
 
       {/* §7.3:篩選列——依建單時間/依預約時間切換 + 日期區間 + 全部服務人員下拉。 */}
@@ -245,7 +301,7 @@ function OrdersPageInner() {
           <div className="mt-2 flex rounded-md border border-border p-0.5">
             <button
               type="button"
-              onClick={() => setFilters((prev) => ({ ...prev, dateFieldMode: "created_at" }))}
+              onClick={() => updateFilters((prev) => ({ ...prev, dateFieldMode: "created_at" }))}
               className={cn(
                 "flex-1 rounded px-2 py-1.5 text-sm transition-colors",
                 filters.dateFieldMode === "created_at"
@@ -257,7 +313,7 @@ function OrdersPageInner() {
             </button>
             <button
               type="button"
-              onClick={() => setFilters((prev) => ({ ...prev, dateFieldMode: "start_at" }))}
+              onClick={() => updateFilters((prev) => ({ ...prev, dateFieldMode: "start_at" }))}
               className={cn(
                 "flex-1 rounded px-2 py-1.5 text-sm transition-colors",
                 filters.dateFieldMode === "start_at"
@@ -276,13 +332,13 @@ function OrdersPageInner() {
               type="date"
               className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
               value={filters.dateFrom}
-              onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+              onChange={(e) => updateFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
             />
             <input
               type="date"
               className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
               value={filters.dateTo}
-              onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+              onChange={(e) => updateFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
             />
           </div>
         </div>
@@ -291,7 +347,7 @@ function OrdersPageInner() {
           <Select
             value={filters.staffId || "__all__"}
             onValueChange={(v) =>
-              setFilters((prev) => ({ ...prev, staffId: v === "__all__" ? "" : v }))
+              updateFilters((prev) => ({ ...prev, staffId: v === "__all__" ? "" : v }))
             }
           >
             <SelectTrigger className="mt-2">
@@ -309,24 +365,46 @@ function OrdersPageInner() {
         </div>
       </div>
 
-      {/* §7.4:統計列。金額加總不含已取消訂單;總業績一律是「符合篩選條件的全部訂單」的加總
-          (不受下方渲染上限影響),本頁業績是目前實際畫出來的那些訂單的加總。 */}
-      <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
-        <span>共 {totalCount} 筆訂單</span>
-        <span>
-          本頁業績 {formatAmount(visibleRevenue)} /(總業績 {formatAmount(revenueTotal)})
-        </span>
-        {/* 用半形斜線+括號,視覺上跟規格書的全形斜線/括號效果一致,避免全形符號跟金額數字
-            混排時視覺上不對齊(既有慣例:formatAmount 產出的金額本身是半形字元)。 */}
-      </p>
-      {/* 問題 1:超過渲染上限時明確說出來,不要讓使用者以為「後面的訂單不見了」。上面的筆數/
-          總業績本來就已經是全部訂單的數字,這行只說明「畫面上這份清單」被截到哪裡。 */}
-      {isTruncated ? (
-        <p className="text-sm text-muted-foreground">
-          清單只顯示最新的 {ORDERS_RENDER_LIMIT} 筆(上方筆數與總業績仍為全部
-          {totalCount} 筆的統計),要看更早的訂單請縮小日期範圍或加上其他篩選條件。
+      {/* §7.4:統計列。金額加總不含已取消訂單。
+          「總業績」一律是「符合篩選條件的全部訂單」的加總,完全不受分頁影響(這是 2026-09-24
+          深夜巡檢問題 1 修好的重點,金額不能少報);「本頁業績」只算目前這一頁畫出來的那些訂單,
+          所以刻意把「第幾筆到第幾筆」寫在同一行,避免使用者把它誤讀成全部訂單的業績。
+          用半形斜線+括號,避免全形符號跟金額數字(formatAmount 產出的是半形字元)混排時不對齊。 */}
+      <div className="space-y-0.5 text-sm text-muted-foreground">
+        <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          <span>共 {totalCount} 筆訂單</span>
+          <span>
+            總業績 {formatAmount(revenueTotal)}(全部 {totalCount} 筆合計)
+          </span>
         </p>
-      ) : null}
+        {totalCount > 0 ? (
+          <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <span>
+              本頁業績 {formatAmount(visibleRevenue)}(僅本頁第 {pageSlice.rangeStart}–
+              {pageSlice.rangeEnd} 筆)
+            </span>
+            <span>
+              第 {pageSlice.page} / {pageSlice.totalPages} 頁
+            </span>
+          </p>
+        ) : null}
+      </div>
+
+      {/* 分頁控制項(上)。刻意放在一般文件流裡,不用 position: fixed —— 底部已經有分頁籤列跟
+          動作列在搶那塊空間,見 src/lib/bottomFixedLayers.ts 記錄的實際事故(兩個各自寫死
+          bottom-16 的元件互相蓋住),這裡不再往那堆裡加第三個。清單前後各放一組,使用者在頂端
+          或看完整頁到底部都能直接翻頁,不必先捲動一長串卡片。 */}
+      <div ref={listTopRef} className="scroll-mt-4">
+        {totalCount > 0 ? (
+          <OrdersPager
+            page={pageSlice.page}
+            totalPages={pageSlice.totalPages}
+            pageSize={pageSize}
+            onPageChange={goToPage}
+            onPageSizeChange={changePageSize}
+          />
+        ) : null}
+      </div>
 
       {/* §7.5:依日期分組的訂單卡片列表。 */}
       {isLoading ? (
@@ -352,6 +430,7 @@ function OrdersPageInner() {
                     serviceItemNames={cardExtras?.get(b.id)?.serviceItemNames ?? []}
                     createdByName={cardExtras?.get(b.id)?.createdByName}
                     statusColors={effectiveStatusColors}
+                    showCustomerAddress={showCustomerAddress}
                     onClick={() => setDetailBookingId(b.id)}
                   />
                 ))}
@@ -360,6 +439,17 @@ function OrdersPageInner() {
           ))}
         </div>
       )}
+
+      {/* 分頁控制項(下):看完這一頁的卡片之後,不用捲回頁首就能翻下一頁。 */}
+      {totalCount > 0 ? (
+        <OrdersPager
+          page={pageSlice.page}
+          totalPages={pageSlice.totalPages}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onPageSizeChange={changePageSize}
+        />
+      ) : null}
 
       <BookingDetailDialog
         bookingId={detailBookingId}
@@ -386,6 +476,87 @@ function OrdersPageInner() {
 }
 
 // ---------------------------------------------------------------------------
+// 分頁控制項(2026-09-24 使用者裁決)。一組「每頁筆數下拉 + 上一頁/第 N / M 頁/下一頁」。
+//
+// 為什麼不用 src/components/ui/pagination.tsx:那份 shadcn 元件是「頁碼連結」式的(內部是
+// <a>,PaginationPrevious/Next 的文字寫死英文 Previous/Next,要改文案就得改那支共用元件),
+// 而且逐頁列出頁碼在 375px 寬度下很容易溢出(訂單上萬筆時會有幾十頁)。這裡改用專案既有的
+// Button + Select 組出「上一頁/下一頁 + 目前頁碼」的精簡版,不新增樣式語言,也不改動那支
+// 共用元件(它還有別的頁面可能會用到)。
+//
+// 手機(375px)不溢出的做法:整組用 flex-wrap,放不下時自動換行,不用水平捲動(比照本頁狀態
+// 分頁籤既有的 h-auto + flex-wrap 做法);每頁筆數下拉固定一個小寬度;數字文字加 whitespace-nowrap
+// 避免在數字中間斷行。刻意不用 position: fixed 貼在底部,見上面呼叫處的說明。
+// ---------------------------------------------------------------------------
+function OrdersPager({
+  page,
+  totalPages,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+}: {
+  page: number;
+  totalPages: number;
+  pageSize: OrdersPageSize;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: OrdersPageSize) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+        <span className="whitespace-nowrap">每頁</span>
+        <Select
+          value={String(pageSize)}
+          onValueChange={(v) => {
+            const next = Number(v);
+            // 下拉的選項就是 ORDERS_PAGE_SIZE_OPTIONS,理論上不可能出現別的值;這裡仍然守一層,
+            // 型別上也才不用硬轉(Radix 的 onValueChange 回傳的是 string)。
+            if (isOrdersPageSize(next)) onPageSizeChange(next);
+          }}
+        >
+          <SelectTrigger className="h-9 w-[5rem]" aria-label="每頁顯示筆數">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ORDERS_PAGE_SIZE_OPTIONS.map((size) => (
+              <SelectItem key={size} value={String(size)}>
+                {size}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="whitespace-nowrap">筆</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          <ChevronLeft className="mr-0.5 h-4 w-4" />
+          上一頁
+        </Button>
+        <span className="whitespace-nowrap px-1 text-sm text-muted-foreground">
+          {page} / {totalPages}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+        >
+          下一頁
+          <ChevronRight className="ml-0.5 h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // §7.5:訂單卡片。左側色條建單與訂單管理介面優化 §10.5(SPECS-INDEX #621)改讀商家自訂顏色表
 // (bookingCardAccentBorderStyle,types.ts export),內容由上到下:①服務項目+狀態徽章
 // ②預約時間+建單時間+建單客服 ③服務人員+客戶姓名/電話/地址 ④商家名稱 ⑤訂單金額。
@@ -399,6 +570,7 @@ function OrderCard({
   serviceItemNames,
   createdByName,
   statusColors,
+  showCustomerAddress,
   onClick,
 }: {
   booking: Booking;
@@ -407,6 +579,8 @@ function OrderCard({
   serviceItemNames: string[];
   createdByName: string | undefined;
   statusColors: BookingStatusColorMap;
+  /** 任務 2:商家目前的產業需要地址時才顯示客戶地址(見呼叫處 showCustomerAddress 的說明)。 */
+  showCustomerAddress: boolean;
   onClick: () => void;
 }) {
   const status = booking.status as BookingStatus;
@@ -436,7 +610,10 @@ function OrderCard({
         </p>
         <p className="mt-1 min-w-0 break-words text-xs text-foreground">
           {staffName} ・ {booking.customer_name} ・ {booking.customer_phone}
-          {booking.customer_address ? ` ・ ${booking.customer_address}` : ""}
+          {/* 任務 2:商家切成「到店服務」後,既有訂單的客戶地址要隱藏——所以判斷條件是
+              「商家目前的產業需要地址」且「這筆訂單真的有地址值」,不是只看有沒有值。
+              資料庫裡的地址值沒有被刪除,切回「到府派工」會重新顯示(預期行為)。 */}
+          {showCustomerAddress && booking.customer_address ? ` ・ ${booking.customer_address}` : ""}
         </p>
         <p className="mt-1 min-w-0 break-words text-xs text-muted-foreground">{merchantName}</p>
         <p className="mt-2 text-right text-base font-bold text-cta">

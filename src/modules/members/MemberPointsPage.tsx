@@ -11,8 +11,9 @@
 // merchant_member_settings.points_feature_enabled)搬進這頁的「點數設定」卡片直接操作。資料庫
 // 欄位、upsertMerchantMemberSettings() 這個 API 完全沒變,upsert 是整列覆蓋,所以這裡切換開關時
 // 要把 settings 目前其他欄位原樣帶回去,不能只送 pointsFeatureEnabled。停用時這頁本身仍可操作
-// (查看/調整既有點數資料方便帳務校正)的既有行為不受影響——只有隱藏建單表單/會員詳情頁的點數
-// 入口,這條規則維持不變。
+// (查看/調整既有點數資料方便帳務校正)的既有行為不受影響。
+// ⚠️ #639 當初這段還寫著「停用只有隱藏建單表單/會員詳情頁的點數入口,這條規則維持不變」——
+//    那句話在 2026-09-24 已經**不再正確**,被下方「開關語意升級」那段取代,見該段說明。
 //
 // #642(.project/specs/會員與紅利.md §10.5,#639 的延續收尾):消費點數比例/推薦獎勵/生日贈點
 // 三個數字欄位(含說明文字、範例試算、儲存按鈕)這次也從會員系統設定頁整個搬過來這頁的「點數
@@ -20,6 +21,26 @@
 // 設定」卡片現在一次管理 4 個欄位(啟用開關+消費點數比例+推薦獎勵+生日贈點),共用同一套
 // saveSettingsRow() 整列 upsert helper,啟用開關切換跟三個數字欄位的「儲存」按鈕各自都會把
 // settings 目前其他欄位原樣帶回去,避免互相覆蓋。
+//
+// 2026-09-24 使用者裁決(#642 的延續收尾):「核發獎勵資格條件」(reward_condition_mode)整個區塊
+// 從 MemberSettingsPage.tsx 搬到這頁,放在「點數設定」卡片**上方**。理由:這個欄位控制的是「什麼樣
+// 的會員才拿得到點數」,只跟點數有關,#617 把紅利點數獨立成一頁時是被漏掉的。搬過來後這頁的儲存
+// 一律走同一套 saveSettingsRow() 整列 upsert helper,所以下拉選單改值時也會把 settings 目前其他
+// 欄位(含會員政策)原樣帶回去,不會互相覆蓋。下拉選單套上 guardPhantomEmptyChange 白名單版防護
+// ——這頁的 value 正是「掛載後才由 useEffect 從資料庫灌進來」的典型情境,不套會被幽靈空值洗掉。
+//
+// 2026-09-24 使用者裁決(「啟用紅利點數功能」開關語意升級,後端由 migration
+// 20260924030000_points_feature_enabled_backend_enforcement 落實):使用者裁決原文「關閉後就不
+// 計算點數了。」points_feature_enabled 從「純前端顯示開關」升級成「後端會不會自動產生新點數」的
+// 真正開關。這頁**沒有任何程式邏輯要跟著改**(開關的讀寫方式完全沒變),要改的是說明文字——
+// 原本開關說明跟「功能已關閉」警示條都只講「畫面會隱藏」,沒講會真的停止累積,那是商家最需要
+// 知道的一件事(關掉之後客人消費就真的拿不到點數了),兩處都已改寫。新行為:
+//   ・關閉後會停止(系統自動發點,商家沒機會逐筆確認):消費累點、推薦獎勵、生日贈點。
+//   ・關閉後仍然可用(商家主動操作、要填原因/用途):手動調整點數、登記兌換——刻意不擋,
+//     否則商家關掉功能後反而卡在一堆清不掉的既有餘額上,無法收尾。
+//   ・既有的點數餘額與異動歷史一律不清空,重新開啟後完整還原顯示(#617 當初的決定沒變)。
+// 這也是為什麼這頁停用時「本身仍可操作」的既有行為依然正確:手動調整/登記兌換就是後端刻意
+// 放行的兩條路徑,跟這頁不隱藏任何操作入口的既有 UI 行為是一致的,不需要改。
 //
 // 支援 ?member=<id> query 參數直接帶入某位會員(會員詳情頁「查看完整點數紀錄」連結會這樣用)。
 //
@@ -45,9 +66,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
@@ -66,6 +95,7 @@ import { previewLoyaltyPoints } from "./previewCalculators";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
 import {
   MEMBER_POINT_TRANSACTION_TYPE_LABELS,
+  REWARD_CONDITION_MODE_LABELS,
   type Member,
   type MemberSummary,
   type RewardConditionMode,
@@ -327,6 +357,12 @@ function MemberPointsPageInner() {
   const [birthdayBonusPoints, setBirthdayBonusPoints] = useState("0");
   const [savingPoints, setSavingPoints] = useState(false);
 
+  // 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 搬過來。這個 state 是
+  // 「顯示用 + 立即回饋用」的本地值——下拉選單改值後要馬上反映在畫面上,不能等 invalidateQueries
+  // 重新抓回 settings 才更新,否則使用者會看到選單彈回舊值。
+  const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
+  const [savingRewardCondition, setSavingRewardCondition] = useState(false);
+
   const selectedMemberId = searchParams.get("member");
   const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
   const { data: members, isLoading } = useMerchantMembersList(merchantId, search);
@@ -337,6 +373,7 @@ function MemberPointsPageInner() {
     setPointsEarnRate(String(settings.points_earn_rate));
     setReferralBonusPoints(String(settings.referral_bonus_points));
     setBirthdayBonusPoints(String(settings.birthday_bonus_points));
+    setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
   }, [settings]);
 
   const numericRate = Number(pointsEarnRate);
@@ -384,6 +421,26 @@ function MemberPointsPageInner() {
     }
   }
 
+  // 2026-09-24 使用者裁決:核發獎勵資格條件的儲存邏輯,從 MemberSettingsPage.tsx 的
+  // handleSaveRewardCondition() 搬過來,改接這頁既有的 saveSettingsRow() 整列 upsert helper
+  // (原本在會員系統設定頁走的是那頁自己的 saveSettings())。沿用「選了就直接存」的既有行為,
+  // 這張卡片不另外放儲存按鈕。存檔失敗時把選單退回資料庫目前的值,避免畫面停在沒存進去的選項。
+  async function handleSaveRewardCondition(next: RewardConditionMode) {
+    setRewardConditionMode(next);
+    setSavingRewardCondition(true);
+    try {
+      await saveSettingsRow({ rewardConditionMode: next });
+      toast.success("已更新核發獎勵資格條件");
+    } catch (err) {
+      setRewardConditionMode(
+        (settings?.reward_condition_mode as RewardConditionMode | undefined) ?? "none",
+      );
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSavingRewardCondition(false);
+    }
+  }
+
   // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的驗證+儲存邏輯,從 MemberSettingsPage.tsx 的
   // handleSavePoints() 原樣搬過來。
   async function handleSavePoints() {
@@ -424,16 +481,63 @@ function MemberPointsPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">紅利點數管理</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史,一站式在這裡操作。
+          「{merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史,以及核發獎勵資格
+          條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點),一站式在這裡操作。
         </p>
       </div>
 
       {settings && settings.points_feature_enabled === false ? (
         <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
-          目前紅利點數功能已關閉,建單表單跟會員詳情頁不會顯示任何點數相關內容給客戶/服務人員看,
-          但你仍然可以在這裡查看/調整既有點數資料。要重新開啟,請到下方「點數設定」切換開關。
+          目前紅利點數功能已關閉,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
+          建單表單跟會員詳情頁也不顯示點數相關內容給客戶/服務人員看。你仍然可以在這裡查看、手動
+          調整、登記兌換既有的點數。要重新開啟,請到下方「點數設定」切換開關。
         </div>
       ) : null}
+
+      {/* 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 整塊搬過來,放在
+          「點數設定」卡片上方——這個欄位決定的是「什麼樣的會員才拿得到點數」,本質上屬於點數
+          設定的一部分,留在會員系統設定頁本來就不合理。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>核發獎勵資格條件</CardTitle>
+          <CardDescription>
+            消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。
+            <strong className="text-warn">
+              提醒:「電話已驗證」只是客服人工標記,不是真的簡訊驗證,無法擋住用假電話註冊的人。
+            </strong>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {settingsLoading ? (
+            <p className="text-sm text-muted-foreground">載入中⋯</p>
+          ) : (
+            /* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings 灌進來的,
+               不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉(見 src/lib/radixSelectGuard.ts)。
+               合法值是 REWARD_CONDITION_MODE_LABELS 這份固定列舉,所以判斷條件用白名單。 */
+            <Select
+              value={rewardConditionMode}
+              disabled={savingRewardCondition}
+              onValueChange={guardPhantomEmptyChange<RewardConditionMode>(
+                (v) => void handleSaveRewardCondition(v),
+                (v) => v in REWARD_CONDITION_MODE_LABELS,
+              )}
+            >
+              <SelectTrigger className="w-full sm:w-80">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
+                  (mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {REWARD_CONDITION_MODE_LABELS[mode]}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          )}
+        </CardContent>
+      </Card>
 
       {/* #639/#642(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關,以及消費點數
           比例/推薦獎勵/生日贈點三個數字欄位,都從 MemberSettingsPage.tsx 搬過來這裡一次操作,
@@ -454,9 +558,10 @@ function MemberPointsPageInner() {
                 <div>
                   <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
                   <p className="text-xs text-muted-foreground">
-                    關閉後,建單表單跟會員詳情頁不再顯示任何點數相關的操作入口與數字;這個管理頁
-                    本身仍可以查看/調整既有點數資料,方便帳務校正。既有的點數餘額/異動歷史資料
-                    不會被清空,重新開啟後會完整還原顯示。
+                    關閉後系統就不再自動給點數了:客人消費不再累點、推薦朋友不發獎勵、生日也不
+                    送點。你仍然可以在這一頁手動調整點數、登記兌換,把會員手上剩下的點數結清;
+                    既有的點數餘額與異動歷史不會被清空,建單表單跟會員詳情頁則不再顯示點數相關
+                    的數字與入口,重新開啟後會完整還原顯示。
                   </p>
                 </div>
                 <Switch

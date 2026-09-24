@@ -20,6 +20,11 @@
 //   在這頁保留成「只讀回填用」的 state(比照既有 pointsFeatureEnabled 的做法):從 settings 讀出來
 //   原樣帶回 saveSettings() 的 payload,確保這頁儲存「會員政策」「核發獎勵資格條件」時不會把
 //   這三個欄位覆蓋掉,但這頁本身完全沒有 UI 讓人編輯這三個值。
+// - 2026-09-24 使用者裁決(#642 的延續收尾):「核發獎勵資格條件」(reward_condition_mode)整個區塊
+//   ——下拉選單、說明文字、儲存邏輯——也搬到 MemberPointsPage.tsx 的「點數設定」區塊上方,理由是
+//   這個欄位控制的是「什麼樣的會員才拿得到點數」,只跟點數有關,#617 把紅利點數獨立成一頁時漏掉了。
+//   這頁因此只剩「會員政策」「會員等級」兩個區塊,頁面描述文字一併照實改寫。rewardConditionMode
+//   在這頁降級成跟上述三個欄位一樣的「只讀回填用」state,確保儲存會員政策時不會把它覆蓋掉。
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -40,13 +45,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -64,11 +62,7 @@ import {
   type UpsertMemberTierInput,
 } from "./api";
 import { RequireMemberSettingsAccess } from "./RequireMemberSettingsAccess";
-import {
-  REWARD_CONDITION_MODE_LABELS,
-  type MerchantMemberTier,
-  type RewardConditionMode,
-} from "./types";
+import { type MerchantMemberTier, type RewardConditionMode } from "./types";
 
 const memberSettingsQueryKey = (merchantId: string) =>
   ["members-module", "merchant-member-settings", merchantId] as const;
@@ -350,16 +344,17 @@ function MemberSettingsPageInner() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useMerchantMemberSettings(merchantId);
 
-  // #642:這三個欄位這頁已經沒有任何 UI 可以編輯,只保留「讀出來原樣回填」的 state,
-  // 避免這頁儲存「會員政策」「核發獎勵資格條件」時,把 MemberPointsPage.tsx 那邊維護的
-  // 消費點數比例/推薦獎勵/生日贈點覆蓋掉(upsertMerchantMemberSettings 是整列 upsert)。
+  // #642 + 2026-09-24 使用者裁決:這幾個欄位這頁已經沒有任何 UI 可以編輯(點數三個數字欄位、
+  // 啟用開關、核發獎勵資格條件都在 MemberPointsPage.tsx 維護),只保留「讀出來原樣回填」的
+  // state,避免這頁儲存「會員政策」時把那頁維護的值覆蓋掉
+  // (upsertMerchantMemberSettings 是整列 upsert,不是局部更新)。
   const [pointsFeatureEnabled, setPointsFeatureEnabled] = useState(true);
   const [pointsEarnRate, setPointsEarnRate] = useState(0);
   const [referralBonusPoints, setReferralBonusPoints] = useState(0);
   const [birthdayBonusPoints, setBirthdayBonusPoints] = useState(0);
+  const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
   const [policyEnabled, setPolicyEnabled] = useState(false);
   const [policyContent, setPolicyContent] = useState("");
-  const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
   const [savingPolicy, setSavingPolicy] = useState(false);
 
   useEffect(() => {
@@ -401,16 +396,6 @@ function MemberSettingsPageInner() {
     }
   }
 
-  async function handleSaveRewardCondition(next: RewardConditionMode) {
-    setRewardConditionMode(next);
-    try {
-      await saveSettings({ rewardConditionMode: next });
-      toast.success("已更新核發獎勵資格條件");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    }
-  }
-
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <div>
@@ -421,8 +406,8 @@ function MemberSettingsPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">會員系統設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的會員政策、核發獎勵資格條件、會員等級。紅利點數(啟用開關、消費
-          點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。
+          「{merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、
+          消費點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。
         </p>
       </div>
 
@@ -466,42 +451,6 @@ function MemberSettingsPageInner() {
                 <PolicyPreviewDialog merchantName={merchant!.name} policyContent={policyContent} />
               </div>
             </>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* #619 §10.7:核發獎勵資格條件,取代原本單一的「核發獎勵要求電話已驗證」開關。 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>核發獎勵資格條件</CardTitle>
-          <CardDescription>
-            消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。
-            <strong className="text-warn">
-              提醒:「電話已驗證」只是客服人工標記,不是真的簡訊驗證,無法擋住用假電話註冊的人。
-            </strong>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
-          ) : (
-            <Select
-              value={rewardConditionMode}
-              onValueChange={(v) => handleSaveRewardCondition(v as RewardConditionMode)}
-            >
-              <SelectTrigger className="w-full sm:w-80">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
-                  (mode) => (
-                    <SelectItem key={mode} value={mode}>
-                      {REWARD_CONDITION_MODE_LABELS[mode]}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
           )}
         </CardContent>
       </Card>

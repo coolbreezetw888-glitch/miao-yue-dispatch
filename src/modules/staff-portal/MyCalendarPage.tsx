@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import {
   addDays,
   buildMonthGrid,
@@ -38,9 +39,13 @@ const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 // 卡片本身的呈現內容完全不變。
 function BookingListItem({
   booking,
+  showCustomerAddress,
   onClick,
 }: {
   booking: MyBookingScheduleItem;
+  /** 2026-09-24 使用者裁決(任務 2):商家目前的產業需要地址時才顯示客戶地址,見下方
+   * MyCalendarPage 裡 showCustomerAddress 的完整說明。 */
+  showCustomerAddress: boolean;
   onClick: () => void;
 }) {
   // 2026-09-24 深夜巡檢問題 5:原本這裡用 toLocaleTimeString 但**沒有帶 timeZone**,顯示的是
@@ -73,7 +78,9 @@ function BookingListItem({
           {booking.customer_name}
           {booking.customer_phone ? `・${booking.customer_phone}` : ""}
         </p>
-        {booking.customer_address ? (
+        {/* 任務 2:商家切成「到店服務」之後,師傅的手機上也不該再看到客戶住家地址,所以條件是
+            「商家目前的產業需要地址」且「這筆預約真的有地址值」,不是只看有沒有值。 */}
+        {showCustomerAddress && booking.customer_address ? (
           <p className="mt-0.5 text-xs text-muted-foreground">{booking.customer_address}</p>
         ) : null}
         {booking.service_item_names.length > 0 ? (
@@ -166,6 +173,25 @@ export default function MyCalendarPage() {
 
   const selectedDayBookings = bookingsByDate.get(selectedDateKey) ?? [];
   const detailBooking = (schedule ?? []).find((b) => b.id === detailBookingId) ?? null;
+
+  // 2026-09-24 使用者裁決(任務 2):商家從「到府派工」切成「到店服務」之後,既有訂單的客戶地址
+  // 要隱藏——包含服務人員端這兩處(當天預約清單的卡片、唯讀詳情彈窗)。判斷用商家**目前**的
+  // 產業設定(industry_type 現在可以隨時切換,見 modules/merchant/api.ts 2026-09-23 的說明),
+  // 不是只看「這筆預約有沒有地址值」,否則到府派工時期建立的舊預約,切成到店服務之後客戶的住家
+  // 地址還是會出現在師傅的手機上。
+  //
+  // 服務人員端拿得到 industry_type:merchants_select 這條 RLS 政策已經疊加
+  // private.is_merchant_staff(id)(見 supabase/migrations/20260921100200_staff_portal_
+  // merchants_and_staff_select_overlay.sql §3.2),而 fetchAccessibleMerchants() 是
+  // select("*"),所以這裡 useCurrentMerchant() 拿到的商家資料本來就含 industry_type,
+  // 不需要新開任何查詢。merchant 還沒載入完(null)時一律當成「不顯示」,寧可少顯示也不要
+  // 在切成到店服務的商家那邊閃出一次地址。
+  //
+  // 刻意只改顯示不動資料:資料庫裡的地址值完全保留,商家切回「到府派工」時舊預約的地址會重新
+  // 顯示出來——這是預期中的正確行為(使用者要的是「隱藏」,不是刪除)。
+  const showCustomerAddress =
+    merchant !== null &&
+    INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[merchant.industry_type as IndustryType] === true;
 
   return (
     <div className="space-y-4">
@@ -269,6 +295,7 @@ export default function MyCalendarPage() {
                   <BookingListItem
                     key={`${booking.id}-${booking.role_in_booking}`}
                     booking={booking}
+                    showCustomerAddress={showCustomerAddress}
                     onClick={() => setDetailBookingId(booking.id)}
                   />
                 ))}
@@ -279,6 +306,7 @@ export default function MyCalendarPage() {
 
       <MyBookingDetailDialog
         booking={detailBooking}
+        showCustomerAddress={showCustomerAddress}
         open={detailBookingId !== null}
         onOpenChange={(open) => {
           if (!open) setDetailBookingId(null);

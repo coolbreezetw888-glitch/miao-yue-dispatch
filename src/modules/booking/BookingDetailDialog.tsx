@@ -17,6 +17,8 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { useCurrentMerchant } from "@/modules/merchant/context";
+import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
@@ -225,6 +227,22 @@ export function BookingDetailDialog({
   const { data: merchantRole } = useCurrentMerchantRole();
   const { data: canManageMembers } = useAgentPermission("members");
   const canViewMemberProfile = merchantRole === "admin" || canManageMembers === true;
+
+  // 2026-09-24 使用者裁決(任務 2):商家切成「到店服務」之後,既有訂單的客戶地址要隱藏。
+  // industry_type 現在可以隨時切換(見 merchant/api.ts 2026-09-23 的說明,資料庫層鎖定的
+  // trigger 已經拿掉),所以顯示條件必須看「商家**目前**的產業設定需不需要地址」,不能只看
+  // 「這筆訂單有沒有地址值」——不然到府派工時期建立的舊訂單,切成到店服務之後客戶住家地址
+  // 還是會出現在預約詳情裡。判斷一律用 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS 這份共用對照表
+  // (建單表單 CalendarPage.tsx 判斷「要不要顯示客戶地址欄位」用的是同一份),不要在這裡自己
+  // 寫死產業判斷式。
+  //
+  // 刻意只改「顯示」不動資料:資料庫裡的 bookings.customer_address 值完全保留,所以商家如果
+  // 再切回「到府派工」,舊訂單的地址會重新顯示出來——這是使用者要的行為(他說的是「隱藏」,
+  // 不是刪除),不是漏改。
+  const { merchant } = useCurrentMerchant();
+  const showCustomerAddress =
+    merchant !== null &&
+    INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[merchant.industry_type as IndustryType] === true;
 
   const { data: relatedBookings, isLoading: relatedLoading } = useQuery({
     queryKey: [
@@ -590,7 +608,9 @@ export function BookingDetailDialog({
                         )}
                       </div>
                     ) : null}
-                    {booking.customer_address ? (
+                    {/* 任務 2:商家目前的產業需要地址(showCustomerAddress)且這筆訂單真的有
+                        地址值,才顯示這一列——切成「到店服務」之後舊訂單的地址一律不顯示。 */}
+                    {showCustomerAddress && booking.customer_address ? (
                       <div className="flex items-start justify-between gap-3">
                         <span className="shrink-0 text-muted-foreground">客戶地址</span>
                         <span className="min-w-0 break-words text-right font-medium text-foreground">

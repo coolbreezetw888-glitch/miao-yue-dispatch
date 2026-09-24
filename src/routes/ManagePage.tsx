@@ -457,7 +457,9 @@ export default function ManagePage() {
       key: "member-points",
       to: "/app/member-points",
       label: "紅利點數管理",
-      description: "會員點數餘額總覽、手動調整、登記兌換與異動歷史",
+      // 2026-09-24:描述補上 #639/#642 搬進這頁的「點數設定」,以及這次搬進來的「核發獎勵資格
+      // 條件」——原本的描述只講點數餘額/兌換/異動歷史,使用者從這張卡片看不出設定也在裡面。
+      description: "點數餘額、兌換調整、核發資格與點數設定",
       icon: Award,
       visible: showMembersCard,
     },
@@ -465,7 +467,10 @@ export default function ManagePage() {
       key: "member-settings",
       to: "/app/member-settings",
       label: "會員系統設定",
-      description: "設定電話驗證政策、消費點數比例、推薦與生日獎勵",
+      // 2026-09-24:原本的描述「設定電話驗證政策、消費點數比例、推薦與生日獎勵」三項都已經不在
+      // 這頁了(電話驗證政策 #618 整個移除、點數三個欄位 #642 搬去紅利點數管理、核發獎勵資格條件
+      // 2026-09-24 搬去紅利點數管理),照這頁目前實際剩下的兩個區塊改寫。
+      description: "設定會員政策內容、管理會員等級",
       icon: Gift,
       visible: showMemberSettingsCard,
     },

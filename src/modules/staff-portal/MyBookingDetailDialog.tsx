@@ -28,10 +28,18 @@ function bookingStatusBadgeVariant(status: BookingStatus): "default" | "secondar
 
 export function MyBookingDetailDialog({
   booking,
+  showCustomerAddress,
   open,
   onOpenChange,
 }: {
   booking: MyBookingScheduleItem | null;
+  /**
+   * 2026-09-24 使用者裁決(任務 2):商家從「到府派工」切成「到店服務」之後,既有訂單的客戶地址
+   * 要隱藏(包含服務人員端)。這裡刻意由呼叫端(MyCalendarPage)算好再傳進來,不在這顆彈窗裡自己
+   * 讀商家設定——這個元件的既有設計就是「呼叫端已經拿到手的資料直接當 prop,不重新查詢」
+   * (見檔頭說明),判斷邏輯與完整理由寫在 MyCalendarPage.tsx 的 showCustomerAddress 那段。
+   */
+  showCustomerAddress: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -81,7 +89,9 @@ export function MyBookingDetailDialog({
               {booking.customer_phone ? ` ・ ${booking.customer_phone}` : ""}
             </span>
           </div>
-          {booking.customer_address ? (
+          {/* 任務 2:商家目前的產業需要地址且這筆預約真的有地址值,才顯示這一列。資料庫裡的
+              地址值不動,所以商家切回「到府派工」時會重新顯示(預期行為)。 */}
+          {showCustomerAddress && booking.customer_address ? (
             <div className="flex items-start justify-between gap-3">
               <span className="shrink-0 text-muted-foreground">客戶地址</span>
               <span className="min-w-0 break-words text-right font-medium text-foreground">
