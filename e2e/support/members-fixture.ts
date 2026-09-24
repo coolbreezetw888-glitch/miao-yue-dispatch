@@ -251,7 +251,9 @@ export async function setupMembersFixture(): Promise<MembersFixture> {
   const { error: confirmError } = await client.rpc("confirm_booking", { p_booking_id: bookingId });
   if (confirmError) throw new Error(`確認測試訂單失敗:${confirmError.message}`);
 
-  const { error: completeError } = await client.rpc("complete_booking", { p_booking_id: bookingId });
+  const { error: completeError } = await client.rpc("complete_booking", {
+    p_booking_id: bookingId,
+  });
   if (completeError) throw new Error(`完成測試訂單失敗:${completeError.message}`);
 
   return {
@@ -271,7 +273,10 @@ export async function setupMembersFixture(): Promise<MembersFixture> {
 }
 
 /** 把 fixture 的真實 session 灌進瀏覽器 localStorage,比照 payroll-fixture.ts 的做法。 */
-export async function injectMembersFixtureSession(page: Page, fixture: MembersFixture): Promise<void> {
+export async function injectMembersFixtureSession(
+  page: Page,
+  fixture: MembersFixture,
+): Promise<void> {
   const storageKey = getSupabaseAuthStorageKey();
   await page.addInitScript(
     ([key, value]) => {
@@ -308,7 +313,9 @@ export async function teardownMembersFixture(fixture: MembersFixture): Promise<s
     .update({ status: "removed" })
     .eq("id", fixture.staffId);
   actions.push(
-    staffError ? `移除 fixture 服務人員失敗:${staffError.message}` : "已移除 fixture 服務人員(軟刪除)",
+    staffError
+      ? `移除 fixture 服務人員失敗:${staffError.message}`
+      : "已移除 fixture 服務人員(軟刪除)",
   );
 
   actions.push(await disableFixtureMerchant(client, fixture.merchantId));

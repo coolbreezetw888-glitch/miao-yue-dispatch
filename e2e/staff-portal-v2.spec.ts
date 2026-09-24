@@ -57,7 +57,7 @@ test.afterAll(async () => {
 async function navigateMonthForward(page: import("@playwright/test").Page, targetDateKey: string) {
   const today = getTaipeiNow();
   const [ty, tm] = targetDateKey.split("-").map(Number);
-  const monthsDiff = (ty! * 12 + (tm! - 1)) - (today.getFullYear() * 12 + today.getMonth());
+  const monthsDiff = ty! * 12 + (tm! - 1) - (today.getFullYear() * 12 + today.getMonth());
   for (let i = 0; i < monthsDiff; i++) {
     await page.getByRole("button", { name: "下個月 →" }).click();
   }
@@ -75,7 +75,9 @@ test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢
   page,
 }) => {
   await page.goto("/app/calendar");
-  await expect(page.getByRole("button", { name: "卡片列表" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("button", { name: "卡片列表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   // 預設看到卡片列表(v1 既有行為),今天這筆已完成訂單看得到。
   await expect(page.getByText("E2E測試客戶v2")).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -88,7 +90,9 @@ test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢
 
   // 時間軸格線點擊這筆預約,開啟唯讀詳情彈窗。
   await page.getByRole("button", { name: /E2E測試客戶v2/ }).click();
-  await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByText("已完成")).toBeVisible();
   await expect(page.getByText("$1,000")).toBeVisible();
   // 唯讀:沒有任何可以修改資料的按鈕。
@@ -101,7 +105,9 @@ test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢
   // 切回卡片列表,點擊同一筆,詳情內容一致。
   await page.getByRole("button", { name: "卡片列表" }).click();
   await page.getByText("E2E測試客戶v2").first().click();
-  await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByText("已完成")).toBeVisible();
   await expect(page.getByText("$1,000")).toBeVisible();
   for (const forbidden of ["確認", "完成", "取消預約", "編輯", "相關訂單"]) {
@@ -118,7 +124,9 @@ test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整
   browser: Browser;
 }) => {
   await page.goto("/app/my-availability");
-  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   // 「整天排休」是預設分頁籤。
   await expect(page.getByRole("tab", { name: "整天排休" })).toBeVisible();
 
@@ -184,7 +192,9 @@ test("10.3.3:時段排休依營業時間顯示,商家管理員視角看到一致
   browser: Browser;
 }) => {
   await page.goto("/app/my-availability");
-  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await page.getByRole("tab", { name: "時段排休" }).click();
 
   await navigateMonthForward(page, fixture.slotOffDateKey);
@@ -239,7 +249,9 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   browser: Browser;
 }) => {
   await page.goto("/app/my-payroll");
-  await expect(page.getByRole("heading", { name: "薪資報表" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "薪資報表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   // 找不到 CSV 匯出按鈕。
   await expect(page.getByRole("button", { name: "匯出這份報表為 CSV" })).toHaveCount(0);
@@ -309,7 +321,9 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   await injectAdminSession(adminPage, fixture);
   await adminPage.goto("/app");
   await adminPage.goto("/app/staff-report");
-  await expect(adminPage.getByRole("heading", { name: "師傅報表" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(adminPage.getByRole("heading", { name: "師傅報表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await adminPage.getByLabel("服務人員").click();
   await adminPage.getByRole("option", { name: fixture.staffName }).click();
 
@@ -317,10 +331,9 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   // 這次稽核問題 4 把它也改走 formatAmount,顯示成 `抽成合計 $500`(跟同一頁的明細列、跟服務
   // 人員視角的摘要卡片格式一致)。驗證意圖不變:兩個視角的抽成數字必須是同一個值。
   await expect(
-    adminPage.getByText(
-      `抽成合計 $${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`,
-      { exact: false },
-    ),
+    adminPage.getByText(`抽成合計 $${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`, {
+      exact: false,
+    }),
   ).toBeVisible({ timeout: LOAD_TIMEOUT });
   // 商家管理員視角回歸測試(必測):CSV 匯出按鈕仍然存在,沒有被連帶拿掉。
   await expect(adminPage.getByRole("button", { name: "匯出這份報表為 CSV" })).toBeVisible();

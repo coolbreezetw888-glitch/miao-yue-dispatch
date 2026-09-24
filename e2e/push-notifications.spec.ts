@@ -49,10 +49,14 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (setupFailed || !fixture) return;
   const actions = await teardownStaffPortalFixture(fixture);
-  console.log("[push-notifications] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"));
+  console.log(
+    "[push-notifications] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"),
+  );
 });
 
-async function stubServiceWorkerAndPushManager(page: import("@playwright/test").Page): Promise<void> {
+async function stubServiceWorkerAndPushManager(
+  page: import("@playwright/test").Page,
+): Promise<void> {
   await page.addInitScript(() => {
     const fakeSubscription = {
       endpoint: "https://fcm.example.test/e2e-fake-endpoint",
@@ -156,7 +160,9 @@ test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對
   ];
   for (const eventType of cardEventTypes) {
     const card = page.getByTestId(`push-event-card-${eventType}`);
-    await expect(card.getByText("可用變數:", { exact: false })).toBeVisible({ timeout: LOAD_TIMEOUT });
+    await expect(card.getByText("可用變數:", { exact: false })).toBeVisible({
+      timeout: LOAD_TIMEOUT,
+    });
   }
 
   // booking_updated 只顯示該事件實際會替換到的變數(change_summary),不混入其他事件才有的
@@ -195,7 +201,9 @@ test("服務人員開啟/關閉推播通知(§7.2):訂閱成功寫入裝置清�
   await expect(page.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   await expect(page.getByText("訂單通知", { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByText("目前沒有任何裝置開通推播通知。")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("目前沒有任何裝置開通推播通知。")).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   await page.getByRole("button", { name: "開啟訂單通知" }).click();
   await expect(page.getByText("已開啟訂單通知")).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -209,5 +217,7 @@ test("服務人員開啟/關閉推播通知(§7.2):訂閱成功寫入裝置清�
   await expect(page.getByRole("button", { name: "開啟訂單通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("目前沒有任何裝置開通推播通知。")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("目前沒有任何裝置開通推播通知。")).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 });

@@ -66,7 +66,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (setupFailed || !fixture) return;
   const actions = await teardownLineNotificationsFixture(fixture);
-  console.log("[line-notifications] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"));
+  console.log(
+    "[line-notifications] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"),
+  );
 });
 
 test.beforeEach(async ({ page }) => {
@@ -97,10 +99,9 @@ test("LINE 串接設定頁(§4.1):貼假憑證測試連線真的失敗,正確顯
   // token,確認系統正確顯示驗證失敗」的間接驗證方式。訊息同時會出現在表單下方的紅字、狀態卡片
   // 的「最後測試時間」那一行、以及一則 toast,這裡只鎖定表單下方那個紅字段落,避免 strict mode
   // 因為同一段文字出現在多處而衝突。
-  await expect(page.locator("p.text-destructive")).toHaveText(
-    /連線失敗|無效或已過期/,
-    { timeout: LOAD_TIMEOUT },
-  );
+  await expect(page.locator("p.text-destructive")).toHaveText(/連線失敗|無效或已過期/, {
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByText("尚未串接")).toBeVisible();
   await expect(page.getByRole("button", { name: "解除串接" })).toHaveCount(0);
 });
@@ -123,7 +124,9 @@ test("LINE 串接設定頁(§4.1):mock 測試連線成功時正確顯示成功�
 
   await page.getByLabel("Channel ID *").fill(`e2e-fake-channel-id-mock-${fixture.runId}`);
   await page.getByLabel("Channel Secret *").fill(`e2e-fake-channel-secret-mock-${fixture.runId}`);
-  await page.getByLabel("Channel Access Token *").fill(`e2e-fake-access-token-mock-${fixture.runId}`);
+  await page
+    .getByLabel("Channel Access Token *")
+    .fill(`e2e-fake-access-token-mock-${fixture.runId}`);
   await page.getByRole("button", { name: "儲存並測試連線" }).click();
 
   // 「連線成功」同時會出現在表單下方的訊息段落跟一則 toast,這裡只鎖定表單下方那一段
@@ -158,9 +161,11 @@ test("服務人員 LINE 綁定區塊(§4.6):編輯服務人員時可以產生綁
 
   const staffRow = page.locator("li", { hasText: fixture.staffName });
   await staffRow.getByRole("button", { name: "編輯" }).click();
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "編輯服務人員" })).toBeVisible({
-    timeout: LOAD_TIMEOUT,
-  });
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "編輯服務人員" })).toBeVisible(
+    {
+      timeout: LOAD_TIMEOUT,
+    },
+  );
 
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("LINE 綁定")).toBeVisible();
@@ -254,7 +259,9 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時彈窗�
   await expect(page.getByText("要透過 LINE 通知這次確認嗎?")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByRole("alertdialog").getByText(new RegExp(fixture.staffName))).toBeVisible();
+  await expect(
+    page.getByRole("alertdialog").getByText(new RegExp(fixture.staffName)),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "否,只確認不通知" }).click();
   await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
@@ -379,8 +386,20 @@ const TIER_TEST_TIERS = [
   { id: "tier-general", merchant_id: "mock", name: "一般會員", sort_order: 1, status: "active" },
 ];
 const TIER_TEST_MEMBERS = [
-  { id: "vip-1", name: "VIP會員一", phone: "0911111111", tier_id: "tier-vip", is_blacklisted: false },
-  { id: "vip-2", name: "VIP會員二", phone: "0922222222", tier_id: "tier-vip", is_blacklisted: false },
+  {
+    id: "vip-1",
+    name: "VIP會員一",
+    phone: "0911111111",
+    tier_id: "tier-vip",
+    is_blacklisted: false,
+  },
+  {
+    id: "vip-2",
+    name: "VIP會員二",
+    phone: "0922222222",
+    tier_id: "tier-vip",
+    is_blacklisted: false,
+  },
   {
     id: "vip-blacklist",
     name: "VIP黑名單會員",
@@ -478,9 +497,6 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):黑名單客戶預設自動排除
   await expect(page.getByText("實際會送出 2 位會員", { exact: false })).toBeVisible();
 
   // 在手動排除清單裡勾選 VIP會員一,最終送出名單應該只剩一般會員一(1 位)。
-  await manualExcludeList
-    .locator("li", { hasText: "VIP會員一" })
-    .getByRole("checkbox")
-    .click();
+  await manualExcludeList.locator("li", { hasText: "VIP會員一" }).getByRole("checkbox").click();
   await expect(page.getByText("實際會送出 1 位會員", { exact: false })).toBeVisible();
 });

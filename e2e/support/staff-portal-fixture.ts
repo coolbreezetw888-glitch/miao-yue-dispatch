@@ -30,7 +30,9 @@ function readEnvValue(key: string): string {
     .split(/\r?\n/)
     .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
   if (!line) {
-    throw new Error(`找不到 .env 裡的 ${key}——staff-portal 這個 e2e 測試需要它來建立 fixture 資料。`);
+    throw new Error(
+      `找不到 .env 裡的 ${key}——staff-portal 這個 e2e 測試需要它來建立 fixture 資料。`,
+    );
   }
   const value = line.slice(line.indexOf("=") + 1).trim();
   return value.replace(/^["']|["']$/g, "");
@@ -201,7 +203,9 @@ export async function teardownStaffPortalFixture(fixture: StaffPortalFixture): P
     .update({ status: "removed" })
     .eq("id", fixture.staffId);
   actions.push(
-    staffError ? `移除 fixture 服務人員失敗:${staffError.message}` : "已移除 fixture 服務人員(軟刪除)",
+    staffError
+      ? `移除 fixture 服務人員失敗:${staffError.message}`
+      : "已移除 fixture 服務人員(軟刪除)",
   );
 
   actions.push(await disableFixtureMerchant(client, fixture.merchantId));

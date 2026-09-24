@@ -60,7 +60,9 @@ test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(�
   const bottomNav = page.locator("nav");
 
   // 4 個分頁籤,順序固定,不再有「功能」。
-  await expect(bottomNav.getByRole("link", { name: "首頁" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(bottomNav.getByRole("link", { name: "首頁" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(bottomNav.getByRole("link", { name: "休假設定" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "薪資報表" })).toBeVisible();
   await expect(bottomNav.getByRole("link", { name: "行事曆" })).toBeVisible();
@@ -70,12 +72,16 @@ test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(�
   // 點「休假設定」分頁籤直接進入既有頁面內容,不再經過「功能」中介頁。
   await bottomNav.getByRole("link", { name: "休假設定" }).click();
   await expect(page).toHaveURL(/\/app\/my-availability$/);
-  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "休假設定" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   // 點「薪資報表」分頁籤同樣直達。
   await bottomNav.getByRole("link", { name: "薪資報表" }).click();
   await expect(page).toHaveURL(/\/app\/my-payroll$/);
-  await expect(page.getByRole("heading", { name: "薪資報表" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("heading", { name: "薪資報表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   // /app/manage 這個路由對服務人員角色而言已經沒有對應入口,殘留深連結一律導回首頁分頁籤,
   // 不會看到任何管理員/客服導向的卡片(服務人員、客服管理、訂單管理、商家設定)。
@@ -90,7 +96,9 @@ test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(�
 test("4.3:服務人員的行事曆是簡化版自助月曆,不是管理員跨服務人員行事曆", async ({ page }) => {
   await page.goto("/app/calendar");
   // 自助行事曆的月份切換按鈕(管理員版本是週/月切換,文字不同)。
-  await expect(page.getByRole("button", { name: "下個月 →" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("button", { name: "下個月 →" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByRole("button", { name: "← 上個月" })).toBeVisible();
   // 管理員版本才有的「新增預約」按鈕不應該出現。
   await expect(page.getByRole("button", { name: "新增預約" })).toHaveCount(0);
@@ -146,7 +154,9 @@ test("4.7:服務人員權限頁正確列出四項自助功能開關,且可以切
   const staffRow = adminPage.locator("li", { hasText: fixture.staffName });
   await staffRow.getByRole("link", { name: "服務人員權限" }).click();
 
-  await expect(adminPage.getByRole("heading", { name: `${fixture.staffName} 的權限設定` })).toBeVisible({
+  await expect(
+    adminPage.getByRole("heading", { name: `${fixture.staffName} 的權限設定` }),
+  ).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(adminPage.getByText("行事曆檢視")).toBeVisible();

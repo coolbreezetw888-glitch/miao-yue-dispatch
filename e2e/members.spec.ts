@@ -159,7 +159,9 @@ test("紅利點數管理頁(§10.5/#617):獨立卡片入口、餘額總覽搜尋
 
   // 點擊會員展開完整異動歷史 + 兌換/調整入口。
   await memberRow.click();
-  await expect(page.getByRole("button", { name: "登記兌換" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("button", { name: "登記兌換" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(page.getByRole("button", { name: "手動調整" })).toBeVisible();
 
   await page.getByRole("button", { name: "登記兌換" }).click();

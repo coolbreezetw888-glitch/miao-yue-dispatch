@@ -262,7 +262,10 @@ export async function teardownIndustryTransferFixture(
   // create_group_and_merchant/轉移精靈流程各自建立在不同集團底下),不能合併成一次
   // `.in("id", merchantIds)` 停用——disableFixtureMerchant 需要針對每一間各自查詢自己的
   // group_id、各自建立佔位商家,所以這裡逐一呼叫。
-  const merchantIds = [fixture.sourceMerchantId, ...(createdTargetMerchantId ? [createdTargetMerchantId] : [])];
+  const merchantIds = [
+    fixture.sourceMerchantId,
+    ...(createdTargetMerchantId ? [createdTargetMerchantId] : []),
+  ];
   for (const merchantId of merchantIds) {
     actions.push(await disableFixtureMerchant(client, merchantId));
   }

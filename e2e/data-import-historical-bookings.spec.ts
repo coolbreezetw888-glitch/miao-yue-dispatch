@@ -124,12 +124,12 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
   await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.locator(".rounded-md.border", { hasText: "成功" }).locator("p.text-2xl")).toHaveText(
-    "2",
-  );
-  await expect(page.locator(".rounded-md.border", { hasText: "失敗" }).locator("p.text-2xl")).toHaveText(
-    "0",
-  );
+  await expect(
+    page.locator(".rounded-md.border", { hasText: "成功" }).locator("p.text-2xl"),
+  ).toHaveText("2");
+  await expect(
+    page.locator(".rounded-md.border", { hasText: "失敗" }).locator("p.text-2xl"),
+  ).toHaveText("0");
 
   // 直接查資料庫驗證:兩筆訂單的 staff_id 分別正確連到既有服務人員 / 新建立的服務人員。
   const verifyClient = createFixtureSupabaseClient();
@@ -173,9 +173,7 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
 // SPECS-INDEX #632:「建立新服務人員」的手機號碼欄位,沿用跟服務人員管理頁(§8.1)相同的
 // 必填+格式驗證規則(isValidTaiwanMobilePhone),這裡補兩種邊界情況:沒填電話擋下、填了不合格
 // 格式擋下,兩種情況都不應該真的呼叫 addMerchantStaff 建立資料。
-test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/電話格式不對都會被擋下", async ({
-  page,
-}) => {
+test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/電話格式不對都會被擋下", async ({ page }) => {
   await page.goto("/app/data-import");
   await expect(page.getByRole("heading", { name: "資料匯入" })).toBeVisible({
     timeout: LOAD_TIMEOUT,

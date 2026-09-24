@@ -327,7 +327,9 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
   const { error: confirmError } = await client.rpc("confirm_booking", { p_booking_id: bookingId });
   if (confirmError) throw new Error(`確認測試訂單失敗:${confirmError.message}`);
 
-  const { error: completeError } = await client.rpc("complete_booking", { p_booking_id: bookingId });
+  const { error: completeError } = await client.rpc("complete_booking", {
+    p_booking_id: bookingId,
+  });
   if (completeError) throw new Error(`完成測試訂單失敗:${completeError.message}`);
 
   // §3.3(regel 2.2 情境):登記一筆「事假」整天請假,產生扣款(規則 2.7/2.8)。
@@ -363,7 +365,10 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
 }
 
 /** 把 fixture 的真實 session 灌進瀏覽器 localStorage,比照 scheduling-leave-fixture.ts 的做法。 */
-export async function injectPayrollFixtureSession(page: Page, fixture: PayrollFixture): Promise<void> {
+export async function injectPayrollFixtureSession(
+  page: Page,
+  fixture: PayrollFixture,
+): Promise<void> {
   const storageKey = getSupabaseAuthStorageKey();
   await page.addInitScript(
     ([key, value]) => {

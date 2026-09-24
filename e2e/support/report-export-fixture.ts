@@ -226,7 +226,9 @@ export async function setupReportExportFixture(): Promise<ReportExportFixture> {
   const { error: confirmError } = await client.rpc("confirm_booking", { p_booking_id: bookingId });
   if (confirmError) throw new Error(`確認測試訂單失敗:${confirmError.message}`);
 
-  const { error: completeError } = await client.rpc("complete_booking", { p_booking_id: bookingId });
+  const { error: completeError } = await client.rpc("complete_booking", {
+    p_booking_id: bookingId,
+  });
   if (completeError) throw new Error(`完成測試訂單失敗:${completeError.message}`);
 
   return {

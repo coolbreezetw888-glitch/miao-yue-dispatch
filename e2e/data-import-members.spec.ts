@@ -40,7 +40,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (setupFailed || !fixture) return;
   const actions = await teardownDataImportMembersFixture(fixture);
-  console.log("[data-import-members] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"));
+  console.log(
+    "[data-import-members] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"),
+  );
 });
 
 test.beforeEach(async ({ page }) => {
@@ -110,10 +112,7 @@ test("會員匯入精靈完整流程(§3.3/§4.1):含缺必填欄位的資料列
   await page.getByRole("button", { name: "下一步" }).click();
   await expect(page.getByText("步驟五:確認匯入", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "確認匯入" }).click();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "確認匯入" })
-    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
 
   // 步驟六:結果報告——驗證預覽判斷跟實際匯入結果一致:1 成功 + 1 失敗，且失敗原因跟預覽相同。
   await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({

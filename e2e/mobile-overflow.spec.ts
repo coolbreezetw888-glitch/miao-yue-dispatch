@@ -336,6 +336,72 @@ test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預�
   await assertNoHorizontalOverflow(page, "行事曆(月檢視)");
 });
 
+// 訂單管理頁 /app/orders —— 2026-09-24 新增,補上這份測試檔原本完全沒有涵蓋的一頁。
+//
+// 為什麼這一頁要補進來(不是「順便多測一頁」):這一頁剛從「只渲染最新 500 筆」改成真正的分頁
+// (見 src/modules/booking/ordersPageLogic.ts sliceBookingsForPage 的說明),新增了一組分頁控制項
+// (每頁筆數下拉 + 上一頁/「N / M」/下一頁),清單前後各一組。這組控制項當初只用 Tailwind 的
+// `flex-wrap` + 固定寬度「推算」375px 下不會溢出,沒有真的在手機尺寸瀏覽器跑過——而這份規格書
+// (.project/specs/手機版容器寬度溢出修正.md 第三節)要求的就是「不要再靠肉眼/推算,要有長期
+// 執行的自動化測試」。這一頁沒被涵蓋,等於這組新控制項完全沒有防護。
+//
+// **為什麼不需要為了讓分頁器出現而多建 50 筆訂單**(這點很重要,不要以為是偷懒):OrdersPage.tsx
+// 渲染分頁器的條件是 `totalCount > 0`,**不是** `totalPages > 1`——只要有一筆訂單,上下兩組
+// 分頁器就都會渲染出來(顯示「1 / 1」,上一頁/下一頁兩顆都是 disabled 狀態,但版位、按鈕、
+// 下拉都是完整的真實尺寸)。所以既有 fixture 建的那一筆預約就足以讓整組控制項上畫面被量到,
+// 不必為了測排版去建 51 筆訂單(這個專案的 bookings 只有軟刪除、沒有 DELETE 政策,每多建一筆
+// 就是在正式 Supabase 專案裡多留一列永久殘留資料,見 mobile-overflow-fixture.ts 開頭的已知限制)。
+//
+// **這支測試不是「永遠會過」的假測試,已經用負面對照實測過**(規格書第四節第 3 點的要求):
+// 把 OrdersPager 根容器的 `flex-wrap` 暫時改成 `flex-nowrap` 重跑這一支,測試確實失敗,並印出
+// 實測數字——分頁器那一列的 `scrollWidth: 349` vs `clientWidth: 335`(上下兩組都各報一次),
+// 右側那一組(上一頁+頁碼+下一頁)自己是 `scrollWidth: 216` vs `clientWidth: 202`。改回
+// `flex-wrap` 後同一支測試通過。這組數字有兩個重要含意,留在這裡給以後改這個元件的人參考:
+//   ① `flex-wrap` 在這裡**不是**可有可無的保險:整組控制項的自然寬度是 349px,而 375px 螢幕扣掉
+//      頁面左右 `px-5` 之後可用寬度只有 335px,少 14px——也就是說在 375px 下這組控制項**一定會**
+//      換成上下兩行(不是「剛好塞得下」)。誰把 flex-wrap 拿掉,這一頁就會立刻需要左右滑動。
+//   ② 換行之後每一行都還很寬鬆:右側那組自然寬度 216px,可用 335px,還有 119px 餘裕。
+// **已知涵蓋範圍的界線,誠實記在這裡**:因此這支測試量到的頁碼文字是「1 / 1」,沒有真的量到
+// 「12 / 120」這種較寬的多頁頁碼文字。以上面 ② 的實測餘裕推算,就算頁碼長到「20000 / 20000」
+// (百萬筆訂單、每頁 50 筆的極端值,比「1 / 1」多 8 個半形字元,約 +56px)也還在 335px 之內;
+// 但這是**推算,不是實測**,要連多頁狀態一起納入自動化保護,就得接受「fixture 要建滿超過一頁的
+// 訂單」這個成本(bookings 只有軟刪除,每筆都會永久留在正式資料庫裡),那是主腦/使用者要裁決的
+// 取捨,不是這支測試能自己決定的。
+//
+// 另外一併涵蓋規格書第三節「測試資料要用會撐開容器的極端值」的部分:訂單卡片會把
+// 「服務人員 ・ 客戶姓名 ・ 客戶電話 ・ 客戶地址」串成一行顯示,fixture 的這筆預約本來就同時帶了
+// 超長客戶姓名(LONG_CUSTOMER_NAME)、40 碼電話組合字串(LONG_PHONE_COMBO)跟含長網址的超長地址
+// (LONG_ADDRESS),而且 fixture 商家是 on_site_dispatch(到府派工),客戶地址欄位在這一頁會真的
+// 顯示出來(見 OrdersPage.tsx showCustomerAddress)——這正是最容易撐爆版面的那一行。
+test("訂單管理頁 /app/orders(分頁控制項 + 長內容訂單卡片)", async ({ page }) => {
+  await page.goto("/app/orders");
+
+  // 等訂單卡片真的渲染出來(客戶姓名是卡片上的動態內容)。這一步不能只等頁面標題:分頁器的
+  // 渲染條件是「已經有撈到訂單」,查詢還沒 resolve 前 totalCount 是 0、分頁器根本不存在,
+  // 太早檢查會量到一個沒有分頁器的畫面,變成一份看起來有測、其實沒測到新控制項的假測試。
+  await expect(page.getByText(LONG_CUSTOMER_NAME_PREFIX, { exact: false }).first()).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  // 明確斷言「上下各一組分頁器都在畫面上」,理由同上——這是防止這支測試哪天因為分頁器沒渲染
+  // 而「安靜地變成永遠會過」的守門條件,不是多餘的重複斷言。用 role=combobox + aria-label 定位
+  // (combobox 是 Radix SelectTrigger 的 role,aria-label 見 OrdersPage.tsx OrdersPager 那顆
+  // SelectTrigger);這一頁另一顆 Select(服務人員篩選)沒有這個名稱,不會被誤抓進來。
+  const pageSizeSelects = page.getByRole("combobox", { name: "每頁顯示筆數" });
+  await expect(pageSizeSelects).toHaveCount(2);
+  await assertNoHorizontalOverflow(page, "訂單管理頁 /app/orders(預設每頁 50 筆,含上下兩組分頁器)");
+
+  // 每頁筆數下拉展開後的選單(Radix SelectContent,portal 到 body 的浮層)也要量一次——
+  // 浮層是這一頁唯一「不在主要文件流裡」的新元件,寬度來源跟底下的觸發按鈕不同。
+  await pageSizeSelects.first().click();
+  await expect(page.getByRole("option", { name: "500" })).toBeVisible();
+  await assertNoHorizontalOverflow(page, "訂單管理頁(每頁筆數下拉展開)");
+
+  // 切到最大的每頁筆數(500),觸發按鈕上的文字變成三位數、頁碼也會重算,再量一次。
+  await page.getByRole("option", { name: "500" }).click();
+  await expect(pageSizeSelects.first()).toContainText("500");
+  await assertNoHorizontalOverflow(page, "訂單管理頁(每頁 500 筆)");
+});
+
 // ---------------------------------------------------------------------------
 // 超級管理員後台:選用區塊,預設略過。
 //

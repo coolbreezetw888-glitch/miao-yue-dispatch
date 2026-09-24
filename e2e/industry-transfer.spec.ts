@@ -41,7 +41,9 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (setupFailed || !fixture) return;
   const actions = await teardownIndustryTransferFixture(fixture, createdTargetMerchantId);
-  console.log("[industry-transfer] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"));
+  console.log(
+    "[industry-transfer] fixture 清理結果:\n" + actions.map((a) => `  - ${a}`).join("\n"),
+  );
 });
 
 test.beforeEach(async ({ page }) => {

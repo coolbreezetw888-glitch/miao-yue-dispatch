@@ -110,10 +110,7 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
 
   // 一鍵復原。
   await card.getByRole("button", { name: "復原" }).click();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "確認復原" })
-    .click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "確認復原" }).click();
   await expect(page.getByText(/復原完成:成功復原 2 筆，跳過 0 筆/)).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });

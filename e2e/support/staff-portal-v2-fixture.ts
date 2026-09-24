@@ -19,7 +19,12 @@ import type { Page } from "@playwright/test";
 
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
-import { addDays, buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
+import {
+  addDays,
+  buildTaipeiIso,
+  getTaipeiNow,
+  toDateKey,
+} from "../../src/modules/booking/dateUtils";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +35,9 @@ function readEnvValue(key: string): string {
     .split(/\r?\n/)
     .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
   if (!line) {
-    throw new Error(`找不到 .env 裡的 ${key}——staff-portal-v2 這個 e2e 測試需要它來建立 fixture 資料。`);
+    throw new Error(
+      `找不到 .env 裡的 ${key}——staff-portal-v2 這個 e2e 測試需要它來建立 fixture 資料。`,
+    );
   }
   const value = line.slice(line.indexOf("=") + 1).trim();
   return value.replace(/^["']|["']$/g, "");
@@ -197,23 +204,27 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
 
   // 新商家已自動種入預設薪資設定(gross),這裡明確 upsert 確保 commission_basis_type='gross'
   // 不受其他測試/預設值變動影響,方便斷言。
-  const { error: payrollSettingsError } = await adminClient.from("merchant_payroll_settings").upsert(
-    { merchant_id: merchantId as string, commission_basis_type: "gross" },
-    { onConflict: "merchant_id" },
-  );
+  const { error: payrollSettingsError } = await adminClient
+    .from("merchant_payroll_settings")
+    .upsert(
+      { merchant_id: merchantId as string, commission_basis_type: "gross" },
+      { onConflict: "merchant_id" },
+    );
   if (payrollSettingsError) {
     throw new Error(`更新測試商家薪資設定失敗:${payrollSettingsError.message}`);
   }
 
-  const { error: commissionRateError } = await adminClient.from("staff_service_commission_rates").upsert(
-    {
-      staff_id: staffId,
-      service_item_id: serviceItemId,
-      commission_mode: "percentage",
-      commission_value: COMMISSION_RATE_PERCENTAGE,
-    },
-    { onConflict: "staff_id,service_item_id" },
-  );
+  const { error: commissionRateError } = await adminClient
+    .from("staff_service_commission_rates")
+    .upsert(
+      {
+        staff_id: staffId,
+        service_item_id: serviceItemId,
+        commission_mode: "percentage",
+        commission_value: COMMISSION_RATE_PERCENTAGE,
+      },
+      { onConflict: "staff_id,service_item_id" },
+    );
   if (commissionRateError) {
     throw new Error(`更新測試服務人員抽成設定失敗:${commissionRateError.message}`);
   }
@@ -246,7 +257,9 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
   const { data: bookingRow, error: bookingError } = await adminClient.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: staffId,
-    p_service_items: [{ service_item_id: serviceItemId, quantity: 1, unit_price: BOOKING_SUBTOTAL }],
+    p_service_items: [
+      { service_item_id: serviceItemId, quantity: 1, unit_price: BOOKING_SUBTOTAL },
+    ],
     p_start_at: buildTaipeiIso(todayDateKey, "10:00"),
     p_customer_name: "E2E測試客戶v2",
     p_customer_phone: "0955888000",
@@ -260,10 +273,14 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
   }
   const bookingId = (bookingRow as { id: string }).id;
 
-  const { error: confirmError } = await adminClient.rpc("confirm_booking", { p_booking_id: bookingId });
+  const { error: confirmError } = await adminClient.rpc("confirm_booking", {
+    p_booking_id: bookingId,
+  });
   if (confirmError) throw new Error(`確認測試訂單失敗:${confirmError.message}`);
 
-  const { error: completeError } = await adminClient.rpc("complete_booking", { p_booking_id: bookingId });
+  const { error: completeError } = await adminClient.rpc("complete_booking", {
+    p_booking_id: bookingId,
+  });
   if (completeError) throw new Error(`完成測試訂單失敗:${completeError.message}`);
 
   return {
@@ -304,7 +321,9 @@ export async function injectAdminSession(page: Page, fixture: StaffPortalV2Fixtu
 
 /** 測試結束後盡量把 fixture 清乾淨(client 端 anon key 只能做到軟停用/軟移除,真正的硬刪除由
  * 這次交付流程用資料庫直接 SQL 存取權限另外處理並查證,記錄在回報內容裡)。 */
-export async function teardownStaffPortalV2Fixture(fixture: StaffPortalV2Fixture): Promise<string[]> {
+export async function teardownStaffPortalV2Fixture(
+  fixture: StaffPortalV2Fixture,
+): Promise<string[]> {
   const client = createFixtureSupabaseClient();
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.adminSession.access_token,
@@ -333,7 +352,9 @@ export async function teardownStaffPortalV2Fixture(fixture: StaffPortalV2Fixture
     .update({ status: "removed" })
     .eq("id", fixture.staffId);
   actions.push(
-    staffError ? `移除 fixture 服務人員失敗:${staffError.message}` : "已移除 fixture 服務人員(軟刪除)",
+    staffError
+      ? `移除 fixture 服務人員失敗:${staffError.message}`
+      : "已移除 fixture 服務人員(軟刪除)",
   );
 
   const { error: hoursError } = await client
