@@ -130,17 +130,20 @@ Deno.test("dispatchPushForBooking(核心必測):訂單沒有指定服務人員,�
   assertEquals(logs[0].staff_id, null);
 });
 
-Deno.test("dispatchPushForBooking(核心必測):服務人員沒有任何訂閱,跳過,寫入 no_subscription", async () => {
-  const { deps, logs } = makeFakeDeps({ getStaffSubscriptions: async () => [] });
-  const result = await dispatchPushForBooking(deps, {
-    merchantId: "m1",
-    bookingId: "b1",
-    eventType: "booking_created",
-  });
-  assertEquals(result, { dispatched: false, reason: "no_subscription" });
-  assertEquals(logs[0].skip_reason, "no_subscription");
-  assertEquals(logs[0].staff_id, "staff-1");
-});
+Deno.test(
+  "dispatchPushForBooking(核心必測):服務人員沒有任何訂閱,跳過,寫入 no_subscription",
+  async () => {
+    const { deps, logs } = makeFakeDeps({ getStaffSubscriptions: async () => [] });
+    const result = await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+    assertEquals(result, { dispatched: false, reason: "no_subscription" });
+    assertEquals(logs[0].skip_reason, "no_subscription");
+    assertEquals(logs[0].staff_id, "staff-1");
+  },
+);
 
 Deno.test("dispatchPushForBooking:全部裝置成功,寫入 sent,不刪除任何訂閱", async () => {
   const { deps, logs, deletedIds } = makeFakeDeps();
@@ -202,7 +205,11 @@ Deno.test("dispatchPushForBooking(核心必測,規則 4.6):410 回應時也刪�
   const { deps, deletedIds } = makeFakeDeps({
     sendPush: async () => ({ ok: false, status: 410, errorDetail: "gone" }),
   });
-  await dispatchPushForBooking(deps, { merchantId: "m1", bookingId: "b1", eventType: "booking_created" });
+  await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
   assertEquals(deletedIds, ["sub-1"]);
 });
 
@@ -210,34 +217,44 @@ Deno.test("dispatchPushForBooking(核心必測,規則 4.6):500 暫時性錯誤�
   const { deps, deletedIds } = makeFakeDeps({
     sendPush: async () => ({ ok: false, status: 500, errorDetail: "server error" }),
   });
-  await dispatchPushForBooking(deps, { merchantId: "m1", bookingId: "b1", eventType: "booking_created" });
-  assertEquals(deletedIds, []);
-});
-
-Deno.test("dispatchPushForBooking(規則 4.5):booking_updated 事件把 changeSummary 併入 {{change_summary}}", async () => {
-  const { deps, logs } = makeFakeDeps({
-    getEventSetting: async () => ({
-      enabled: true,
-      message_title: "訂單內容異動",
-      message_body: "{{booking_date}} {{customer_name}}:{{change_summary}}",
-    }),
-  });
-  await dispatchPushForBooking(deps, {
-    merchantId: "m1",
-    bookingId: "b1",
-    eventType: "booking_updated",
-    changeSummary: "預約時間改為 09/26 15:00",
-  });
-  assertEquals(logs[0].rendered_body, "2026-10-01 10:00 王小明:預約時間改為 09/26 15:00");
-});
-
-Deno.test("dispatchPushForBooking:非 booking_updated 事件即使傳了 changeSummary 也不影響渲染(沒有這個變數鍵)", async () => {
-  const { deps, logs } = makeFakeDeps();
   await dispatchPushForBooking(deps, {
     merchantId: "m1",
     bookingId: "b1",
     eventType: "booking_created",
-    changeSummary: "不應該出現",
   });
-  assertEquals(logs[0].rendered_body, "2026-10-01 10:00 王小明");
+  assertEquals(deletedIds, []);
 });
+
+Deno.test(
+  "dispatchPushForBooking(規則 4.5):booking_updated 事件把 changeSummary 併入 {{change_summary}}",
+  async () => {
+    const { deps, logs } = makeFakeDeps({
+      getEventSetting: async () => ({
+        enabled: true,
+        message_title: "訂單內容異動",
+        message_body: "{{booking_date}} {{customer_name}}:{{change_summary}}",
+      }),
+    });
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_updated",
+      changeSummary: "預約時間改為 09/26 15:00",
+    });
+    assertEquals(logs[0].rendered_body, "2026-10-01 10:00 王小明:預約時間改為 09/26 15:00");
+  },
+);
+
+Deno.test(
+  "dispatchPushForBooking:非 booking_updated 事件即使傳了 changeSummary 也不影響渲染(沒有這個變數鍵)",
+  async () => {
+    const { deps, logs } = makeFakeDeps();
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+      changeSummary: "不應該出現",
+    });
+    assertEquals(logs[0].rendered_body, "2026-10-01 10:00 王小明");
+  },
+);

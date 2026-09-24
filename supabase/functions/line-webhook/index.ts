@@ -204,7 +204,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (insertEventError) {
       // 極少數情況下(例如真的同時處理兩次)插入會因為主鍵重複而失敗,視為已處理過,跳過即可。
-      console.error("[line-webhook] 寫入 line_webhook_events 失敗,視為已處理過跳過", insertEventError);
+      console.error(
+        "[line-webhook] 寫入 line_webhook_events 失敗,視為已處理過跳過",
+        insertEventError,
+      );
       continue;
     }
 

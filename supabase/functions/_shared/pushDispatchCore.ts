@@ -9,10 +9,7 @@
 // 的既有精神,只是這裡的介面涵蓋範圍更大(本模組要查詢/寫入的表比模組 11 這支函式更多)。
 
 export type PushDispatchEventType =
-  | "booking_created"
-  | "booking_cancelled"
-  | "booking_updated"
-  | "booking_reminder_next_day";
+  "booking_created" | "booking_cancelled" | "booking_updated" | "booking_reminder_next_day";
 
 export interface PushEventSettingRow {
   enabled: boolean;
@@ -49,7 +46,10 @@ export interface PushNotificationLogInsert {
 
 /** 兩支 Edge Function 各自用真正的 service role client 實作這組介面。 */
 export interface PushDispatchDeps {
-  getEventSetting(merchantId: string, eventType: PushDispatchEventType): Promise<PushEventSettingRow | null>;
+  getEventSetting(
+    merchantId: string,
+    eventType: PushDispatchEventType,
+  ): Promise<PushEventSettingRow | null>;
   getBookingStaffId(bookingId: string): Promise<string | null>;
   getStaffSubscriptions(staffId: string): Promise<StaffPushSubscriptionRow[]>;
   deleteSubscription(id: string): Promise<void>;

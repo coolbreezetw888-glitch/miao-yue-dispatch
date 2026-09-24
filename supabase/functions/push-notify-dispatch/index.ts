@@ -83,7 +83,9 @@ function buildDefaultDeps(config: ReturnType<typeof readEnvConfig>): HandleReque
         auth: { persistSession: false },
       }),
     createAdminClient: () =>
-      createClient(config.supabaseUrl, config.supabaseServiceRoleKey, { auth: { persistSession: false } }),
+      createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
+        auth: { persistSession: false },
+      }),
   };
 }
 

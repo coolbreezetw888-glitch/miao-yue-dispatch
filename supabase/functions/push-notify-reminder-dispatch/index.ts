@@ -97,7 +97,9 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "伺服器設定不完整" }, 500);
   }
   if (!VAPID_SUBJECT || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.error("[push-notify-reminder-dispatch] 缺少 VAPID 環境變數,尚未完成規則 4.2 的一次性設定");
+    console.error(
+      "[push-notify-reminder-dispatch] 缺少 VAPID 環境變數,尚未完成規則 4.2 的一次性設定",
+    );
     return jsonResponse({ error: "伺服器設定不完整" }, 500);
   }
 
@@ -105,7 +107,9 @@ async function handleRequest(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { tomorrowStartUtcMs, tomorrowEndUtcMs, todayTaipeiDate } = computeTaipeiTomorrowRange(Date.now());
+  const { tomorrowStartUtcMs, tomorrowEndUtcMs, todayTaipeiDate } = computeTaipeiTomorrowRange(
+    Date.now(),
+  );
 
   const { data: bookings, error: bookingsError } = await adminClient
     .from("bookings")

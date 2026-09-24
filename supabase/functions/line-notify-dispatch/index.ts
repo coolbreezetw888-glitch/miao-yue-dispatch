@@ -127,10 +127,7 @@ export async function pushLineMessage(
 
 /** 呼叫 RPC 拿變數用的最小介面,方便測試時傳入假的 client(不需要整個 supabase-js SupabaseClient)。 */
 export interface RpcClient {
-  rpc(
-    fn: string,
-    args: Record<string, unknown>,
-  ): PromiseLike<{ data: unknown; error: unknown }>;
+  rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
 }
 
 /**
@@ -246,7 +243,10 @@ async function handleRequest(req: Request): Promise<Response> {
   );
 
   if (resolveError) {
-    console.error("[line-notify-dispatch] resolve_line_notification_targets 呼叫失敗", resolveError);
+    console.error(
+      "[line-notify-dispatch] resolve_line_notification_targets 呼叫失敗",
+      resolveError,
+    );
     return jsonResponse({ error: "判斷通知對象時發生錯誤" }, 500);
   }
 
@@ -254,7 +254,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // 步驟 3:沒有任何目標(not_configured/event_disabled)→ 直接回 200,不寫入任何記錄。
   if (!shouldWriteAnyLogRow(result)) {
-    return jsonResponse({ dispatched: false, reason: !result.connected ? "not_configured" : "event_disabled" }, 200);
+    return jsonResponse(
+      { dispatched: false, reason: !result.connected ? "not_configured" : "event_disabled" },
+      200,
+    );
   }
 
   // 寫入 skipped 對象的記錄。
@@ -303,7 +306,12 @@ async function handleRequest(req: Request): Promise<Response> {
   let failedCount = 0;
 
   for (const target of result.targets) {
-    const pushResult = await pushLineMessage(fetch, channelAccessToken, target.line_user_id, renderedMessage);
+    const pushResult = await pushLineMessage(
+      fetch,
+      channelAccessToken,
+      target.line_user_id,
+      renderedMessage,
+    );
 
     await adminClient.from("line_notification_log").insert({
       merchant_id: merchantId,
@@ -322,7 +330,10 @@ async function handleRequest(req: Request): Promise<Response> {
     else failedCount += 1;
   }
 
-  return jsonResponse({ dispatched: true, sentCount, failedCount, skippedCount: result.skipped.length }, 200);
+  return jsonResponse(
+    { dispatched: true, sentCount, failedCount, skippedCount: result.skipped.length },
+    200,
+  );
 }
 
 if (import.meta.main) {

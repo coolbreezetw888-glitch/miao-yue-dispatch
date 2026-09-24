@@ -49,36 +49,48 @@ Deno.test("buildMarketingDispatchPlan: 混合已綁定/未綁定會員,各自正
   assertEquals(skipped[0].memberId, "m2");
 });
 
-Deno.test("buildMarketingDispatchPlan: 傳入不存在的 member_id(例如已被刪除)視為未綁定跳過,不報錯", () => {
-  const plan = buildMarketingDispatchPlan(["not-exist-id"], MEMBERS);
-  assertEquals(plan.length, 1);
-  assertEquals(plan[0].status, "skipped_not_bound");
-  assertEquals(plan[0].name, "");
-});
+Deno.test(
+  "buildMarketingDispatchPlan: 傳入不存在的 member_id(例如已被刪除)視為未綁定跳過,不報錯",
+  () => {
+    const plan = buildMarketingDispatchPlan(["not-exist-id"], MEMBERS);
+    assertEquals(plan.length, 1);
+    assertEquals(plan[0].status, "skipped_not_bound");
+    assertEquals(plan[0].name, "");
+  },
+);
 
-Deno.test("buildMarketingDispatchPlan(§10.2/SPECS-INDEX #612 問題 2,核心必測): 黑名單會員一律標記為 skipped_blacklisted,即使已經綁定 LINE 也不會是 will_send", () => {
-  const plan = buildMarketingDispatchPlan(["m4-blacklisted"], MEMBERS);
-  assertEquals(plan.length, 1);
-  assertEquals(plan[0].status, "skipped_blacklisted");
-  assertEquals(plan[0].lineUserId, null);
-  assertEquals(plan[0].name, "會員丁(黑名單)");
-});
+Deno.test(
+  "buildMarketingDispatchPlan(§10.2/SPECS-INDEX #612 問題 2,核心必測): 黑名單會員一律標記為 skipped_blacklisted,即使已經綁定 LINE 也不會是 will_send",
+  () => {
+    const plan = buildMarketingDispatchPlan(["m4-blacklisted"], MEMBERS);
+    assertEquals(plan.length, 1);
+    assertEquals(plan[0].status, "skipped_blacklisted");
+    assertEquals(plan[0].lineUserId, null);
+    assertEquals(plan[0].name, "會員丁(黑名單)");
+  },
+);
 
-Deno.test("buildMarketingDispatchPlan(§10.2): 黑名單擋下的優先權比『未綁定』更高——同時符合兩種條件時記錄為黑名單,不是未綁定", () => {
-  const blacklistedAndUnbound: MarketingMemberRow[] = [
-    { id: "m5", name: "會員戊", line_bound: false, line_user_id: null, is_blacklisted: true },
-  ];
-  const plan = buildMarketingDispatchPlan(["m5"], blacklistedAndUnbound);
-  assertEquals(plan[0].status, "skipped_blacklisted");
-});
+Deno.test(
+  "buildMarketingDispatchPlan(§10.2): 黑名單擋下的優先權比『未綁定』更高——同時符合兩種條件時記錄為黑名單,不是未綁定",
+  () => {
+    const blacklistedAndUnbound: MarketingMemberRow[] = [
+      { id: "m5", name: "會員戊", line_bound: false, line_user_id: null, is_blacklisted: true },
+    ];
+    const plan = buildMarketingDispatchPlan(["m5"], blacklistedAndUnbound);
+    assertEquals(plan[0].status, "skipped_blacklisted");
+  },
+);
 
-Deno.test("buildMarketingDispatchPlan(§10.2): 混合黑名單/已綁定/未綁定,各自正確分類,伺服器端不管前端傳了哪些 id 進來都會重新判斷", () => {
-  const plan = buildMarketingDispatchPlan(["m1", "m2", "m3", "m4-blacklisted"], MEMBERS);
-  const willSend = plan.filter((p) => p.status === "will_send");
-  const skippedNotBound = plan.filter((p) => p.status === "skipped_not_bound");
-  const skippedBlacklisted = plan.filter((p) => p.status === "skipped_blacklisted");
-  assertEquals(willSend.length, 2);
-  assertEquals(skippedNotBound.length, 1);
-  assertEquals(skippedBlacklisted.length, 1);
-  assertEquals(skippedBlacklisted[0].memberId, "m4-blacklisted");
-});
+Deno.test(
+  "buildMarketingDispatchPlan(§10.2): 混合黑名單/已綁定/未綁定,各自正確分類,伺服器端不管前端傳了哪些 id 進來都會重新判斷",
+  () => {
+    const plan = buildMarketingDispatchPlan(["m1", "m2", "m3", "m4-blacklisted"], MEMBERS);
+    const willSend = plan.filter((p) => p.status === "will_send");
+    const skippedNotBound = plan.filter((p) => p.status === "skipped_not_bound");
+    const skippedBlacklisted = plan.filter((p) => p.status === "skipped_blacklisted");
+    assertEquals(willSend.length, 2);
+    assertEquals(skippedNotBound.length, 1);
+    assertEquals(skippedBlacklisted.length, 1);
+    assertEquals(skippedBlacklisted[0].memberId, "m4-blacklisted");
+  },
+);

@@ -27,11 +27,14 @@ const KNOWN_SECRET = "my-test-channel-secret";
 const KNOWN_BODY = '{"destination":"Uabc123","events":[]}';
 const KNOWN_ANSWER = "JAbE46YdBtXxshUa8DAcpR8oLbAyaM6FSv1qDuhWlw0=";
 
-Deno.test("computeLineSignature: 已知密鑰+已知內容算出跟獨立(Node.js crypto)計算完全一致的結果", async () => {
-  const rawBody = new TextEncoder().encode(KNOWN_BODY);
-  const signature = await computeLineSignature(rawBody, KNOWN_SECRET);
-  assertEquals(signature, KNOWN_ANSWER);
-});
+Deno.test(
+  "computeLineSignature: 已知密鑰+已知內容算出跟獨立(Node.js crypto)計算完全一致的結果",
+  async () => {
+    const rawBody = new TextEncoder().encode(KNOWN_BODY);
+    const signature = await computeLineSignature(rawBody, KNOWN_SECRET);
+    assertEquals(signature, KNOWN_ANSWER);
+  },
+);
 
 Deno.test("verifyLineSignature: 正確簽章通過驗證", async () => {
   const rawBody = new TextEncoder().encode(KNOWN_BODY);

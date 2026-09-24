@@ -17,7 +17,8 @@ import {
 } from "./index.ts";
 
 Deno.test("renderMessageTemplate: 涵蓋所有已定義變數,正確替換", () => {
-  const template = "【{{merchant_name}}】{{customer_name}} 於 {{booking_date}} 預約 {{service_names}}。";
+  const template =
+    "【{{merchant_name}}】{{customer_name}} 於 {{booking_date}} 預約 {{service_names}}。";
   const result = renderMessageTemplate(template, {
     merchant_name: "測試商家",
     customer_name: "王小明",
@@ -65,7 +66,8 @@ Deno.test("pushLineMessage: LINE 回傳錯誤時記錄錯誤內容", async () =>
 });
 
 Deno.test("pushLineMessage: 網路錯誤時 status=0 並記錄錯誤訊息", async () => {
-  const fakeFetch = (() => Promise.reject(new Error("connection refused"))) as unknown as typeof fetch;
+  const fakeFetch = (() =>
+    Promise.reject(new Error("connection refused"))) as unknown as typeof fetch;
   const result = await pushLineMessage(fakeFetch, "token", "Uabc", "hello");
   assertEquals(result.ok, false);
   assertEquals(result.status, 0);
@@ -78,9 +80,10 @@ Deno.test("pushLineMessage: 網路錯誤時 status=0 並記錄錯誤訊息", asy
 // 沒有 booking_id)正確呼叫 render_staff_leave_notification_variables,並把結果套進範本渲染後
 // 不再殘留未替換的 {{}} 語法」——這正是這次要修的 bug 本身。
 // =========================================================================
-function makeRpcClient(
-  responses: Record<string, { data: unknown; error: unknown }>,
-): { client: RpcClient; calls: { fn: string; args: Record<string, unknown> }[] } {
+function makeRpcClient(responses: Record<string, { data: unknown; error: unknown }>): {
+  client: RpcClient;
+  calls: { fn: string; args: Record<string, unknown> }[];
+} {
   const calls: { fn: string; args: Record<string, unknown> }[] = [];
   const client: RpcClient = {
     rpc(fn: string, args: Record<string, unknown>) {
@@ -91,68 +94,83 @@ function makeRpcClient(
   return { client, calls };
 }
 
-Deno.test("resolveNotificationVariables: booking_id 有值時呼叫 render_booking_notification_variables,不呼叫請假那支", async () => {
-  const { client, calls } = makeRpcClient({
-    render_booking_notification_variables: {
-      data: { merchant_name: "測試商家", customer_name: "王小明" },
-      error: null,
-    },
-  });
-  const variables = await resolveNotificationVariables(client, "booking-1", null);
-  assertEquals(variables, { merchant_name: "測試商家", customer_name: "王小明" });
-  assertEquals(calls.length, 1);
-  assertEquals(calls[0].fn, "render_booking_notification_variables");
-  assertEquals(calls[0].args, { p_booking_id: "booking-1" });
-});
-
-Deno.test("resolveNotificationVariables(核心必測,bug 385):staff_leave_record_id 有值時正確呼叫 render_staff_leave_notification_variables,渲染後不再殘留 {{}}", async () => {
-  const { client, calls } = makeRpcClient({
-    render_staff_leave_notification_variables: {
-      data: {
-        merchant_name: "測試商家",
-        staff_name: "陳美美",
-        booking_date: "2026-10-01",
-        leave_type_name: "特休",
+Deno.test(
+  "resolveNotificationVariables: booking_id 有值時呼叫 render_booking_notification_variables,不呼叫請假那支",
+  async () => {
+    const { client, calls } = makeRpcClient({
+      render_booking_notification_variables: {
+        data: { merchant_name: "測試商家", customer_name: "王小明" },
+        error: null,
       },
-      error: null,
-    },
-  });
+    });
+    const variables = await resolveNotificationVariables(client, "booking-1", null);
+    assertEquals(variables, { merchant_name: "測試商家", customer_name: "王小明" });
+    assertEquals(calls.length, 1);
+    assertEquals(calls[0].fn, "render_booking_notification_variables");
+    assertEquals(calls[0].args, { p_booking_id: "booking-1" });
+  },
+);
 
-  const variables = await resolveNotificationVariables(client, undefined, "leave-1");
-  assertEquals(calls.length, 1);
-  assertEquals(calls[0].fn, "render_staff_leave_notification_variables");
-  assertEquals(calls[0].args, { p_staff_leave_record_id: "leave-1" });
+Deno.test(
+  "resolveNotificationVariables(核心必測,bug 385):staff_leave_record_id 有值時正確呼叫 render_staff_leave_notification_variables,渲染後不再殘留 {{}}",
+  async () => {
+    const { client, calls } = makeRpcClient({
+      render_staff_leave_notification_variables: {
+        data: {
+          merchant_name: "測試商家",
+          staff_name: "陳美美",
+          booking_date: "2026-10-01",
+          leave_type_name: "特休",
+        },
+        error: null,
+      },
+    });
 
-  // 這是 bug 385 的實際情境:staff_leave_created 事件的預設文案。修好之前 variables 永遠是
-  // {},渲染結果會殘留 {{staff_name}}/{{booking_date}} 沒被替換,直接送給收訊人看到。
-  const template = "【{{merchant_name}}】{{staff_name}} 登記了一筆請假:{{booking_date}}。";
-  const renderedMessage = renderMessageTemplate(template, variables);
-  assertEquals(renderedMessage, "【測試商家】陳美美 登記了一筆請假:2026-10-01。");
-  assertEquals(/\{\{\w+\}\}/.test(renderedMessage), false);
-});
+    const variables = await resolveNotificationVariables(client, undefined, "leave-1");
+    assertEquals(calls.length, 1);
+    assertEquals(calls[0].fn, "render_staff_leave_notification_variables");
+    assertEquals(calls[0].args, { p_staff_leave_record_id: "leave-1" });
 
-Deno.test("resolveNotificationVariables: booking_id 跟 staff_leave_record_id 都沒有時(理論上不該發生)回傳空物件,不呼叫任何 RPC", async () => {
-  const { client, calls } = makeRpcClient({});
-  const variables = await resolveNotificationVariables(client, null, null);
-  assertEquals(variables, {});
-  assertEquals(calls.length, 0);
-});
+    // 這是 bug 385 的實際情境:staff_leave_created 事件的預設文案。修好之前 variables 永遠是
+    // {},渲染結果會殘留 {{staff_name}}/{{booking_date}} 沒被替換,直接送給收訊人看到。
+    const template = "【{{merchant_name}}】{{staff_name}} 登記了一筆請假:{{booking_date}}。";
+    const renderedMessage = renderMessageTemplate(template, variables);
+    assertEquals(renderedMessage, "【測試商家】陳美美 登記了一筆請假:2026-10-01。");
+    assertEquals(/\{\{\w+\}\}/.test(renderedMessage), false);
+  },
+);
 
-Deno.test("resolveNotificationVariables: render_booking_notification_variables 呼叫失敗時回傳空物件,不往外拋", async () => {
-  const { client } = makeRpcClient({
-    render_booking_notification_variables: { data: null, error: { message: "boom" } },
-  });
-  const variables = await resolveNotificationVariables(client, "booking-1", null);
-  assertEquals(variables, {});
-});
+Deno.test(
+  "resolveNotificationVariables: booking_id 跟 staff_leave_record_id 都沒有時(理論上不該發生)回傳空物件,不呼叫任何 RPC",
+  async () => {
+    const { client, calls } = makeRpcClient({});
+    const variables = await resolveNotificationVariables(client, null, null);
+    assertEquals(variables, {});
+    assertEquals(calls.length, 0);
+  },
+);
 
-Deno.test("resolveNotificationVariables: render_staff_leave_notification_variables 呼叫失敗時回傳空物件,不往外拋", async () => {
-  const { client } = makeRpcClient({
-    render_staff_leave_notification_variables: { data: null, error: { message: "boom" } },
-  });
-  const variables = await resolveNotificationVariables(client, null, "leave-1");
-  assertEquals(variables, {});
-});
+Deno.test(
+  "resolveNotificationVariables: render_booking_notification_variables 呼叫失敗時回傳空物件,不往外拋",
+  async () => {
+    const { client } = makeRpcClient({
+      render_booking_notification_variables: { data: null, error: { message: "boom" } },
+    });
+    const variables = await resolveNotificationVariables(client, "booking-1", null);
+    assertEquals(variables, {});
+  },
+);
+
+Deno.test(
+  "resolveNotificationVariables: render_staff_leave_notification_variables 呼叫失敗時回傳空物件,不往外拋",
+  async () => {
+    const { client } = makeRpcClient({
+      render_staff_leave_notification_variables: { data: null, error: { message: "boom" } },
+    });
+    const variables = await resolveNotificationVariables(client, null, "leave-1");
+    assertEquals(variables, {});
+  },
+);
 
 Deno.test("resolveNotificationVariables: 查無資料時資料庫回傳空物件 {},這裡原樣帶出", async () => {
   const { client } = makeRpcClient({
@@ -176,18 +194,24 @@ Deno.test("shouldWriteAnyLogRow: 2.4 第 2 點——事件關閉時不寫入任�
   assertEquals(shouldWriteAnyLogRow(result), false);
 });
 
-Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,但沒有任何目標(理論上不會出現,防禦性驗證)不寫入", () => {
-  const result = makeResult({ targets: [], skipped: [] });
-  assertEquals(shouldWriteAnyLogRow(result), false);
-});
+Deno.test(
+  "shouldWriteAnyLogRow: 已連線且事件開啟,但沒有任何目標(理論上不會出現,防禦性驗證)不寫入",
+  () => {
+    const result = makeResult({ targets: [], skipped: [] });
+    assertEquals(shouldWriteAnyLogRow(result), false);
+  },
+);
 
-Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,有 skipped 對象時要寫入記錄(核心必測,規則 2.4 第 3 點)", () => {
-  const result = makeResult({
-    targets: [],
-    skipped: [{ type: "staff", id: "s1", reason: "target_not_bound" }],
-  });
-  assertEquals(shouldWriteAnyLogRow(result), true);
-});
+Deno.test(
+  "shouldWriteAnyLogRow: 已連線且事件開啟,有 skipped 對象時要寫入記錄(核心必測,規則 2.4 第 3 點)",
+  () => {
+    const result = makeResult({
+      targets: [],
+      skipped: [{ type: "staff", id: "s1", reason: "target_not_bound" }],
+    });
+    assertEquals(shouldWriteAnyLogRow(result), true);
+  },
+);
 
 Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,有實際目標時要寫入記錄", () => {
   const result = makeResult({

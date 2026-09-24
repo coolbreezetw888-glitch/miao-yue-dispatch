@@ -181,10 +181,9 @@ async function handleRequest(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc(
-    "am_i_merchant_admin",
-    { p_merchant_id: merchantId },
-  );
+  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc("am_i_merchant_admin", {
+    p_merchant_id: merchantId,
+  });
 
   if (adminCheckError) {
     console.error("[line-send-marketing] am_i_merchant_admin 呼叫失敗", adminCheckError);

@@ -39,8 +39,7 @@ const PUBLIC_SITE_URL = Deno.env.get("PUBLIC_SITE_URL") ?? "https://miao-yue-dis
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 function jsonResponse(body: Record<string, unknown>, status: number): Response {
@@ -109,10 +108,9 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc(
-    "am_i_merchant_admin",
-    { p_merchant_id: merchantId },
-  );
+  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc("am_i_merchant_admin", {
+    p_merchant_id: merchantId,
+  });
 
   if (adminCheckError) {
     console.error("[invite-merchant-staff] am_i_merchant_admin 呼叫失敗", adminCheckError);
@@ -196,7 +194,10 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
 
   if (recordError) {
     console.error("[invite-merchant-staff] record_invited_staff_login 失敗", recordError);
-    return jsonResponse({ error: recordError.message || "寫入服務人員登入資料失敗,請稍後再試" }, 500);
+    return jsonResponse(
+      { error: recordError.message || "寫入服務人員登入資料失敗,請稍後再試" },
+      500,
+    );
   }
 
   return jsonResponse(
