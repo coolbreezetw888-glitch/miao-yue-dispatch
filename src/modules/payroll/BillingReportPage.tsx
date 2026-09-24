@@ -104,7 +104,8 @@ function BillingReportPageInner() {
               查詢都出現(避免嚇到使用者)。樣式比照既有 over_deduction_warning 警示區塊的既有寫法。 */}
           {summary.salary_estimation_applied ? (
             <p className="rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm text-warn">
-              ⚠️ 查詢區間內有部分月份早於系統開始記錄薪資歷史的時間,這些月份的金額是用最早的已知薪資回推估算,僅供參考。
+              ⚠️
+              查詢區間內有部分月份早於系統開始記錄薪資歷史的時間,這些月份的金額是用最早的已知薪資回推估算,僅供參考。
             </p>
           ) : null}
 
@@ -114,7 +115,9 @@ function BillingReportPageInner() {
           <Card>
             <CardHeader>
               <CardTitle>稅金小計</CardTitle>
-              <CardDescription>這段期間完成訂單的稅金加總,已經從「商家總淨利」的計算中排除。</CardDescription>
+              <CardDescription>
+                這段期間完成訂單的稅金加總,已經從「商家總淨利」的計算中排除。
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-semibold text-foreground">

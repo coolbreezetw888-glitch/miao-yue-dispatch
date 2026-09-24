@@ -416,8 +416,8 @@ function ImportWizardPageInner() {
                   </>
                 ) : (
                   <>
-                    還沒整理好 CSV?可以先下載範例模板對照欄位。服務時長沒填預設
-                    60 分鐘,訂單狀態沒填預設「已完成」,付款方式為選填(留空也能成功匯入)。
+                    還沒整理好 CSV?可以先下載範例模板對照欄位。服務時長沒填預設 60
+                    分鐘,訂單狀態沒填預設「已完成」,付款方式為選填(留空也能成功匯入)。
                   </>
                 )}
               </p>
@@ -535,7 +535,11 @@ function ImportWizardPageInner() {
               </p>
             )}
             {distinctStaffNames.map((name) => (
-              <div key={name} className="flex items-center gap-3" data-testid={`staff-mapping-${name}`}>
+              <div
+                key={name}
+                className="flex items-center gap-3"
+                data-testid={`staff-mapping-${name}`}
+              >
                 <span className="w-40 shrink-0 truncate text-sm font-medium">{name}</span>
                 {staffValueMapping[name] ? (
                   <span className="text-sm text-muted-foreground">

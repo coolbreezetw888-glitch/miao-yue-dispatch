@@ -20,10 +20,7 @@ import type { CalendarStateStyleMap, StaffAvailabilityWindow } from "@/modules/b
 import { fetchMyStaffRow } from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
 import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "@/modules/payroll/api";
-import type {
-  StaffCommissionSummary,
-  StaffMonthlyPayrollSummary,
-} from "@/modules/payroll/types";
+import type { StaffCommissionSummary, StaffMonthlyPayrollSummary } from "@/modules/payroll/types";
 
 import {
   fetchMyAvailabilityOverrides,
@@ -74,7 +71,18 @@ export function useActiveMyStaffRecord(
 
 /** 5.7 對外介面:回傳目前使用者(如果是「目前有效且已開通登入」的服務人員)是否被開放某個自助
  * 功能區塊。不是服務人員身份時回傳 null,代表「不適用這個判斷」(比照模組 3 useAgentPermission
- * 的既有精神)。 */
+ * 的既有精神)。
+ *
+ * 2026-09-24 深夜巡檢問題 6 的根因修正:enabled 原本只看 merchantId,但 queryFn 在 staffId 還
+ * 沒解出來時是直接 `return null`。結果是「查詢明明還沒有答案,isLoading 卻已經轉成 false、data
+ * 是 null」——呼叫端只要沒有另外等 useActiveMyStaffRecord 的載入狀態,就會先當成「沒有權限」渲染
+ * 一次空狀態文字,網路慢的時候使用者真的看得到這一閃(手機端尤其明顯)。改成 staffId 解出來之前
+ * 查詢根本不啟用,就不會再產生這種「假的 null 答案」,也不會在 staffId=null 的 queryKey 底下留
+ * 一份沒有意義的快取。
+ *
+ * 呼叫端的行為不受影響:非服務人員身分時查詢維持停用,data 是 undefined(原本是 null),目前四個
+ * 呼叫端(MyCalendarPage、RequireStaffPayrollAccess、RequireStaffAvailabilityAccess、
+ * HomePage)判斷的都是「=== true 才放行」,undefined 跟 null 在這個判斷下完全等價。 */
 export function useMyStaffPermission(
   sectionKey: StaffPermissionSectionKey | string,
 ): UseQueryResult<boolean | null> {
@@ -98,7 +106,7 @@ export function useMyStaffPermission(
 
       return data?.granted ?? false;
     },
-    enabled: Boolean(merchantId),
+    enabled: Boolean(merchantId) && Boolean(staffId),
   });
 }
 
@@ -116,7 +124,8 @@ export function useMyBookingSchedule(
 
   return useQuery({
     queryKey: ["staff-portal-module", "my-booking-schedule", staffId, startDate, endDate],
-    queryFn: () => fetchMyBookingSchedule(staffId as string, startDate as string, endDate as string),
+    queryFn: () =>
+      fetchMyBookingSchedule(staffId as string, startDate as string, endDate as string),
     enabled: Boolean(staffId) && Boolean(startDate) && Boolean(endDate),
   });
 }

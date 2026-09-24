@@ -313,7 +313,10 @@ export async function updateMemberTier(
 }
 
 async function setMemberTierStatus(tierId: string, status: MemberTierStatus): Promise<void> {
-  const { error } = await supabase.from("merchant_member_tiers").update({ status }).eq("id", tierId);
+  const { error } = await supabase
+    .from("merchant_member_tiers")
+    .update({ status })
+    .eq("id", tierId);
   if (error) throw error;
 }
 

@@ -51,9 +51,18 @@ describe("getPushTemplateVariableDefinitions(§13.1 可用變數清單,依事件
 describe("previewPushTemplate(§13.1 即時預覽)", () => {
   it("套用 2.2 表格的 4 種事件預設文案,都能完整渲染不殘留 {{}}", () => {
     const templates: Record<PushNotificationEventType, { title: string; body: string }> = {
-      booking_created: { title: "新訂單通知", body: "{{booking_date}} {{customer_name}}·{{service_names}}" },
-      booking_cancelled: { title: "訂單已取消", body: "{{booking_date}} {{customer_name}} 的預約已取消" },
-      booking_updated: { title: "訂單內容異動", body: "{{booking_date}} {{customer_name}}:{{change_summary}}" },
+      booking_created: {
+        title: "新訂單通知",
+        body: "{{booking_date}} {{customer_name}}·{{service_names}}",
+      },
+      booking_cancelled: {
+        title: "訂單已取消",
+        body: "{{booking_date}} {{customer_name}} 的預約已取消",
+      },
+      booking_updated: {
+        title: "訂單內容異動",
+        body: "{{booking_date}} {{customer_name}}:{{change_summary}}",
+      },
       booking_reminder_next_day: {
         title: "明天有預約提醒",
         body: "{{booking_date}} {{customer_name}}·{{service_names}}",

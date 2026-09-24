@@ -182,9 +182,7 @@ export async function updateMerchantStaff(
     ...(input.canUploadConstructionPhotos !== undefined
       ? { can_upload_construction_photos: input.canUploadConstructionPhotos }
       : {}),
-    ...(input.compensationType !== undefined
-      ? { compensation_type: input.compensationType }
-      : {}),
+    ...(input.compensationType !== undefined ? { compensation_type: input.compensationType } : {}),
   };
   const { error } = await supabase.from("merchant_staff").update(payload).eq("id", staffId);
   if (error) throw error;

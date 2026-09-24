@@ -104,7 +104,8 @@ function EventSettingCard({
             maxLength={40}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            建議 20 字以內({form.messageTitle.length} 字)——手機通知顯示空間有限,超出的部分會被系統截斷。
+            建議 20 字以內({form.messageTitle.length}{" "}
+            字)——手機通知顯示空間有限,超出的部分會被系統截斷。
           </p>
         </div>
 
@@ -117,7 +118,8 @@ function EventSettingCard({
             maxLength={120}
           />
           <p className="mt-1 text-xs text-muted-foreground">
-            建議 50 字以內({form.messageBody.length} 字)——手機通知列空間有限,超出的部分會被系統截斷。
+            建議 50 字以內({form.messageBody.length}{" "}
+            字)——手機通知列空間有限,超出的部分會被系統截斷。
           </p>
           <TemplateVariablePreview
             variables={getPushTemplateVariableDefinitions(eventType)}

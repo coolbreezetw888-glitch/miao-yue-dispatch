@@ -33,11 +33,7 @@ export const REWARD_CONDITION_MODE_LABELS: Record<RewardConditionMode, string> =
 };
 
 export type MemberPointTransactionType =
-  | "earn_booking"
-  | "referral_bonus"
-  | "birthday_bonus"
-  | "manual_adjustment"
-  | "redeem";
+  "earn_booking" | "referral_bonus" | "birthday_bonus" | "manual_adjustment" | "redeem";
 
 export const MEMBER_POINT_TRANSACTION_TYPE_LABELS: Record<MemberPointTransactionType, string> = {
   earn_booking: "消費核發",

@@ -164,7 +164,11 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
             placeholder="對方需已註冊過秒約帳號"
           />
         </div>
-        <Button type="button" onClick={() => void handleAdd()} disabled={adding || !newAdminEmail.trim()}>
+        <Button
+          type="button"
+          onClick={() => void handleAdd()}
+          disabled={adding || !newAdminEmail.trim()}
+        >
           {adding ? "新增中⋯" : "新增"}
         </Button>
       </div>

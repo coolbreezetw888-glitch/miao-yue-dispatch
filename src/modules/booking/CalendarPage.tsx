@@ -41,6 +41,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/utils";
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
+// 2026-09-24 稽核修正(問題 2):客戶 Email 欄位的格式驗證,沿用電話驗證既有的共用檔案。
+import { EMAIL_ERROR_MESSAGE, isValidEmail } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag } from "@/modules/merchant/api";
@@ -50,7 +54,10 @@ import {
   useCurrentMerchantRole,
   useMerchantStaffList,
 } from "@/modules/staff-agent/context";
-import { useMerchantServiceCategories, useMerchantServiceItems } from "@/modules/service-items/context";
+import {
+  useMerchantServiceCategories,
+  useMerchantServiceItems,
+} from "@/modules/service-items/context";
 import { UNCATEGORIZED_LABEL } from "@/modules/service-items/types";
 import {
   MemberPhoneMatchPanel,
@@ -96,6 +103,11 @@ import {
   timeToMinutes,
   toDateKey,
 } from "./dateUtils";
+// 2026-09-24 稽核修正(問題 5):時段清單要排除整天請假/單日排休,計算邏輯抽成純函式方便測試。
+import { buildBookingSlotOptions } from "./bookingSlotOptions";
+// 2026-09-24 稽核修正(問題 1):數量欄位清空時三處 fallback 不一致(畫面顯示 $0、實際送出全額),
+// 統一走這支共用解析函式,見該檔案開頭的完整說明。
+import { parseItemQuantity } from "./itemQuantity";
 import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // 模組 14(服務人員端)規格書 4.3:role==='staff' 時渲染服務人員自助行事曆,不渲染下面給
@@ -164,18 +176,25 @@ function BookingDateTimeField({
 
   const staffBlock = (schedule?.staff ?? []).find((s) => s.staff_id === staffId);
 
+  // 2026-09-24 稽核修正(問題 5):這位服務人員這一天是不是整天請假。有值時下面的時段清單
+  // 一定是空的,改成顯示「這天休假」的說明,不要讓客服把整張表單填完送出才被後端擋下。
+  const onLeave = staffBlock?.on_leave ?? null;
+
   // 第 3 點:只列出總工時能完整放進某個可預約區間的起始時間點,以現有的 SLOT_MINUTES 切格。
+  // 2026-09-24 稽核修正(問題 5):同時排除整天請假(on_leave)跟單日排休
+  // (availability_overrides 且 is_available=false)——這兩份資料本來就在同一包
+  // get_merchant_day_schedule 回傳值裡,以前只讀了 available_windows 沒讀它們,
+  // 導致行事曆主畫面已經整欄灰掉的師傅,在建單表單裡照樣列得出所有時段。
+  // 實際計算搬到 bookingSlotOptions.ts(純函式,有單元測試),這裡只負責把資料餵進去。
   const slotOptions = useMemo(() => {
     if (!staffBlock) return [];
-    const starts = new Set<string>();
-    for (const w of staffBlock.available_windows) {
-      const windowStart = timeToMinutes(w.start_time);
-      const windowEnd = timeToMinutes(w.end_time);
-      for (let m = windowStart; m + totalDurationMinutes <= windowEnd; m += SLOT_MINUTES) {
-        starts.add(minutesToTime(m));
-      }
-    }
-    return Array.from(starts).sort();
+    return buildBookingSlotOptions({
+      availableWindows: staffBlock.available_windows,
+      availabilityOverrides: staffBlock.availability_overrides,
+      onLeave: Boolean(staffBlock.on_leave),
+      totalDurationMinutes,
+      slotMinutes: SLOT_MINUTES,
+    });
   }, [staffBlock, totalDurationMinutes]);
 
   const label = dateKey && time ? formatDisplayDateTime(dateKey, time) : "請選擇日期時間";
@@ -203,6 +222,13 @@ function BookingDateTimeField({
             <p className="text-center text-sm text-muted-foreground">請先選擇服務人員</p>
           ) : !dateKey ? (
             <p className="text-center text-sm text-muted-foreground">請先選擇日期</p>
+          ) : onLeave ? (
+            /* 2026-09-24 稽核修正(問題 5):整天請假時明確說明原因(含假別名稱快照),
+               不要只顯示「這天沒有可預約的時段」讓客服猜是哪裡設錯。
+               這是體驗層引導,真正擋下建單的仍然是後端 create_booking 的驗證。 */
+            <p className="text-center text-sm text-warn">
+              這位服務人員這天休假({onLeave.leave_type_name}),無法建立預約。
+            </p>
           ) : slotOptions.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground">這天沒有可預約的時段</p>
           ) : (
@@ -468,7 +494,8 @@ export function BookingFormDialog({
   const itemsTotalDurationMinutes = useMemo(() => {
     return serviceItemIds.reduce((sum, id) => {
       const item = (serviceItems ?? []).find((s) => s.id === id);
-      const quantity = Number(itemQuantities[id] ?? "1") || 1;
+      // 2026-09-24 稽核修正(問題 1):跟金額預覽、實際送出三處一律走同一支 parseItemQuantity。
+      const quantity = parseItemQuantity(itemQuantities[id]);
       return sum + (item?.duration_minutes ?? 0) * quantity;
     }, 0);
   }, [serviceItemIds, serviceItems, itemQuantities]);
@@ -483,7 +510,10 @@ export function BookingFormDialog({
   // §2.3 步驟 1 的「逐項小計」= Σ(unit_price × quantity)。
   const itemsSubtotal = useMemo(() => {
     return serviceItemIds.reduce((sum, id) => {
-      const quantity = Number(itemQuantities[id] ?? "1") || 0;
+      // 2026-09-24 稽核修正(問題 1):這裡原本的 fallback 是 `|| 0`,跟工時加總、實際送出的
+      // `|| 1` 不一致——數量格子清空時,畫面上的小計/最終金額會顯示 $0,後端卻收到 quantity=1
+      // 存成全額,對帳時完全對不上。三處統一改用 parseItemQuantity。
+      const quantity = parseItemQuantity(itemQuantities[id]);
       const unitPrice = Number(itemUnitPrices[id] ?? "0") || 0;
       return sum + quantity * unitPrice;
     }, 0);
@@ -572,6 +602,18 @@ export function BookingFormDialog({
       toast.error("請填寫客戶電話");
       return;
     }
+    // 2026-09-24 稽核修正(問題 2):客戶 Email 格式驗證。
+    // 欄位雖然寫了 type="email",但送出鈕是 type="button" + onClick、外面也沒有 <form>,
+    // 所以瀏覽器的原生格式驗證從來不會觸發,客服隨手打 abc 就會直接存進資料庫。
+    // **空白要放行**——這是選填欄位,不填是正常情況,只有「填了但格式不對」才擋。
+    //
+    // 註:客戶電話刻意**不**比照服務人員/客服跑 isValidTaiwanMobilePhone 的嚴格手機格式驗證。
+    // 後端 private.normalize_phone 本來就會去掉非數字字元,而且客戶可能留市話,
+    // 擋死會影響正常建單流程(這是稽核時明確確認過的決定,不是漏掉)。
+    if (customerEmail.trim() && !isValidEmail(customerEmail)) {
+      toast.error(EMAIL_ERROR_MESSAGE);
+      return;
+    }
     if (requiresCustomerAddress && !customerAddress.trim()) {
       toast.error("請填寫客戶地址");
       return;
@@ -608,7 +650,9 @@ export function BookingFormDialog({
         staffId,
         serviceItems: serviceItemIds.map<BookingServiceItemSelectionInput>((id) => ({
           serviceItemId: id,
-          quantity: Number(itemQuantities[id] ?? "1") || 1,
+          // 2026-09-24 稽核修正(問題 1):跟畫面上的工時加總/金額預覽走同一支解析函式,
+          // 確保「畫面顯示的數量」跟「真正送出的數量」永遠是同一個數字。
+          quantity: parseItemQuantity(itemQuantities[id]),
           unitPrice: Number(itemUnitPrices[id] ?? "0") || 0,
         })),
         startAt: buildTaipeiIso(dateKey, time),
@@ -710,12 +754,17 @@ export function BookingFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>服務人員 *</Label>
+              {/* 2026-09-24 稽核修正(問題 3):這個欄位是最容易踩到「幽靈空值事件」的地方——
+                  在行事曆點某位服務人員的空格建單時,prefill.staffId 是在掛載當下的 useEffect
+                  才灌進 staffId 的,那一刻隱藏原生 select 的選項可能還沒註冊完,會補發一次
+                  空字串把剛選好的服務人員洗掉,客服按送出才被擋下卻不知道哪裡沒選。
+                  合法值是資料庫來的動態清單(服務人員 id),所以判斷條件是「不是空字串」。 */}
               <Select
                 value={staffId}
-                onValueChange={(v) => {
+                onValueChange={guardPhantomEmptyChange((v) => {
                   setStaffId(v);
                   setAssistantStaffIds((prev) => prev.filter((id) => id !== v));
-                }}
+                })}
               >
                 <SelectTrigger className="mt-2">
                   <SelectValue placeholder="請選擇" />
@@ -758,9 +807,14 @@ export function BookingFormDialog({
                 已勾選的項目,見 handleSubmit 附近的 serviceItemIds 獨立狀態)。商家沒有使用分類
                 功能時,下拉只會有「全部」跟「未分類」兩個選項,不影響既有操作流程。 */}
             {(serviceCategories ?? []).length > 0 ? (
+              /* 2026-09-24 稽核修正(問題 3):合法值是 "all"/"uncategorized" 兩個 sentinel
+                 加上資料庫來的動態分類 id,沒有固定白名單可以比對,判斷條件是「不是空字串」。
+                 (categoryFilter 會在每次開啟表單的 useEffect 裡被重設,一樣有時序風險。) */
               <Select
                 value={categoryFilter}
-                onValueChange={(v) => setCategoryFilter(v as ServiceItemCategoryFilter)}
+                onValueChange={guardPhantomEmptyChange<ServiceItemCategoryFilter>(
+                  setCategoryFilter,
+                )}
               >
                 <SelectTrigger className="mt-2">
                   <SelectValue />
@@ -812,6 +866,14 @@ export function BookingFormDialog({
                                   [item.id]: e.target.value,
                                 }))
                               }
+                              // 2026-09-24 稽核修正(問題 1)配套:離開欄位時如果還是空的,
+                              // 自動填回 "1",讓畫面不會停在「空白格子」這種容易誤會的狀態
+                              // (送出時的 parseItemQuantity 本來就會當成 1,這裡只是讓畫面
+                              // 跟實際送出的值一眼看起來就一致)。輸入過程中不干擾,只在離開時補。
+                              onBlur={(e) => {
+                                if (e.target.value.trim() !== "") return;
+                                setItemQuantities((prev) => ({ ...prev, [item.id]: "1" }));
+                              }}
                             />
                           </div>
                           <div className="flex items-center gap-1.5">
@@ -976,9 +1038,17 @@ export function BookingFormDialog({
             </div>
             {discountEnabled ? (
               <div className="flex gap-2">
+                {/* 2026-09-24 稽核修正(問題 3):合法值是固定常數清單(fixed/percentage),
+                    用白名單判斷。白名單直接取 AMOUNT_ADJUSTMENT_MODE_LABELS 的 key,
+                    之後常數增減會自動跟著變,不用記得回來改這裡。
+                    編輯既有訂單時 discountMode 是 useEffect 從 editingDetail 灌進來的,
+                    正是會觸發幽靈空值事件的時序。 */}
                 <Select
                   value={discountMode}
-                  onValueChange={(v) => setDiscountMode(v as AmountAdjustmentMode)}
+                  onValueChange={guardPhantomEmptyChange<AmountAdjustmentMode>(
+                    setDiscountMode,
+                    (v) => v in AMOUNT_ADJUSTMENT_MODE_LABELS,
+                  )}
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue />
@@ -1046,7 +1116,15 @@ export function BookingFormDialog({
                 (見 handleSubmit 的驗證),不是完全禁止選取。 */}
             <div className="border-t border-border pt-3">
               <Label>付款方式 *</Label>
-              <Select value={paymentMethodValue} onValueChange={setPaymentMethodValue}>
+              {/* 2026-09-24 稽核修正(問題 3):合法值是 PAYMENT_METHOD_UNSET 這個 sentinel
+                  加上資料庫來的動態付款方式 id,判斷條件是「不是空字串」。
+                  注意 PAYMENT_METHOD_UNSET("__unset__")本身不是空字串,會正常放行——
+                  編輯模式下客服要主動選回「(未選擇/尚未設定)」仍然做得到,
+                  是否放行由 handleSubmit 的必填驗證決定,不是在這裡擋。 */}
+              <Select
+                value={paymentMethodValue}
+                onValueChange={guardPhantomEmptyChange(setPaymentMethodValue)}
+              >
                 <SelectTrigger className="mt-2">
                   <SelectValue />
                 </SelectTrigger>
@@ -1280,12 +1358,38 @@ export function useTapVsDragOpenState(thresholdPx: number = SLOT_TAP_VS_DRAG_THR
   return { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel };
 }
 
+/** 2026-09-24 新增(可測試性):每一格背景格線目前是哪一種狀態。
+ *
+ * 2026-09-24 使用者要求「例外開啟/例外關閉這個色塊不需要文字說明,只有跨店占用需要文字」之後
+ * (見下方 badgeText="" 的說明),這幾種狀態在畫面上只剩下底色/斜線圖樣的差別,而圖樣本身是
+ * 商家可自訂的動態 inline style(SPECS-INDEX #644),沒有任何穩定的 class 或文字可以選取。
+ * e2e 測試(e2e/staff-portal-v2.spec.ts 10.3.2/10.3.3 核心必測項目)需要驗證「整天/單一時段
+ * 排休之後,商家管理員視角這幾格確實呈現成例外關閉」,所以把狀態本身以 data-slot-state 屬性
+ * 明確標出來,改成斷言狀態而不是斷言文字。這是純粹的可測試性標記,不影響任何畫面呈現。 */
+type DaySlotState =
+  /** 落在可預約時段內,沒有單日例外。 */
+  | "available"
+  /** 不在可預約時段內,也沒有單日例外(預設關閉)。 */
+  | "unavailable"
+  /** 單日例外把這一格「開啟」成可預約。 */
+  | "override-open"
+  /** 單日例外把這一格「關閉」(時段排休/整天排休都走這個狀態)。 */
+  | "override-closed"
+  /** 這位服務人員在同一時段被別家商家的預約佔用。 */
+  | "cross-store-occupied";
+
+function daySlotState(isOverride: boolean, finalAvailable: boolean): DaySlotState {
+  if (isOverride) return finalAvailable ? "override-open" : "override-closed";
+  return finalAvailable ? "available" : "unavailable";
+}
+
 function DaySlotCell({
   top,
   height,
   cellClassName,
   cellStyle,
   ariaLabel,
+  slotState,
   badgeText,
   showCreateOption,
   onCreateBooking,
@@ -1305,6 +1409,8 @@ function DaySlotCell({
     | { backgroundColor: string; backgroundImage: string; borderColor: string; color: string }
     | undefined;
   ariaLabel: string;
+  /** 見上方 DaySlotState 的說明:輸出成 data-slot-state 屬性,給 e2e 測試穩定選取用。 */
+  slotState: DaySlotState;
   badgeText: string;
   showCreateOption: boolean;
   onCreateBooking: () => void;
@@ -1328,6 +1434,7 @@ function DaySlotCell({
           )}
           style={{ top, height, ...cellStyle }}
           aria-label={ariaLabel}
+          data-slot-state={slotState}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -1710,7 +1817,10 @@ function CalendarPageInner() {
                   {s.on_leave ? (
                     <div
                       className="absolute inset-0"
-                      style={calendarStateBlockStyle(effectiveCalendarStateStyles, "full_day_leave")}
+                      style={calendarStateBlockStyle(
+                        effectiveCalendarStateStyles,
+                        "full_day_leave",
+                      )}
                       aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
                     />
                   ) : null}
@@ -1721,129 +1831,144 @@ function CalendarPageInner() {
                   {s.on_leave
                     ? null
                     : slots.map((slot, i) => {
-                    const slotStartMin = timeToMinutes(slot.start);
-                    const slotEndMin = timeToMinutes(slot.end);
+                        const slotStartMin = timeToMinutes(slot.start);
+                        const slotEndMin = timeToMinutes(slot.end);
 
-                    const inWindow = s.available_windows.some(
-                      (w) =>
-                        timeToMinutes(w.start_time) <= slotStartMin &&
-                        timeToMinutes(w.end_time) >= slotEndMin,
-                    );
+                        const inWindow = s.available_windows.some(
+                          (w) =>
+                            timeToMinutes(w.start_time) <= slotStartMin &&
+                            timeToMinutes(w.end_time) >= slotEndMin,
+                        );
 
-                    const matchedOverride = s.availability_overrides.find(
-                      (o) =>
-                        timeToMinutes(o.start_time) <= slotStartMin &&
-                        timeToMinutes(o.end_time) >= slotEndMin,
-                    );
-                    const isOverride = Boolean(matchedOverride);
-                    // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
-                    const finalAvailable = matchedOverride
-                      ? matchedOverride.is_available
-                      : inWindow;
+                        const matchedOverride = s.availability_overrides.find(
+                          (o) =>
+                            timeToMinutes(o.start_time) <= slotStartMin &&
+                            timeToMinutes(o.end_time) >= slotEndMin,
+                        );
+                        const isOverride = Boolean(matchedOverride);
+                        // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
+                        const finalAvailable = matchedOverride
+                          ? matchedOverride.is_available
+                          : inWindow;
 
-                    const foreignBusy = s.foreign_bookings.some((b) => {
-                      const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
-                      const bEnd = timeToMinutes(isoToTaipeiTime(b.end_at));
-                      return bStart < slotEndMin && bEnd > slotStartMin;
-                    });
+                        const foreignBusy = s.foreign_bookings.some((b) => {
+                          const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
+                          const bEnd = timeToMinutes(isoToTaipeiTime(b.end_at));
+                          return bStart < slotEndMin && bEnd > slotStartMin;
+                        });
 
-                    if (foreignBusy) {
-                      // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
-                      // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
-                      return (
-                        <div
-                          key={slot.start}
-                          className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
-                          style={{
-                            top: i * SLOT_PX,
-                            height: SLOT_PX,
-                            ...calendarStateBlockStyle(effectiveCalendarStateStyles, "cross_store_occupied"),
-                          }}
-                        >
-                          外店預約中
-                        </div>
-                      );
-                    }
-
-                    // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
-                    // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
-                    if (!finalAvailable && !canManageDayOverride) {
-                      return (
-                        <div
-                          key={slot.start}
-                          className="absolute inset-x-0 border-b border-border bg-muted/40"
-                          style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                          aria-label="不可預約"
-                        />
-                      );
-                    }
-
-                    // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
-                    // 管理員一眼看出這是臨時調整過的,不是預設狀態。
-                    // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
-                    // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
-                    // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
-                    const cellClassName = finalAvailable
-                      ? isOverride
-                        ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
-                        : "bg-background hover:bg-brand-soft/40"
-                      : isOverride
-                        ? "hover:opacity-80"
-                        : "bg-muted/40 hover:bg-muted/60";
-                    const cellStyle =
-                      isOverride && !finalAvailable
-                        ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
-                        : undefined;
-
-                    // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
-                    // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
-                    return (
-                      <DaySlotCell
-                        key={slot.start}
-                        top={i * SLOT_PX}
-                        height={SLOT_PX}
-                        cellClassName={cellClassName}
-                        cellStyle={cellStyle}
-                        ariaLabel={finalAvailable ? "可預約" : "不可預約"}
-                        // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
-                        // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
-                        // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
-                        // 「這是被別家佔用,不是本店自己的例外設定」這件事。
-                        badgeText=""
-                        // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
-                        // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
-                        // 實際可預約時才提供。
-                        showCreateOption={finalAvailable}
-                        onCreateBooking={() =>
-                          openCreateForm({
-                            staffId: s.staff_id,
-                            dateKey: selectedDateKey,
-                            time: slot.start,
-                          })
-                        }
-                        // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
-                        // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
-                        // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
-                        // 不再跳對話框選時間範圍。
-                        showOverrideOption={canManageDayOverride}
-                        overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
-                        onToggleOverride={() =>
-                          handleToggleDayOverride(s.staff_id, slot.start, slot.end, finalAvailable)
-                        }
-                        showClearOverrideOption={
-                          canManageDayOverride && isOverride && Boolean(matchedOverride)
-                        }
-                        onClearOverride={() => {
-                          if (!matchedOverride) return;
-                          handleClearOverride(
-                            s.staff_id,
-                            matchedOverride.start_time,
-                            matchedOverride.end_time,
+                        if (foreignBusy) {
+                          // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
+                          // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
+                          return (
+                            <div
+                              key={slot.start}
+                              className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
+                              style={{
+                                top: i * SLOT_PX,
+                                height: SLOT_PX,
+                                ...calendarStateBlockStyle(
+                                  effectiveCalendarStateStyles,
+                                  "cross_store_occupied",
+                                ),
+                              }}
+                              data-slot-state="cross-store-occupied"
+                            >
+                              外店預約中
+                            </div>
                           );
-                        }}
-                      />
-                    );
-                  })}
+                        }
+
+                        // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
+                        // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
+                        if (!finalAvailable && !canManageDayOverride) {
+                          return (
+                            <div
+                              key={slot.start}
+                              className="absolute inset-x-0 border-b border-border bg-muted/40"
+                              style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                              aria-label="不可預約"
+                              // 沒有 business_hours 權限的人走這個純視覺分支,一樣標出狀態,
+                              // 讓「不同權限視角看到的同一格是不是同一個狀態」也能被測試比對。
+                              data-slot-state={daySlotState(isOverride, finalAvailable)}
+                            />
+                          );
+                        }
+
+                        // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
+                        // 管理員一眼看出這是臨時調整過的,不是預設狀態。
+                        // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
+                        // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
+                        // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
+                        const cellClassName = finalAvailable
+                          ? isOverride
+                            ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
+                            : "bg-background hover:bg-brand-soft/40"
+                          : isOverride
+                            ? "hover:opacity-80"
+                            : "bg-muted/40 hover:bg-muted/60";
+                        const cellStyle =
+                          isOverride && !finalAvailable
+                            ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
+                            : undefined;
+
+                        // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
+                        // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
+                        return (
+                          <DaySlotCell
+                            key={slot.start}
+                            top={i * SLOT_PX}
+                            height={SLOT_PX}
+                            cellClassName={cellClassName}
+                            cellStyle={cellStyle}
+                            ariaLabel={finalAvailable ? "可預約" : "不可預約"}
+                            // 見 DaySlotState 的說明:斜線圖樣不帶文字之後,這是唯一能穩定
+                            // 分辨「例外關閉」跟「預設關閉」的標記。
+                            slotState={daySlotState(isOverride, finalAvailable)}
+                            // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
+                            // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
+                            // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
+                            // 「這是被別家佔用,不是本店自己的例外設定」這件事。
+                            badgeText=""
+                            // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
+                            // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
+                            // 實際可預約時才提供。
+                            showCreateOption={finalAvailable}
+                            onCreateBooking={() =>
+                              openCreateForm({
+                                staffId: s.staff_id,
+                                dateKey: selectedDateKey,
+                                time: slot.start,
+                              })
+                            }
+                            // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
+                            // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
+                            // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
+                            // 不再跳對話框選時間範圍。
+                            showOverrideOption={canManageDayOverride}
+                            overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
+                            onToggleOverride={() =>
+                              handleToggleDayOverride(
+                                s.staff_id,
+                                slot.start,
+                                slot.end,
+                                finalAvailable,
+                              )
+                            }
+                            showClearOverrideOption={
+                              canManageDayOverride && isOverride && Boolean(matchedOverride)
+                            }
+                            onClearOverride={() => {
+                              if (!matchedOverride) return;
+                              handleClearOverride(
+                                s.staff_id,
+                                matchedOverride.start_time,
+                                matchedOverride.end_time,
+                              );
+                            }}
+                          />
+                        );
+                      })}
 
                   {/* 1.3:同一筆預約合併顯示成一個跨越多格高度的連續色塊,疊在背景格線上方。 */}
                   {s.bookings.map((b: DayScheduleOwnBooking) => {

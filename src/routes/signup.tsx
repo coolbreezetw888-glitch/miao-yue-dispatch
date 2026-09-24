@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
+import { translateAuthErrorMessage } from "@/lib/authErrorMessages";
 
 export default function SignUp() {
   const navigate = useNavigate();
@@ -24,7 +25,10 @@ export default function SignUp() {
     });
     setLoading(false);
     if (error) {
-      toast.error("註冊失敗", { description: error.message });
+      // 2026-09-24 深夜巡檢修正:同 signin.tsx——原本直接顯示 Supabase 的英文訊息
+      // (Email 已存在時是「User already registered」)。改用共用的對照表
+      // (src/lib/authErrorMessages.ts),查不到的訊息仍然原樣顯示英文原文。
+      toast.error("註冊失敗", { description: translateAuthErrorMessage(error.message) });
       return;
     }
     if (data.session) {

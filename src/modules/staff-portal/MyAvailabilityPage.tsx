@@ -20,7 +20,11 @@ import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 // e2e 測試抓到並修正。
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
 
-import { upsertMyAvailabilityWindow, deleteMyAvailabilityWindow, useActiveMyStaffRecord } from "./context";
+import {
+  upsertMyAvailabilityWindow,
+  deleteMyAvailabilityWindow,
+  useActiveMyStaffRecord,
+} from "./context";
 import { DayOffTabsSection } from "./DayOffTabsSection";
 import { RequireStaffAvailabilityAccess } from "./RequireStaffAvailabilityAccess";
 
@@ -74,7 +78,9 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
     <Card>
       <CardHeader>
         <CardTitle>每週固定可預約時段</CardTitle>
-        <CardDescription>這裡設定的是你自己願意接單的時段,完全沒有設定時這次還不可預約。</CardDescription>
+        <CardDescription>
+          這裡設定的是你自己願意接單的時段,完全沒有設定時這次還不可預約。
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -94,7 +100,12 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
                   星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
                   {w.end_time.slice(0, 5)}
                 </span>
-                <Button type="button" variant="outline" size="sm" onClick={() => handleRemove(w.id)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRemove(w.id)}
+                >
                   刪除
                 </Button>
               </li>

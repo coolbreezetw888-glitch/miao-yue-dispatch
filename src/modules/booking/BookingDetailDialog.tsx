@@ -37,7 +37,10 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { ConfirmBookingLineDialog } from "@/modules/line-notifications/ConfirmBookingLineDialog";
-import { dispatchLineNotification, usePendingLineNotificationPreview } from "@/modules/line-notifications/api";
+import {
+  dispatchLineNotification,
+  usePendingLineNotificationPreview,
+} from "@/modules/line-notifications/api";
 import type { PendingLineNotificationTarget } from "@/modules/line-notifications/types";
 
 import {
@@ -238,8 +241,10 @@ export function BookingDetailDialog({
 
   // 模組 6 §9.1(SPECS-INDEX #597):操作記錄查詢,只在打開這個子畫面時才查(比照「相關訂單」
   // 既有的 enabled 條件寫法),不用等使用者點開按鈕就預先撈。
-  const { data: statusChangeLogs, isLoading: statusChangeLogsLoading } =
-    useBookingStatusChangeLogs(viewingBookingId, open && showLogs);
+  const { data: statusChangeLogs, isLoading: statusChangeLogsLoading } = useBookingStatusChangeLogs(
+    viewingBookingId,
+    open && showLogs,
+  );
 
   // 模組 11(LINE 通知)規則 2.5/§4.8:確認訂單前先預覽會不會通知任何人——沒有目標就直接確認,
   // 有目標才彈出 Yes/No 對話框,兩個選項都會執行 confirm_booking(),差別只在於「是」之後才呼叫
@@ -344,322 +349,320 @@ export function BookingDetailDialog({
   // 不用改(§5 第 3 點),巢狀在下面 showEditAndCancel 區塊裡,原封不動搬過來。
   return (
     <>
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="flex h-[92vh] max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-xl p-0"
-      >
-        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
-          <SheetTitle>
-            {showRelated ? "相關訂單" : showLogs ? "操作記錄" : "預約詳情"}
-          </SheetTitle>
-        </SheetHeader>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side="bottom"
+          className="flex h-[92vh] max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-xl p-0"
+        >
+          <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
+            <SheetTitle>{showRelated ? "相關訂單" : showLogs ? "操作記錄" : "預約詳情"}</SheetTitle>
+          </SheetHeader>
 
-        <div className="min-w-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
-          {showLogs ? (
-            <StatusChangeLogsView
-              loading={statusChangeLogsLoading}
-              logs={statusChangeLogs ?? []}
-              onBack={() => setShowLogs(false)}
-            />
-          ) : showRelated ? (
-            <RelatedBookingsView
-              loading={relatedLoading}
-              bookings={relatedBookings ?? []}
-              onBack={() => setShowRelated(false)}
-              onSelect={(id) => {
-                setViewingBookingId(id);
-                setShowRelated(false);
-              }}
-            />
-          ) : (
-            <>
-              {/* 預約詳情資訊擴充與建單備註分類第四節:操作按鈕從彈窗最下方搬到標題下方、
+          <div className="min-w-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+            {showLogs ? (
+              <StatusChangeLogsView
+                loading={statusChangeLogsLoading}
+                logs={statusChangeLogs ?? []}
+                onBack={() => setShowLogs(false)}
+              />
+            ) : showRelated ? (
+              <RelatedBookingsView
+                loading={relatedLoading}
+                bookings={relatedBookings ?? []}
+                onBack={() => setShowRelated(false)}
+                onSelect={(id) => {
+                  setViewingBookingId(id);
+                  setShowRelated(false);
+                }}
+              />
+            ) : (
+              <>
+                {/* 預約詳情資訊擴充與建單備註分類第四節:操作按鈕從彈窗最下方搬到標題下方、
                 資訊列之上,純版面位置調整,按鈕本身的顯示條件/點擊行為完全不變。 */}
-              {booking && (showConfirm || showComplete || showEditAndCancel) ? (
-                <div className="flex flex-wrap items-center gap-2 sm:justify-between">
-                  {showEditAndCancel ? (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button type="button" variant="outline" disabled={busy}>
-                          取消預約
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>確定要取消這筆預約嗎?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            取消後這個時段會恢復可預約,可以填寫取消原因(選填)。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <Textarea
-                          placeholder="取消原因(選填)"
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          rows={2}
-                        />
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>再想想</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleCancel}>確定取消</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
+                {booking && (showConfirm || showComplete || showEditAndCancel) ? (
+                  <div className="flex flex-wrap items-center gap-2 sm:justify-between">
                     {showEditAndCancel ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => onEdit(booking.id)}
-                      >
-                        編輯
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button type="button" variant="outline" disabled={busy}>
+                            取消預約
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>確定要取消這筆預約嗎?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              取消後這個時段會恢復可預約,可以填寫取消原因(選填)。
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <Textarea
+                            placeholder="取消原因(選填)"
+                            value={reason}
+                            onChange={(e) => setReason(e.target.value)}
+                            rows={2}
+                          />
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>再想想</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleCancel}>確定取消</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     ) : null}
-                    {showConfirm ? (
-                      <Button type="button" onClick={handleConfirm} disabled={busy}>
-                        確認訂單
-                      </Button>
-                    ) : null}
-                    {showComplete ? (
-                      <Button type="button" onClick={handleComplete} disabled={busy}>
-                        標記完成
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
-              {isLoading || !booking ? (
-                <p className="text-sm text-muted-foreground">載入中⋯</p>
-              ) : (
-                <div className="min-w-0 space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">訂單狀態</span>
-                    <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
-                      {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">建單時間</span>
-                    <span className="font-medium text-foreground">
-                      {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
-                    </span>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="shrink-0 text-muted-foreground">預約客服</span>
-                    <span className="min-w-0 break-words text-right font-medium text-foreground">
-                      {booking.createdByName}
-                    </span>
-                  </div>
-                  {booking.lastModifiedByName && booking.last_modified_at ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="shrink-0 text-muted-foreground">最後修改</span>
-                      <span className="min-w-0 break-words text-right font-medium text-foreground">
-                        {booking.lastModifiedByName} ・{" "}
-                        {isoToTaipeiDateTimeWithSeconds(booking.last_modified_at)}
-                      </span>
-                    </div>
-                  ) : null}
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="shrink-0 text-muted-foreground">服務人員</span>
-                    <span className="min-w-0 break-words text-right font-medium text-foreground">
-                      {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
-                    </span>
-                  </div>
-                  {booking.assistants.length > 0 ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="shrink-0 text-muted-foreground">助手</span>
-                      <span className="min-w-0 break-words text-right font-medium text-foreground">
-                        {booking.assistants.map((a) => a.staffName).join("、")}
-                      </span>
-                    </div>
-                  ) : null}
-
-                  {/* 模組 6 §3.1:金額明細改用快照(quantity × unitPriceSnapshot),取代原本的即時查價。 */}
-                  <div>
-                    <span className="text-muted-foreground">服務項目</span>
-                    <ul className="mt-1 space-y-0.5">
-                      {booking.serviceItems.map((i) => (
-                        <li
-                          key={i.id}
-                          className="flex items-start justify-between gap-3 text-foreground"
+                    <div className="flex flex-wrap gap-2">
+                      {showEditAndCancel ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => onEdit(booking.id)}
                         >
-                          <span className="min-w-0 break-words">
-                            {i.name} × {i.quantity}
-                          </span>
-                          <span className="shrink-0">{formatAmount(i.lineTotal)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
-                      <span className="text-muted-foreground">
-                        服務金額小計
-                        {booking.custom_total_amount_enabled ? "(已套用自訂總金額)" : ""}
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {formatAmount(booking.subtotal_amount_snapshot)}
-                      </span>
-                    </div>
-                    {booking.discount_enabled ? (
-                      <div className="mt-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          折扣(
-                          {booking.discount_mode
-                            ? AMOUNT_ADJUSTMENT_MODE_LABELS[
-                                booking.discount_mode as "fixed" | "percentage"
-                              ]
-                            : ""}
-                          )
-                        </span>
-                        <span className="font-medium text-foreground">
-                          -{formatAmount(booking.discount_amount_snapshot)}
-                        </span>
-                      </div>
-                    ) : null}
-                    {booking.tax_enabled ? (
-                      <div className="mt-1 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          稅金(
-                          {booking.tax_mode_snapshot
-                            ? AMOUNT_ADJUSTMENT_MODE_LABELS[
-                                booking.tax_mode_snapshot as "fixed" | "percentage"
-                              ]
-                            : ""}
-                          )
-                        </span>
-                        <span className="font-medium text-foreground">
-                          +{formatAmount(booking.tax_amount_snapshot)}
-                        </span>
-                      </div>
-                    ) : null}
-                    <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
-                      <span className="font-semibold text-foreground">最終金額</span>
-                      <span className="text-base font-bold text-cta">
-                        {formatAmount(booking.final_amount_snapshot)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 模組 9(支付方式)v2:直接顯示快照文字,沒有選擇時顯示「尚未設定」。 */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">付款方式</span>
-                    <span className="font-medium text-foreground">
-                      {getPaymentMethodLabel(booking.payment_method_name_snapshot)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">預約時間</span>
-                    <span className="font-medium text-foreground">
-                      {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
-                      {/* 模組 6 §3.1/§4.3:自訂工時開啟時,工時旁邊註明,避免管理員誤以為是逐項
-                        加總算出來的。 */}
-                      {booking.custom_duration_enabled ? (
-                        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                          (已套用自訂工時 {booking.custom_duration_minutes} 分鐘)
-                        </span>
+                          編輯
+                        </Button>
                       ) : null}
-                    </span>
-                  </div>
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="shrink-0 text-muted-foreground">客戶姓名</span>
-                    <span className="min-w-0 break-words text-right font-medium text-foreground">
-                      {booking.customer_name} ・ {booking.customer_phone}
-                    </span>
-                  </div>
-                  {/* 模組 10(會員與紅利)§4.5:member_name_snapshot 有值才顯示這個區塊。有
-                      members 權限(或管理員)才做成可點擊連結,否則只顯示純文字。 */}
-                  {booking.member_name_snapshot ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="shrink-0 text-muted-foreground">會員</span>
-                      {canViewMemberProfile && booking.member_id ? (
-                        <Link
-                          to={`/app/members/${booking.member_id}`}
-                          className="min-w-0 break-words text-right font-medium text-brand hover:underline"
-                        >
-                          {booking.member_name_snapshot}
-                        </Link>
-                      ) : (
-                        <span className="min-w-0 break-words text-right font-medium text-foreground">
-                          {booking.member_name_snapshot}
-                        </span>
-                      )}
+                      {showConfirm ? (
+                        <Button type="button" onClick={handleConfirm} disabled={busy}>
+                          確認訂單
+                        </Button>
+                      ) : null}
+                      {showComplete ? (
+                        <Button type="button" onClick={handleComplete} disabled={busy}>
+                          標記完成
+                        </Button>
+                      ) : null}
                     </div>
-                  ) : null}
-                  {booking.customer_address ? (
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="shrink-0 text-muted-foreground">客戶地址</span>
-                      <span className="min-w-0 break-words text-right font-medium text-foreground">
-                        {booking.customer_address}
+                  </div>
+                ) : null}
+
+                {isLoading || !booking ? (
+                  <p className="text-sm text-muted-foreground">載入中⋯</p>
+                ) : (
+                  <div className="min-w-0 space-y-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">訂單狀態</span>
+                      <Badge variant={bookingStatusBadgeVariant(booking.status as BookingStatus)}>
+                        {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">建單時間</span>
+                      <span className="font-medium text-foreground">
+                        {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
                       </span>
                     </div>
-                  ) : null}
-                  {booking.customer_notes ? (
-                    <div>
-                      <span className="text-muted-foreground">客戶備註</span>
-                      <p className="mt-1 text-foreground">{booking.customer_notes}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="shrink-0 text-muted-foreground">預約客服</span>
+                      <span className="min-w-0 break-words text-right font-medium text-foreground">
+                        {booking.createdByName}
+                      </span>
                     </div>
-                  ) : null}
-                  {booking.materialCosts.length > 0 ? (
+                    {booking.lastModifiedByName && booking.last_modified_at ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="shrink-0 text-muted-foreground">最後修改</span>
+                        <span className="min-w-0 break-words text-right font-medium text-foreground">
+                          {booking.lastModifiedByName} ・{" "}
+                          {isoToTaipeiDateTimeWithSeconds(booking.last_modified_at)}
+                        </span>
+                      </div>
+                    ) : null}
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="shrink-0 text-muted-foreground">服務人員</span>
+                      <span className="min-w-0 break-words text-right font-medium text-foreground">
+                        {staffNameById.get(booking.staff_id) ?? "(未知人員)"}
+                      </span>
+                    </div>
+                    {booking.assistants.length > 0 ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="shrink-0 text-muted-foreground">助手</span>
+                        <span className="min-w-0 break-words text-right font-medium text-foreground">
+                          {booking.assistants.map((a) => a.staffName).join("、")}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {/* 模組 6 §3.1:金額明細改用快照(quantity × unitPriceSnapshot),取代原本的即時查價。 */}
                     <div>
-                      <span className="text-muted-foreground">料錢成本</span>
+                      <span className="text-muted-foreground">服務項目</span>
                       <ul className="mt-1 space-y-0.5">
-                        {booking.materialCosts.map((c) => (
-                          <li key={c.materialCostItemId} className="break-words text-foreground">
-                            {c.name} ・ {formatAmount(c.amountSnapshot)}
+                        {booking.serviceItems.map((i) => (
+                          <li
+                            key={i.id}
+                            className="flex items-start justify-between gap-3 text-foreground"
+                          >
+                            <span className="min-w-0 break-words">
+                              {i.name} × {i.quantity}
+                            </span>
+                            <span className="shrink-0">{formatAmount(i.lineTotal)}</span>
                           </li>
                         ))}
                       </ul>
+                      <div className="mt-1 flex items-center justify-between border-t border-border pt-1 text-xs">
+                        <span className="text-muted-foreground">
+                          服務金額小計
+                          {booking.custom_total_amount_enabled ? "(已套用自訂總金額)" : ""}
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {formatAmount(booking.subtotal_amount_snapshot)}
+                        </span>
+                      </div>
+                      {booking.discount_enabled ? (
+                        <div className="mt-1 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            折扣(
+                            {booking.discount_mode
+                              ? AMOUNT_ADJUSTMENT_MODE_LABELS[
+                                  booking.discount_mode as "fixed" | "percentage"
+                                ]
+                              : ""}
+                            )
+                          </span>
+                          <span className="font-medium text-foreground">
+                            -{formatAmount(booking.discount_amount_snapshot)}
+                          </span>
+                        </div>
+                      ) : null}
+                      {booking.tax_enabled ? (
+                        <div className="mt-1 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            稅金(
+                            {booking.tax_mode_snapshot
+                              ? AMOUNT_ADJUSTMENT_MODE_LABELS[
+                                  booking.tax_mode_snapshot as "fixed" | "percentage"
+                                ]
+                              : ""}
+                            )
+                          </span>
+                          <span className="font-medium text-foreground">
+                            +{formatAmount(booking.tax_amount_snapshot)}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="mt-1 flex items-center justify-between border-t border-border pt-1">
+                        <span className="font-semibold text-foreground">最終金額</span>
+                        <span className="text-base font-bold text-cta">
+                          {formatAmount(booking.final_amount_snapshot)}
+                        </span>
+                      </div>
                     </div>
-                  ) : null}
-                  {booking.notes ? (
-                    <div>
-                      <span className="text-muted-foreground">內部備註</span>
-                      <p className="mt-1 text-foreground">{booking.notes}</p>
-                    </div>
-                  ) : null}
 
-                  {/* 模組 6 §3.3:相關訂單按鈕。§9.1(SPECS-INDEX #597):操作記錄按鈕,
+                    {/* 模組 9(支付方式)v2:直接顯示快照文字,沒有選擇時顯示「尚未設定」。 */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">付款方式</span>
+                      <span className="font-medium text-foreground">
+                        {getPaymentMethodLabel(booking.payment_method_name_snapshot)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">預約時間</span>
+                      <span className="font-medium text-foreground">
+                        {isoToTaipeiTime(booking.start_at)} - {isoToTaipeiTime(booking.end_at)}
+                        {/* 模組 6 §3.1/§4.3:自訂工時開啟時,工時旁邊註明,避免管理員誤以為是逐項
+                        加總算出來的。 */}
+                        {booking.custom_duration_enabled ? (
+                          <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                            (已套用自訂工時 {booking.custom_duration_minutes} 分鐘)
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="shrink-0 text-muted-foreground">客戶姓名</span>
+                      <span className="min-w-0 break-words text-right font-medium text-foreground">
+                        {booking.customer_name} ・ {booking.customer_phone}
+                      </span>
+                    </div>
+                    {/* 模組 10(會員與紅利)§4.5:member_name_snapshot 有值才顯示這個區塊。有
+                      members 權限(或管理員)才做成可點擊連結,否則只顯示純文字。 */}
+                    {booking.member_name_snapshot ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="shrink-0 text-muted-foreground">會員</span>
+                        {canViewMemberProfile && booking.member_id ? (
+                          <Link
+                            to={`/app/members/${booking.member_id}`}
+                            className="min-w-0 break-words text-right font-medium text-brand hover:underline"
+                          >
+                            {booking.member_name_snapshot}
+                          </Link>
+                        ) : (
+                          <span className="min-w-0 break-words text-right font-medium text-foreground">
+                            {booking.member_name_snapshot}
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                    {booking.customer_address ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="shrink-0 text-muted-foreground">客戶地址</span>
+                        <span className="min-w-0 break-words text-right font-medium text-foreground">
+                          {booking.customer_address}
+                        </span>
+                      </div>
+                    ) : null}
+                    {booking.customer_notes ? (
+                      <div>
+                        <span className="text-muted-foreground">客戶備註</span>
+                        <p className="mt-1 text-foreground">{booking.customer_notes}</p>
+                      </div>
+                    ) : null}
+                    {booking.materialCosts.length > 0 ? (
+                      <div>
+                        <span className="text-muted-foreground">料錢成本</span>
+                        <ul className="mt-1 space-y-0.5">
+                          {booking.materialCosts.map((c) => (
+                            <li key={c.materialCostItemId} className="break-words text-foreground">
+                              {c.name} ・ {formatAmount(c.amountSnapshot)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {booking.notes ? (
+                      <div>
+                        <span className="text-muted-foreground">內部備註</span>
+                        <p className="mt-1 text-foreground">{booking.notes}</p>
+                      </div>
+                    ) : null}
+
+                    {/* 模組 6 §3.3:相關訂單按鈕。§9.1(SPECS-INDEX #597):操作記錄按鈕,
                       比照相關訂單按鈕的視覺樣式與互動模式,並排放在同一列。 */}
-                  <div className="flex gap-2 border-t border-border pt-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setShowRelated(true)}
-                    >
-                      相關訂單
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setShowLogs(true)}
-                    >
-                      操作記錄
-                    </Button>
+                    <div className="flex gap-2 border-t border-border pt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setShowRelated(true)}
+                      >
+                        相關訂單
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setShowLogs(true)}
+                      >
+                        操作記錄
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+                )}
+              </>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
-    {/* 模組 11(LINE 通知)§4.8/規則 2.5:有實際會被通知的對象時才顯示,兩個選項都會執行
+      {/* 模組 11(LINE 通知)§4.8/規則 2.5:有實際會被通知的對象時才顯示,兩個選項都會執行
         confirm_booking(),差別只在於要不要額外呼叫 dispatchLineNotification。刻意放在 Sheet
         外層(獨立的 Radix AlertDialog root),避免巢狀在同一個 Sheet root 底下互相干擾。 */}
-    <ConfirmBookingLineDialog
-      open={showLineDialog}
-      targets={lineDialogTargets}
-      busy={busy}
-      onOpenChange={setShowLineDialog}
-      onChoice={(shouldNotify) => void doConfirm(shouldNotify)}
-    />
+      <ConfirmBookingLineDialog
+        open={showLineDialog}
+        targets={lineDialogTargets}
+        busy={busy}
+        onOpenChange={setShowLineDialog}
+        onChoice={(shouldNotify) => void doConfirm(shouldNotify)}
+      />
     </>
   );
 }

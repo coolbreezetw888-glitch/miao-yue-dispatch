@@ -64,7 +64,11 @@ import {
   type UpsertMemberTierInput,
 } from "./api";
 import { RequireMemberSettingsAccess } from "./RequireMemberSettingsAccess";
-import { REWARD_CONDITION_MODE_LABELS, type MerchantMemberTier, type RewardConditionMode } from "./types";
+import {
+  REWARD_CONDITION_MODE_LABELS,
+  type MerchantMemberTier,
+  type RewardConditionMode,
+} from "./types";
 
 const memberSettingsQueryKey = (merchantId: string) =>
   ["members-module", "merchant-member-settings", merchantId] as const;
@@ -225,7 +229,9 @@ function TierFormDialog({
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
             />
-            <p className="mt-1 text-xs text-muted-foreground">數字小的排前面,例如一般會員 0、VIP 1。</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              數字小的排前面,例如一般會員 0、VIP 1。
+            </p>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -299,7 +305,10 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{tier.name}</p>
-                  <Badge variant={tier.status === "active" ? "default" : "secondary"} className="mt-1">
+                  <Badge
+                    variant={tier.status === "active" ? "default" : "secondary"}
+                    className="mt-1"
+                  >
                     {tier.status === "active" ? "上架中" : "已下架"}
                   </Badge>
                 </div>
@@ -364,7 +373,9 @@ function MemberSettingsPageInner() {
     setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
   }, [settings]);
 
-  async function saveSettings(overrides: Partial<Parameters<typeof upsertMerchantMemberSettings>[1]>) {
+  async function saveSettings(
+    overrides: Partial<Parameters<typeof upsertMerchantMemberSettings>[1]>,
+  ) {
     await upsertMerchantMemberSettings(merchantId, {
       pointsEarnRate,
       referralBonusPoints,
@@ -482,11 +493,13 @@ function MemberSettingsPageInner() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map((mode) => (
-                  <SelectItem key={mode} value={mode}>
-                    {REWARD_CONDITION_MODE_LABELS[mode]}
-                  </SelectItem>
-                ))}
+                {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
+                  (mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {REWARD_CONDITION_MODE_LABELS[mode]}
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
           )}

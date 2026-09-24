@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { acquireBottomActionBarSlot, BOTTOM_LAYER_ACTION_BAR } from "@/lib/bottomFixedLayers";
 import { cn } from "@/lib/utils";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -108,6 +109,37 @@ function MerchantSettingsPageInner() {
     setAnnouncementContent(merchant.announcement_content ?? "");
   }, [merchant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 使用者回報(2026-09-24):「儲存變更」按鈕在頁面最下方(要捲過地址/電話/主題色/公告/管理員
+  // 名單才看得到),而上方的「產業模組」下拉選單改完之後沒有任何提示,使用者以為選了就生效,
+  // 結果根本沒存到。這裡比對表單目前的值跟資料庫存的值,只要有任何一項不一樣就顯示一條固定在
+  // 畫面底部的提示列(見下方 render),讓「你還沒儲存」這件事不可能被忽略。
+  // LOGO 不列入比對——它在上傳成功的當下就已經自己存檔了(見 handleLogoUpload),不走這個表單。
+  //
+  // 2026-09-24 深夜巡檢修正:這段計算刻意放在下面兩個提早 return(載入中/找不到商家)之前,
+  // 因為緊接著的 useEffect 必須在每一次 render 都被呼叫到,不能被提早 return 跳過(React Hooks
+  // 規則)。還沒載到商家資料時一律當作「沒有未儲存變更」。
+  const hasUnsavedChanges = merchant
+    ? name !== merchant.name ||
+      industryType !== merchant.industry_type ||
+      address !== (merchant.address ?? "") ||
+      phone !== (merchant.phone ?? "") ||
+      contactEmail !== (merchant.contact_email ?? "") ||
+      intro !== (merchant.intro ?? "") ||
+      themePreset !== merchant.theme_preset ||
+      themeCustomColor !== merchant.theme_custom_color ||
+      announcementEnabled !== merchant.announcement_enabled ||
+      announcementContent !== (merchant.announcement_content ?? "")
+    : false;
+
+  // 2026-09-24 深夜巡檢修正(重疊事故):底部的未儲存提示列跟 PWA 安裝提示條原本各自寫死
+  // 一模一樣的 `fixed inset-x-0 bottom-16 z-40`,安裝提示條會把「儲存變更」那顆按鈕整個蓋掉。
+  // 現在兩邊都改從 src/lib/bottomFixedLayers.ts 取 class,而且這條提示列出現時主動登記一下,
+  // 讓優先度較低的提示條自動往上讓開。完整原委見那個檔案開頭的說明。
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    return acquireBottomActionBarSlot();
+  }, [hasUnsavedChanges]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
@@ -123,23 +155,6 @@ function MerchantSettingsPageInner() {
       </div>
     );
   }
-
-  // 使用者回報(2026-09-24):「儲存變更」按鈕在頁面最下方(要捲過地址/電話/主題色/公告/管理員
-  // 名單才看得到),而上方的「產業模組」下拉選單改完之後沒有任何提示,使用者以為選了就生效,
-  // 結果根本沒存到。這裡比對表單目前的值跟資料庫存的值,只要有任何一項不一樣就顯示一條固定在
-  // 畫面底部的提示列(見下方 render),讓「你還沒儲存」這件事不可能被忽略。
-  // LOGO 不列入比對——它在上傳成功的當下就已經自己存檔了(見 handleLogoUpload),不走這個表單。
-  const hasUnsavedChanges =
-    name !== merchant.name ||
-    industryType !== merchant.industry_type ||
-    address !== (merchant.address ?? "") ||
-    phone !== (merchant.phone ?? "") ||
-    contactEmail !== (merchant.contact_email ?? "") ||
-    intro !== (merchant.intro ?? "") ||
-    themePreset !== merchant.theme_preset ||
-    themeCustomColor !== merchant.theme_custom_color ||
-    announcementEnabled !== merchant.announcement_enabled ||
-    announcementContent !== (merchant.announcement_content ?? "");
 
   async function handleLogoUpload(file: File) {
     const url = await uploadMerchantLogo(merchant!.id, file);
@@ -166,7 +181,12 @@ function MerchantSettingsPageInner() {
       await refetchAccessibleMerchants();
       toast.success("商家設定已儲存");
     } catch (err) {
-      toast.error("儲存失敗", { description: err instanceof Error ? err.message : "請稍後再試" });
+      // 2026-09-24 深夜巡檢修正:原本寫 `err instanceof Error ? err.message : "請稍後再試"`,
+      // 但 Supabase 回傳的 error 只是 JSON.parse 出來的一般物件、不是 Error 的實例,
+      // instanceof 永遠 false,資料庫真正擋下來的原因(欄位約束、權限、防呆訊息)永遠被吞掉。
+      // 改用本檔案上方早就 import 好、卻漏了在這裡使用的 getErrorMessage()。
+      // 完整根因見 src/modules/platform-admin/getErrorMessage.ts 的檔頭說明。
+      toast.error("儲存失敗", { description: getErrorMessage(err, "請稍後再試") });
     } finally {
       setSaving(false);
     }
@@ -387,18 +407,21 @@ function MerchantSettingsPageInner() {
 
       {/* 使用者回報(2026-09-24):原本唯一的「儲存變更」按鈕在頁面最下方,使用者在上方改完
           「產業模組」之後,沒有任何提示告訴他還沒儲存,結果以為選了就生效。這條提示列只在真的
-          有未儲存變更時才出現,固定在畫面底部(疊在底部分頁籤上方,bottom-16 讓開分頁籤的高度),
-          不管捲到哪裡都看得到,而且直接附一顆儲存按鈕,不用再捲回去找。 */}
+          有未儲存變更時才出現,固定在畫面底部(疊在底部分頁籤上方,讓開分頁籤的高度),
+          不管捲到哪裡都看得到,而且直接附一顆儲存按鈕,不用再捲回去找。
+          位置/層級一律取自 src/lib/bottomFixedLayers.ts 的 BOTTOM_LAYER_ACTION_BAR,不再自己
+          寫死 bottom 距離跟 z-index(2026-09-24 深夜巡檢:寫死的數字跟 PWA 安裝提示條撞在一起,
+          那條提示把這顆儲存按鈕整個蓋掉)。 */}
       {hasUnsavedChanges ? (
-        <div className="fixed inset-x-0 bottom-16 z-40 border-y border-border bg-background shadow-[0_-4px_12px_rgba(0,0,0,0.1)]">
+        <div
+          className={cn(
+            BOTTOM_LAYER_ACTION_BAR,
+            "border-y border-border bg-background shadow-[0_-4px_12px_rgba(0,0,0,0.1)]",
+          )}
+        >
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
             <p className="text-sm font-medium text-foreground">尚未儲存變更</p>
-            <Button
-              type="submit"
-              form={MERCHANT_SETTINGS_FORM_ID}
-              variant="cta"
-              disabled={saving}
-            >
+            <Button type="submit" form={MERCHANT_SETTINGS_FORM_ID} variant="cta" disabled={saving}>
               {saving ? "儲存中⋯" : "儲存變更"}
             </Button>
           </div>
@@ -503,10 +526,20 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
 // 函式),讓商家在設定畫面就能看到跟行事曆上一模一樣的圖樣效果(斜線/交叉網格),不是只看到
 // 純色塊。這個元件只在 RequireMerchantAdmin 通過後才會渲染,不需要再重複判斷一次權限。
 // ---------------------------------------------------------------------------
-const CALENDAR_STATE_FIELDS: { key: keyof CalendarStateStyleMap; state: CalendarStateType; label: string; hint: string }[] = [
+const CALENDAR_STATE_FIELDS: {
+  key: keyof CalendarStateStyleMap;
+  state: CalendarStateType;
+  label: string;
+  hint: string;
+}[] = [
   { key: "fullDayLeave", state: "full_day_leave", label: "全天休假", hint: "密集 45 度斜線" },
   { key: "partialLeave", state: "partial_leave", label: "時段排休", hint: "稀疏 45 度斜線" },
-  { key: "crossStoreOccupied", state: "cross_store_occupied", label: "跨店佔用", hint: "交叉網格紋" },
+  {
+    key: "crossStoreOccupied",
+    state: "cross_store_occupied",
+    label: "跨店佔用",
+    hint: "交叉網格紋",
+  },
 ];
 
 function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {

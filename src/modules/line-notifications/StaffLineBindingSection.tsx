@@ -91,18 +91,34 @@ export function StaffLineBindingSection({ staffId }: { staffId: string }) {
       </p>
 
       {bindingStatus?.lineBound ? (
-        <Button type="button" variant="outline" size="sm" disabled={unbinding} onClick={handleUnbind}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={unbinding}
+          onClick={handleUnbind}
+        >
           {unbinding ? "處理中⋯" : "解除綁定"}
         </Button>
       ) : (
         <div className="space-y-2">
-          <Button type="button" variant="outline" size="sm" disabled={generating} onClick={handleGenerate}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={generating}
+            onClick={handleGenerate}
+          >
             {generating ? "產生中⋯" : "產生綁定碼"}
           </Button>
           {issuedCode && !codeExpired ? (
             <div className="rounded-md border border-dashed border-border px-3 py-2">
-              <p className="text-2xl font-bold tracking-widest text-foreground">{issuedCode.code}</p>
-              <p className="text-xs text-muted-foreground">剩餘時間 {formatCountdown(msRemaining)}</p>
+              <p className="text-2xl font-bold tracking-widest text-foreground">
+                {issuedCode.code}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                剩餘時間 {formatCountdown(msRemaining)}
+              </p>
             </div>
           ) : issuedCode && codeExpired ? (
             <p className="text-xs text-muted-foreground">綁定碼已過期,請重新產生。</p>

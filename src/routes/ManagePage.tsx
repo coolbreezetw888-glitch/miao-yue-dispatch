@@ -70,10 +70,7 @@ import { Label } from "@/components/ui/label";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { updateMyAdminProfile } from "@/modules/merchant/api";
 import { useCurrentMerchant, useMyAdminProfile } from "@/modules/merchant/context";
-import {
-  clearAgentPendingLoginEmail,
-  updateMyAgentProfile,
-} from "@/modules/staff-agent/api";
+import { clearAgentPendingLoginEmail, updateMyAgentProfile } from "@/modules/staff-agent/api";
 import {
   useCurrentMerchantRole,
   useAgentPermission,
@@ -82,7 +79,11 @@ import {
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
 
 import { useAppLayoutContext } from "./AppLayout";
-import { emailNamePrefix, LoginEmailSection, PendingAdminLoginEmailSuggestionCard } from "./ProfileCardShared";
+import {
+  emailNamePrefix,
+  LoginEmailSection,
+  PendingAdminLoginEmailSuggestionCard,
+} from "./ProfileCardShared";
 
 interface EditProfileDialogProps {
   role: "admin" | "agent";
@@ -537,7 +538,11 @@ export default function ManagePage() {
   const visibleCards = cards.filter((card) => card.visible);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+    // data-testid="manage-page":e2e 測試的共用啟動錨點(見 e2e/support/app-shell.ts)。
+    // 2026-09-23 後台導覽改版拔掉「首頁」分頁籤之後,/app 對商家管理員/客服會轉址到這裡,
+    // 測試需要一個「不管角色/權限怎麼設定都一定存在」的元素來確認外殼已經渲染完成——頁面上的
+    // 功能卡片全部會因權限被藏起來,只有這個根容器永遠在,所以錨點掛在這一層。
+    <div data-testid="manage-page" className="mx-auto max-w-3xl space-y-6 px-5 py-10">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">功能</h1>
         <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>

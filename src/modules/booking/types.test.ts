@@ -72,10 +72,7 @@ describe("buildPaymentMethodOptions(模組 9 v2 §5.2/§8.2)", () => {
 
   it("編輯模式且原本選的付款方式已經下架,選項清單多出這一筆並標示「(已下架)」", () => {
     const options = buildPaymentMethodOptions(activeMethods, "m3", "LINE Pay");
-    expect(options).toEqual([
-      ...activeMethods,
-      { id: "m3", name: "LINE Pay(已下架)" },
-    ]);
+    expect(options).toEqual([...activeMethods, { id: "m3", name: "LINE Pay(已下架)" }]);
   });
 
   it("顯示文字用快照文字,不是目前的名字(商家可能已經改名,快照才是這筆訂單當初實際顯示過的內容)", () => {
@@ -194,6 +191,8 @@ describe("filterServiceItemsByCategory(SPECS-INDEX #598)", () => {
       { id: "j2", name: "服務乙", category_id: null },
     ];
     expect(filterServiceItemsByCategory(allUncategorized, "all")).toEqual(allUncategorized);
-    expect(filterServiceItemsByCategory(allUncategorized, "uncategorized")).toEqual(allUncategorized);
+    expect(filterServiceItemsByCategory(allUncategorized, "uncategorized")).toEqual(
+      allUncategorized,
+    );
   });
 });

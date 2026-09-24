@@ -33,7 +33,11 @@ export function previewServiceCommission(
 /** 月折算天數換算成「一天薪水」(對應規則 2.7 的 day_rate)。payDaysPerMonth <= 0 時視為 0,
  * 避免除以 0(正常情況下 §十 10.1 動態計算出來的天數一定是 28~31,這裡只是前端防呆)。 */
 export function calculateDayRate(monthlyBaseSalary: number, payDaysPerMonth: number): number {
-  if (!Number.isFinite(monthlyBaseSalary) || !Number.isFinite(payDaysPerMonth) || payDaysPerMonth <= 0) {
+  if (
+    !Number.isFinite(monthlyBaseSalary) ||
+    !Number.isFinite(payDaysPerMonth) ||
+    payDaysPerMonth <= 0
+  ) {
     return 0;
   }
   return monthlyBaseSalary / payDaysPerMonth;
@@ -49,10 +53,7 @@ export function getDaysInMonth(year: number, month: number): number {
 }
 
 export type DeductionMode =
-  | "no_deduction"
-  | "full_day_rate"
-  | "percentage_of_day_rate"
-  | "fixed_amount_per_day";
+  "no_deduction" | "full_day_rate" | "percentage_of_day_rate" | "fixed_amount_per_day";
 
 /** 假別扣款試算(對應規則 2.7 四種模式,單日金額,不乘天數——天數由畫面另外顯示/相乘)。 */
 export function previewLeaveDeductionPerDay(

@@ -9,10 +9,7 @@
 // 的區間篩選取代並移除,不留下死掉的舊元件。
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import {
-  MonthlySalaryStaffReport,
-  PieceRateStaffReport,
-} from "@/modules/payroll/StaffReportPage";
+import { MonthlySalaryStaffReport, PieceRateStaffReport } from "@/modules/payroll/StaffReportPage";
 import { DateRangePicker, useDateRangeState } from "@/modules/payroll/DateRangePicker";
 
 import { useActiveMyStaffRecord } from "./context";

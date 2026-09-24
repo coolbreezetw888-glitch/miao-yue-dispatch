@@ -281,7 +281,11 @@ function LeaveTypesPageInner() {
                           }
                           onSaved={refetchLeaveTypes}
                         />
-                        <Button variant="outline" size="sm" onClick={() => handleRemove(leaveType.id)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemove(leaveType.id)}
+                        >
                           下架
                         </Button>
                       </>

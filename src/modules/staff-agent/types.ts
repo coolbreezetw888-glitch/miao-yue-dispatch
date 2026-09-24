@@ -196,12 +196,14 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   {
     key: "line_notification",
     label: "LINE 通知設定",
-    description: "開放後客服可以調整每類事件要不要通知、通知誰、文案內容,以及查看發送記錄(對應模組 11 LINE 通知)。",
+    description:
+      "開放後客服可以調整每類事件要不要通知、通知誰、文案內容,以及查看發送記錄(對應模組 11 LINE 通知)。",
   },
   {
     key: "push_notification",
     label: "推播通知設定",
-    description: "開放後客服可以設定服務人員手機/瀏覽器推播要不要開、文案內容(對應模組 15 服務人員推播通知)。",
+    description:
+      "開放後客服可以設定服務人員手機/瀏覽器推播要不要開、文案內容(對應模組 15 服務人員推播通知)。",
   },
   {
     key: "payment_methods",

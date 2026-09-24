@@ -103,7 +103,10 @@ export function MyLineBindingCard() {
     if (!bindingStatus) return;
     setUnbinding(true);
     try {
-      await unbindLineAccount(bindingRoleForQuery === "admin" ? "admin" : "agent", bindingStatus.selfId);
+      await unbindLineAccount(
+        bindingRoleForQuery === "admin" ? "admin" : "agent",
+        bindingStatus.selfId,
+      );
       toast.success("已解除 LINE 綁定");
       setIssuedCode(null);
       await refetchBindingStatus();
@@ -143,7 +146,13 @@ export function MyLineBindingCard() {
         </div>
 
         {bindingStatus?.lineBound ? (
-          <Button type="button" variant="outline" size="sm" disabled={unbinding} onClick={handleUnbind}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={unbinding}
+            onClick={handleUnbind}
+          >
             {unbinding ? "處理中⋯" : "解除綁定"}
           </Button>
         ) : (
@@ -157,7 +166,9 @@ export function MyLineBindingCard() {
                 <p className="text-xs text-muted-foreground">
                   請在 LINE 加好友後,把這組數字當作一則訊息傳送過去完成綁定
                 </p>
-                <p className="text-2xl font-bold tracking-widest text-foreground">{issuedCode.code}</p>
+                <p className="text-2xl font-bold tracking-widest text-foreground">
+                  {issuedCode.code}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   剩餘時間 {formatCountdown(msRemaining)}
                 </p>

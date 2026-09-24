@@ -7,7 +7,17 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -184,13 +194,23 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="member-name">姓名 *</Label>
-            <Input id="member-name" className="mt-2" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="member-name"
+              className="mt-2"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           {/* #614(SPECS-INDEX):電話這次只當查詢索引,不是必填的唯一鍵,不再依 merchant_member_
               settings 的任何開關判斷是否必填(該開關已於 #618 移除)。 */}
           <div>
             <Label htmlFor="member-phone">電話</Label>
-            <Input id="member-phone" className="mt-2" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="member-phone"
+              className="mt-2"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="member-email">Email</Label>
@@ -232,11 +252,19 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <div>
             <Label>推薦人(選填)</Label>
             <ReferrerPicker merchantId={merchantId} value={referrer} onChange={setReferrer} />
-            <p className="mt-1 text-xs text-muted-foreground">推薦人只能在建立當下設定,之後無法變更。</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              推薦人只能在建立當下設定,之後無法變更。
+            </p>
           </div>
           <div>
             <Label htmlFor="member-notes">備註</Label>
-            <Textarea id="member-notes" className="mt-2" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Textarea
+              id="member-notes"
+              className="mt-2"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -260,7 +288,9 @@ function MembersListInner() {
   // #615(SPECS-INDEX):會員等級篩選,"all" 顯示全部。
   const [tierFilter, setTierFilter] = useState<string>("all");
   // #643(SPECS-INDEX):黑名單篩選,比照上面會員等級篩選的既有模式(Select,"all" 顯示全部)。
-  const [blacklistFilter, setBlacklistFilter] = useState<"all" | "blacklisted" | "not_blacklisted">("all");
+  const [blacklistFilter, setBlacklistFilter] = useState<"all" | "blacklisted" | "not_blacklisted">(
+    "all",
+  );
   const [birthdayNotice, setBirthdayNotice] = useState<number | null>(null);
 
   const { data: members, isLoading } = useQuery({
@@ -328,7 +358,9 @@ function MembersListInner() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">會員管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的會員名錄與紅利點數</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            「{merchant!.name}」的會員名錄與紅利點數
+          </p>
         </div>
         <NewMemberDialog merchantId={merchantId} onSaved={refetch} />
       </div>
@@ -450,7 +482,11 @@ function MembersListInner() {
                         </AlertDialogContent>
                       </AlertDialog>
                     ) : (
-                      <Button variant="outline" size="sm" onClick={() => handleReactivate(member.id)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleReactivate(member.id)}
+                      >
                         恢復
                       </Button>
                     )}

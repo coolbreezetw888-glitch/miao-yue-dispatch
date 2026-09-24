@@ -29,7 +29,10 @@ export function groupOverridesByDate(
 }
 
 /** 給定某個特定日期(YYYY-MM-DD)跟一批(可能跨很多天的)例外紀錄,判斷那一天是不是整天排休。 */
-export function isDateWholeDayOff(overrides: StaffAvailabilityOverride[], dateKey: string): boolean {
+export function isDateWholeDayOff(
+  overrides: StaffAvailabilityOverride[],
+  dateKey: string,
+): boolean {
   return isWholeDayOff(overrides.filter((o) => o.override_date === dateKey));
 }
 

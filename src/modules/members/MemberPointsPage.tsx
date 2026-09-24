@@ -119,7 +119,8 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
         <DialogHeader>
           <DialogTitle>登記兌換點數</DialogTitle>
           <DialogDescription>
-            目前餘額 {member.points_balance} 點。這裡只登記點數異動紀錄,不會自動反映在任何訂單金額上。
+            目前餘額 {member.points_balance}{" "}
+            點。這裡只登記點數異動紀錄,不會自動反映在任何訂單金額上。
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -136,7 +137,13 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
           </div>
           <div>
             <Label htmlFor="redeem-note">用途說明 *</Label>
-            <Textarea id="redeem-note" className="mt-2" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+            <Textarea
+              id="redeem-note"
+              className="mt-2"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -193,7 +200,9 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>手動調整點數</DialogTitle>
-          <DialogDescription>目前餘額 {member.points_balance} 點,不能調整成負數。</DialogDescription>
+          <DialogDescription>
+            目前餘額 {member.points_balance} 點,不能調整成負數。
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -209,7 +218,13 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
           </div>
           <div>
             <Label htmlFor="adjust-note">調整原因 *</Label>
-            <Textarea id="adjust-note" className="mt-2" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+            <Textarea
+              id="adjust-note"
+              className="mt-2"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -519,7 +534,9 @@ function MemberPointsPageInner() {
       <Card>
         <CardHeader>
           <CardTitle>會員點數餘額總覽</CardTitle>
-          <CardDescription>搜尋姓名/電話,點擊某位會員查看完整異動歷史與兌換/調整入口</CardDescription>
+          <CardDescription>
+            搜尋姓名/電話,點擊某位會員查看完整異動歷史與兌換/調整入口
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input

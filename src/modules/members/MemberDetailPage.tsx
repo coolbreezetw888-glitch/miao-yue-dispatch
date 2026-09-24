@@ -35,6 +35,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
@@ -124,11 +126,21 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="edit-member-name">姓名 *</Label>
-            <Input id="edit-member-name" className="mt-2" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="edit-member-name"
+              className="mt-2"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="edit-member-phone">電話</Label>
-            <Input id="edit-member-phone" className="mt-2" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="edit-member-phone"
+              className="mt-2"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="edit-member-email">Email</Label>
@@ -153,7 +165,13 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
           {/* #615(SPECS-INDEX):會員等級,選填,可隨時重新指派。 */}
           <div>
             <Label>會員等級</Label>
-            <Select value={tierId} onValueChange={setTierId}>
+            {/* 2026-09-24 稽核修正(問題 3):tierId 是在 useEffect 裡等 member 資料回來之後
+                才重設的(見上面 setTierId(member.tier_id ?? UNASSIGNED_TIER_VALUE)),
+                正是會觸發幽靈空值事件的時序——被洗成空字串的話,會員等級會顯示成空白,
+                存檔就把使用者原本設好的等級清掉。
+                合法值是 UNASSIGNED_TIER_VALUE 這個 sentinel 加上資料庫來的動態等級 id,
+                沒有固定白名單,判斷條件是「不是空字串」。 */}
+            <Select value={tierId} onValueChange={guardPhantomEmptyChange(setTierId)}>
               <SelectTrigger className="mt-2">
                 <SelectValue />
               </SelectTrigger>
@@ -327,7 +345,9 @@ function MemberDetailInner() {
   if (!member) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-5 py-12 text-center">
-        <p className="text-sm text-muted-foreground">找不到這位會員(可能已被移除或不屬於這間商家)。</p>
+        <p className="text-sm text-muted-foreground">
+          找不到這位會員(可能已被移除或不屬於這間商家)。
+        </p>
         <Link to="/app/members" className="text-sm text-brand hover:underline">
           ← 返回會員管理
         </Link>
@@ -392,7 +412,13 @@ function MemberDetailInner() {
               ) : (
                 <Badge variant="secondary">未驗證</Badge>
               )}
-              <Button type="button" variant="outline" size="sm" disabled={verifying} onClick={handleToggleVerified}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={verifying}
+                onClick={handleToggleVerified}
+              >
                 {member.phone_verified ? "取消驗證標記" : "標記為已驗證"}
               </Button>
             </div>
@@ -483,12 +509,18 @@ function MemberDetailInner() {
                 >
                   <div className="min-w-0">
                     <p className="text-foreground">{formatDateTime(booking.startAt)}</p>
-                    <p className="text-muted-foreground">{booking.serviceItemNames.join("、") || "—"}</p>
+                    <p className="text-muted-foreground">
+                      {booking.serviceItemNames.join("、") || "—"}
+                    </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-foreground">${Number(booking.finalAmountSnapshot).toFixed(0)}</p>
+                    <p className="text-foreground">
+                      ${Number(booking.finalAmountSnapshot).toFixed(0)}
+                    </p>
                     <p className="text-muted-foreground">
-                      {booking.earnedPoints !== null ? `已核發 ${booking.earnedPoints} 點` : "未核發點數"}
+                      {booking.earnedPoints !== null
+                        ? `已核發 ${booking.earnedPoints} 點`
+                        : "未核發點數"}
                     </p>
                   </div>
                 </li>

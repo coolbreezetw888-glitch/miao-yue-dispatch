@@ -24,9 +24,13 @@ import type { IndustryFeaturePresetRow, PlatformGroupRow, PlatformMerchantRow } 
  * (例如規則 2.4/2.5 的防呆訊息、3.4 的「查無此 email」訊息)。
  */
 class SupabaseCallError extends Error {
-  code?: string;
-  details?: string;
-  hint?: string;
+  // 這個專案開了 tsconfig 的 `exactOptionalPropertyTypes: true`,在這個模式下「可選屬性」
+  // (`code?: string`)只允許「整個屬性不存在」,不允許「屬性存在但值是 undefined」。
+  // 下面建構子是無條件做 `this.code = error.code` 賦值的(來源本身就可能是 undefined),
+  // 所以型別要明確寫成 `string | undefined`,才等於「這個屬性可以不存在,存在時也可以是 undefined」。
+  code?: string | undefined;
+  details?: string | undefined;
+  hint?: string | undefined;
 
   constructor(error: { message: string; code?: string; details?: string; hint?: string }) {
     super(error.message);
@@ -159,9 +163,17 @@ export async function platformSetGroupAdmin(
   groupId: string,
   userEmail: string | null,
 ): Promise<void> {
+  const trimmedEmail = userEmail && userEmail.trim().length > 0 ? userEmail.trim() : null;
   const { error } = await supabase.rpc("platform_set_group_admin", {
     p_group_id: groupId,
-    p_user_email: userEmail && userEmail.trim().length > 0 ? userEmail.trim() : null,
+    // 這裡的 `as unknown as string` 不是在掩蓋真正的型別錯誤,是在繞過型別產生器的限制:
+    // PostgreSQL 的函式簽章沒有辦法表達「這個參數允許傳 null」(參數型別就只是 text),
+    // 所以 Supabase 自動產生的 src/integrations/supabase/types.ts 一律把 p_user_email 標成
+    // `string`。但 platform_set_group_admin 這支函式的設計本來就是「傳 null 代表清空集團
+    // 管理者」(見上方註解與資料庫端函式說明),null 一定要真的送出去,不能改成空字串或省略,
+    // 否則會變成「把集團管理者設成空字串帳號」而不是清空。
+    // 只做型別層的斷言,runtime 行為完全不變。
+    p_user_email: trimmedEmail as unknown as string,
   });
   if (error) throwSupabaseError(error);
 }

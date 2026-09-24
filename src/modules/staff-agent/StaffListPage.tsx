@@ -919,7 +919,13 @@ function StaffListInner() {
               onValueChange={(v) => setListFilter(v as StaffListFilter)}
               className="pt-2"
             >
-              <TabsList>
+              {/* 手機版容器寬度溢出回歸(e2e/mobile-overflow.spec.ts「人員管理頁 /app/staff」):
+                  四顆分頁籤「全部/未上架 (n)/已上架 (n)/已移除 (n)」在 375px 寬的手機上總寬
+                  327px、放不進 285px 的卡片內寬,原本的預設 TabsList 既不換行也沒有橫向捲動,
+                  後面兩顆會直接被裁掉看不到。沿用 OrdersPage.tsx §7.1 已經驗證過的同一組解法
+                  (h-auto + w-full + flex-wrap 自動換行),不另外發明新寫法、也不改成橫向捲動
+                  ——這是篩選器,四個選項應該一眼全部看到,不該要求使用者左右滑才發現還有選項。 */}
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
                 {STAFF_LIST_FILTER_TABS.map((tab) => (
                   <TabsTrigger key={tab.value} value={tab.value}>
                     {tab.label}
@@ -940,13 +946,24 @@ function StaffListInner() {
           ) : filteredStaffList.length === 0 ? (
             <p className="text-sm text-muted-foreground">這個分類目前沒有服務人員。</p>
           ) : (
+            /* 手機版容器寬度溢出回歸(e2e/mobile-overflow.spec.ts「人員管理頁 /app/staff」):
+               每一列原本固定是 `flex items-center justify-between`,右側按鈕群組又是 `shrink-0`,
+               所以在 375px 的手機上「在職 + 尚未開通 + 管理員」這種會同時出現邀請登入/編輯/移除
+               三顆按鈕的情況下,左半邊的資訊區被壓到只剩 57px、姓名與狀態徽章區塊只剩 5px
+               (內容需要 114px)——實際畫面上只看得到頭像跟三顆按鈕,服務人員叫什麼名字、是不是
+               已上架、有沒有開通登入,全部看不到。
+               版面優先權:姓名與狀態徽章比按鈕重要,所以窄螢幕改成上下兩段式(資訊一段、按鈕一段),
+               sm 以上維持原本的左右排列。沿用 MerchantAdminList.tsx / MerchantDetailPage.tsx
+               管理員名單同一組已驗證過的寫法(`flex flex-col gap-2 ... sm:flex-row sm:items-center
+               sm:justify-between`),不是在外層補 `overflow-x-auto` 讓它可以橫向捲——那只是把
+               「看不到」換成「要左右滑才看得到」,沒有解決資訊被擠掉的問題。 */
             <ul className="space-y-2">
               {filteredStaffList.map((staff) => (
                 <li
                   key={staff.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                  className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                 >
-                  <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
                       {staff.avatar_url ? (
                         <img
@@ -959,11 +976,16 @@ function StaffListInner() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
+                      {/* break-words(不是 truncate):姓名是這一列最重要的資訊,窄螢幕上寧可
+                          換行多佔一行,也不要把長姓名切掉只剩前半段。比照 MerchantAdminList.tsx
+                          管理員 email 的處理方式。 */}
+                      <p className="break-words text-sm font-medium text-foreground">
                         {staff.name}
                         {staff.nickname ? `(${staff.nickname})` : ""}
                       </p>
-                      <div className="mt-0.5 flex gap-1.5">
+                      {/* flex-wrap:最多會同時出現「已上架/按件計酬/尚未開通/已移除」四顆徽章,
+                          窄螢幕放不下就換行,不要撐開容器。 */}
+                      <div className="mt-0.5 flex flex-wrap gap-1.5">
                         <Badge variant={staff.is_listed ? "default" : "secondary"}>
                           {staff.is_listed ? "已上架" : "未上架"}
                         </Badge>
@@ -987,7 +1009,9 @@ function StaffListInner() {
                       ) : null}
                     </div>
                   </div>
-                  <div className="flex shrink-0 gap-2">
+                  {/* 窄螢幕:按鈕自己獨立一行、放不下就換行(flex-wrap),不再擠壓上面的資訊區。
+                      sm 以上:維持 shrink-0,不讓按鈕文字被壓到換行。 */}
+                  <div className="flex flex-wrap gap-2 sm:shrink-0">
                     {staff.status === "active" ? (
                       <>
                         {/* 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請按鈕。
@@ -1059,7 +1083,9 @@ function StaffListInner() {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>確定要真正刪除「{staff.name}」嗎?</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  確定要真正刪除「{staff.name}」嗎?
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
                                   這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
                                   抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下

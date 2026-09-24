@@ -9,8 +9,10 @@ import {
   formatGroupDateHeading,
   groupBookingsByDateField,
   ORDER_STATUS_TABS,
+  ORDERS_RENDER_LIMIT,
   sumBookingRevenue,
   tabToStatusFilter,
+  takeLatestBookings,
   type KeywordMatchableBooking,
 } from "./ordersPageLogic";
 
@@ -158,5 +160,58 @@ describe("formatGroupDateHeading / formatCardDateTime", () => {
   it("formatCardDateTime 附加 HH:mm", () => {
     // 2026-09-09T02:00:00+00:00 換算台北時間是 9/9 10:00
     expect(formatCardDateTime("2026-09-09T02:00:00+00:00")).toBe("9/9(三) 10:00");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-09-24 深夜巡檢問題 1:訂單管理頁改成 unpaged 撈取全部訂單(統計列的筆數/總業績跟關鍵字
+// 搜尋才會正確),渲染則設上限避免一次畫出上萬張卡片。這裡測「挑出最新的 N 筆」這條純邏輯。
+// ---------------------------------------------------------------------------
+describe("takeLatestBookings(問題 1:撈全部、只渲染最新的 N 筆)", () => {
+  function makeBooking(id: string, startAt: string, createdAt: string) {
+    return { id, start_at: startAt, created_at: createdAt };
+  }
+
+  // 由舊到新,跟 fetchMerchantBookings 既有的 order by start_at ascending 一致。
+  const bookings = [
+    makeBooking("a", "2026-09-01T02:00:00+00:00", "2026-09-03T02:00:00+00:00"),
+    makeBooking("b", "2026-09-02T02:00:00+00:00", "2026-09-02T02:00:00+00:00"),
+    makeBooking("c", "2026-09-03T02:00:00+00:00", "2026-09-01T02:00:00+00:00"),
+  ];
+
+  it("總筆數沒超過上限時原封不動回傳(含順序),畫面跟改版前完全一致", () => {
+    expect(takeLatestBookings(bookings, "start_at", 10)).toBe(bookings);
+    expect(takeLatestBookings(bookings, "start_at", 3)).toBe(bookings);
+  });
+
+  it("超過上限時留下「依預約時間」最新的那幾筆,而且順序還原成由舊到新", () => {
+    expect(takeLatestBookings(bookings, "start_at", 2).map((b) => b.id)).toEqual(["b", "c"]);
+  });
+
+  it("切換成「依建單時間」時,挑的是建單時間最新的那幾筆(跟依預約時間的結果不同)", () => {
+    expect(takeLatestBookings(bookings, "created_at", 2).map((b) => b.id)).toEqual(["b", "a"]);
+  });
+
+  it("不會改動傳進來的原始陣列(統計列仍然要用完整清單加總)", () => {
+    const input = bookings.slice();
+    takeLatestBookings(input, "start_at", 1);
+    expect(input.map((b) => b.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("上限 <= 0 時回傳空陣列,不會炸掉", () => {
+    expect(takeLatestBookings(bookings, "start_at", 0)).toEqual([]);
+  });
+
+  it("預設上限就是 ORDERS_RENDER_LIMIT,超過的部分不渲染但仍可被統計", () => {
+    const many = Array.from({ length: ORDERS_RENDER_LIMIT + 20 }, (_, i) =>
+      makeBooking(
+        `id-${i}`,
+        `2026-09-09T${String(i % 24).padStart(2, "0")}:00:00+00:00`,
+        "2026-09-09T02:00:00+00:00",
+      ),
+    );
+    expect(takeLatestBookings(many, "start_at")).toHaveLength(ORDERS_RENDER_LIMIT);
+    // 統計列用的是完整清單,不受渲染上限影響。
+    expect(many).toHaveLength(ORDERS_RENDER_LIMIT + 20);
   });
 });

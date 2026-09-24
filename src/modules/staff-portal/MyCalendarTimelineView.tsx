@@ -89,7 +89,12 @@ export function MyCalendarTimelineView({
       {/* SPECS-INDEX #644:整天休假時在格線上方額外顯示一行文字,不是只靠底下格線的圖樣分辨
           (比照商家端 CalendarPageInner 欄位標題也會顯示「休假:xxx」的既有做法)。 */}
       {onLeave ? (
-        <p className="text-xs font-medium" style={{ color: calendarStateBlockStyle(effectiveCalendarStateStyles, "full_day_leave").color }}>
+        <p
+          className="text-xs font-medium"
+          style={{
+            color: calendarStateBlockStyle(effectiveCalendarStateStyles, "full_day_leave").color,
+          }}
+        >
           休假:{onLeave.leave_type_name}
         </p>
       ) : null}
@@ -107,7 +112,8 @@ export function MyCalendarTimelineView({
             ? undefined
             : (dayState?.availability_overrides ?? []).find(
                 (o) =>
-                  timeToMinutes(o.start_time) <= slotStartMin && timeToMinutes(o.end_time) >= slotEndMin,
+                  timeToMinutes(o.start_time) <= slotStartMin &&
+                  timeToMinutes(o.end_time) >= slotEndMin,
               );
           const isPartialLeave = matchedOverride ? !matchedOverride.is_available : false;
 

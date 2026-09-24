@@ -28,7 +28,10 @@ function SchedulingOverviewPageInner() {
   const merchantId = merchant!.id;
 
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(getTaipeiNow()));
-  const weekDays = useMemo(() => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekStart, i)), [weekStart]);
+  const weekDays = useMemo(
+    () => [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(weekStart, i)),
+    [weekStart],
+  );
   const startDateKey = toDateKey(weekStart);
   const endDateKey = toDateKey(addDays(weekStart, 6));
 

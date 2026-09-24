@@ -207,8 +207,7 @@ export function useMerchantSwitcherState() {
 /** 讓 4.6 AppShell 在建立/刪除商家等操作後，強制重新拉一次可存取商家清單。 */
 export function useRefetchAccessibleMerchants() {
   const queryClient = useQueryClient();
-  return () =>
-    queryClient.invalidateQueries({ queryKey: ACCESSIBLE_MERCHANTS_QUERY_KEY_PREFIX });
+  return () => queryClient.invalidateQueries({ queryKey: ACCESSIBLE_MERCHANTS_QUERY_KEY_PREFIX });
 }
 
 /** 登出時呼叫,清掉「目前這個使用者」的本機商家選擇快取(見 src/routes/app.tsx handleSignOut,

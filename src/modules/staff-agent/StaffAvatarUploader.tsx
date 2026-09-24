@@ -5,6 +5,8 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+
 import { validateAvatarFile } from "./api";
 
 interface StaffAvatarUploaderProps {
@@ -34,9 +36,10 @@ export function StaffAvatarUploader({ currentAvatarUrl, onUpload }: StaffAvatarU
       await onUpload(file);
       toast.success("頭像已更新");
     } catch (err) {
-      toast.error("上傳失敗", {
-        description: err instanceof Error ? err.message : "請稍後再試",
-      });
+      // 2026-09-24 深夜巡檢修正:同 LogoUploader.tsx——Supabase Storage 回傳的 error 不是 Error
+      // 的實例,instanceof 永遠 false,真正的原因會被吞成「請稍後再試」。改用共用的
+      // getErrorMessage(),見 platform-admin/getErrorMessage.ts 檔頭說明。
+      toast.error("上傳失敗", { description: getErrorMessage(err, "請稍後再試") });
     } finally {
       setUploading(false);
     }

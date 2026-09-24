@@ -15,6 +15,8 @@ import {
   addDays,
   buildMonthGrid,
   getTaipeiNow,
+  isoToTaipeiDateKey,
+  isoToTaipeiTime,
   startOfMonth,
   addMonths,
   toDateKey,
@@ -41,75 +43,74 @@ function BookingListItem({
   booking: MyBookingScheduleItem;
   onClick: () => void;
 }) {
-  const startTime = new Date(booking.start_at).toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const endTime = new Date(booking.end_at).toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  // 2026-09-24 深夜巡檢問題 5:原本這裡用 toLocaleTimeString 但**沒有帶 timeZone**,顯示的是
+  // 「瀏覽器本機時區」的時間。服務人員的手機/瀏覽器時區不是 UTC+8 時(出國、手機自動時區抓錯、
+  // 境外機器)時間會顯示錯誤,而且同一頁切到「時間軸格線」檢視時
+  // (MyCalendarTimelineView.tsx 用的是正確的 isoToTaipeiTime),同一筆預約會出現兩種時間。
+  // dateUtils.ts 檔頭已明講「不依賴瀏覽器本機時區」,這裡改用它提供的 isoToTaipeiTime。
+  const startTime = isoToTaipeiTime(booking.start_at);
+  const endTime = isoToTaipeiTime(booking.end_at);
 
   return (
     <li>
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-md border border-border px-3 py-2.5 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-foreground">
-          {startTime} - {endTime}
-        </p>
-        <div className="flex gap-1.5">
-          <Badge variant={booking.role_in_booking === "primary" ? "default" : "secondary"}>
-            {booking.role_in_booking === "primary" ? "主要服務人員" : "協助"}
-          </Badge>
-          {booking.is_member ? <Badge variant="outline">會員</Badge> : null}
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full rounded-md border border-border px-3 py-2.5 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium text-foreground">
+            {startTime} - {endTime}
+          </p>
+          <div className="flex gap-1.5">
+            <Badge variant={booking.role_in_booking === "primary" ? "default" : "secondary"}>
+              {booking.role_in_booking === "primary" ? "主要服務人員" : "協助"}
+            </Badge>
+            {booking.is_member ? <Badge variant="outline">會員</Badge> : null}
+          </div>
         </div>
-      </div>
-      <p className="mt-1 text-sm text-foreground">
-        {booking.customer_name}
-        {booking.customer_phone ? `・${booking.customer_phone}` : ""}
-      </p>
-      {booking.customer_address ? (
-        <p className="mt-0.5 text-xs text-muted-foreground">{booking.customer_address}</p>
-      ) : null}
-      {booking.service_item_names.length > 0 ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          服務項目:{booking.service_item_names.join("、")}
+        <p className="mt-1 text-sm text-foreground">
+          {booking.customer_name}
+          {booking.customer_phone ? `・${booking.customer_phone}` : ""}
         </p>
-      ) : null}
-      {booking.notes ? (
-        <p className="mt-1 text-xs text-muted-foreground">內部備註:{booking.notes}</p>
-      ) : null}
-      {booking.customer_notes ? (
-        <p className="mt-1 text-xs text-muted-foreground">客戶備註:{booking.customer_notes}</p>
-      ) : null}
-      {booking.is_member ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          會員{booking.member_name ? `:${booking.member_name}` : ""}
-          {booking.member_points_balance != null
-            ? `(目前點數 ${booking.member_points_balance})`
-            : ""}
-        </p>
-      ) : null}
-      {booking.final_amount_snapshot != null ? (
-        <p className="mt-1 text-xs text-muted-foreground">金額:{booking.final_amount_snapshot} 元</p>
-      ) : null}
-    </button>
+        {booking.customer_address ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">{booking.customer_address}</p>
+        ) : null}
+        {booking.service_item_names.length > 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            服務項目:{booking.service_item_names.join("、")}
+          </p>
+        ) : null}
+        {booking.notes ? (
+          <p className="mt-1 text-xs text-muted-foreground">內部備註:{booking.notes}</p>
+        ) : null}
+        {booking.customer_notes ? (
+          <p className="mt-1 text-xs text-muted-foreground">客戶備註:{booking.customer_notes}</p>
+        ) : null}
+        {booking.is_member ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            會員{booking.member_name ? `:${booking.member_name}` : ""}
+            {booking.member_points_balance != null
+              ? `(目前點數 ${booking.member_points_balance})`
+              : ""}
+          </p>
+        ) : null}
+        {booking.final_amount_snapshot != null ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            金額:{booking.final_amount_snapshot} 元
+          </p>
+        ) : null}
+      </button>
     </li>
   );
 }
 
 export default function MyCalendarPage() {
-  const { merchant } = useCurrentMerchant();
+  const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
   const merchantId = merchant?.id ?? null;
   const { data: hasCalendarAccess, isLoading: permissionLoading } =
     useMyStaffPermission("staff_calendar_view");
-  const { data: staffRow } = useActiveMyStaffRecord(merchantId);
+  const { data: staffRow, isLoading: staffLoading } = useActiveMyStaffRecord(merchantId);
 
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(getTaipeiNow()));
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toDateKey(getTaipeiNow()));
@@ -131,7 +132,11 @@ export default function MyCalendarPage() {
   const bookingsByDate = useMemo(() => {
     const map = new Map<string, MyBookingScheduleItem[]>();
     for (const b of schedule ?? []) {
-      const key = toDateKey(new Date(b.start_at));
+      // 問題 5:原本是 toDateKey(new Date(b.start_at)),toDateKey 讀的是 Date 的**本機**年月日,
+      // 所以瀏覽器時區不是 UTC+8 時,跨日的預約(例如台北時間 00:30)會被歸到前一天的格子,
+      // 當天列表變成「這一天沒有預約」。月曆格線那邊的 dateKey 是用 getTaipeiNow() 推出來的
+      // 台北日曆日,兩邊必須用同一套基準才對得起來,所以這裡改用 isoToTaipeiDateKey。
+      const key = isoToTaipeiDateKey(b.start_at);
       const list = map.get(key) ?? [];
       list.push(b);
       map.set(key, list);
@@ -139,7 +144,13 @@ export default function MyCalendarPage() {
     return map;
   }, [schedule]);
 
-  if (permissionLoading) {
+  // 2026-09-24 深夜巡檢問題 6:原本這裡只等 permissionLoading。權限查詢(useMyStaffPermission)
+  // 內部要先解出自己的 staff_id 才問得到答案,staff_id 還沒解出來的那段時間,權限查詢等於沒有
+  // 答案,但 isLoading 已經是 false ——於是一位權限完全正常的服務人員,用網路較慢的手機點「行事
+  // 曆」分頁籤,會先閃出一次「尚未開放此功能,請洽商家管理員開通…」,等 staff_id 解出來才恢復
+  // 正常。這裡把 useActiveMyStaffRecord 的載入狀態(以及它依賴的 merchant 載入狀態)一起算進
+  // loading,寫法直接比照同資料夾已經正確的 RequireStaffAvailabilityAccess.tsx,保持一致。
+  if (merchantLoading || staffLoading || permissionLoading) {
     return <p className="text-sm text-muted-foreground">載入中⋯</p>;
   }
 

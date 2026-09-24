@@ -217,7 +217,8 @@ export async function fetchMyCalendarStateStyles(staffId: string): Promise<Calen
   return {
     fullDayLeave: raw["full_day_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.fullDayLeave,
     partialLeave: raw["partial_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.partialLeave,
-    crossStoreOccupied: raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
+    crossStoreOccupied:
+      raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
   };
 }
 

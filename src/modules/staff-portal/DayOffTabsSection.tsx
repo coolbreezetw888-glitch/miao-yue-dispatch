@@ -28,7 +28,12 @@ import {
   toDateKey,
 } from "@/modules/booking/dateUtils";
 
-import { clearMyDayOverride, setMyDayOverride, useMyAvailabilityOverrides, useMyDayBusinessHours } from "./context";
+import {
+  clearMyDayOverride,
+  setMyDayOverride,
+  useMyAvailabilityOverrides,
+  useMyDayBusinessHours,
+} from "./context";
 import { countWholeDaysOffInMonth, isDateWholeDayOff } from "./dayOffLogic";
 import type { StaffAvailabilityOverride } from "./api";
 
@@ -56,13 +61,23 @@ function DayOffMonthCalendar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Button type="button" variant="outline" size="sm" onClick={() => onMonthChange(addMonths(monthAnchor, -1))}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onMonthChange(addMonths(monthAnchor, -1))}
+        >
           ← 上個月
         </Button>
         <p className="text-sm font-semibold text-foreground">
           {monthAnchor.getFullYear()} 年 {monthAnchor.getMonth() + 1} 月
         </p>
-        <Button type="button" variant="outline" size="sm" onClick={() => onMonthChange(addMonths(monthAnchor, 1))}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onMonthChange(addMonths(monthAnchor, 1))}
+        >
           下個月 →
         </Button>
       </div>
@@ -104,23 +119,17 @@ function DayOffMonthCalendar({
 // ---------------------------------------------------------------------------
 // 10.3.2:「整天排休」分頁籤。
 // ---------------------------------------------------------------------------
-function WholeDayOffTab({
-  merchantId,
-  staffId,
-}: {
-  merchantId: string;
-  staffId: string;
-}) {
+function WholeDayOffTab({ merchantId, staffId }: { merchantId: string; staffId: string }) {
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(getTaipeiNow()));
   const monthGrid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
   const rangeStart = toDateKey(monthGrid[0]!.date);
   const rangeEnd = toDateKey(monthGrid[monthGrid.length - 1]!.date);
 
-  const { data: overrides, isLoading, refetch } = useMyAvailabilityOverrides(
-    merchantId,
-    rangeStart,
-    rangeEnd,
-  );
+  const {
+    data: overrides,
+    isLoading,
+    refetch,
+  } = useMyAvailabilityOverrides(merchantId, rangeStart, rangeEnd);
   const [saving, setSaving] = useState(false);
 
   const overridesList: StaffAvailabilityOverride[] = overrides ?? [];
@@ -187,13 +196,7 @@ function WholeDayOffTab({
 // ---------------------------------------------------------------------------
 // 10.3.3:「時段排休」分頁籤。
 // ---------------------------------------------------------------------------
-function BySlotOffTab({
-  merchantId,
-  staffId,
-}: {
-  merchantId: string;
-  staffId: string;
-}) {
+function BySlotOffTab({ merchantId, staffId }: { merchantId: string; staffId: string }) {
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(getTaipeiNow()));
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(getTaipeiNow()));
   const monthGrid = useMemo(() => buildMonthGrid(monthAnchor), [monthAnchor]);
@@ -270,7 +273,9 @@ function BySlotOffTab({
         ) : (
           <ul className="max-h-72 space-y-1 overflow-y-auto">
             {slots.map((slot) => {
-              const matched = overridesForSelectedDate.find((o) => o.slot_start_time.slice(0, 5) === slot.start);
+              const matched = overridesForSelectedDate.find(
+                (o) => o.slot_start_time.slice(0, 5) === slot.start,
+              );
               const isAvailable = matched ? matched.is_available : true;
               return (
                 <li key={slot.start}>

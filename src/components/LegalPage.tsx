@@ -19,7 +19,10 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
         <div className="mt-8 space-y-5 text-base leading-relaxed text-muted-foreground">
           {children}
         </div>
-        <Link to="/" className="mt-10 inline-block text-sm font-semibold text-primary hover:underline">
+        <Link
+          to="/"
+          className="mt-10 inline-block text-sm font-semibold text-primary hover:underline"
+        >
           ← 回首頁
         </Link>
       </main>

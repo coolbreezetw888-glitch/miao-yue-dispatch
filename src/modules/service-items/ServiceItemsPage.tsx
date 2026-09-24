@@ -41,6 +41,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
@@ -387,10 +389,17 @@ function ServiceItemFormDialog({
 
           <div>
             <Label>類型 *</Label>
+            {/* 2026-09-24 稽核修正(問題 3)的防禦性套用:這是 RadioGroup 不是 Select,
+                Radix RadioGroup 沒有那個會補發空字串的隱藏原生 <select>,嚴格說不會踩到
+                幽靈空值事件;一併套上是為了讓全專案的「值變更入口」寫法一致(編輯既有項目時
+                form.itemType 一樣是資料回來才灌進去的,套上零風險)。判斷條件用白名單。 */}
             <RadioGroup
               className="mt-2 flex gap-6"
               value={form.itemType}
-              onValueChange={(v) => setField("itemType", v as ServiceItemType)}
+              onValueChange={guardPhantomEmptyChange<ServiceItemType>(
+                (v) => setField("itemType", v),
+                (v) => v in SERVICE_ITEM_TYPE_LABELS,
+              )}
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="primary" id="item-type-primary" />
@@ -411,7 +420,14 @@ function ServiceItemFormDialog({
             <Label htmlFor="item-category">所屬分類</Label>
             <Select
               value={form.categoryId ?? "__uncategorized__"}
-              onValueChange={(v) => setField("categoryId", v === "__uncategorized__" ? null : v)}
+              /* 2026-09-24 稽核修正(問題 3):編輯既有服務項目時 form.categoryId 是等資料
+                 回來才灌進去的,正是會觸發幽靈空值事件的時序——被洗成空字串的話,原本設好的
+                 分類會變成「未分類」並在存檔時真的寫成 null,把商家的分類設定清掉。
+                 合法值是 "__uncategorized__" 這個 sentinel 加上資料庫來的動態分類 id,
+                 沒有固定白名單,判斷條件是「不是空字串」。 */
+              onValueChange={guardPhantomEmptyChange((v) =>
+                setField("categoryId", v === "__uncategorized__" ? null : v),
+              )}
             >
               <SelectTrigger id="item-category" className="mt-2">
                 <SelectValue />

@@ -557,6 +557,44 @@ export interface BookingCardExtra {
   createdByName: string;
 }
 
+type BookingServiceItemRow = { booking_id: string; service_items: { name: string } | null };
+
+/** 一次最多拿幾個 booking id 去查 booking_service_items(見下面 fetchBookingServiceItemRows 說明)。 */
+const BOOKING_SERVICE_ITEM_ID_CHUNK_SIZE = 200;
+
+/** 2026-09-24 深夜巡檢問題 2:原本這裡是「把整批 booking id 一次 .in() 查完」的單次查詢,沒有
+ * 分頁。PostgREST 有 db.max_rows 上限(這個專案設定 1000,見 supabase/config.toml),訂單管理頁
+ * 一次載入約 400 筆以上訂單、平均每筆 3 個服務項目(400×3 = 1200 > 1000)時,查詢結果會被靜靜
+ * 截斷在 1000 列,後面的訂單在 namesByBookingId 裡查不到,卡片第一行就顯示成「(無服務項目資料)」
+ * ——但那些訂單其實是有服務項目的,只是沒查回來。這是「資料被截斷卻沒有任何錯誤」的典型坑,跟
+ * fetchMerchantBookings 的 unpaged 分頁迴圈是同一個成因。
+ *
+ * 這裡用兩層保護:①每批最多 200 個 booking id(正常情況下 200×平均 3 個項目 = 600 列,遠低於
+ * 1000);②每一批內部仍然跑 .range() 分頁迴圈,即使某幾筆訂單的服務項目特別多、單批就超過 1000
+ * 列也不會漏。分頁迴圈需要穩定排序才不會漏抓/重複抓,所以明確帶 order(booking_id, id)。 */
+async function fetchBookingServiceItemRows(bookingIds: string[]): Promise<BookingServiceItemRow[]> {
+  const rows: BookingServiceItemRow[] = [];
+  for (let i = 0; i < bookingIds.length; i += BOOKING_SERVICE_ITEM_ID_CHUNK_SIZE) {
+    const chunk = bookingIds.slice(i, i + BOOKING_SERVICE_ITEM_ID_CHUNK_SIZE);
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await supabase
+        .from("booking_service_items")
+        .select("booking_id, id, service_items(name)")
+        .in("booking_id", chunk)
+        .order("booking_id", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + POSTGREST_PAGE_SIZE - 1);
+      if (error) throw error;
+      const page = (data ?? []) as unknown as BookingServiceItemRow[];
+      rows.push(...page);
+      if (page.length < POSTGREST_PAGE_SIZE) break;
+      offset += POSTGREST_PAGE_SIZE;
+    }
+  }
+  return rows;
+}
+
 export async function fetchBookingCardExtras(
   merchantId: string,
   bookings: Pick<Booking, "id" | "created_by_user_id">[],
@@ -569,22 +607,17 @@ export async function fetchBookingCardExtras(
     new Set(bookings.map((b) => b.created_by_user_id).filter((id): id is string => Boolean(id))),
   );
 
-  const [serviceItemsRes, actorNamesRes] = await Promise.all([
-    supabase
-      .from("booking_service_items")
-      .select("booking_id, service_items(name)")
-      .in("booking_id", bookingIds),
+  const [serviceItemRows, actorNamesRes] = await Promise.all([
+    fetchBookingServiceItemRows(bookingIds),
     actorIds.length > 0
       ? supabase.rpc("get_booking_actor_names", { p_merchant_id: merchantId, p_user_ids: actorIds })
       : Promise.resolve({ data: [] as { user_id: string; display_name: string }[], error: null }),
   ]);
 
-  if (serviceItemsRes.error) throw serviceItemsRes.error;
   if (actorNamesRes.error) throw actorNamesRes.error;
 
-  type ServiceItemRow = { booking_id: string; service_items: { name: string } | null };
   const namesByBookingId = new Map<string, string[]>();
-  for (const row of (serviceItemsRes.data ?? []) as ServiceItemRow[]) {
+  for (const row of serviceItemRows) {
     const list = namesByBookingId.get(row.booking_id) ?? [];
     list.push(row.service_items?.name ?? "(已刪除的服務項目)");
     namesByBookingId.set(row.booking_id, list);

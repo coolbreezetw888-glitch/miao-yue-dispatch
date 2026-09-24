@@ -127,7 +127,9 @@ function LineSettingsPageInner() {
     }
   }
 
-  const addFriendUrl = status?.lineBotBasicId ? `https://line.me/R/ti/p/@${status.lineBotBasicId}` : null;
+  const addFriendUrl = status?.lineBotBasicId
+    ? `https://line.me/R/ti/p/@${status.lineBotBasicId}`
+    : null;
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
@@ -162,7 +164,12 @@ function LineSettingsPageInner() {
               {addFriendUrl ? (
                 <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">加好友連結:</span>
-                  <a href={addFriendUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
+                  <a
+                    href={addFriendUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand hover:underline"
+                  >
                     {addFriendUrl}
                   </a>
                   <Button
@@ -181,7 +188,8 @@ function LineSettingsPageInner() {
           )}
           {status?.lastTestedAt ? (
             <p className="text-xs text-muted-foreground">
-              最後測試時間:{new Date(status.lastTestedAt).toLocaleString("zh-TW", { hour12: false })}
+              最後測試時間:
+              {new Date(status.lastTestedAt).toLocaleString("zh-TW", { hour12: false })}
               {status.lastTestResult ? `・${status.lastTestResult}` : ""}
             </p>
           ) : null}
@@ -249,7 +257,12 @@ function LineSettingsPageInner() {
                   onChange={(e) => setChannelSecret(e.target.value)}
                   placeholder={status?.isConnected ? "(已設定,重新輸入以更換)" : undefined}
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => setShowSecret((v) => !v)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowSecret((v) => !v)}
+                >
                   {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
@@ -268,7 +281,12 @@ function LineSettingsPageInner() {
                       : undefined
                   }
                 />
-                <Button type="button" variant="outline" size="icon" onClick={() => setShowToken((v) => !v)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowToken((v) => !v)}
+                >
                   {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>

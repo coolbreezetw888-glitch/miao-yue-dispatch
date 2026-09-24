@@ -28,7 +28,9 @@ describe("renderLineMessageTemplate(判斷 11)", () => {
   });
 
   it("對應不到的變數維持原樣,不報錯、不清空", () => {
-    expect(renderLineMessageTemplate("金額:{{final_amount}} 元", {})).toBe("金額:{{final_amount}} 元");
+    expect(renderLineMessageTemplate("金額:{{final_amount}} 元", {})).toBe(
+      "金額:{{final_amount}} 元",
+    );
   });
 
   it("變數值為空字串時正確替換成空字串(對應規則 2.4「安靜」精神延伸到變數組裝)", () => {
@@ -84,12 +86,14 @@ describe("getTemplateVariableDefinitions(4.2 可用變數清單,bug fix SPECS-IN
     expect(keys).not.toContain("final_amount");
   });
 
-  it.each(["booking_created", "booking_confirmed", "booking_cancelled", "booking_completed"] as const)(
-    "%s 事件回傳完整的訂單變數清單",
-    (eventType) => {
-      expect(getTemplateVariableDefinitions(eventType)).toBe(LINE_TEMPLATE_VARIABLE_DEFINITIONS);
-    },
-  );
+  it.each([
+    "booking_created",
+    "booking_confirmed",
+    "booking_cancelled",
+    "booking_completed",
+  ] as const)("%s 事件回傳完整的訂單變數清單", (eventType) => {
+    expect(getTemplateVariableDefinitions(eventType)).toBe(LINE_TEMPLATE_VARIABLE_DEFINITIONS);
+  });
 
   it("staff_leave_created 清單裡列出的每一個變數,即時預覽都有對應的範例值可以替換(不殘留 {{}})", () => {
     for (const { key } of LINE_STAFF_LEAVE_TEMPLATE_VARIABLE_DEFINITIONS) {
@@ -106,7 +110,9 @@ describe("§10.1 行銷通知(SPECS-INDEX #584):LINE_MARKETING_TEMPLATE_VARIABLE
   });
 
   it("套用範例假資料後正確渲染,{{member_name}} 出現多次都會被換掉", () => {
-    const rendered = previewLineMarketingTemplate("{{member_name}} 您好,{{member_name}} 感謝您的支持");
+    const rendered = previewLineMarketingTemplate(
+      "{{member_name}} 您好,{{member_name}} 感謝您的支持",
+    );
     expect(rendered).not.toMatch(/\{\{\w+\}\}/);
     expect(rendered).toContain("王小姐");
   });

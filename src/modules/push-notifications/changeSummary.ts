@@ -36,10 +36,13 @@ function sameServiceItemSet(a: string[], b: string[]): boolean {
 
 /** 判斷「使用者這次改動最主要的欄位」,回傳哪個欄位有變動(用於決定要不要當作唯一一項顯示)。
  * 回傳陣列長度 0 代表沒有明顯差異,1 代表只改了一項,>=2 代表同時改了好幾項。 */
-export function detectChangedFields(input: BookingChangeSummaryInput): Array<"time" | "service" | "staff"> {
+export function detectChangedFields(
+  input: BookingChangeSummaryInput,
+): Array<"time" | "service" | "staff"> {
   const changed: Array<"time" | "service" | "staff"> = [];
   if (input.original.startAt !== input.next.startAt) changed.push("time");
-  if (!sameServiceItemSet(input.original.serviceItemIds, input.next.serviceItemIds)) changed.push("service");
+  if (!sameServiceItemSet(input.original.serviceItemIds, input.next.serviceItemIds))
+    changed.push("service");
   if (input.original.staffId !== input.next.staffId) changed.push("staff");
   return changed;
 }
@@ -56,9 +59,10 @@ export function computeBookingChangeSummary(input: BookingChangeSummaryInput): s
   } else if (changed[0] === "time") {
     summary = `預約時間改為 ${input.next.formattedStartAt ?? input.next.startAt}`;
   } else if (changed[0] === "service") {
-    const names = input.next.serviceNames && input.next.serviceNames.length > 0
-      ? input.next.serviceNames.join("+")
-      : "";
+    const names =
+      input.next.serviceNames && input.next.serviceNames.length > 0
+        ? input.next.serviceNames.join("+")
+        : "";
     summary = names ? `服務項目改為 ${names}` : GENERIC_MULTI_CHANGE_TEXT;
   } else {
     // changed[0] === "staff"

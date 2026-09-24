@@ -38,10 +38,16 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
-import { addStaffServiceItem, fetchStaffServiceItemIds, removeStaffServiceItem } from "@/modules/staff-agent/api";
+import {
+  addStaffServiceItem,
+  fetchStaffServiceItemIds,
+  removeStaffServiceItem,
+} from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
 import { useMerchantServiceItems } from "@/modules/service-items/context";
 import type { ServiceItem } from "@/modules/service-items/types";
@@ -117,10 +123,19 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
           <>
             <div>
               <Label>抽成基準</Label>
+              {/* 2026-09-24 稽核修正(問題 3)的防禦性套用:這是 RadioGroup 不是 Select,
+                  Radix RadioGroup 內部用的是隱藏的 <input type="radio">,**沒有**那個會補發
+                  空字串的隱藏原生 <select>,所以嚴格說沒有幽靈空值事件的問題。
+                  這裡仍然一併套上同一支防護,理由是:(1) basisType 一樣是 useEffect 等資料
+                  回來才灌進去的,套上零風險;(2) 全專案的「值變更入口」寫法一致,之後有人把
+                  RadioGroup 改成 Select 時不會漏掉防護。判斷條件用白名單。 */}
               <RadioGroup
                 className="mt-2 space-y-2"
                 value={basisType}
-                onValueChange={(v) => setBasisType(v as CommissionBasisType)}
+                onValueChange={guardPhantomEmptyChange<CommissionBasisType>(
+                  setBasisType,
+                  (v) => v in COMMISSION_BASIS_TYPE_LABELS,
+                )}
               >
                 <div className="flex items-start gap-2">
                   <RadioGroupItem value="gross" id="basis-gross" className="mt-0.5" />
@@ -132,11 +147,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
                   </Label>
                 </div>
                 <div className="flex items-start gap-2">
-                  <RadioGroupItem
-                    value="net_of_material_cost"
-                    id="basis-net"
-                    className="mt-0.5"
-                  />
+                  <RadioGroupItem value="net_of_material_cost" id="basis-net" className="mt-0.5" />
                   <Label htmlFor="basis-net" className="font-normal">
                     {COMMISSION_BASIS_TYPE_LABELS.net_of_material_cost}
                     <span className="block text-xs text-muted-foreground">
@@ -247,14 +258,20 @@ function ServiceCommissionRow({
 
       {checked ? (
         <div className="flex flex-wrap items-center gap-2">
+          {/* 2026-09-24 稽核修正(問題 3):這個 Select 特別危險——onValueChange 裡會**立刻
+              呼叫 API 存檔**(void persist(...)),所以一次幽靈空值事件不只是畫面變空白,
+              而是直接把一筆不合法的抽成模式寫進資料庫。
+              合法值是固定常數清單,用白名單判斷(取 COMMISSION_MODE_LABELS 的 key)。 */}
           <Select
             value={mode}
             disabled={saving}
-            onValueChange={(v) => {
-              const nextMode = v as CommissionMode;
-              setMode(nextMode);
-              void persist(nextMode, value);
-            }}
+            onValueChange={guardPhantomEmptyChange<CommissionMode>(
+              (nextMode) => {
+                setMode(nextMode);
+                void persist(nextMode, value);
+              },
+              (v) => v in COMMISSION_MODE_LABELS,
+            )}
           >
             <SelectTrigger className="w-32">
               <SelectValue />
@@ -281,9 +298,7 @@ function ServiceCommissionRow({
           {!hasRate ? (
             <span className="text-xs text-warn">尚未設定,目前抽成 0 元</span>
           ) : (
-            <span className="text-xs text-muted-foreground">
-              試算:1 件約 {previewAmount} 元
-            </span>
+            <span className="text-xs text-muted-foreground">試算:1 件約 {previewAmount} 元</span>
           )}
         </div>
       ) : null}
@@ -399,10 +414,14 @@ function StaffServiceCommissionDialog({
         <div className="space-y-5">
           <div className="space-y-3 rounded-md border border-border p-4">
             <p className="text-sm font-medium text-foreground">整體抽成(批量套用)</p>
+            {/* 同上:RadioGroup 本身沒有幽靈空值事件的問題,這裡是為了寫法一致而一併套上。 */}
             <RadioGroup
               className="flex flex-wrap gap-4"
               value={batchMode}
-              onValueChange={(v) => setBatchMode(v as CommissionMode)}
+              onValueChange={guardPhantomEmptyChange<CommissionMode>(
+                setBatchMode,
+                (v) => v in COMMISSION_MODE_LABELS,
+              )}
             >
               <div className="flex items-center gap-2">
                 <RadioGroupItem value="percentage" id="batch-mode-percentage" />
@@ -493,7 +512,9 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
     <Card>
       <CardHeader>
         <CardTitle>按件計酬服務人員</CardTitle>
-        <CardDescription>逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元</CardDescription>
+        <CardDescription>
+          逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -584,7 +605,8 @@ function StaffSalarySettingsDialog({
     if (!open) return;
     setBaseSalary(settings ? String(settings.monthly_base_salary) : "0");
     setQuotaDays(
-      settings?.monthly_leave_quota_days !== undefined && settings?.monthly_leave_quota_days !== null
+      settings?.monthly_leave_quota_days !== undefined &&
+        settings?.monthly_leave_quota_days !== null
         ? String(settings.monthly_leave_quota_days)
         : "",
     );

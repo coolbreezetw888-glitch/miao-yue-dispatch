@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import {
   Select,
   SelectContent,
@@ -68,7 +69,12 @@ export function MerchantIntakeForm({
         intro,
       });
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "建立失敗，請稍後再試");
+      // 2026-09-24 深夜巡檢修正:原本寫 `err instanceof Error ? err.message : ...`,但 Supabase
+      // 回傳的 error 只是 JSON.parse 出來的一般物件、不是 Error 的實例,instanceof 永遠 false,
+      // 後端真正擋下來的原因(店名重複、權限不足、欄位約束)全部被吞成一句沒有線索的
+      // 「建立失敗,請稍後再試」——而這裡正是新使用者註冊完成後看到的第一個畫面(/app/onboarding),
+      // 看不到原因就只能一直重試同樣的輸入。完整根因見 platform-admin/getErrorMessage.ts 檔頭。
+      setErrorMessage(getErrorMessage(err, "建立失敗，請稍後再試"));
     } finally {
       setSubmitting(false);
     }

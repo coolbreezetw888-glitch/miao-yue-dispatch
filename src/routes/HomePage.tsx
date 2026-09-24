@@ -24,9 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import {
-  clearStaffPendingLoginEmail,
-} from "@/modules/staff-agent/api";
+import { clearStaffPendingLoginEmail } from "@/modules/staff-agent/api";
 // 模組 14(服務人員端)規格書 4.1:個人資料卡片。
 import { EditMyStaffProfileDialog } from "@/modules/staff-portal/EditMyStaffProfileDialog";
 import { useActiveMyStaffRecord, useMyStaffPermission } from "@/modules/staff-portal/context";

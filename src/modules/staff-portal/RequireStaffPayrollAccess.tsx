@@ -15,16 +15,23 @@ import { useNavigate } from "react-router-dom";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
-import { useMyStaffPermission } from "./context";
+import { useActiveMyStaffRecord, useMyStaffPermission } from "./context";
 
 export function RequireStaffPayrollAccess({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
   const { data: role, isLoading: roleLoading } = useCurrentMerchantRole();
+  // 2026-09-24 深夜巡檢問題 6:原本 loading 只算 merchant/role/permission 三項,沒有把
+  // useActiveMyStaffRecord 算進來。權限查詢(useMyStaffPermission)內部要先解出自己的 staff_id
+  // 才問得到答案,staff_id 還沒解出來的那段時間它等於沒有答案、但 isLoading 已經是 false,於是
+  // 一位權限完全正常的服務人員,用網路較慢的手機點「薪資報表」分頁籤,會先閃出一次「尚未開放此
+  // 功能,請洽商家管理員開通『抽成/薪資報表檢視』權限」,等 staff_id 解出來才恢復正常。
+  // 寫法直接比照同資料夾已經正確的 RequireStaffAvailabilityAccess.tsx,保持一致。
+  const { isLoading: staffLoading } = useActiveMyStaffRecord(merchant?.id ?? null);
   const { data: hasPermission, isLoading: permissionLoading } =
     useMyStaffPermission("staff_payroll_view");
 
-  const loading = merchantLoading || roleLoading || permissionLoading;
+  const loading = merchantLoading || roleLoading || staffLoading || permissionLoading;
   const isStaff = role === "staff";
 
   useEffect(() => {

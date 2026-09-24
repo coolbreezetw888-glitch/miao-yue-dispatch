@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 import { BOOKING_STATUS_LABELS, type BookingStatus } from "@/modules/booking/types";
+import { isoToTaipeiTime } from "@/modules/booking/dateUtils";
 import { formatAmount } from "@/modules/booking/orderAmount";
 
 import type { MyBookingScheduleItem } from "./api";
@@ -36,16 +37,12 @@ export function MyBookingDetailDialog({
 }) {
   if (!booking) return null;
 
-  const startTime = new Date(booking.start_at).toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const endTime = new Date(booking.end_at).toLocaleTimeString("zh-TW", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  // 2026-09-24 深夜巡檢問題 5:原本用 toLocaleTimeString 但沒帶 timeZone,跟著瀏覽器本機時區跑
+  // ——服務人員的裝置時區不是 UTC+8 時(出國、手機自動時區抓錯)這裡的預約時間會顯示錯誤,而且
+  // 跟「時間軸格線」檢視(用正確的 isoToTaipeiTime)對同一筆預約顯示出不同的時間。改用
+  // dateUtils.ts 提供、明確指定 Asia/Taipei 的 isoToTaipeiTime。
+  const startTime = isoToTaipeiTime(booking.start_at);
+  const endTime = isoToTaipeiTime(booking.end_at);
   const status = booking.status as BookingStatus;
 
   return (
@@ -132,7 +129,12 @@ export function MyBookingDetailDialog({
         </div>
 
         <div className="shrink-0 border-t border-border bg-background px-5 py-3">
-          <Button type="button" variant="outline" className="w-full" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => onOpenChange(false)}
+          >
             關閉
           </Button>
         </div>

@@ -276,7 +276,8 @@ export function useMyLineBindingStatus(
 ): UseQueryResult<SelfLineBindingStatus> {
   return useQuery({
     queryKey: ["line-notifications-module", "my-binding-status", merchantId, role, userId],
-    queryFn: () => fetchMyLineBindingStatus(merchantId as string, role as "admin" | "agent", userId as string),
+    queryFn: () =>
+      fetchMyLineBindingStatus(merchantId as string, role as "admin" | "agent", userId as string),
     enabled: Boolean(merchantId) && Boolean(role) && Boolean(userId),
   });
 }
@@ -359,7 +360,14 @@ export function useLineNotificationLog(
   pageSize = 20,
 ): UseQueryResult<LineNotificationLogRow[]> {
   return useQuery({
-    queryKey: ["line-notifications-module", "notification-log", merchantId, eventType, page, pageSize],
+    queryKey: [
+      "line-notifications-module",
+      "notification-log",
+      merchantId,
+      eventType,
+      page,
+      pageSize,
+    ],
     queryFn: () =>
       fetchLineNotificationLog(merchantId as string, eventType, pageSize, page * pageSize),
     enabled: Boolean(merchantId),
@@ -472,6 +480,15 @@ export interface DispatchLineNotificationInput {
  * line-notify-dispatch Edge Function。這支函式本身回傳 void(不是 Promise),呼叫端不會、也不能
  * await 到任何東西,即使這支 Edge Function 整個掛掉或逾時,也絕對不會讓錯誤往外拋、影響原本呼叫端
  * 的訂單/請假操作。
+ *
+ * 2026-09-24 深夜巡檢修正:這裡原本只掛 `.catch()`。但 `supabase.functions.invoke` 對非 2xx
+ * 回應是「resolve 成 { data: null, error: FunctionsHttpError }」,不是 reject——所以 .catch()
+ * 只有在網路整個斷掉時才會跑,HTTP 401/500 這類「通知真的送不出去」的情況完全靜默,下面註解
+ * 承諾的那行 console.error 從來不會出現(商家 LINE token 過期、Edge Function 內部拋錯,
+ * 沒有任何人會知道)。同一份檔案的 testLineConnection/sendMarketingMessage 其實早就寫對了
+ * (`if (error) throw await extractEdgeFunctionError(error)`),只有這支 dispatch 漏掉。
+ * 現在 .then 負責非 2xx、.catch 負責網路層失敗,兩條路都會留下紀錄;邊界原則完全不變——
+ * 一樣不彈任何訊息給使用者、一樣不影響訂單/請假操作。
  */
 export function dispatchLineNotification(input: DispatchLineNotificationInput): void {
   void supabase.functions
@@ -483,8 +500,14 @@ export function dispatchLineNotification(input: DispatchLineNotificationInput): 
         event_type: input.eventType,
       },
     })
-    .catch((err: unknown) => {
+    .then(({ error }) => {
       // 規則 2.4 第 4 點:只留一行 console.error,不彈出任何錯誤訊息給使用者,不影響原本操作。
+      if (error) {
+        console.error("[line-notify-dispatch] 呼叫失敗(不影響訂單/請假操作)", error);
+      }
+    })
+    .catch((err: unknown) => {
+      // 網路整個斷掉/請求被瀏覽器擋下來這類真正 reject 的情況,行為同上。
       console.error("[line-notify-dispatch] 呼叫失敗(不影響訂單/請假操作)", err);
     });
 }

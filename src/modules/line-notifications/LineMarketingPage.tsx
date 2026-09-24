@@ -84,22 +84,14 @@ function LineMarketingPageInner() {
   // §10.2「排除清單」:可以手動排除的名單來源就是「已綁定 LINE 的會員」全體(跟單獨選擇同一份
   // 名單),黑名單會員另外用唯讀的「系統自動排除」區塊顯示,不出現在這個手動排除的可勾選清單裡
   // (避免同一個人同時出現在兩個排除區塊造成混淆)。
-  const excludableMembers = useMemo(
-    () => memberList.filter((m) => !m.isBlacklisted),
-    [memberList],
-  );
+  const excludableMembers = useMemo(() => memberList.filter((m) => !m.isBlacklisted), [memberList]);
   const filteredExcludableMembers = useMemo(() => {
     const term = excludeSearch.trim();
     if (!term) return excludableMembers;
-    return excludableMembers.filter(
-      (m) => m.name.includes(term) || (m.phone ?? "").includes(term),
-    );
+    return excludableMembers.filter((m) => m.name.includes(term) || (m.phone ?? "").includes(term));
   }, [excludableMembers, excludeSearch]);
 
-  const blacklistedMembers = useMemo(
-    () => memberList.filter((m) => m.isBlacklisted),
-    [memberList],
-  );
+  const blacklistedMembers = useMemo(() => memberList.filter((m) => m.isBlacklisted), [memberList]);
 
   const finalRecipientIds = useMemo(
     () => computeFinalRecipientIds(memberList, selectedIds, excludedIds),
@@ -219,9 +211,7 @@ function LineMarketingPageInner() {
                 ) : (
                   <ul className="space-y-1" data-testid="line-marketing-tier-list">
                     {tiers.map((tier) => {
-                      const tierMemberCount = memberList.filter(
-                        (m) => m.tierId === tier.id,
-                      ).length;
+                      const tierMemberCount = memberList.filter((m) => m.tierId === tier.id).length;
                       return (
                         <li key={tier.id}>
                           <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
@@ -309,7 +299,9 @@ function LineMarketingPageInner() {
                         onCheckedChange={(v) => toggleExcluded(m.id, v === true)}
                       />
                       <span className="text-foreground">{m.name}</span>
-                      {m.phone ? <span className="text-xs text-muted-foreground">{m.phone}</span> : null}
+                      {m.phone ? (
+                        <span className="text-xs text-muted-foreground">{m.phone}</span>
+                      ) : null}
                     </label>
                   </li>
                 ))}

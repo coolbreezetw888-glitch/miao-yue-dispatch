@@ -10,7 +10,11 @@ import {
 
 describe("parsePushPayload", () => {
   it("正常 payload:正確解析 title/body/url", () => {
-    const result = parsePushPayload({ title: "新訂單通知", body: "王小明 10:00", url: "/app/my-calendar" });
+    const result = parsePushPayload({
+      title: "新訂單通知",
+      body: "王小明 10:00",
+      url: "/app/my-calendar",
+    });
     expect(result).toEqual({ title: "新訂單通知", body: "王小明 10:00", url: "/app/my-calendar" });
   });
 
@@ -20,7 +24,11 @@ describe("parsePushPayload", () => {
   });
 
   it("raw 不是物件時回傳預設值", () => {
-    expect(parsePushPayload("not an object")).toEqual({ title: "秒約", body: "", url: "/app/my-calendar" });
+    expect(parsePushPayload("not an object")).toEqual({
+      title: "秒約",
+      body: "",
+      url: "/app/my-calendar",
+    });
     expect(parsePushPayload(123)).toEqual({ title: "秒約", body: "", url: "/app/my-calendar" });
   });
 

@@ -19,7 +19,8 @@ vi.mock("./api", () => ({
   insertStaffPushSubscription: (...args: unknown[]) => insertStaffPushSubscriptionMock(...args),
   deleteStaffPushSubscriptionByEndpoint: (...args: unknown[]) =>
     deleteStaffPushSubscriptionByEndpointMock(...args),
-  deleteStaffPushSubscriptionById: (...args: unknown[]) => deleteStaffPushSubscriptionByIdMock(...args),
+  deleteStaffPushSubscriptionById: (...args: unknown[]) =>
+    deleteStaffPushSubscriptionByIdMock(...args),
 }));
 
 vi.mock("@/components/InstallPwaHint", () => ({
@@ -27,7 +28,11 @@ vi.mock("@/components/InstallPwaHint", () => ({
   isRunningStandalone: (...args: unknown[]) => isRunningStandaloneMock(...args),
 }));
 
-import { usePushSubscription, type UsePushSubscriptionResult } from "./usePushSubscription";
+import {
+  PUSH_SUBSCRIBE_BLOCKED_MESSAGES,
+  usePushSubscription,
+  type UsePushSubscriptionResult,
+} from "./usePushSubscription";
 
 function Probe({
   merchantId,
@@ -68,7 +73,10 @@ describe("usePushSubscription", () => {
     detectIosSafariMock.mockReset().mockReturnValue(false);
     isRunningStandaloneMock.mockReset().mockReturnValue(false);
 
-    vi.stubEnv("VITE_VAPID_PUBLIC_KEY", "BFg_if7Gen_q313Y3lRXBIdntbLU80t1njSXCDe6DQK85bk3fmjEyq9qN2sTvl3mdtAJTiv6NKTvGzuVRAMrEVY");
+    vi.stubEnv(
+      "VITE_VAPID_PUBLIC_KEY",
+      "BFg_if7Gen_q313Y3lRXBIdntbLU80t1njSXCDe6DQK85bk3fmjEyq9qN2sTvl3mdtAJTiv6NKTvGzuVRAMrEVY",
+    );
 
     requestPermissionMock = vi.fn().mockResolvedValue("granted");
     getSubscriptionMock = vi.fn().mockResolvedValue(null);
@@ -80,7 +88,7 @@ describe("usePushSubscription", () => {
 
     // @ts-expect-error 測試環境手動塞入瀏覽器全域物件
     global.Notification = { permission: "default", requestPermission: requestPermissionMock };
-    // @ts-expect-error 同上
+    // @ts-expect-error 同上,PushManager 的 DOM 型別是 interface + 建構子簽章,測試用的假實作對不上,刻意忽略
     global.PushManager = function PushManager() {};
 
     Object.defineProperty(navigator, "serviceWorker", {
@@ -104,7 +112,7 @@ describe("usePushSubscription", () => {
     vi.unstubAllEnvs();
     // @ts-expect-error 清除測試塞入的全域物件
     delete global.Notification;
-    // @ts-expect-error 同上
+    // @ts-expect-error 同上,globalThis.PushManager 在型別上是必要屬性不可 delete,測試需要還原環境所以刻意忽略
     delete global.PushManager;
   });
 
@@ -124,9 +132,7 @@ describe("usePushSubscription", () => {
     });
 
     expect(requestPermissionMock).toHaveBeenCalledTimes(1);
-    expect(subscribeMock).toHaveBeenCalledWith(
-      expect.objectContaining({ userVisibleOnly: true }),
-    );
+    expect(subscribeMock).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
     expect(insertStaffPushSubscriptionMock).toHaveBeenCalledWith({
       merchantId: "merchant-1",
       staffId: "staff-1",
@@ -147,6 +153,83 @@ describe("usePushSubscription", () => {
     });
 
     expect(subscribeMock).not.toHaveBeenCalled();
+    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // 2026-09-24 深夜巡檢新增:死按鈕 + 假成功訊息。
+  // -------------------------------------------------------------------------
+
+  it("subscribe():部署環境沒設 VITE_VAPID_PUBLIC_KEY 時,丟出看得懂的中文錯誤,不是靜默沒反應", async () => {
+    // Vercel 正式環境漏設這個 build-time 變數的情境(本機 .env 有、部署環境沒有)。
+    vi.stubEnv("VITE_VAPID_PUBLIC_KEY", "");
+    const getResult = renderProbe();
+    await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
+
+    await expect(getResult().subscribe()).rejects.toThrow(
+      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.missingVapidKey,
+    );
+    // 連權限視窗都不該跳出來——根本不可能成功,不要浪費使用者一次授權決定。
+    expect(requestPermissionMock).not.toHaveBeenCalled();
+    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+  });
+
+  it("subscribe():瀏覽器不支援推播時,丟出看得懂的中文錯誤", async () => {
+    // @ts-expect-error 測試環境刻意移除 Notification,模擬不支援推播的瀏覽器
+    delete global.Notification;
+    const getResult = renderProbe();
+    await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
+
+    expect(getResult().isSupported).toBe(false);
+    await expect(getResult().subscribe()).rejects.toThrow(
+      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.unsupported,
+    );
+  });
+
+  it("subscribe():沒有商家 id / 沒有服務人員 id 時,各自丟出對應的中文錯誤", async () => {
+    const getWithoutMerchant = renderProbe("", "staff-1");
+    await waitFor(() => expect(getWithoutMerchant().isLoadingSubscriptions).toBe(false));
+    await expect(getWithoutMerchant().subscribe()).rejects.toThrow(
+      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.noMerchant,
+    );
+
+    const getWithoutStaff = renderProbe("merchant-1", "");
+    await waitFor(() => expect(getWithoutStaff().isLoadingSubscriptions).toBe(false));
+    await expect(getWithoutStaff().subscribe()).rejects.toThrow(
+      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.noStaff,
+    );
+
+    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+  });
+
+  it("subscribe():真的訂閱成功才回傳 true(呼叫端靠這個值決定要不要報喜)", async () => {
+    insertStaffPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
+    const getResult = renderProbe();
+    await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
+
+    let returned: boolean | undefined;
+    await act(async () => {
+      returned = await getResult().subscribe();
+    });
+
+    expect(returned).toBe(true);
+  });
+
+  it("subscribe():使用者沒給權限時回傳 false——即使這個瀏覽器「曾經」被允許過通知,也不能誤報成功", async () => {
+    // 關鍵情境:Notification.permission 停留在 granted(以前允許過),但這次 requestPermission()
+    // 的結果是 denied。舊寫法會因為 permission === 'granted' 而跳出假的「已開啟訂單通知」。
+    // @ts-expect-error 測試環境手動塞入瀏覽器全域物件
+    global.Notification = { permission: "granted", requestPermission: requestPermissionMock };
+    requestPermissionMock.mockResolvedValue("denied");
+    const getResult = renderProbe();
+    await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
+
+    let returned: boolean | undefined;
+    await act(async () => {
+      returned = await getResult().subscribe();
+    });
+
+    expect(returned).toBe(false);
     expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
   });
 

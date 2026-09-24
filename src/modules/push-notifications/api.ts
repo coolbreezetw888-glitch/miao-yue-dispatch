@@ -17,7 +17,9 @@ import type {
 // =========================================================================
 // 7.2:服務人員自己的推播訂閱讀寫(直接開放 RLS,比照 staff_availability_windows 既有模式)。
 // =========================================================================
-export async function fetchStaffPushSubscriptions(staffId: string): Promise<StaffPushSubscription[]> {
+export async function fetchStaffPushSubscriptions(
+  staffId: string,
+): Promise<StaffPushSubscription[]> {
   const { data, error } = await supabase
     .from("staff_push_subscriptions")
     .select("*")
@@ -74,7 +76,10 @@ export async function deleteStaffPushSubscriptionById(id: string): Promise<void>
 
 /** 7.2 第 5 點:依 endpoint 刪除(「關閉此裝置通知」按鈕用這個裝置目前的 endpoint 比對)。 */
 export async function deleteStaffPushSubscriptionByEndpoint(endpoint: string): Promise<void> {
-  const { error } = await supabase.from("staff_push_subscriptions").delete().eq("endpoint", endpoint);
+  const { error } = await supabase
+    .from("staff_push_subscriptions")
+    .delete()
+    .eq("endpoint", endpoint);
   if (error) throw error;
 }
 
@@ -179,10 +184,7 @@ export function usePushNotificationLog(
 // 第八節「對外介面」:8.1 dispatchPushNotification。供模組 6(訂單管理)的 create_booking/
 // cancel_booking/update_booking 三個 mutation 呼叫成功之後直接 import 使用。
 // =========================================================================
-export type DispatchablePushEventType =
-  | "booking_created"
-  | "booking_cancelled"
-  | "booking_updated";
+export type DispatchablePushEventType = "booking_created" | "booking_cancelled" | "booking_updated";
 
 export interface DispatchPushNotificationInput {
   merchantId: string;
@@ -196,6 +198,13 @@ export interface DispatchPushNotificationInput {
  * 8.1/規則 4.3 第 4 點(本模組最重要的邊界原則,完全比照模組 11 dispatchLineNotification 的既有
  * 寫法):不等待、吞掉錯誤地呼叫 push-notify-dispatch Edge Function。即使這支 Edge Function
  * 整個掛掉或逾時,也絕對不會讓錯誤往外拋、影響原本呼叫端的訂單操作。
+ *
+ * 2026-09-24 深夜巡檢修正(跟 line-notifications/api.ts 的 dispatchLineNotification 同一個問題,
+ * 同樣的修法):這裡原本只掛 `.catch()`。但 `supabase.functions.invoke` 對非 2xx 回應是
+ * 「resolve 成 { data: null, error: FunctionsHttpError }」,不是 reject——所以 .catch() 只有在
+ * 網路整個斷掉時才會跑,HTTP 401/500 這類「推播真的送不出去」的情況完全靜默,下面註解承諾的
+ * 那行 console.error 從來不會出現。現在 .then 負責非 2xx、.catch 負責網路層失敗,兩條路都會留下
+ * 紀錄;邊界原則完全不變——一樣不彈任何訊息給使用者、一樣不影響訂單操作。
  */
 export function dispatchPushNotification(input: DispatchPushNotificationInput): void {
   void supabase.functions
@@ -207,8 +216,14 @@ export function dispatchPushNotification(input: DispatchPushNotificationInput): 
         ...(input.changeSummary ? { change_summary: input.changeSummary } : {}),
       },
     })
-    .catch((err: unknown) => {
+    .then(({ error }) => {
       // 規則 4.3 第 4 點:只留一行 console.error,不彈出任何錯誤訊息給使用者,不影響原本操作。
+      if (error) {
+        console.error("[push-notify-dispatch] 呼叫失敗(不影響訂單操作)", error);
+      }
+    })
+    .catch((err: unknown) => {
+      // 網路整個斷掉/請求被瀏覽器擋下來這類真正 reject 的情況,行為同上。
       console.error("[push-notify-dispatch] 呼叫失敗(不影響訂單操作)", err);
     });
 }

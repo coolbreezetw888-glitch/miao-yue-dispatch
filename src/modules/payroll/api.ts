@@ -36,7 +36,10 @@ import { validateDateRange } from "./dateRangeUtils";
 // 商家層級預設抽成比例欄位、§十 10.1 拿掉 pay_days_per_month 欄位(改成系統動態計算,不再是
 // 商家可填寫的設定值)之後,這裡的預設值只剩 commission_basis_type。
 // =========================================================================
-export const DEFAULT_MERCHANT_PAYROLL_SETTINGS: Pick<MerchantPayrollSettings, "commission_basis_type"> = {
+export const DEFAULT_MERCHANT_PAYROLL_SETTINGS: Pick<
+  MerchantPayrollSettings,
+  "commission_basis_type"
+> = {
   commission_basis_type: "gross",
 };
 
@@ -414,7 +417,11 @@ export function useMerchantBillingSummaryByRange(
   return useQuery({
     queryKey: ["payroll-module", "merchant-billing-summary-range", merchantId, startDate, endDate],
     queryFn: () =>
-      fetchMerchantBillingSummaryByRange(merchantId as string, startDate as string, endDate as string),
+      fetchMerchantBillingSummaryByRange(
+        merchantId as string,
+        startDate as string,
+        endDate as string,
+      ),
     enabled:
       Boolean(merchantId) &&
       Boolean(startDate) &&
@@ -478,9 +485,19 @@ export function useStaffMonthlyPayrollSummaryByRange(
   endDate: string | null | undefined,
 ): UseQueryResult<StaffMonthlyPayrollSummary> {
   return useQuery({
-    queryKey: ["payroll-module", "staff-monthly-payroll-summary-range", staffId, startDate, endDate],
+    queryKey: [
+      "payroll-module",
+      "staff-monthly-payroll-summary-range",
+      staffId,
+      startDate,
+      endDate,
+    ],
     queryFn: () =>
-      fetchStaffMonthlyPayrollSummaryByRange(staffId as string, startDate as string, endDate as string),
+      fetchStaffMonthlyPayrollSummaryByRange(
+        staffId as string,
+        startDate as string,
+        endDate as string,
+      ),
     enabled:
       Boolean(staffId) &&
       Boolean(startDate) &&

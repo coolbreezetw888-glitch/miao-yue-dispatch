@@ -146,7 +146,15 @@ function ReportExportCenterPageInner() {
         }
       }
       const csv = buildCsvContent(
-        ["服務人員", "訂單編號", "訂單日期", "客戶姓名", "抽成基準金額", "服務項目明細", "抽成金額"],
+        [
+          "服務人員",
+          "訂單編號",
+          "訂單日期",
+          "客戶姓名",
+          "抽成基準金額",
+          "服務項目明細",
+          "抽成金額",
+        ],
         allRows,
       );
       downloadCsv(

@@ -23,6 +23,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
@@ -73,7 +75,11 @@ export function PieceRateStaffReport({
   // 兩個 hook 都無條件呼叫(react hooks 規則),各自的 enabled 條件會確保只有其中一個真的送出
   // 請求——沒有 dateRange 時走原本的年/月查詢(商家管理員視角),有 dateRange 時走區間查詢
   // (服務人員自助視角)。
-  const monthQuery = useStaffCommissionSummary(staffId, dateRange ? null : year, dateRange ? null : month);
+  const monthQuery = useStaffCommissionSummary(
+    staffId,
+    dateRange ? null : year,
+    dateRange ? null : month,
+  );
   const rangeQuery = useStaffCommissionSummaryByRange(
     staffId,
     dateRange ? dateRange.startDate : null,
@@ -105,12 +111,15 @@ export function PieceRateStaffReport({
       d.commission_amount,
       d.recalculated ? "是" : "否",
     ]);
-    const periodLabel = dateRange ? `${dateRange.startDate}_${dateRange.endDate}` : `${year}-${String(month).padStart(2, "0")}`;
+    const periodLabel = dateRange
+      ? `${dateRange.startDate}_${dateRange.endDate}`
+      : `${year}-${String(month).padStart(2, "0")}`;
     downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
-  if (error || !summary) return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
+  if (error || !summary)
+    return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
 
   return (
     <div className="space-y-4">
@@ -156,7 +165,9 @@ export function PieceRateStaffReport({
                 <CardDescription>訂單總額</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-foreground">{formatAmount(summary.total_amount)}</p>
+                <p className="text-lg font-semibold text-foreground">
+                  {formatAmount(summary.total_amount)}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -177,8 +188,12 @@ export function PieceRateStaffReport({
         <CardHeader>
           <CardTitle>訂單明細</CardTitle>
           {!showSummaryCards ? (
+            /* 2026-09-24 稽核修正(問題 4):金額顯示統一走 formatAmount,不要一邊用
+               formatAmount(摘要卡片)一邊直接印原始值(這裡跟下面的明細列),
+               否則同一個數字在同一頁會長得不一樣,師傅會懷疑是不是被扣了錢。 */
             <CardDescription>
-              總計 {summary.total_orders} 筆訂單,抽成合計 {summary.total_commission_amount} 元
+              總計 {summary.total_orders} 筆訂單,抽成合計{" "}
+              {formatAmount(summary.total_commission_amount)}
             </CardDescription>
           ) : null}
         </CardHeader>
@@ -206,13 +221,25 @@ export function PieceRateStaffReport({
                       <TableRow>
                         <TableCell>{new Date(d.order_date).toLocaleDateString("zh-TW")}</TableCell>
                         <TableCell>{d.customer_name}</TableCell>
-                        <TableCell className="text-right">{d.commission_base_amount}</TableCell>
+                        {/* 2026-09-24 稽核修正(問題 4):明細列原本直接印原始值(例如 99.5),
+                            摘要卡片卻走 formatAmount(四捨五入成 $100),同一頁兩種格式,
+                            師傅拿計算機加明細會跟卡片對不上,產生「是不是被扣了」的信任問題。
+                            這裡改成一律走同一支 formatAmount,格式統一。 */}
                         <TableCell className="text-right">
-                          {d.commission_amount}
-                          {d.recalculated ? <span className="ml-1 text-xs text-warn">(已重算)</span> : null}
+                          {formatAmount(d.commission_base_amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" onClick={() => toggleExpanded(d.booking_id)}>
+                          {formatAmount(d.commission_amount)}
+                          {d.recalculated ? (
+                            <span className="ml-1 text-xs text-warn">(已重算)</span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleExpanded(d.booking_id)}
+                          >
                             {expanded ? "收合" : "展開"}
                           </Button>
                         </TableCell>
@@ -229,7 +256,10 @@ export function PieceRateStaffReport({
                             ) : (
                               <ul className="space-y-1 text-sm text-foreground">
                                 {d.item_breakdown.map((item, idx) => (
-                                  <li key={idx} className="flex flex-wrap items-center justify-between gap-2">
+                                  <li
+                                    key={idx}
+                                    className="flex flex-wrap items-center justify-between gap-2"
+                                  >
                                     <span>
                                       {item.service_item_name} × {item.quantity}(
                                       {item.commission_mode === "percentage"
@@ -237,7 +267,10 @@ export function PieceRateStaffReport({
                                         : `${item.commission_value} 元/件`}
                                       )
                                     </span>
-                                    <span className="font-medium">{item.commission_amount} 元</span>
+                                    {/* 問題 4:展開後的逐項抽成明細一樣統一走 formatAmount。 */}
+                                    <span className="font-medium">
+                                      {formatAmount(item.commission_amount)}
+                                    </span>
                                   </li>
                                 ))}
                               </ul>
@@ -278,7 +311,11 @@ export function MonthlySalaryStaffReport({
    * 的摘要卡片(本來就已經有三張卡片),不新增 showSummaryCards 這個 prop。 */
   showCsvExport?: boolean;
 }) {
-  const monthQuery = useStaffMonthlyPayrollSummary(staffId, dateRange ? null : year, dateRange ? null : month);
+  const monthQuery = useStaffMonthlyPayrollSummary(
+    staffId,
+    dateRange ? null : year,
+    dateRange ? null : month,
+  );
   const rangeQuery = useStaffMonthlyPayrollSummaryByRange(
     staffId,
     dateRange ? dateRange.startDate : null,
@@ -289,13 +326,21 @@ export function MonthlySalaryStaffReport({
   function handleExportCsv() {
     if (!summary) return;
     const headers = ["假別", "天數", "扣款模式", "扣款金額"];
-    const rows = summary.details.map((d) => [d.leave_type_name, d.days, d.deduction_mode, d.deduction_amount]);
-    const periodLabel = dateRange ? `${dateRange.startDate}_${dateRange.endDate}` : `${year}-${String(month).padStart(2, "0")}`;
+    const rows = summary.details.map((d) => [
+      d.leave_type_name,
+      d.days,
+      d.deduction_mode,
+      d.deduction_amount,
+    ]);
+    const periodLabel = dateRange
+      ? `${dateRange.startDate}_${dateRange.endDate}`
+      : `${year}-${String(month).padStart(2, "0")}`;
     downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
-  if (error || !summary) return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
+  if (error || !summary)
+    return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
 
   return (
     <div className="space-y-4">
@@ -317,7 +362,9 @@ export function MonthlySalaryStaffReport({
             <CardDescription>月薪基本額</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold text-foreground">{summary.monthly_base_salary} 元</p>
+            <p className="text-lg font-semibold text-foreground">
+              {summary.monthly_base_salary} 元
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -325,7 +372,9 @@ export function MonthlySalaryStaffReport({
             <CardDescription>總扣款</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-lg font-semibold text-foreground">{summary.total_deduction_amount} 元</p>
+            <p className="text-lg font-semibold text-foreground">
+              {summary.total_deduction_amount} 元
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -443,7 +492,16 @@ function StaffReportPageInner() {
           <label className="text-xs text-muted-foreground" htmlFor="staff-select">
             服務人員
           </label>
-          <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+          {/* 2026-09-24 稽核修正(問題 3):稽核清單沒有列到這一站,但它其實是全專案最典型的
+              受害情境——selectedStaffId 是在上面的 useEffect 裡「等 staffList 載入完才退回
+              選名單第一位」灌進去的,而且從「服務人員明細」點「查看明細」過來時還會再帶一次
+              網址參數,兩種都是掛載之後才改 value 的時序。被洗成空字串的話,畫面會卡在
+              「請選擇服務人員」,使用者明明是從連結點過來的卻看不到任何報表。
+              合法值是資料庫來的動態清單(服務人員 id),判斷條件是「不是空字串」。 */}
+          <Select
+            value={selectedStaffId}
+            onValueChange={guardPhantomEmptyChange(setSelectedStaffId)}
+          >
             <SelectTrigger id="staff-select" className="mt-1 w-56">
               <SelectValue placeholder="選擇服務人員" />
             </SelectTrigger>
@@ -456,7 +514,12 @@ function StaffReportPageInner() {
             </SelectContent>
           </Select>
         </div>
-        <YearMonthPicker year={year} month={month} onYearChange={setYear} onMonthChange={setMonth} />
+        <YearMonthPicker
+          year={year}
+          month={month}
+          onYearChange={setYear}
+          onMonthChange={setMonth}
+        />
       </div>
 
       {!staffList || staffList.length === 0 ? (

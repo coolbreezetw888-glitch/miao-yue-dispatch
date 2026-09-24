@@ -83,10 +83,12 @@ export default function ResetPasswordPage() {
   if (status === "invalid") {
     return (
       <AuthShell title="重設密碼連結已失效" subtitle="這個連結可能已經使用過或過期了">
-        <p className="text-sm text-muted-foreground">
-          請回到忘記密碼頁重新申請一次重設密碼信。
-        </p>
-        <Button className="mt-6 w-full" variant="outline" onClick={() => navigate("/forgot-password")}>
+        <p className="text-sm text-muted-foreground">請回到忘記密碼頁重新申請一次重設密碼信。</p>
+        <Button
+          className="mt-6 w-full"
+          variant="outline"
+          onClick={() => navigate("/forgot-password")}
+        >
           重新申請
         </Button>
       </AuthShell>

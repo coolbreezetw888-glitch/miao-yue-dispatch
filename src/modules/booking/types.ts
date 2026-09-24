@@ -285,7 +285,10 @@ export const DEFAULT_CALENDAR_STATE_STYLES: CalendarStateStyleMap = {
 };
 
 /** 依狀態值從顏色表挑出對應色碼。 */
-export function getCalendarStateColor(colors: CalendarStateStyleMap, state: CalendarStateType): string {
+export function getCalendarStateColor(
+  colors: CalendarStateStyleMap,
+  state: CalendarStateType,
+): string {
   if (state === "full_day_leave") return colors.fullDayLeave;
   if (state === "partial_leave") return colors.partialLeave;
   return colors.crossStoreOccupied;

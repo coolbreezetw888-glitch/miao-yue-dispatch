@@ -48,11 +48,19 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import type { IndustryType } from "@/modules/merchant/types";
-import { useAgentPermission, useCurrentMerchantRole, useMerchantStaffList } from "@/modules/staff-agent/context";
+import {
+  useAgentPermission,
+  useCurrentMerchantRole,
+  useMerchantStaffList,
+} from "@/modules/staff-agent/context";
 
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import { BookingFormDialog } from "./CalendarPage";
-import { useBookingCardExtras, useMerchantBookings, useMerchantBookingStatusColors } from "./context";
+import {
+  useBookingCardExtras,
+  useMerchantBookings,
+  useMerchantBookingStatusColors,
+} from "./context";
 import { addDays, buildTaipeiIso, isoToTaipeiDateTimeWithSeconds, toDateKey } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import {
@@ -60,8 +68,10 @@ import {
   formatGroupDateHeading,
   groupBookingsByDateField,
   ORDER_STATUS_TABS,
+  ORDERS_RENDER_LIMIT,
   sumBookingRevenue,
   tabToStatusFilter,
+  takeLatestBookings,
   type OrderDateFieldMode,
   type OrderStatusTab,
 } from "./ordersPageLogic";
@@ -134,12 +144,34 @@ function OrdersPageInner() {
         }
       : {}),
     ...(filters.keyword.trim() ? { keyword: filters.keyword.trim() } : {}),
+    // 2026-09-24 深夜巡檢問題 1:這支查詢原本沒帶 unpaged,PostgREST 的 db.max_rows 上限
+    // (這個專案設定 1000,見 supabase/config.toml)會讓一間累積超過 1000 筆訂單的商家,在
+    // 「全部」分頁籤、不設日期區間時只拿到**最舊的 1000 筆**(查詢是 order by start_at
+    // ascending),造成四個連鎖錯誤:①較新的訂單整個看不到(使用者以為訂單不見了)②統計列
+    // 「共 N 筆訂單」固定卡在 1000 ③「總業績」只加總這 1000 筆,金額明顯少報 ④關鍵字搜尋是
+    // 前端對撈回來的資料比對(api.ts fetchMerchantBookings),搜尋較新的客戶姓名/單號會搜不到。
+    // 這裡改成帶 unpaged:true,直接複用 api.ts 既有的 .range() 分頁迴圈(原本只有模組 12 的
+    // 報表匯出在用),把符合篩選條件的訂單全部撈完。
+    //
+    // 效能考量已經評估過:撈取不設上限、但**渲染**另外設上限(ORDERS_RENDER_LIMIT,見下方
+    // visibleBookings),所以「資料量大」影響的只有一次查詢的往返次數跟記憶體(每筆訂單是一列
+    // 純欄位資料,幾千筆等級對瀏覽器沒有壓力),不會變成「一次畫出上萬張卡片」把瀏覽器卡死。
+    unpaged: true,
   });
 
   const bookings = useMemo(() => bookingsData ?? [], [bookingsData]);
 
+  // 問題 1:撈全部(統計/搜尋才正確),但只渲染最新的 ORDERS_RENDER_LIMIT 筆(畫面才不會爆)。
+  const visibleBookings = useMemo(
+    () => takeLatestBookings(bookings, filters.dateFieldMode, ORDERS_RENDER_LIMIT),
+    [bookings, filters.dateFieldMode],
+  );
+  const isTruncated = visibleBookings.length < bookings.length;
+
   // §7.5:卡片延伸資訊(服務項目名稱清單、建單客服姓名),批次查詢,不對每一筆訂單各自查一次。
-  const { data: cardExtras } = useBookingCardExtras(merchantId, bookings);
+  // 只對「真的會被渲染出來的那些訂單」查延伸資訊——沒被渲染的卡片不需要服務項目名稱,順便避免
+  // 把上萬個 booking id 丟進 useBookingCardExtras 的 queryKey(那支會把 id 排序後串成字串)。
+  const { data: cardExtras } = useBookingCardExtras(merchantId, visibleBookings);
 
   // 建單與訂單管理介面優化 §10.5(SPECS-INDEX #621):訂單卡片色條改讀商家自訂顏色表,查無資料/
   // 載入中時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS(等同改版前寫死的顏色)。
@@ -147,14 +179,19 @@ function OrdersPageInner() {
   const effectiveStatusColors = statusColors ?? DEFAULT_BOOKING_STATUS_COLORS;
 
   // §7.4:統計列——N 筆訂單就是目前篩選結果的陣列長度(取消的訂單如果符合目前篩選一樣算進來);
-  // 業績加總排除已取消訂單。這次不做真正的分頁機制,「本頁業績」跟「總業績」永遠是同一個值。
+  // 業績加總排除已取消訂單。
+  //
+  // 問題 1 修正後,「本頁業績」跟「總業績」不再永遠是同一個值:總業績 = 符合篩選條件的**全部**
+  // 訂單加總(這正是這次要修的重點,金額不能少報),本頁業績 = 目前這一頁實際畫出來的那些訂單
+  // 加總。沒有超過渲染上限時兩者一樣,跟改版前的畫面完全一致。
   const totalCount = bookings.length;
   const revenueTotal = useMemo(() => sumBookingRevenue(bookings), [bookings]);
+  const visibleRevenue = useMemo(() => sumBookingRevenue(visibleBookings), [visibleBookings]);
 
   // §7.5:依 §7.3 選定的日期欄位分組,日期新到舊排序。
   const dateGroups = useMemo(
-    () => groupBookingsByDateField(bookings, filters.dateFieldMode),
-    [bookings, filters.dateFieldMode],
+    () => groupBookingsByDateField(visibleBookings, filters.dateFieldMode),
+    [visibleBookings, filters.dateFieldMode],
   );
 
   function refetchAll() {
@@ -272,15 +309,24 @@ function OrdersPageInner() {
         </div>
       </div>
 
-      {/* §7.4:統計列。金額加總不含已取消訂單,這次不做真正分頁,本頁業績/總業績永遠同一個值。 */}
+      {/* §7.4:統計列。金額加總不含已取消訂單;總業績一律是「符合篩選條件的全部訂單」的加總
+          (不受下方渲染上限影響),本頁業績是目前實際畫出來的那些訂單的加總。 */}
       <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
         <span>共 {totalCount} 筆訂單</span>
         <span>
-          本頁業績 {formatAmount(revenueTotal)} /(總業績 {formatAmount(revenueTotal)})
+          本頁業績 {formatAmount(visibleRevenue)} /(總業績 {formatAmount(revenueTotal)})
         </span>
         {/* 用半形斜線+括號,視覺上跟規格書的全形斜線/括號效果一致,避免全形符號跟金額數字
             混排時視覺上不對齊(既有慣例:formatAmount 產出的金額本身是半形字元)。 */}
       </p>
+      {/* 問題 1:超過渲染上限時明確說出來,不要讓使用者以為「後面的訂單不見了」。上面的筆數/
+          總業績本來就已經是全部訂單的數字,這行只說明「畫面上這份清單」被截到哪裡。 */}
+      {isTruncated ? (
+        <p className="text-sm text-muted-foreground">
+          清單只顯示最新的 {ORDERS_RENDER_LIMIT} 筆(上方筆數與總業績仍為全部
+          {totalCount} 筆的統計),要看更早的訂單請縮小日期範圍或加上其他篩選條件。
+        </p>
+      ) : null}
 
       {/* §7.5:依日期分組的訂單卡片列表。 */}
       {isLoading ? (

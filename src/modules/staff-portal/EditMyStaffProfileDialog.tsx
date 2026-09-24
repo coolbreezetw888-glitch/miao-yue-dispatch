@@ -134,7 +134,9 @@ export function EditMyStaffProfileDialog({
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>編輯個人資料</DialogTitle>
-          <DialogDescription>只能修改姓名/暱稱/電話/對外聯絡 Email/頭像/簡介這幾項。</DialogDescription>
+          <DialogDescription>
+            只能修改姓名/暱稱/電話/對外聯絡 Email/頭像/簡介這幾項。
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <StaffAvatarUploader currentAvatarUrl={avatarUrl} onUpload={handleAvatarUpload} />

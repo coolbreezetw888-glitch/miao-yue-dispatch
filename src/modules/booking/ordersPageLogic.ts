@@ -110,6 +110,35 @@ export function groupBookingsByDateField<T extends { start_at: string; created_a
     .map(([dateKey, list]) => ({ dateKey, bookings: list }));
 }
 
+// ---------------------------------------------------------------------------
+// 2026-09-24 深夜巡檢問題 1:訂單管理頁的查詢改成 unpaged(把符合篩選條件的訂單全部撈回來,
+// 統計列的「共 N 筆訂單」「總業績」跟關鍵字搜尋才會是正確的,見 OrdersPage.tsx 的說明)。
+// 但「全部撈回來」跟「全部畫出來」是兩件事——這個頁面是把每一筆訂單都渲染成一張卡片,一間累積
+// 上萬筆訂單的商家如果真的一次畫出上萬張卡片,瀏覽器會直接卡住。所以撈取不設上限(統計/搜尋
+// 正確),渲染設上限(畫面不爆),超過上限時在統計列明確告訴使用者只畫了最新的幾筆。
+//
+// 「最新」依照 §7.3 目前選定的日期欄位判斷(依建單時間/依預約時間),跟分組標題用的是同一個
+// 欄位,不會出現「排序依據跟分組依據不一致」的錯亂。回傳的陣列維持「由舊到新」的順序,跟
+// fetchMerchantBookings 既有的 order by start_at ascending 一致,群組內的卡片順序不受影響。
+// ---------------------------------------------------------------------------
+
+export const ORDERS_RENDER_LIMIT = 500;
+
+export function takeLatestBookings<T extends { start_at: string; created_at: string }>(
+  bookings: T[],
+  dateField: OrderDateFieldMode,
+  limit: number = ORDERS_RENDER_LIMIT,
+): T[] {
+  if (limit <= 0) return [];
+  if (bookings.length <= limit) return bookings;
+  const pick = (b: T) => (dateField === "created_at" ? b.created_at : b.start_at);
+  return bookings
+    .slice()
+    .sort((a, b) => (pick(a) < pick(b) ? 1 : pick(a) > pick(b) ? -1 : 0)) // 新到舊
+    .slice(0, limit)
+    .reverse(); // 還原成「由舊到新」,跟後端既有的排序方向一致
+}
+
 /** 分組標題格式,例如「9/9(三)」。 */
 export function formatGroupDateHeading(dateKey: string): string {
   const d = new Date(`${dateKey}T00:00:00`);

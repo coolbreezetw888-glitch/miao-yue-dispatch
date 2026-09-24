@@ -123,7 +123,9 @@ function LineLogsPageInner() {
                   {expandedId === log.id ? (
                     <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
                       {log.skip_reason ? (
-                        <p>跳過原因:{LINE_LOG_SKIP_REASON_LABELS[log.skip_reason] ?? log.skip_reason}</p>
+                        <p>
+                          跳過原因:{LINE_LOG_SKIP_REASON_LABELS[log.skip_reason] ?? log.skip_reason}
+                        </p>
                       ) : null}
                       {log.error_detail ? <p>錯誤內容:{log.error_detail}</p> : null}
                       {log.rendered_message ? (

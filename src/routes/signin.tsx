@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
+import { translateAuthErrorMessage } from "@/lib/authErrorMessages";
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -46,7 +47,11 @@ export default function SignIn() {
     });
     setLoading(false);
     if (error) {
-      toast.error("登入失敗", { description: error.message });
+      // 2026-09-24 深夜巡檢修正:原本直接把 Supabase 回傳的英文訊息丟給使用者,師傅在手機上
+      // 打錯密碼看到的是「登入失敗 / Invalid login credentials」——整個產品都是中文,只有最常
+      // 出錯的這一頁是英文。改用共用的對照表(src/lib/authErrorMessages.ts);對照表查不到的
+      // 訊息仍然原樣顯示英文原文,刻意不吞掉未知錯誤,才留得下追查線索。
+      toast.error("登入失敗", { description: translateAuthErrorMessage(error.message) });
       return;
     }
     navigate("/app", { replace: true });

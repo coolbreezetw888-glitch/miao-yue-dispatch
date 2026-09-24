@@ -25,7 +25,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { upsertLeaveTypeDeductionRule, useLeaveTypeDeductionRule } from "./api";
-import { previewLeaveDeductionPerDay, calculateDayRate, getDaysInMonth } from "./previewCalculators";
+import {
+  previewLeaveDeductionPerDay,
+  calculateDayRate,
+  getDaysInMonth,
+} from "./previewCalculators";
 import { DEDUCTION_MODE_LABELS, type DeductionMode } from "./types";
 
 const DEDUCTION_MODES: DeductionMode[] = [
@@ -108,7 +112,10 @@ export function LeaveDeductionRuleDialog({
   // 的實際天數預覽試算(純粹輔助理解,不是任何寫入依據)。
   const exampleMonthlySalary = 3000;
   const now = new Date();
-  const exampleDayRate = calculateDayRate(exampleMonthlySalary, getDaysInMonth(now.getFullYear(), now.getMonth() + 1));
+  const exampleDayRate = calculateDayRate(
+    exampleMonthlySalary,
+    getDaysInMonth(now.getFullYear(), now.getMonth() + 1),
+  );
   const previewPerDay = previewLeaveDeductionPerDay(
     exampleDayRate,
     mode,
@@ -180,9 +187,8 @@ export function LeaveDeductionRuleDialog({
 
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
               範例試算:假設月薪 {exampleMonthlySalary} 元(依本月實際天數換算,一天薪水約{" "}
-              {exampleDayRate.toFixed(2)} 元),請這個假一天扣{" "}
-              <strong>{previewPerDay}</strong> 元(僅供參考,實際扣款以每位服務人員自己的月薪、
-              請假當月的實際天數計算為準)。
+              {exampleDayRate.toFixed(2)} 元),請這個假一天扣 <strong>{previewPerDay}</strong>{" "}
+              元(僅供參考,實際扣款以每位服務人員自己的月薪、 請假當月的實際天數計算為準)。
             </p>
 
             <DialogFooter>

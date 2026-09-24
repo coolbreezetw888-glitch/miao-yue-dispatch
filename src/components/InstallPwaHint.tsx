@@ -6,11 +6,23 @@
 //    (手動教學,沒有「安裝」按鈕,因為做不到程式化觸發)。
 // 3. 已經是「已安裝身份開啟」時,完全不顯示這個提示條。
 // 4. 使用者按下「稍後再說」或關閉提示,寫入 localStorage 一個時間戳記,7 天內不再顯示。
+//
+// 2026-09-24 深夜巡檢修正(重疊事故):這個提示條原本寫死 `fixed inset-x-0 bottom-16 z-40`,
+// 跟商家設定頁「尚未儲存變更 / 儲存變更」提示列的 class 字面完全一樣,在 DOM 裡又排在 <main>
+// 之後,結果把那顆儲存按鈕整個蓋掉。現在一律從 src/lib/bottomFixedLayers.ts 取 class:
+// 提示條是底部三層裡優先度最低的一層(z-30,低於動作列的 z-40),而且畫面上只要有動作列存在,
+// 就自動往上挪到動作列上方,兩者不會再有任何重疊。完整原委見那個檔案開頭的說明。
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  BOTTOM_LAYER_HINT,
+  BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR,
+  useHasBottomActionBar,
+} from "@/lib/bottomFixedLayers";
+import { cn } from "@/lib/utils";
 
 const DISMISS_STORAGE_KEY = "miaoyue_pwa_install_hint_dismissed_at";
 const DISMISS_THROTTLE_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
@@ -25,6 +37,8 @@ export default function InstallPwaHint() {
   const [isIosSafari, setIsIosSafari] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [dismissed, setDismissed] = useState(true);
+  // 畫面上同時有動作列(目前是商家設定頁的「尚未儲存變更」提示列)時,這條提示往上讓開。
+  const hasBottomActionBar = useHasBottomActionBar();
 
   useEffect(() => {
     setIsStandalone(isRunningStandalone());
@@ -61,7 +75,12 @@ export default function InstallPwaHint() {
   if (!deferredPrompt && !isIosSafari) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-16 z-40 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lg">
+    <div
+      className={cn(
+        hasBottomActionBar ? BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR : BOTTOM_LAYER_HINT,
+        "mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lg",
+      )}
+    >
       <div className="min-w-0 flex-1">
         {deferredPrompt ? (
           <p className="text-sm text-foreground">安裝秒約 App,以後更快打開</p>

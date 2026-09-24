@@ -36,12 +36,25 @@ export function PushSubscriptionCard({
 
   if (!merchantId || !staffId) return null;
 
+  // 2026-09-24 深夜巡檢修正(假成功訊息):原本寫的是
+  //   await subscribe();
+  //   if (Notification.permission === "granted") toast.success("已開啟訂單通知");
+  // 但 Notification.permission 只代表「這個瀏覽器曾經被允許過通知」,跟「這次有沒有真的訂閱成功」
+  // 完全是兩回事。只要這位服務人員以前允許過通知,即使 subscribe() 其實什麼都沒做(例如部署環境
+  // 漏設 VITE_VAPID_PUBLIC_KEY),照樣會跳出綠色的「已開啟訂單通知」,而卡片上還是顯示
+  // 「開啟訂單通知」按鈕跟「目前沒有任何裝置開通推播通知」,之後也一則通知都收不到。
+  // 現在一律依 subscribe() 的實際回傳值判斷:true 才報喜,false(使用者沒給權限)給明確說明,
+  // 丟出例外(環境不允許訂閱)則由 catch 顯示 hook 給的中文原因。
   async function handleSubscribe() {
     try {
-      await subscribe();
-      if (Notification.permission === "granted") {
+      const subscribed = await subscribe();
+      if (subscribed) {
         toast.success("已開啟訂單通知");
+        return;
       }
+      toast.error("尚未開啟訂單通知", {
+        description: "瀏覽器沒有取得通知權限,請在跳出的視窗選擇「允許」後再試一次。",
+      });
     } catch (err) {
       toast.error("開啟通知失敗", { description: getErrorMessage(err) });
     }

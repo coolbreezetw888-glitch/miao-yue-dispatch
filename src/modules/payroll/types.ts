@@ -41,10 +41,7 @@ export const COMMISSION_BASIS_TYPE_LABELS: Record<CommissionBasisType, string> =
 };
 
 export type DeductionMode =
-  | "no_deduction"
-  | "full_day_rate"
-  | "percentage_of_day_rate"
-  | "fixed_amount_per_day";
+  "no_deduction" | "full_day_rate" | "percentage_of_day_rate" | "fixed_amount_per_day";
 
 export const DEDUCTION_MODE_LABELS: Record<DeductionMode, string> = {
   no_deduction: "不扣款",
@@ -71,12 +68,16 @@ export function formatStaffCommissionItemBreakdown(d: {
   legacy_rate_percentage: number | null;
 }): string {
   if (d.item_breakdown.length === 0) {
-    return d.legacy_rate_percentage !== null ? `單一比例 ${d.legacy_rate_percentage}%` : "沒有抽成明細";
+    return d.legacy_rate_percentage !== null
+      ? `單一比例 ${d.legacy_rate_percentage}%`
+      : "沒有抽成明細";
   }
   return d.item_breakdown
     .map((item) => {
       const valueLabel =
-        item.commission_mode === "percentage" ? `${item.commission_value}%` : `${item.commission_value}元/件`;
+        item.commission_mode === "percentage"
+          ? `${item.commission_value}%`
+          : `${item.commission_value}元/件`;
       return `${item.service_item_name} x${item.quantity}(${valueLabel}): ${item.commission_amount}元`;
     })
     .join("; ");

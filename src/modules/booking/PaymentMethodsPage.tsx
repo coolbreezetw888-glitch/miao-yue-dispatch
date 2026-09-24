@@ -31,6 +31,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
@@ -45,7 +47,11 @@ import {
 } from "./api";
 import { useMerchantTaxSettings } from "./context";
 import { RequirePaymentMethodsAccess } from "./RequirePaymentMethodsAccess";
-import { AMOUNT_ADJUSTMENT_MODE_LABELS, type AmountAdjustmentMode, type PaymentMethod } from "./types";
+import {
+  AMOUNT_ADJUSTMENT_MODE_LABELS,
+  type AmountAdjustmentMode,
+  type PaymentMethod,
+} from "./types";
 
 const methodsQueryKey = (merchantId: string) =>
   ["booking-module", "payment-methods-admin", merchantId] as const;
@@ -107,13 +113,26 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
           <p className="text-sm text-muted-foreground">載入中⋯</p>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={taxMode} onValueChange={(v) => setTaxMode(v as AmountAdjustmentMode)}>
+            {/* 2026-09-24 稽核修正(問題 3):taxMode 是在 useEffect 裡等
+                merchant_tax_settings 查回來之後才灌進去的,正是會觸發幽靈空值事件的時序
+                (被洗成空字串的話,商家的稅金模式會顯示成空白,存檔還可能存進不合法的值)。
+                合法值是固定常數清單,用白名單判斷,白名單直接取 AMOUNT_ADJUSTMENT_MODE_LABELS
+                的 key,之後常數增減會自動跟著變。 */}
+            <Select
+              value={taxMode}
+              onValueChange={guardPhantomEmptyChange<AmountAdjustmentMode>(
+                setTaxMode,
+                (v) => v in AMOUNT_ADJUSTMENT_MODE_LABELS,
+              )}
+            >
               <SelectTrigger className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
-                <SelectItem value="percentage">{AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}</SelectItem>
+                <SelectItem value="percentage">
+                  {AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}
+                </SelectItem>
               </SelectContent>
             </Select>
             <Input
