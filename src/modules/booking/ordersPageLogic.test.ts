@@ -10,11 +10,12 @@ import {
   DEFAULT_ORDERS_PAGE_SIZE,
   formatCardDateTime,
   formatGroupDateHeading,
+  getOrdersPageSizeStorageKey,
   groupBookingsByDateField,
   isOrdersPageSize,
   ORDER_STATUS_TABS,
   ORDERS_PAGE_SIZE_OPTIONS,
-  ORDERS_PAGE_SIZE_STORAGE_KEY,
+  ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX,
   readStoredOrdersPageSize,
   sliceBookingsForPage,
   sumBookingRevenue,
@@ -335,7 +336,11 @@ describe("adjustPageForPageSizeChange(每頁筆數改變時的頁碼調整)", ()
   });
 });
 
-describe("每頁筆數選項與 localStorage 記憶", () => {
+describe("每頁筆數選項與 localStorage 記憶(依帳號分開)", () => {
+  // 2026-09-24 使用者裁決:每頁筆數改成依登入帳號各自記住,所以讀/寫都要帶 userId。
+  const USER_A = "user-a-uuid";
+  const USER_B = "user-b-uuid";
+
   afterEach(() => {
     window.localStorage.clear();
   });
@@ -354,21 +359,61 @@ describe("每頁筆數選項與 localStorage 記憶", () => {
     expect(isOrdersPageSize(undefined)).toBe(false);
   });
 
+  it("key 依使用者 id 分開,且帶著共同前綴(比照 merchant/constants.ts 的既有慣例)", () => {
+    const keyA = getOrdersPageSizeStorageKey(USER_A);
+    const keyB = getOrdersPageSizeStorageKey(USER_B);
+    expect(keyA).not.toBe(keyB);
+    expect(keyA.startsWith(`${ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX}.`)).toBe(true);
+    // 前綴本身(改版前那個全域 key)不會等於任何帳號的 key,所以舊的殘留值不會被誤讀成某個帳號的設定。
+    expect(keyA).not.toBe(ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX);
+  });
+
   it("沒存過任何值時回傳預設值", () => {
-    expect(readStoredOrdersPageSize()).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+    expect(readStoredOrdersPageSize(USER_A)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
   });
 
   it("寫入後讀得回同一個值", () => {
-    writeStoredOrdersPageSize(200);
-    expect(window.localStorage.getItem(ORDERS_PAGE_SIZE_STORAGE_KEY)).toBe("200");
-    expect(readStoredOrdersPageSize()).toBe(200);
+    writeStoredOrdersPageSize(USER_A, 200);
+    expect(window.localStorage.getItem(getOrdersPageSizeStorageKey(USER_A))).toBe("200");
+    expect(readStoredOrdersPageSize(USER_A)).toBe(200);
+  });
+
+  it("兩個不同帳號各自存的值互不影響(使用者裁決的核心行為:A 選 100 不會把 B 的 500 蓋掉)", () => {
+    writeStoredOrdersPageSize(USER_B, 500);
+    writeStoredOrdersPageSize(USER_A, 100);
+
+    expect(readStoredOrdersPageSize(USER_A)).toBe(100);
+    expect(readStoredOrdersPageSize(USER_B)).toBe(500);
+
+    // 反向再改一次,確認不是剛好順序造成的巧合。
+    writeStoredOrdersPageSize(USER_B, 50);
+    expect(readStoredOrdersPageSize(USER_A)).toBe(100);
+    expect(readStoredOrdersPageSize(USER_B)).toBe(50);
+
+    // 第三個從沒設定過的帳號,一律拿到預設值 50,不會沿用別人的設定。
+    expect(readStoredOrdersPageSize("user-c-uuid")).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+  });
+
+  it("沒有使用者 id(登入狀態還沒確認完/未登入)時讀回預設值,寫入直接跳過不留孤兒值", () => {
+    expect(readStoredOrdersPageSize(null)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+    expect(readStoredOrdersPageSize(undefined)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+    expect(readStoredOrdersPageSize("")).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+
+    writeStoredOrdersPageSize(null, 500);
+    writeStoredOrdersPageSize(undefined, 500);
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  it("改版前那個不分帳號的全域 key 殘留值不會被讀到(所有人重新從預設 50 開始)", () => {
+    window.localStorage.setItem(ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX, "500");
+    expect(readStoredOrdersPageSize(USER_A)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
   });
 
   it("存著不合法的值(手動改過、舊版殘留)時退回預設值,不讓畫面壞掉", () => {
-    window.localStorage.setItem(ORDERS_PAGE_SIZE_STORAGE_KEY, "9999");
-    expect(readStoredOrdersPageSize()).toBe(DEFAULT_ORDERS_PAGE_SIZE);
-    window.localStorage.setItem(ORDERS_PAGE_SIZE_STORAGE_KEY, "不是數字");
-    expect(readStoredOrdersPageSize()).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+    window.localStorage.setItem(getOrdersPageSizeStorageKey(USER_A), "9999");
+    expect(readStoredOrdersPageSize(USER_A)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+    window.localStorage.setItem(getOrdersPageSizeStorageKey(USER_A), "不是數字");
+    expect(readStoredOrdersPageSize(USER_A)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
   });
 
   it("localStorage 整個不能用(無痕視窗/瀏覽器封鎖)時不丟錯,讀回預設值、寫入也不炸", () => {
@@ -379,8 +424,8 @@ describe("每頁筆數選項與 localStorage 記憶", () => {
       throw new Error("SecurityError: localStorage is not available");
     });
     try {
-      expect(readStoredOrdersPageSize()).toBe(DEFAULT_ORDERS_PAGE_SIZE);
-      expect(() => writeStoredOrdersPageSize(100)).not.toThrow();
+      expect(readStoredOrdersPageSize(USER_A)).toBe(DEFAULT_ORDERS_PAGE_SIZE);
+      expect(() => writeStoredOrdersPageSize(USER_A, 100)).not.toThrow();
     } finally {
       getItem.mockRestore();
       setItem.mockRestore();

@@ -34,6 +34,7 @@ import {
   testLineConnection,
   useMerchantLineConfigStatus,
 } from "./api";
+import { buildLineAddFriendUrl } from "./lineBindingViewLogic";
 
 const configStatusQueryKey = (merchantId: string) =>
   ["line-notifications-module", "config-status", merchantId] as const;
@@ -127,9 +128,16 @@ function LineSettingsPageInner() {
     }
   }
 
-  const addFriendUrl = status?.lineBotBasicId
-    ? `https://line.me/R/ti/p/@${status.lineBotBasicId}`
-    : null;
+  // ⚠️ 2026-09-24 修掉一個壞連結:原本是 `https://line.me/R/ti/p/@${status.lineBotBasicId}`
+  //    直接字串拼接。但 LINE 官方帳號的 basic id 在 LINE 後台慣例上就是顯示成 `@abcd1234`,
+  //    商家照著複製貼上的機率很高,拼出來就變成 `https://line.me/R/ti/p/@@abcd1234` —— 這個連結
+  //    點進去找不到帳號,而且因為連結長得「很像對的」,很難被發現是壞的。
+  //    改用共用的 buildLineAddFriendUrl(它會把開頭的 @ 正規化掉,有單元測試涵蓋帶 @/不帶 @/
+  //    空值三種輸入)。
+  //    ⚠️ 這一頁的資料來源**維持不變**:仍然走管理員專用的 useMerchantLineConfigStatus,
+  //    管理員原本看得到的串接管理資訊(channel_id、遮蔽過的 access token、最後測試結果等)
+  //    一項都沒有減少 —— 這次只換了「連結怎麼組出來」這一件事。
+  const addFriendUrl = buildLineAddFriendUrl(status?.lineBotBasicId);
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">

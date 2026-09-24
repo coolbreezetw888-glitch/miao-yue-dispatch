@@ -35,6 +35,10 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
+// 2026-09-24:管理員名單的顯示 fallback 規則抽到 ./adminDisplay.ts 共用——這份清單在商家端
+// (這個檔案)跟超級管理員端(platform-admin/MerchantDetailPage.tsx)各自渲染一份 markup,
+// fallback 規則若各自複製會漂移,所以集中維護、兩邊都 import 同一份(見該檔案開頭的說明)。
+import { adminDisplayName, adminJobTitle, adminPhone } from "./adminDisplay";
 import { useMerchantAdmins } from "./context";
 
 async function inviteMerchantAdmin(merchantId: string, userEmail: string): Promise<void> {
@@ -108,11 +112,34 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
             {/* 對應規格書「首頁外殼與主題色優化」三 + QA #183 打回:email 長度不固定(真實帳號
                 可能 25 字元以上),窄螢幕下不能跟右側日期/按鈕擠在同一個 nowrap 列,否則會把
                 整個 <li> 撐寬到超出卡片,連帶讓整個頁面 body 出現橫向捲軸。這裡改成手機寬度垂直
-                堆疊(email 自己一行、可以自然換行 + min-w-0 讓它真的能縮小換行,不撐開容器)、
-                sm 以上維持原本橫向排列,不是用整列橫向捲動處理(這是一般清單列,不是刻意設計成
-                可橫向捲動的區塊)。 */}
-            <span className="min-w-0 break-words text-foreground">{admin.email}</span>
-            <div className="flex items-center justify-between gap-3 sm:justify-end">
+                堆疊(min-w-0 讓資訊區真的能縮小換行,不撐開容器)、sm 以上維持原本橫向排列,
+                不是用整列橫向捲動處理(這是一般清單列,不是刻意設計成可橫向捲動的區塊)。
+
+                2026-09-24:這一列從「只有一個 email」擴充成「暱稱 / 職位 / 手機 / Email」。
+                使用者原話:「目前我這邊看到的只有 Email(新增管理員也是 Email),新增用 Email 沒
+                問題,但名單要顯示暱稱 / 手機 / Email,這樣才好判斷是誰。」
+                那個 Email 就是登入 Email(auth.users)——同日使用者又裁決一個人只有一個 Email
+                (「登入和聯絡信箱應該要是一致的」),所以這裡不會有第二個 Email 欄位。
+                資訊多了之後手機版更容易溢出,所以每一行都各自 break-words / break-all
+                (email 跟手機沒有空白可以斷行,要用 break-all),沿用 StaffListPage.tsx /
+                AgentListPage.tsx 剛修過的同一組模式。 */}
+            <div className="min-w-0 space-y-0.5">
+              {/* 暱稱是這一列最重要的辨識資訊,放第一行、字體最明顯;職位跟在後面當小字。
+                  null 的 fallback 一律走 ./adminDisplay.ts,不在畫面裡自己寫 ?? 或 || 判斷。 */}
+              <p className="break-words font-medium text-foreground">
+                {adminDisplayName(admin)}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {adminJobTitle(admin)}
+                </span>
+              </p>
+              <p className="break-all text-xs text-muted-foreground">手機:{adminPhone(admin)}</p>
+              {/* 2026-09-24 使用者裁決:一位管理員只有**一個** Email,就是登入 Email
+                  (原話:「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」)。
+                  原本這裡下面還有一行「聯絡信箱」(merchant_admins.contact_email),連同那個欄位
+                  跟 adminContactEmailToShow() 判斷式一起移除了,不要加回來。 */}
+              <p className="break-all text-xs text-muted-foreground">Email:{admin.email}</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
               <span className="text-xs text-muted-foreground">
                 {new Date(admin.created_at).toLocaleDateString("zh-TW")} 加入
               </span>
@@ -125,9 +152,11 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>確定要移除這位管理員嗎?</AlertDialogTitle>
+                    {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在顯示暱稱,確認視窗只講 email
+                        會讓人要自己對照是哪一位,移除是不可逆的操作,要讓對象一眼確認。 */}
                     <AlertDialogDescription>
-                      {admin.email} 將無法再登入管理這間店。如果這是最後一位管理員(且集團也沒有設定
-                      集團管理者),系統會擋下這個操作並提示。
+                      {adminDisplayName(admin)}({admin.email})將無法再登入管理這間店。如果這是
+                      最後一位管理員(且集團也沒有設定集團管理者),系統會擋下這個操作並提示。
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

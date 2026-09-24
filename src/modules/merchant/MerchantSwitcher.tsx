@@ -7,6 +7,16 @@
 // 2026-09-16 對應規格書「首頁外殼與主題色優化」1.1:這個元件搬進 AppLayout.tsx 常駐頂端列左側,
 // 取代原本的秒約 LOGO,使用者要求「顯示店家自己的 LOGO」——觸發按鈕上補上目前操作中商家的
 // logo_url(沒有 LOGO 時 fallback 成店名首字圓形標誌),不重新設計下拉選單內容本身。
+//
+// 2026-09-24(頁首吸頂 + 顯示功能頁名稱)新增 `variant` prop:
+//   ・"full"(預設,維持原本外觀):LOGO + 商家名稱 + 下拉箭頭。
+//   ・"compact":**只有 LOGO**。用在 AppLayout.tsx 的頁首 —— 那一列現在要同時塞 LOGO、目前功能頁
+//     名稱、登出按鈕三樣東西,商家名稱佔掉的寬度必須讓給功能頁名稱(320px 手機上沒有那麼多空間,
+//     見 e2e/mobile-overflow.spec.ts 守的那顆地雷)。點下去展開的下拉選單內容完全一樣(切換商家、
+//     雙重身分切換入口),商家名稱在選單打開後照樣看得到。
+// 為什麼加 prop 而不是直接把名稱拔掉:預設值維持 "full",既有的 5 條測試(MerchantSwitcher.test.tsx,
+// 2026-09-24 為線上故障補的)不需要改任何斷言就能繼續守住原本的行為;之後若有別的地方要用完整版
+// (例如桌面版側邊欄),也不用再把名稱加回來。目前唯一的使用端是 AppLayout.tsx 的頁首。
 
 import { ChevronDown } from "lucide-react";
 
@@ -54,12 +64,16 @@ interface MerchantSwitcherProps {
   /** 目前是否正顯示服務人員端內容,決定切換選項的文字方向。 */
   isStaffView?: boolean;
   onToggleView?: () => void;
+  /** 2026-09-24:觸發按鈕的外觀。"full" = LOGO + 商家名稱 + 箭頭(預設,原本的樣子);
+   * "compact" = 只有 LOGO(頁首用,把橫向空間讓給功能頁名稱)。下拉選單內容兩者完全相同。 */
+  variant?: "full" | "compact";
 }
 
 export function MerchantSwitcher({
   canSwitchToStaffView = false,
   isStaffView = false,
   onToggleView,
+  variant = "full",
 }: MerchantSwitcherProps) {
   const { merchants, currentMerchantId, setCurrentMerchantId, isLoading } =
     useMerchantSwitcherState();
@@ -70,13 +84,20 @@ export function MerchantSwitcher({
 
   const currentMerchant = merchants.find((m) => m.id === currentMerchantId);
   const hasMultipleMerchants = merchants.length > 1;
+  const isCompact = variant === "compact";
+  const currentMerchantName = currentMerchant?.name ?? "選擇商家";
 
-  /** 2026-09-23:切換服務人員端/商家端這個選項,附加在下拉選單最下方(見 image 132)。 */
+  /** 2026-09-23:切換服務人員端/商家端這個選項,附加在下拉選單最下方(見 image 132)。
+   *
+   * ⚠️ 2026-09-24:這個選項 **不再是唯一的入口**。實機上使用者根本沒有找到它(要先點開商家切換器、
+   * 再往下滑到分隔線底下才看得到),導致雙重身分的人完全進不去服務人員端 —— 主要入口已經改成常駐
+   * 橫幅 src/routes/DualRoleViewSwitchBar.tsx。這裡保留這個選項(已經習慣的人照樣能用,兩個入口
+   * 呼叫同一個 onToggleView),文字跟橫幅上的按鈕統一成「切換到…」。 */
   const viewToggleItem = canSwitchToStaffView ? (
     <>
       <DropdownMenuSeparator />
       <DropdownMenuItem onSelect={() => onToggleView?.()}>
-        {isStaffView ? "切換商家端" : "切換服務人員端"}
+        {isStaffView ? "切換到商家端" : "切換到服務人員端"}
       </DropdownMenuItem>
     </>
   ) : null;
@@ -84,6 +105,19 @@ export function MerchantSwitcher({
   // 只有一間可管理的商家、也沒有雙重身份可切換時，不需要顯示下拉選單，直接顯示店名即可。
   if (!hasMultipleMerchants && !canSwitchToStaffView) {
     const onlyMerchant = merchants[0]!;
+    // compact(頁首)只留 LOGO。這裡沒有下拉選單可以打開,所以商家名稱改放 title 屬性,
+    // 滑鼠移上去/長按還是看得到是哪一間店;LOGO 的 alt 本來就是「{店名} LOGO」,讀螢幕的人
+    // 照樣聽得到店名(沒有 LOGO 的 fallback 是店名首字,見 MerchantLogo)。
+    if (isCompact) {
+      return (
+        <div
+          title={onlyMerchant.name}
+          className="flex shrink-0 items-center rounded-md border border-border bg-background p-1.5"
+        >
+          <MerchantLogo logoUrl={onlyMerchant.logo_url} name={onlyMerchant.name} />
+        </div>
+      );
+    }
     return (
       <div className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-sm">
         <MerchantLogo logoUrl={onlyMerchant.logo_url} name={onlyMerchant.name} />
@@ -104,14 +138,27 @@ export function MerchantSwitcher({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <MerchantLogo
-            logoUrl={currentMerchant?.logo_url ?? null}
-            name={currentMerchant?.name ?? "選擇商家"}
-          />
-          <span className="max-w-[10rem] truncate">{currentMerchant?.name ?? "選擇商家"}</span>
-          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-        </Button>
+        {isCompact ? (
+          // 只剩一個圖示的按鈕一定要有 aria-label,否則對讀螢幕的人就是一顆沒有名字的按鈕。
+          // 刻意把目前商家名稱也放進 aria-label:compact 版的頁首上看不到店名,如果 label 只寫
+          // 「切換商家」,讀螢幕的人就完全不知道現在在哪一間店(要先打開選單才知道)。
+          // w-8 px-0 讓它變成 32×32 的正方形按鈕(size="sm" 是 h-8),寬度固定、不可壓縮。
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-8 shrink-0 px-0"
+            aria-label={`切換商家(目前:${currentMerchantName})`}
+            title={currentMerchantName}
+          >
+            <MerchantLogo logoUrl={currentMerchant?.logo_url ?? null} name={currentMerchantName} />
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" className="gap-2">
+            <MerchantLogo logoUrl={currentMerchant?.logo_url ?? null} name={currentMerchantName} />
+            <span className="max-w-[10rem] truncate">{currentMerchantName}</span>
+            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
         {hasMultipleMerchants ? (

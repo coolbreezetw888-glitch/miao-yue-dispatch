@@ -252,7 +252,6 @@ export interface UpdateMyStaffProfileInput {
   name: string;
   nickname?: string | null;
   phone?: string | null;
-  contactEmail?: string | null;
   avatarUrl?: string | null;
   intro?: string | null;
 }
@@ -262,15 +261,20 @@ export async function updateMyStaffProfile(input: UpdateMyStaffProfileInput): Pr
   // supabase gen types 對 Postgres text 參數一律推導成 `string`(不是 `string | null`),即使資料庫
   // 函式實際上完全能接受 null——這是產生器的已知限制,不是真正的執行期限制。這裡改傳空字串而不是
   // null:update_my_staff_profile 內部用 nullif(trim(coalesce(p_xxx, '')), '') 正規化
-  // nickname/phone/contact_email/intro,空字串跟 null 效果完全相同;avatar_url 沒有這層正規化,
-  // 但呼叫端(EditMyStaffProfileDialog)一律用「目前已知的值」預先帶入表單再送出整組六個欄位
+  // nickname/phone/intro,空字串跟 null 效果完全相同;avatar_url 沒有這層正規化,
+  // 但呼叫端(EditMyStaffProfileDialog)一律用「目前已知的值」預先帶入表單再送出整組五個欄位
   // (不是部分更新),所以這裡不會有「不小心把既有頭像洗掉」的風險。
+  //
+  // ✅ 2026-09-24:p_contact_email 已經跟著 merchant_staff.contact_email 欄位一起移除
+  // (migration 20260924040800,使用者裁決「客服和服務人員應該也是一樣只需要一個 Email 即可」),
+  // 該 migration 已套用到正式資料庫、types.ts 也重新產生過,所以這裡送的就是最終的 6 個參數。
+  // (界線:public.merchants.contact_email —— 商家本身對外給消費者看的聯絡信箱 —— 一律保留,
+  //  跟這次移除的「人」的 contact_email 是兩回事。)
   const { error } = await supabase.rpc("update_my_staff_profile", {
     p_staff_id: input.staffId,
     p_name: input.name.trim(),
     p_nickname: input.nickname ?? "",
     p_phone: input.phone ?? "",
-    p_contact_email: input.contactEmail ?? "",
     p_avatar_url: input.avatarUrl ?? "",
     p_intro: input.intro ?? "",
   });

@@ -54,13 +54,14 @@ test("4.1:服務人員登入後首頁顯示自己的個人資料卡片,看不到
   await expect(page.getByRole("link", { name: "新增分店" })).toHaveCount(0);
 });
 
-test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(首頁/休假設定/薪資報表/行事曆),不再有「功能」分頁籤", async ({
+test("4.2(商家端調整批次 #609):服務人員底部分頁籤改成 4 個(個人資料/行事曆/休假設定/薪資報表),不再有「功能」分頁籤", async ({
   page,
 }) => {
   const bottomNav = page.locator("nav");
 
-  // 4 個分頁籤,順序固定,不再有「功能」。
-  await expect(bottomNav.getByRole("link", { name: "首頁" })).toBeVisible({
+  // 4 個分頁籤,順序固定(見 src/routes/appLayoutLogic.ts 的 STAFF_TABS),不再有「功能」。
+  // 2026-09-24:第一個分頁籤從「首頁」改名成「個人資料」。
+  await expect(bottomNav.getByRole("link", { name: "個人資料" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(bottomNav.getByRole("link", { name: "休假設定" })).toBeVisible();

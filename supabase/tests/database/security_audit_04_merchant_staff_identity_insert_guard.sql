@@ -117,19 +117,32 @@ select throws_ok(
 
 -- =========================================================================
 -- ④⑤ 範圍回歸(這份測試最重要的一條):客服「正常新增服務人員」必須照樣成功。
---     欄位組合刻意照抄前端 src/modules/staff-agent/api.ts:109 createMerchantStaff 實際送出的
---     那一組(有 name/nickname/phone/contact_email/intro/is_listed/各種旗標/compensation_type,
---     沒有 user_id、沒有 login_status),證明這次的保護沒有誤擋任何正常流程。
+--     欄位組合刻意照抄前端 src/modules/staff-agent/api.ts addMerchantStaff 實際送出的
+--     那一組(有 name/nickname/phone/intro/advance_booking_days/is_listed/各種旗標/
+--     compensation_type,沒有 user_id、沒有 login_status),證明這次的保護沒有誤擋任何正常流程。
+--
+-- ⚠️ 2026-09-24 使用者裁決:這串欄位原本還有 contact_email('normal-new@test.local'),
+--    那個欄位已經被 drop(migration 20260924040800,使用者原話「登入和聯絡信箱應該要是一致的」
+--    「客服和服務人員應該也是一樣只需要一個 Email 即可」),所以不能再寫在這裡。
+--    ⚠️ 但**不是**直接把對照組砍一欄就算了——這一條的證明力來自「一次列舉一整排可編輯的
+--    非身分欄位、全部都不該被擋」,欄位少一個就少一分覆蓋。所以改成補上
+--    `advance_booking_days`(數值型、真的還存在、真的是商家管理員/客服可編輯的非身分欄位,
+--    而且 addMerchantStaff 每次送出都會帶它),維持對照組的寬度不變。
+--    選它的理由:它跟 contact_email 一樣屬於「純設定值、跟登入身分完全無關」那一類,
+--    而且型別不同(integer vs text),順便讓這條斷言也涵蓋到非文字欄位。
 -- =========================================================================
 select lives_ok(
   $$insert into merchant_staff (
-      merchant_id, name, nickname, phone, contact_email, intro, avatar_url,
+      merchant_id, name, nickname, phone, intro, avatar_url, advance_booking_days,
       is_listed, no_time_slot_limit, unlimited_backend_edit,
       direct_accept_after_merchant_confirm, auto_accept_booking, show_member_info,
       can_create_edit_orders, can_upload_construction_photos, compensation_type
     ) values (
       'd4000000-0000-4000-8000-000000000020', '客服正常新增的服務人員', '小王', '0901000621',
-      'normal-new@test.local', '自我介紹', null,
+      -- advance_booking_days = 3:滿足 merchant_staff_advance_booking_days_check(>= 0),
+      -- 也沒有跟 booking_window_max_days 形成任何跨欄位約束(那條 range 約束已經在
+      -- 20260924040200 §2 被 drop 掉了),所以這個值不會讓斷言因為別的原因失敗。
+      '自我介紹', null, 3,
       true, false, false, false, false, false, false, false, 'piece_rate'
     )$$,
   'INSERT 範圍回歸(最重要):客服「正常新增服務人員」(前端實際送出的欄位組合,不帶身分綁定欄位)照樣成功'

@@ -69,12 +69,19 @@ export interface UpsertMerchantStaffInput {
   // CHECK 約束(20260922140000_req595_596 migration),型別跟著改成不可為 null,呼叫端(表單)
   // 必須自行保證送進來的是已驗證過的非空字串,這裡不再用 toNullIfEmpty 把空字串靜默轉成 null。
   phone?: string;
-  contactEmail?: string | null;
+  // ⚠️ 這裡原本有一個 contactEmail(merchant_staff.contact_email)。2026-09-24 使用者裁決把它
+  // 整個拿掉了(欄位本身也 drop 了,見 migration 20260924040800):
+  //   「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+  //   「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」
+  // 服務人員唯一的 Email 就是登入 Email(auth.users,透過「邀請登入」建立),不要加回來。
   intro?: string | null;
   avatarUrl?: string | null;
   isListed?: boolean;
   advanceBookingDays?: number | null;
-  bookingWindowMinDays?: number | null;
+  // ⚠️ 這裡原本有一個 bookingWindowMinDays(merchant_staff.booking_window_min_days)。
+  // 該欄位已於 2026-09-24 從資料庫移除(migration 20260924040200),「預約天數」三個欄位收斂成
+  // advanceBookingDays(最少要提前幾天)+ bookingWindowMaxDays(最遠可預約到幾天後)兩個。
+  // 不要加回來。
   bookingWindowMaxDays?: number | null;
   noTimeSlotLimit?: boolean;
   unlimitedBackendEdit?: boolean;
@@ -113,12 +120,10 @@ export async function addMerchantStaff(
       nickname: toNullIfEmpty(input.nickname),
       // phone 現在是 NOT NULL 欄位,不能用 toNullIfEmpty(空字串會變成 null 而違反約束)。
       phone: input.phone?.trim() ?? "",
-      contact_email: toNullIfEmpty(input.contactEmail),
       intro: toNullIfEmpty(input.intro),
       avatar_url: input.avatarUrl ?? null,
       is_listed: input.isListed ?? false,
       advance_booking_days: input.advanceBookingDays ?? null,
-      booking_window_min_days: input.bookingWindowMinDays ?? null,
       booking_window_max_days: input.bookingWindowMaxDays ?? null,
       no_time_slot_limit: input.noTimeSlotLimit ?? false,
       unlimited_backend_edit: input.unlimitedBackendEdit ?? false,
@@ -147,17 +152,11 @@ export async function updateMerchantStaff(
     // phone 現在是 NOT NULL 欄位,不能用 toNullIfEmpty——呼叫端傳 phone 這個 key 進來時,
     // 一定要保證是已驗證過的非空字串(見 StaffListPage.tsx §8.1 的表單驗證)。
     ...(input.phone !== undefined ? { phone: input.phone.trim() } : {}),
-    ...(input.contactEmail !== undefined
-      ? { contact_email: toNullIfEmpty(input.contactEmail) }
-      : {}),
     ...(input.intro !== undefined ? { intro: toNullIfEmpty(input.intro) } : {}),
     ...(input.avatarUrl !== undefined ? { avatar_url: input.avatarUrl } : {}),
     ...(input.isListed !== undefined ? { is_listed: input.isListed } : {}),
     ...(input.advanceBookingDays !== undefined
       ? { advance_booking_days: input.advanceBookingDays }
-      : {}),
-    ...(input.bookingWindowMinDays !== undefined
-      ? { booking_window_min_days: input.bookingWindowMinDays }
       : {}),
     ...(input.bookingWindowMaxDays !== undefined
       ? { booking_window_max_days: input.bookingWindowMaxDays }
@@ -357,6 +356,97 @@ export async function removeMerchantAgent(agentId: string): Promise<void> {
   if (error) throw error;
 }
 
+// =========================================================================
+// 2026-09-24 使用者裁決(客服管理補上「編輯」與「恢復」)。使用者裁決原文:
+//   ・客服的聯絡 Email:「客服可自行編輯或管理員可協助編輯。」
+//   ・「重新啟用…指的應該是移除後[恢復/真正刪除]按鈕的恢復對吧?如果是的話那就要增加恢復按鈕。」
+//   ・「要做。」
+//
+// ⚠️⚠️ 同日後續裁決推翻了上面第一條的前提:「聯絡 Email」這個欄位本身被廢除了。原話:
+//        「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+//        「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」
+//      merchant_agents.contact_email 欄位已經 drop(migration 20260924040800),客服唯一的 Email
+//      就是登入 Email(merchant_agents.invited_email / auth.users,有自己一套
+//      request_agent_login_email_change 流程)。所以「編輯」對話框裡不再有聯絡 Email 欄位。
+//
+// 對應的資料庫契約:
+//   public.update_merchant_agent(p_agent_id uuid, p_name text, p_nickname text, p_phone text,
+//                                p_job_title text) returns merchant_agents
+//     → 商家管理員「或客服本人」可呼叫,只開放那四個欄位。
+//     ⚠️ 這支函式的簽章變動過兩次,migration 裡把每個舊簽章都 drop 掉了:
+//        第一版 5 參數(…p_contact_email)→ 20260924040500 的 6 參數(…p_contact_email, p_job_title)
+//        → 20260924040800 的 5 參數(…p_job_title,拿掉 contact_email)。
+//        注意最後這一版跟第一版**型別完全相同**(只有第 5 個參數名不同),所以 migration 必須
+//        先 drop 才建得起來(create or replace 不允許改參數名),詳見該 migration 的說明。
+//        呼叫端從原本「update_merchant_agent + update_my_agent_profile 兩支都呼叫」收斂成
+//        單一呼叫,四個欄位在同一個 UPDATE 語句裡,是天然的原子交易,不再需要處理「一半存成功、
+//        一半失敗」的部分儲存情境。
+//   public.restore_merchant_agent(p_agent_id uuid) returns merchant_agents
+//     → 只有商家管理員可呼叫,把 status 從 'removed' 改回 'active'。
+//   p_phone 有格式約束(09 開頭 10 碼),函式會回白話中文錯誤訊息(用既有的 getErrorMessage()
+//   顯示,不要改寫成通用文字)。
+//
+// ✅ 這兩支函式已經上線,types.ts 也重新產生過,所以下面兩個呼叫都是一般的 supabase.rpc(...),
+//    跟本檔案其他 RPC 呼叫完全一致。
+
+/** 2026-09-24:編輯既有客服的四個欄位(姓名/暱稱/電話/職位)。
+ * 商家管理員或客服本人都可以呼叫(權限判斷在資料庫端的 SECURITY DEFINER 函式裡,前端只負責不要
+ * 顯示做不到的入口)。刻意「不」開放 invited_email(那是邀請/登入用的信箱,有自己一套
+ * request_agent_login_email_change 流程,不能從「編輯基本資料」側面被改掉)。
+ * ⚠️ 原本還有第五個欄位 contactEmail(merchant_agents.contact_email),2026-09-24 使用者裁決
+ *    「客服和服務人員應該也是一樣只需要一個 Email 即可」之後,欄位本身已經 drop,這裡也移除。
+ * 電話格式驗證前端先做一次(isValidTaiwanMobilePhone),資料庫端還會再擋一次,兩層都在。 */
+export interface UpdateMerchantAgentInput {
+  name: string;
+  nickname?: string | null;
+  /** 2026-09-24:資料庫端已補上 p_job_title(每個舊簽章都已 drop),所以這支函式現在一次涵蓋
+   * 四個欄位,呼叫端不需要再額外呼叫 update_my_agent_profile 去補職位。
+   * update_my_agent_profile 已被完全涵蓋、視為廢棄(依主腦指示這次先不刪除那支資料庫函式)。
+   *
+   * ⚠️ 這個欄位刻意設成「必填」(沒有 `?`),即使它允許 null。原因:這支 RPC 是整列覆蓋,五個
+   * 參數每次都會送出,漏送 jobTitle 會讓 toNullIfEmpty(undefined) 回傳 null,把對方原本的職位
+   * 靜默清空。設成必填可以把這種資料遺失變成「編譯時就報錯」,強迫每個呼叫端明確決定要寫入什麼
+   * (不想改動就把現值原樣傳回來),而不是靠人記得。 */
+  jobTitle: string | null;
+  /** merchant_agents.phone 是 NOT NULL 欄位(見 types.ts 產生的 Row 型別),所以這裡不用
+   * toNullIfEmpty——空字串會變成 null 而違反約束。呼叫端(編輯表單)必須自行保證送進來的是
+   * 已經用 isValidTaiwanMobilePhone 驗證過的非空字串,寫法比照本檔案 addMerchantStaff() 對
+   * merchant_staff.phone 的既有處理。 */
+  phone: string;
+}
+
+export async function updateMerchantAgent(
+  agentId: string,
+  input: UpdateMerchantAgentInput,
+): Promise<MerchantAgent> {
+  // 既有踩坑(完全比照 staff-portal/api.ts updateMyStaffProfile() 對 update_my_staff_profile 的
+  // 既有處理,不自己另發明一套):supabase gen types 對 Postgres text 參數一律推導成 `string`
+  // (不是 `string | null`),即使資料庫函式實際上完全能接受 null——這是產生器的已知限制,不是
+  // 執行期限制。所以 nickname/jobTitle 這兩個「可以清空」的欄位改傳空字串而不是 null:
+  // update_merchant_agent 內部用 nullif(btrim(coalesce(p_xxx, '')), '') 正規化這兩個參數,
+  // 空字串跟 null 寫進資料庫的結果完全相同(都是 NULL),行為沒有任何差別。
+  const { data, error } = await supabase.rpc("update_merchant_agent", {
+    p_agent_id: agentId,
+    p_name: input.name.trim(),
+    p_nickname: input.nickname ?? "",
+    p_phone: input.phone.trim(),
+    p_job_title: input.jobTitle ?? "",
+  });
+  if (error) throw error;
+  return data as MerchantAgent;
+}
+
+/** 2026-09-24:把已移除(status='removed')的客服恢復成 active。只有商家管理員可以呼叫。
+ * 命名上刻意跟畫面上的按鈕文字「恢復」一致(比照 StaffListPage.tsx 服務人員那邊「恢復」按鈕的
+ * 既有用語),不叫「重新啟用」——使用者裁決時已經確認這兩個講的是同一件事。 */
+export async function restoreMerchantAgent(agentId: string): Promise<MerchantAgent> {
+  const { data, error } = await supabase.rpc("restore_merchant_agent", {
+    p_agent_id: agentId,
+  });
+  if (error) throw error;
+  return data as MerchantAgent;
+}
+
 /** 3.8:客服完成設定密碼流程後,轉場頁載入時呼叫,把自己所有 invited 狀態的紀錄轉為 active。 */
 export async function markAgentActiveIfSelf(): Promise<void> {
   const { error } = await supabase.rpc("mark_agent_active_if_self");
@@ -440,7 +530,12 @@ export async function fetchMyStaffRow(
 // 對應規格書「首頁外殼與主題色優化」1.2/1.3:首頁個人資料卡片(客服這一半)。
 // =========================================================================
 
-/** 1.3:客服自助編輯自己的暱稱/職位,呼叫 SECURITY DEFINER RPC update_my_agent_profile
+/** @deprecated 2026-09-24 起已無呼叫端,功能被 updateMerchantAgent() 完全涵蓋——
+ * update_merchant_agent 補上 p_job_title 之後,一支呼叫就能寫姓名/暱稱/電話/職位,
+ * 而且是單一 UPDATE 語句的原子交易。依主腦指示這次「先留著不刪除」(資料庫那支函式也還在),
+ * 但不要在新程式碼裡使用它;之後確認沒有其他依賴時可以連同資料庫函式一起移除。
+ *
+ * 1.3:客服自助編輯自己的暱稱/職位,呼叫 SECURITY DEFINER RPC update_my_agent_profile
  * (資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷)。姓名沿用既有的 name 欄位,不開放編輯,
  * 這裡只開放 nickname/job_title 兩個欄位,跟資料庫 RPC 的參數一致。 */
 export async function updateMyAgentProfile(

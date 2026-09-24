@@ -226,7 +226,11 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
       name: LONG_STAFF_NAME,
       phone: staffMainPhone,
       intro: LONG_STAFF_INTRO,
-      contact_email: email,
+      // ⚠️ 2026-09-24 使用者裁決:merchant_staff.contact_email 欄位已經 drop
+      // (migration 20260924040800,原話「登入和聯絡信箱應該要是一致的」「客服和服務人員應該也是
+      //  一樣只需要一個 Email 即可」),所以這裡原本寫的 `contact_email: email` 已經移除。
+      // ⚠️ 不要跟上面 create_group_and_merchant 的 p_contact_email 搞混——那個是
+      // public.merchants.contact_email(店家對外給消費者看的信箱),完全保留,兩者不是同一件事。
       is_listed: true,
       no_time_slot_limit: true,
       unlimited_backend_edit: true,

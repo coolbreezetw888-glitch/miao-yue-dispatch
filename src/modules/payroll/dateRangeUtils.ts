@@ -57,3 +57,42 @@ export function defaultDateRange(): { startDate: string; endDate: string } {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return { startDate: toISODateString(start), endDate: toISODateString(now) };
 }
+
+// ---------------------------------------------------------------------------
+// 2026-09-24 使用者裁決(月薪只在「完整月份」的查詢下才計算):店家帳務報表的時間篩選預設改成
+// 「月份」顆粒度(本月 / 上個月 / 指定月份),只有切到「自訂區間」才用任意起訖日期。
+//
+// 為什麼要有這一組「完整月份」專用的函式,而不是沿用上面的 defaultDateRange():
+//   defaultDateRange() 是「本月 1 號 ~ **今天**」,月中查詢時結束日期不是月底,也就不是一個
+//   完整月份;而月薪本質上是「一整個月」這個單位,資料庫端的 salary_applicable 判斷正是
+//   「起始日是某月 1 號 且 結束日是某月最後一天」。所以「本月」這個選項一律取到**月底**
+//   (未來的日期還沒有訂單,營收加總是 0,不影響數字正確性),這樣月薪相關數字才算得出來。
+//
+// 這幾支都是純函式,月份字串一律用 "YYYY-MM",跟 <Input type="month"> 的原生值格式一致,
+// 也跟上面既有的 firstDayOfMonth/lastDayOfMonth 共用同一套月底判斷邏輯,不另造一套。
+// ---------------------------------------------------------------------------
+
+/** Date 物件 → "YYYY-MM"(本地時間,理由同 toISODateString)。 */
+export function toMonthString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+/** "YYYY-MM" → 該月份的完整區間(1 號 ~ 該月最後一天)。 */
+export function monthRange(monthStr: string): { startDate: string; endDate: string } {
+  return { startDate: firstDayOfMonth(monthStr), endDate: lastDayOfMonth(monthStr) };
+}
+
+/** 今天所在月份的完整區間(1 號 ~ 月底,刻意不是「~ 今天」,理由見本區塊開頭說明)。 */
+export function currentMonthRange(): { startDate: string; endDate: string } {
+  return monthRange(toMonthString(new Date()));
+}
+
+/** 上一個月的完整區間。用 `new Date(年, 月-1, 1)` 往前推,跨年(1 月 → 前一年 12 月)由
+ * Date 自己處理,不用自己算年份進位。 */
+export function previousMonthRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+  const firstDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return monthRange(toMonthString(firstDayOfPreviousMonth));
+}

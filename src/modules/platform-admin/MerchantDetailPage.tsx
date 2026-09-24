@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 import { disableMerchant, enableMerchant, updateMerchantSettings } from "@/modules/merchant/api";
+import { adminDisplayName, adminJobTitle, adminPhone } from "@/modules/merchant/adminDisplay";
 import { useMerchantAdmins } from "@/modules/merchant/context";
 import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
@@ -332,8 +333,37 @@ export default function MerchantDetailPage() {
                   >
                     {/* 手機版容器寬度溢出修正:跟 MerchantAdminList.tsx 同一種 bug——email
                         長度不固定,窄螢幕下不能跟右側按鈕擠在同一個 nowrap 列,否則會撐開整個
-                        <li> 超出手機螢幕寬度。改成手機寬度垂直堆疊、sm 以上橫向排列。 */}
-                    <span className="min-w-0 break-words text-foreground">{admin.email}</span>
+                        <li> 超出手機螢幕寬度。改成手機寬度垂直堆疊、sm 以上橫向排列。
+
+                        2026-09-24 使用者裁決(「超級管理員後台要不要也看得到這些欄位 = 要」,
+                        理由是「以我這個廠商視角」——平台方需要掌握每位商家管理員的聯絡方式):
+                        這一列從「只有一個 email」擴充成「暱稱・職位 / 手機 / Email」,
+                        顯示的資訊跟商家端 MerchantAdminList.tsx 完全一致,
+                        fallback 規則也共用 @/modules/merchant/adminDisplay 同一份,不各自複製。
+                        排版刻意比商家端更緊湊(見下方說明),因為這一頁是平台維運視角。
+
+                        ⚠️ 同日使用者又裁決「登入和聯絡信箱應該要是一致的(所以理論上不該出現
+                        不同的信箱)」,所以原本還有的第四行「聯絡信箱」
+                        (merchant_admins.contact_email + adminContactEmailToShow())已經移除,
+                        一個人只有一個 Email。不要加回來。 */}
+                    <div className="min-w-0 space-y-0.5">
+                      {/* 平台維運視角:一次可能看很多商家、每家又有多位管理員,所以「暱稱・職位」
+                          壓在同一行(商家端是暱稱大字、職位小字跟在後面),讓每一列高度更矮、
+                          一個畫面塞得下更多筆。資訊內容一樣,只有密度不同。 */}
+                      <p className="break-words font-medium text-foreground">
+                        {adminDisplayName(admin)}
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          {adminJobTitle(admin)}
+                        </span>
+                      </p>
+                      {/* 手機與 email 沒有空白可以斷行,必須 break-all(只有 break-words 仍會
+                          撐開容器)。手機/Email 在寬螢幕併成一行、窄螢幕自動換行,
+                          用 flex-wrap + gap 而不是兩個獨立段落,進一步壓低列高。 */}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="break-all">手機:{adminPhone(admin)}</span>
+                        <span className="break-all">Email:{admin.email}</span>
+                      </div>
+                    </div>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -348,9 +378,13 @@ export default function MerchantDetailPage() {
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>確定要移除這位管理員嗎?</AlertDialogTitle>
+                          {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在以暱稱為主要辨識資訊,
+                              確認視窗只講 email 會讓人要自己回頭對照是哪一位,而移除是不可逆的
+                              操作。比照商家端 MerchantAdminList.tsx 的同一個處理。 */}
                           <AlertDialogDescription>
-                            {admin.email} 將無法再登入管理「{merchant.name}」。如果這是最後一位
-                            管理員(且集團也沒有設定集團管理者),系統會擋下這個操作並提示。
+                            {adminDisplayName(admin)}({admin.email})將無法再登入管理「
+                            {merchant.name}」。如果這是最後一位管理員(且集團也沒有設定集團
+                            管理者),系統會擋下這個操作並提示。
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

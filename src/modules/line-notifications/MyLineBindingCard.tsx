@@ -5,34 +5,43 @@
 //
 // 掛載位置:規格書 4.5 說「由 engineer 依實際既有版面決定掛載位置」——這次掛在 ManagePage.tsx
 // 的「功能」分頁籤最上方(商家管理員/客服都會經過這個頁面,不需要另外找個人設定選單)。
+//
+// ⚠️ 2026-09-24 修掉一個從一開始就存在的 bug(客服看不到加好友連結):
+//    加好友連結原本是從 fetchMerchantLineConfigStatus(get_merchant_line_config_status)拿的,
+//    而那支資料庫函式第一行就是 `if not private.is_merchant_admin(...) then raise 42501`
+//    —— 只有商家管理員能呼叫。所以**客服**打開這張卡片時那支查詢必定失敗,lineConfigStatus
+//    永遠是 undefined,畫面上永遠顯示「商家尚未完成 LINE 串接測試連線,暫時沒有加好友連結」,
+//    即使商家其實早就串好了。客服等於拿到一組綁定碼卻不知道要加哪個官方帳號好友。
+//    修法:改用新增的窄函式 get_merchant_line_bot_public_info(migration 20260924040900),
+//    它只回傳 is_connected / display_name / line_bot_basic_id 三個公開欄位,允許在職管理員/
+//    客服/服務人員呼叫。管理員的行為完全不變(管理員本來也只用到 line_bot_basic_id 這一個欄位;
+//    LINE 設定頁 LineSettingsPage 的串接管理資訊仍然走原本的 useMerchantLineConfigStatus,
+//    那一支維持管理員專用、一個字都沒改)。
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { getVerifiedUser } from "@/lib/auth-guard";
-import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
-  fetchMerchantLineConfigStatus,
   generateOwnAdminLineBindingCode,
   generateOwnAgentLineBindingCode,
   unbindLineAccount,
+  useMerchantLineBotPublicInfo,
   useMyLineBindingStatus,
 } from "./api";
-
-function formatCountdown(msRemaining: number): string {
-  const totalSeconds = Math.max(0, Math.floor(msRemaining / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-}
+import {
+  buildLineAddFriendUrl,
+  formatBindingCodeCountdown,
+  toFriendlyLineBindingErrorMessage,
+} from "./lineBindingViewLogic";
 
 export function MyLineBindingCard() {
   const { merchant } = useCurrentMerchant();
@@ -58,11 +67,7 @@ export function MyLineBindingCard() {
     userId,
   );
 
-  const { data: lineConfigStatus } = useQuery({
-    queryKey: ["line-notifications-module", "config-status", merchantId],
-    queryFn: () => fetchMerchantLineConfigStatus(merchantId as string),
-    enabled: Boolean(merchantId),
-  });
+  const { data: botPublicInfo } = useMerchantLineBotPublicInfo(merchantId);
 
   const [generating, setGenerating] = useState(false);
   const [unbinding, setUnbinding] = useState(false);
@@ -93,7 +98,12 @@ export function MyLineBindingCard() {
       setNow(Date.now());
       toast.success("已產生綁定碼,請在 10 分鐘內完成綁定");
     } catch (err) {
-      toast.error("產生綁定碼失敗", { description: getErrorMessage(err) });
+      toast.error("產生綁定碼失敗", {
+        description: toFriendlyLineBindingErrorMessage(
+          err,
+          "目前沒辦法產生綁定碼,請稍後再試一次。",
+        ),
+      });
     } finally {
       setGenerating(false);
     }
@@ -111,7 +121,9 @@ export function MyLineBindingCard() {
       setIssuedCode(null);
       await refetchBindingStatus();
     } catch (err) {
-      toast.error("解除綁定失敗", { description: getErrorMessage(err) });
+      toast.error("解除綁定失敗", {
+        description: toFriendlyLineBindingErrorMessage(err, "目前沒辦法解除綁定,請稍後再試一次。"),
+      });
     } finally {
       setUnbinding(false);
     }
@@ -121,9 +133,7 @@ export function MyLineBindingCard() {
 
   const msRemaining = issuedCode ? new Date(issuedCode.expiresAt).getTime() - now : 0;
   const codeExpired = issuedCode !== null && msRemaining <= 0;
-  const addFriendUrl = lineConfigStatus?.lineBotBasicId
-    ? `https://line.me/R/ti/p/@${lineConfigStatus.lineBotBasicId}`
-    : null;
+  const addFriendUrl = buildLineAddFriendUrl(botPublicInfo?.lineBotBasicId);
 
   return (
     <Card>
@@ -170,7 +180,7 @@ export function MyLineBindingCard() {
                   {issuedCode.code}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  剩餘時間 {formatCountdown(msRemaining)}
+                  剩餘時間 {formatBindingCodeCountdown(msRemaining)}
                 </p>
                 {addFriendUrl ? (
                   <a
@@ -186,6 +196,19 @@ export function MyLineBindingCard() {
                     (商家尚未完成 LINE 串接測試連線,暫時沒有加好友連結可以顯示)
                   </p>
                 )}
+                {/* 綁定是在 LINE 那邊完成的(Webhook 收到那則訊息才會寫入 line_bound),這個頁面
+                    不會自己知道。給一顆「我傳完了」的按鈕重新查一次自己的紀錄,否則使用者傳完
+                    訊息回到這個畫面,會看到狀態還是「未綁定」而以為失敗了。
+                    ⚠️ 文案與做法刻意跟服務人員端那張卡片(staff-portal/MyStaffLineBindingCard)
+                    完全一致——同一件事在不同角色的畫面上行為不一致,之後一定會有人來問。 */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refetchBindingStatus()}
+                >
+                  我已經傳送完成,重新檢查
+                </Button>
               </div>
             ) : issuedCode && codeExpired ? (
               <p className="text-xs text-muted-foreground">綁定碼已過期,請重新產生。</p>

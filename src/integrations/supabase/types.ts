@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       booking_assistants: {
@@ -945,6 +970,7 @@ export type Database = {
           line_bound: boolean
           line_user_id: string | null
           merchant_id: string
+          phone: string | null
           user_id: string
         }
         Insert: {
@@ -955,6 +981,7 @@ export type Database = {
           line_bound?: boolean
           line_user_id?: string | null
           merchant_id: string
+          phone?: string | null
           user_id: string
         }
         Update: {
@@ -965,6 +992,7 @@ export type Database = {
           line_bound?: boolean
           line_user_id?: string | null
           merchant_id?: string
+          phone?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1015,7 +1043,6 @@ export type Database = {
       merchant_agents: {
         Row: {
           activated_at: string | null
-          contact_email: string | null
           created_at: string
           id: string
           invited_at: string
@@ -1036,7 +1063,6 @@ export type Database = {
         }
         Insert: {
           activated_at?: string | null
-          contact_email?: string | null
           created_at?: string
           id?: string
           invited_at?: string
@@ -1057,7 +1083,6 @@ export type Database = {
         }
         Update: {
           activated_at?: string | null
-          contact_email?: string | null
           created_at?: string
           id?: string
           invited_at?: string
@@ -1597,6 +1622,44 @@ export type Database = {
           },
         ]
       }
+      merchant_points_feature_history: {
+        Row: {
+          created_at: string
+          effective_from: string
+          effective_to: string | null
+          enabled: boolean
+          id: string
+          is_backfill_seed: boolean
+          merchant_id: string
+        }
+        Insert: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          enabled: boolean
+          id?: string
+          is_backfill_seed?: boolean
+          merchant_id: string
+        }
+        Update: {
+          created_at?: string
+          effective_from?: string
+          effective_to?: string | null
+          enabled?: boolean
+          id?: string
+          is_backfill_seed?: boolean
+          merchant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_points_feature_history_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_push_event_settings: {
         Row: {
           created_at: string
@@ -1644,11 +1707,9 @@ export type Database = {
           auto_accept_booking: boolean
           avatar_url: string | null
           booking_window_max_days: number | null
-          booking_window_min_days: number | null
           can_create_edit_orders: boolean
           can_upload_construction_photos: boolean
           compensation_type: string
-          contact_email: string | null
           created_at: string
           direct_accept_after_merchant_confirm: boolean
           google_calendar_sync_enabled: boolean
@@ -1680,11 +1741,9 @@ export type Database = {
           auto_accept_booking?: boolean
           avatar_url?: string | null
           booking_window_max_days?: number | null
-          booking_window_min_days?: number | null
           can_create_edit_orders?: boolean
           can_upload_construction_photos?: boolean
           compensation_type?: string
-          contact_email?: string | null
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
           google_calendar_sync_enabled?: boolean
@@ -1716,11 +1775,9 @@ export type Database = {
           auto_accept_booking?: boolean
           avatar_url?: string | null
           booking_window_max_days?: number | null
-          booking_window_min_days?: number | null
           can_create_edit_orders?: boolean
           can_upload_construction_photos?: boolean
           compensation_type?: string
-          contact_email?: string | null
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
           google_calendar_sync_enabled?: boolean
@@ -2996,6 +3053,13 @@ export type Database = {
           expires_at: string
         }[]
       }
+      generate_own_staff_line_binding_code: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          code: string
+          expires_at: string
+        }[]
+      }
       generate_staff_line_binding_code: {
         Args: { p_staff_id: string }
         Returns: {
@@ -3121,9 +3185,12 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: {
           created_at: string
+          display_name: string
           email: string
           id: string
+          job_title: string
           merchant_id: string
+          phone: string
           user_id: string
         }[]
       }
@@ -3169,6 +3236,10 @@ export type Database = {
       }
       get_merchant_day_schedule: {
         Args: { p_date: string; p_merchant_id: string }
+        Returns: Json
+      }
+      get_merchant_line_bot_public_info: {
+        Args: { p_merchant_id: string }
         Returns: Json
       }
       get_merchant_line_config_status: {
@@ -3472,6 +3543,35 @@ export type Database = {
           p_staff_leave_record_id?: string
         }
         Returns: Json
+      }
+      restore_merchant_agent: {
+        Args: { p_agent_id: string }
+        Returns: {
+          activated_at: string | null
+          created_at: string
+          id: string
+          invited_at: string
+          invited_email: string
+          job_title: string | null
+          line_bound: boolean
+          line_user_id: string | null
+          merchant_id: string
+          name: string
+          nickname: string | null
+          pending_admin_login_email: string | null
+          pending_admin_login_email_requested_at: string | null
+          pending_admin_login_email_requested_by: string | null
+          phone: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "merchant_agents"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       rollback_bulk_operation: {
         Args: { p_operation_id: string }
@@ -3844,6 +3944,41 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      update_merchant_agent: {
+        Args: {
+          p_agent_id: string
+          p_job_title: string
+          p_name: string
+          p_nickname: string
+          p_phone: string
+        }
+        Returns: {
+          activated_at: string | null
+          created_at: string
+          id: string
+          invited_at: string
+          invited_email: string
+          job_title: string | null
+          line_bound: boolean
+          line_user_id: string | null
+          merchant_id: string
+          name: string
+          nickname: string | null
+          pending_admin_login_email: string | null
+          pending_admin_login_email_requested_at: string | null
+          pending_admin_login_email_requested_by: string | null
+          phone: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "merchant_agents"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       update_merchant_booking_status_colors: {
         Args: {
           p_accepted_color: string
@@ -3894,6 +4029,7 @@ export type Database = {
           p_display_name: string
           p_job_title: string
           p_merchant_id: string
+          p_phone: string
         }
         Returns: undefined
       }
@@ -3904,7 +4040,6 @@ export type Database = {
       update_my_staff_profile: {
         Args: {
           p_avatar_url: string
-          p_contact_email: string
           p_intro: string
           p_name: string
           p_nickname: string
@@ -4066,6 +4201,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

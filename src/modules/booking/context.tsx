@@ -8,7 +8,6 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import {
   cancelBooking as apiCancelBooking,
-  clearStaffDayOverride as apiClearStaffDayOverride,
   completeBooking as apiCompleteBooking,
   confirmBooking as apiConfirmBooking,
   createBooking as apiCreateBooking,
@@ -206,15 +205,10 @@ export async function setStaffDayOverride(
   return apiSetStaffDayOverride(staffId, overrideDate, startTime, endTime, isAvailable);
 }
 
-/** 模組 6 §5.2/§6.4 對外介面:清除單日例外,恢復成回歸每週固定模板的狀態。 */
-export async function clearStaffDayOverride(
-  staffId: string,
-  overrideDate: string,
-  startTime: string,
-  endTime: string,
-): Promise<void> {
-  return apiClearStaffDayOverride(staffId, overrideDate, startTime, endTime);
-}
+// 使用者裁決(2026-09-24):行事曆時段選單的「清除例外(恢復預設)」入口整個拿掉,這裡原本包一層
+// 的 clearStaffDayOverride 對外介面也隨之移除(唯一的呼叫端就是 CalendarPage)。資料庫函式
+// clear_staff_day_override 與 api.ts 的同名 wrapper 都保留——模組 14(服務人員端)
+// src/modules/staff-portal/context.tsx 仍然直接從 @/modules/booking/api 使用它。
 
 /** 模組 6 §6.1 對外介面:直接取得單筆訂單的金額 breakdown,供模組 8/12 之後複用,
  * 不用重新查三張關聯表自己加總。 */

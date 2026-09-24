@@ -79,7 +79,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
   adjustMemberPoints,
@@ -363,6 +363,35 @@ function MemberPointsPageInner() {
   const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
   const [savingRewardCondition, setSavingRewardCondition] = useState(false);
 
+  // =======================================================================
+  // 2026-09-24 使用者裁決(紅利點數管理頁分成「交易」與「規則」兩段權限)。使用者原文:
+  //   餘額總覽、手動調整、登記兌換、異動歷史 = 會員管理(members)
+  //   核發獎勵資格條件、點數設定(啟用開關/比例/推薦/生日) = 紅利點數管理(member_points)
+  // 也就是同一頁由兩把鑰匙共管:交易歸既有的 members,規則歸新增的 member_points。
+  // 整頁的進入守衛(RequireMemberPointsAccess)刻意「維持只認 members」——否則只有交易權限的
+  // 客服連這一頁都進不去,就違反使用者「客服可以處理會員管理內的資料包含紅利點數異動等等」的裁決。
+  //
+  // 判斷寫法沿用專案既有慣例(CalendarPage.tsx canManageDayOverride、LeaveTypesPage.tsx
+  // showDeductionRuleButton 這兩處「頁面層一把鑰匙、區塊層另一把鑰匙」的先例),不自創新寫法:
+  // merchantRole === 'admin' 一律放行,agent 才需要 useAgentPermission 為 true。
+  // ⚠️ 這行就是使用者特別交代「商家管理員一定要全部看得到」那一點的落實處:admin 直接短路,
+  //    完全不看 member_points 開關(客服權限開關只對 agent 生效);merchantRole === 'staff' 或
+  //    null 的人本來就過不了頁面守衛,到不了這裡。
+  //
+  // ✅ 資料庫端已上線(migration 20260924040400_member_points_permission_and_rules_guard,
+  //    private.can_manage_member_points() 與規則欄位的寫入鎖),所以前後端兩層防線都在。
+  //    但這裡仍然刻意「不」依賴那支函式——useAgentPermission() 讀的是 merchant_agent_permissions
+  //    這張表(section_key = 'member_points'),那張表今天就已經存在、也沒有 section_key 白名單
+  //    約束,所以前端這一半是獨立成立的。查不到權限列時 useAgentPermission 的
+  //    既有行為是 `data?.granted ?? false`,也就是 fail-closed(預設關閉):在商家管理員實際去
+  //    勾選這把新鑰匙之前,客服只看得到交易那一半。刻意選 fail-closed 而不是 fail-open,理由是
+  //    「規則」會直接影響之後每一筆訂單發出去的點數,寧可讓商家多勾一次開關,也不要讓從來沒被
+  //    明確授權過的客服默默保有改規則的能力。
+  const { data: merchantRole } = useCurrentMerchantRole();
+  const { data: canManageMemberPointsRules } = useAgentPermission("member_points");
+  const canManagePointsRules =
+    merchantRole === "admin" || (merchantRole === "agent" && canManageMemberPointsRules === true);
+
   const selectedMemberId = searchParams.get("member");
   const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
   const { data: members, isLoading } = useMerchantMembersList(merchantId, search);
@@ -480,9 +509,13 @@ function MemberPointsPageInner() {
       </div>
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">紅利點數管理</h1>
+        {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流
+            ——只有交易權限的客服看到的畫面裡根本沒有那兩張規則卡片,如果還寫「核發獎勵資格條件、
+            點數設定也在這裡操作」,對方會一直在頁面上找一個他看不到的東西。 */}
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史,以及核發獎勵資格
-          條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點),一站式在這裡操作。
+          {canManagePointsRules
+            ? `「${merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史,以及核發獎勵資格條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點),一站式在這裡操作。`
+            : `「${merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史。點數的核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點)需要另外的「紅利點數管理」權限才能調整,請找商家管理員。`}
         </p>
       </div>
 
@@ -490,152 +523,177 @@ function MemberPointsPageInner() {
         <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
           目前紅利點數功能已關閉,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
           建單表單跟會員詳情頁也不顯示點數相關內容給客戶/服務人員看。你仍然可以在這裡查看、手動
-          調整、登記兌換既有的點數。要重新開啟,請到下方「點數設定」切換開關。
+          調整、登記兌換既有的點數。
+          {/* 2026-09-24 使用者裁決:這句「要重新開啟請到下方點數設定」只有看得到那張卡片的人適用。
+              沒有 member_points 權限的客服看不到那張卡片,對他們說「去下方切換開關」等於叫他們去找
+              一個畫面上不存在的東西,所以改成告訴他們該找誰。 */}
+          {canManagePointsRules
+            ? "要重新開啟,請到下方「點數設定」切換開關。"
+            : "要重新開啟這個功能需要「紅利點數管理」權限,請找商家管理員處理。"}
         </div>
       ) : null}
 
-      {/* 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 整塊搬過來,放在
+      {/* 2026-09-24 使用者裁決(交易/規則權限分離):下面這兩張卡片就是「規則」那一半,整組需要
+          member_points 權限。
+          呈現方式選「整張卡片不渲染」而不是「渲染成 disabled」:這是專案既有慣例——
+          LeaveTypesPage.tsx 的「扣款規則」按鈕(需要 commission_settings)、CalendarPage.tsx 的
+          「開啟/關閉時段」選項(需要 business_hours)、AgentPermissionsPage 描述文字裡寫的
+          「關掉的區塊會直接看不到對應的入口」,全部都是條件式不渲染,專案裡沒有任何一處是把
+          沒權限的區塊留在畫面上灰掉。一致性之外也比較不會誤導:灰掉的欄位會讓客服以為「這個值
+          就是目前設定」而據此回答客人,不渲染則不會產生這種誤解。 */}
+      {canManagePointsRules ? (
+        <>
+          {/* 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 整塊搬過來,放在
           「點數設定」卡片上方——這個欄位決定的是「什麼樣的會員才拿得到點數」,本質上屬於點數
           設定的一部分,留在會員系統設定頁本來就不合理。 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>核發獎勵資格條件</CardTitle>
-          <CardDescription>
-            消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。
-            <strong className="text-warn">
-              提醒:「電話已驗證」只是客服人工標記,不是真的簡訊驗證,無法擋住用假電話註冊的人。
-            </strong>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {settingsLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
-          ) : (
-            /* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings 灌進來的,
+          <Card>
+            <CardHeader>
+              <CardTitle>核發獎勵資格條件</CardTitle>
+              <CardDescription>
+                消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。
+                <strong className="text-warn">
+                  提醒:「電話已驗證」只是客服人工標記,不是真的簡訊驗證,無法擋住用假電話註冊的人。
+                </strong>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {settingsLoading ? (
+                <p className="text-sm text-muted-foreground">載入中⋯</p>
+              ) : (
+                /* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings 灌進來的,
                不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉(見 src/lib/radixSelectGuard.ts)。
                合法值是 REWARD_CONDITION_MODE_LABELS 這份固定列舉,所以判斷條件用白名單。 */
-            <Select
-              value={rewardConditionMode}
-              disabled={savingRewardCondition}
-              onValueChange={guardPhantomEmptyChange<RewardConditionMode>(
-                (v) => void handleSaveRewardCondition(v),
-                (v) => v in REWARD_CONDITION_MODE_LABELS,
+                <Select
+                  value={rewardConditionMode}
+                  disabled={savingRewardCondition}
+                  onValueChange={guardPhantomEmptyChange<RewardConditionMode>(
+                    (v) => void handleSaveRewardCondition(v),
+                    (v) => v in REWARD_CONDITION_MODE_LABELS,
+                  )}
+                >
+                  <SelectTrigger className="w-full sm:w-80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
+                      (mode) => (
+                        <SelectItem key={mode} value={mode}>
+                          {REWARD_CONDITION_MODE_LABELS[mode]}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
               )}
-            >
-              <SelectTrigger className="w-full sm:w-80">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
-                  (mode) => (
-                    <SelectItem key={mode} value={mode}>
-                      {REWARD_CONDITION_MODE_LABELS[mode]}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
-      {/* #639/#642(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關,以及消費點數
+          {/* #639/#642(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關,以及消費點數
           比例/推薦獎勵/生日贈點三個數字欄位,都從 MemberSettingsPage.tsx 搬過來這裡一次操作,
           不再需要連結導去會員系統設定頁調整。 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>點數設定</CardTitle>
-          <CardDescription>
-            啟用/停用紅利點數功能,以及消費點數比例、推薦獎勵、生日贈點,都在這裡一次設定。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {settingsLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
-                  <p className="text-xs text-muted-foreground">
-                    關閉後系統就不再自動給點數了:客人消費不再累點、推薦朋友不發獎勵、生日也不
-                    送點。你仍然可以在這一頁手動調整點數、登記兌換,把會員手上剩下的點數結清;
-                    既有的點數餘額與異動歷史不會被清空,建單表單跟會員詳情頁則不再顯示點數相關
-                    的數字與入口,重新開啟後會完整還原顯示。
-                  </p>
-                </div>
-                <Switch
-                  checked={settings ? settings.points_feature_enabled : true}
-                  disabled={savingFeatureToggle}
-                  onCheckedChange={handleToggleFeatureEnabled}
-                />
-              </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>點數設定</CardTitle>
+              <CardDescription>
+                啟用/停用紅利點數功能,以及消費點數比例、推薦獎勵、生日贈點,都在這裡一次設定。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {settingsLoading ? (
+                <p className="text-sm text-muted-foreground">載入中⋯</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
+                      <p className="text-xs text-muted-foreground">
+                        關閉後系統就不再自動給點數了:客人消費不再累點、推薦朋友不發獎勵、生日也不
+                        送點。你仍然可以在這一頁手動調整點數、登記兌換,把會員手上剩下的點數結清;
+                        既有的點數餘額與異動歷史不會被清空,建單表單跟會員詳情頁則不再顯示點數相關
+                        的數字與入口,重新開啟後會完整還原顯示。
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings ? settings.points_feature_enabled : true}
+                      disabled={savingFeatureToggle}
+                      onCheckedChange={handleToggleFeatureEnabled}
+                    />
+                  </div>
 
-              <div>
-                <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
-                <Input
-                  id="points-earn-rate"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={pointsEarnRate}
-                  onChange={(e) => setPointsEarnRate(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你
-                  套用任何數字。
-                </p>
-                {!Number.isNaN(numericRate) ? (
-                  <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                    範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
-                    <strong>{previewLoyaltyPoints(1000, numericRate)}</strong> 點(僅供參考,實際
-                    點數以訂單完成時系統計算為準,計算基準是含稅總額)。
-                  </p>
-                ) : null}
-              </div>
+                  <div>
+                    <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
+                    <Input
+                      id="points-earn-rate"
+                      className="mt-2 w-40"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={pointsEarnRate}
+                      onChange={(e) => setPointsEarnRate(e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你
+                      套用任何數字。
+                    </p>
+                    {!Number.isNaN(numericRate) ? (
+                      <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
+                        <strong>{previewLoyaltyPoints(1000, numericRate)}</strong> 點(僅供參考,實際
+                        點數以訂單完成時系統計算為準,計算基準是含稅總額)。
+                      </p>
+                    ) : null}
+                  </div>
 
-              <div>
-                <Label htmlFor="referral-bonus-points">推薦獎勵點數</Label>
-                <Input
-                  id="referral-bonus-points"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={referralBonusPoints}
-                  onChange={(e) => setReferralBonusPoints(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  被推薦人完成第一筆訂單時,推薦人可以拿到的點數。
-                </p>
-              </div>
+                  <div>
+                    <Label htmlFor="referral-bonus-points">推薦獎勵點數</Label>
+                    <Input
+                      id="referral-bonus-points"
+                      className="mt-2 w-40"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={referralBonusPoints}
+                      onChange={(e) => setReferralBonusPoints(e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      被推薦人完成第一筆訂單時,推薦人可以拿到的點數。
+                    </p>
+                  </div>
 
-              <div>
-                <Label htmlFor="birthday-bonus-points">生日贈點</Label>
-                <Input
-                  id="birthday-bonus-points"
-                  className="mt-2 w-40"
-                  type="number"
-                  min={0}
-                  step="1"
-                  value={birthdayBonusPoints}
-                  onChange={(e) => setBirthdayBonusPoints(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員
-                  管理列表頁時系統才會補發)。
-                </p>
-              </div>
+                  <div>
+                    <Label htmlFor="birthday-bonus-points">生日贈點</Label>
+                    <Input
+                      id="birthday-bonus-points"
+                      className="mt-2 w-40"
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={birthdayBonusPoints}
+                      onChange={(e) => setBirthdayBonusPoints(e.target.value)}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員
+                      管理列表頁時系統才會補發)。
+                    </p>
+                  </div>
 
-              <Button type="button" size="sm" disabled={savingPoints} onClick={handleSavePoints}>
-                {savingPoints ? "儲存中⋯" : "儲存"}
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={savingPoints}
+                    onClick={handleSavePoints}
+                  >
+                    {savingPoints ? "儲存中⋯" : "儲存"}
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
 
+      {/* 以下是「交易」那一半(餘額總覽/手動調整/登記兌換/異動歷史),維持只認 members 權限,
+          也就是能進到這一頁的人一律看得到,不受 member_points 這把新鑰匙影響。 */}
       <Card>
         <CardHeader>
           <CardTitle>會員點數餘額總覽</CardTitle>

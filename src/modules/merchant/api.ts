@@ -177,7 +177,16 @@ export async function uploadMerchantLogo(merchantId: string, file: File): Promis
   return data.publicUrl;
 }
 
-/** 5.4 對外介面:回傳某商家目前的管理員名單(含 email),供模組 3 直接複用查詢邏輯。 */
+/** 5.4 對外介面:回傳某商家目前的管理員名單,供模組 3 直接複用查詢邏輯。
+ * 2026-09-24:這支 RPC 的回傳新增了 display_name/job_title/phone 三個欄位
+ * (嚴格超集,非破壞性),讓管理員名單能顯示「暱稱 / 手機 / Email」而不是只有一個 email。
+ * 那個 Email 就是 `email`(登入帳號,來自 auth.users)——使用者裁決一個人只有一個 Email,
+ * merchant_admins 沒有 contact_email 欄位。
+ * ⚠️ 這三個欄位對既有管理員都可能是 null(資料庫端刻意不做 coalesce,見 migration
+ * 20260924040700 的 comment),本地的 MerchantAdminUser 型別因此宣告成 `string | null`。
+ * 自動產生的 types.ts 把 RETURNS TABLE 的欄位一律推導成非 nullable(產生器的已知限制,
+ * 它看不出哪些欄位可能是 null),那個型別比真實情況窄,所以這裡用 `as` 放寬到真實形狀即可,
+ * 不需要 `as unknown as`。 */
 export async function fetchMerchantAdminUsers(merchantId: string): Promise<MerchantAdminUser[]> {
   const { data, error } = await supabase.rpc("get_merchant_admin_users", {
     p_merchant_id: merchantId,
@@ -193,6 +202,15 @@ export async function fetchMerchantAdminUsers(merchantId: string): Promise<Merch
 export interface MyAdminProfile {
   displayName: string | null;
   jobTitle: string | null;
+  /** 2026-09-24 使用者新裁決(管理員也要能填電話):原話「我認為需要,因為這會影響到
+   * 整個系統判斷這個管理員與集團的關聯或者這個管理員在系統內的資料(以我這個廠商視角)」——
+   * 他是平台方,要能掌握每位商家管理員的聯絡方式。
+   * ⚠️ merchant_admins.phone 是 nullable(既有管理員沒有這個值),所以這個欄位在畫面上是
+   * 「選填」,不要照抄客服/服務人員那邊的必填邏輯。
+   * ⚠️ 這裡刻意**沒有** contactEmail:同日使用者裁決「登入和聯絡信箱應該要是一致的(所以理論上
+   * 不該出現不同的信箱)」「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」一個人只有一個
+   * Email,就是登入 Email(從 supabase.auth 的 session / auth.users 讀,不在這個 profile 裡)。 */
+  phone: string | null;
 }
 
 /**
@@ -207,28 +225,56 @@ export async function fetchMyAdminProfile(
   merchantId: string,
   userId: string,
 ): Promise<MyAdminProfile | null> {
+  // 只讀這張卡片真正用得到的三個欄位(比照本檔案其他查詢的既有慣例,用具名 select 而不是 `*`,
+  // 避免多搬一整列欄位、也讓「這個畫面依賴哪些欄位」一眼可讀)。
+  // ⚠️ display_name / job_title / phone 三個欄位在資料庫裡本來就是 nullable(既有管理員從來沒有
+  // 被強迫填過,phone 更是 2026-09-24 才新增的欄位),所以下面直接沿用它們的 null——
+  // MyAdminProfile 三個欄位都宣告成 `string | null`,這個 null 是真實資料狀態,不是防禦性補值,
+  // 畫面上的 fallback 文字由呼叫端負責(見 MerchantSettingsPage / 首頁個人資料卡片)。
   const { data, error } = await supabase
     .from("merchant_admins")
-    .select("display_name, job_title")
+    .select("display_name, job_title, phone")
     .eq("merchant_id", merchantId)
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return { displayName: data.display_name, jobTitle: data.job_title };
+  return {
+    displayName: data.display_name,
+    jobTitle: data.job_title,
+    phone: data.phone,
+  };
 }
 
-/** 1.3:管理員自助編輯自己的姓名/職位,呼叫 SECURITY DEFINER RPC update_my_admin_profile
- * (資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷,見對應 migration 說明)。 */
+/** 1.3:管理員自助編輯自己的姓名/職位/電話,呼叫 SECURITY DEFINER RPC
+ * update_my_admin_profile(資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷)。
+ *
+ * ⚠️ 2026-09-24 破壞性改動:這支 RPC 從 3 參數變成 4 參數,**舊的 3 參數重載已經被 drop**
+ * (避免 PostgREST 解析到孤兒重載)。新簽章的參數順序是:
+ *     p_merchant_id, p_display_name, p_job_title, p_phone
+ * 下面送出的四個 key 跟它逐一對應,數量與名稱完全一致。
+ * ⚠️ 開發過程中曾短暫有過一個 5 參數版本(多一個 p_contact_email),同日被使用者推翻:
+ *    「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」——一個人只有一個 Email,
+ *    就是登入 Email。那個 5 參數簽章也在 migration 裡一併 drop 掉了,不要再送 p_contact_email。
+ * phone 是 nullable 欄位(「清空」是合法操作),所以這裡的參數型別保持 `string | null`,
+ * 由呼叫端決定要寫入號碼還是清空。 */
 export async function updateMyAdminProfile(
   merchantId: string,
   displayName: string,
   jobTitle: string,
+  phone: string | null,
 ): Promise<void> {
+  // 既有踩坑(比照 staff-portal/api.ts updateMyStaffProfile() 對 update_my_staff_profile 的既有
+  // 處理,不自己另發明一套):supabase gen types 對 Postgres text 參數一律推導成 `string`
+  // (不是 `string | null`),即使資料庫函式實際上完全能接受 null——這是產生器的已知限制,不是
+  // 執行期限制。所以「清空電話」這件事在這裡送空字串而不是 null:update_my_admin_profile 內部用
+  // nullif(btrim(coalesce(p_phone, '')), '') 正規化,空字串跟 null 寫進資料庫的結果完全相同
+  // (都是 NULL,而且都會跳過 ^09\d{8}$ 格式檢查),行為沒有任何差別。
   const { error } = await supabase.rpc("update_my_admin_profile", {
     p_merchant_id: merchantId,
     p_display_name: displayName,
     p_job_title: jobTitle,
+    p_phone: phone ?? "",
   });
   if (error) throw error;
 }

@@ -76,7 +76,6 @@ import {
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 import {
-  clearStaffDayOverride,
   setStaffDayOverride,
   useMerchantBookings,
   useMerchantBookingStatusColors,
@@ -110,9 +109,12 @@ import { buildBookingSlotOptions } from "./bookingSlotOptions";
 import { parseItemQuantity } from "./itemQuantity";
 import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
-// 模組 14(服務人員端)規格書 4.3:role==='staff' 時渲染服務人員自助行事曆,不渲染下面給
-// 管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
+// 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
+// 下面給管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
 import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
+// 2026-09-24 修正:CalendarPageRoleGate 改讀共用外殼算好的 isStaffView/isViewResolved,
+// 不再自己用 role==='staff' 判斷(雙重身分使用者會被誤判),詳見該元件上方註解。
+import { useAppLayoutContext } from "@/routes/AppLayout";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   bookingBlockStyle,
@@ -1396,8 +1398,6 @@ function DaySlotCell({
   showOverrideOption,
   overrideOptionLabel,
   onToggleOverride,
-  showClearOverrideOption,
-  onClearOverride,
 }: {
   top: number;
   height: number;
@@ -1417,8 +1417,6 @@ function DaySlotCell({
   showOverrideOption: boolean;
   overrideOptionLabel: string;
   onToggleOverride: () => void;
-  showClearOverrideOption: boolean;
-  onClearOverride: () => void;
 }) {
   const { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
     useTapVsDragOpenState();
@@ -1449,9 +1447,6 @@ function DaySlotCell({
         ) : null}
         {showOverrideOption ? (
           <DropdownMenuItem onClick={onToggleOverride}>{overrideOptionLabel}</DropdownMenuItem>
-        ) : null}
-        {showClearOverrideOption ? (
-          <DropdownMenuItem onClick={onClearOverride}>清除例外(恢復預設)</DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1599,16 +1594,6 @@ function CalendarPageInner() {
       refetchAll();
     } catch (err) {
       toast.error("設定失敗", { description: getErrorMessage(err) });
-    }
-  }
-
-  async function handleClearOverride(staffId: string, startTime: string, endTime: string) {
-    try {
-      await clearStaffDayOverride(staffId, selectedDateKey, startTime, endTime);
-      toast.success("已清除例外,恢復成預設狀態");
-      refetchAll();
-    } catch (err) {
-      toast.error("清除失敗", { description: getErrorMessage(err) });
     }
   }
 
@@ -1955,17 +1940,6 @@ function CalendarPageInner() {
                                 finalAvailable,
                               )
                             }
-                            showClearOverrideOption={
-                              canManageDayOverride && isOverride && Boolean(matchedOverride)
-                            }
-                            onClearOverride={() => {
-                              if (!matchedOverride) return;
-                              handleClearOverride(
-                                s.staff_id,
-                                matchedOverride.start_time,
-                                matchedOverride.end_time,
-                              );
-                            }}
                           />
                         );
                       })}
@@ -2033,10 +2007,19 @@ function CalendarPageInner() {
 // (src/modules/staff-portal/MyCalendarPage.tsx),不是下面給管理員/客服看的
 // CalendarPageInner——這裡刻意不套用 RequireBookingAccess(那個守衛只認 admin/agent,
 // 服務人員一律會被導回 /app),角色判斷放在 RequireBookingAccess 之外先做分流。
+//
+// 2026-09-24 修正:原本這裡判斷 `role === "staff"`,對「同時是管理員/客服 + 同一間商家的服務
+// 人員」的雙重身分使用者是 false(角色優先序會把他解析成 admin/agent),所以他切換到服務人員端
+// 之後點「行事曆」會掉到商家版 CalendarPageInner,再被 RequireBookingAccess 擋掉,變成空白畫面。
+// 改讀 AppLayout 已經算好並透過 outlet context 傳下來的 isStaffView(/app/calendar 是
+// <Route element={<AppLayout />}> 的子路由),跟 HomePage/ManagePage 用同一個判斷來源,
+// 不要在這裡自己重算一次角色。
 function CalendarPageRoleGate() {
-  const { data: role, isLoading } = useCurrentMerchantRole();
+  const { isStaffView, isViewResolved } = useAppLayoutContext();
 
-  if (isLoading) {
+  // isViewResolved 這道守衛不能省:角色/服務人員紀錄還在查的時候 isStaffView 一律是 false,
+  // 少了這一關,雙重身分的人會先閃一下商家版行事曆(甚至閃一下被擋掉的空白畫面)才切回來。
+  if (!isViewResolved) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
         <p className="text-sm text-muted-foreground">載入中⋯</p>
@@ -2044,7 +2027,7 @@ function CalendarPageRoleGate() {
     );
   }
 
-  if (role === "staff") {
+  if (isStaffView) {
     return (
       <main className="mx-auto max-w-3xl px-5 py-12">
         <MyCalendarPage />

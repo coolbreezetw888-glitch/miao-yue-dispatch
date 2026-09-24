@@ -59,7 +59,14 @@ values
 select pg_temp.test_set_auth('a3000000-0000-4000-8000-000000000001');
 
 select lives_ok(
-  $$select update_my_admin_profile('a3000000-0000-4000-8000-000000000020', '管理員 A 姓名', '店長')$$,
+  -- ⚠️ 2026-09-24(migration 20260924040600):update_my_admin_profile 追加了 p_phone
+  --    參數(使用者裁決:平台方需要能掌握每一位商家管理員的聯絡方式),舊的 3 參數重載已經被
+  --    drop(避免 PostgREST 解析到不寫 phone 的舊版),所以這裡必須改成 4 個參數。
+  --    這一條測的是「本人可以更新自己的資料」,語意完全沒變。
+  -- ⚠️ 開發過程中曾短暫有過一個 5 參數版本(多一個 p_contact_email),同日被使用者推翻
+  --    (「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」),那個簽章也已經
+  --    一併 drop。這裡是 4 個參數,不是 5 個。
+  $$select update_my_admin_profile('a3000000-0000-4000-8000-000000000020', '管理員 A 姓名', '店長', null)$$,
   '管理員 A 可以成功更新自己在 M1 的 display_name/job_title'
 );
 
@@ -88,7 +95,7 @@ select is(
 -- 帶別人的 merchant_id(M2,管理員 A 在這間店完全沒有 merchant_admins 紀錄):找不到符合條件的列,
 -- 應該拋出例外,不會誤改到任何資料。
 select throws_ok(
-  $$select update_my_admin_profile('a3000000-0000-4000-8000-000000000021', '竄改姓名', '竄改職位')$$,
+  $$select update_my_admin_profile('a3000000-0000-4000-8000-000000000021', '竄改姓名', '竄改職位', null)$$,
   'P0002',
   NULL,
   '管理員 A 帶別人商家(M2)的 merchant_id 呼叫時,找不到符合條件的列,直接被擋下'
@@ -139,7 +146,7 @@ select pg_temp.test_clear_auth();
 -- ③ 權限邊界:anon 不能呼叫這兩支函式(比照既有 RPC 的 revoke 檢查方式)。
 -- ---------------------------------------------------------------------------
 select ok(
-  not has_function_privilege('anon', 'public.update_my_admin_profile(uuid, text, text)', 'execute'),
+  not has_function_privilege('anon', 'public.update_my_admin_profile(uuid, text, text, text, text)', 'execute'),
   'anon 角色不能執行 update_my_admin_profile'
 );
 

@@ -1,5 +1,14 @@
-// 對應規格書 4.6:個人資料自助編輯視窗。表單(姓名必填/暱稱/電話/對外聯絡 email/簡介 + 頭像
-// 上傳),送出呼叫 updateMyStaffProfile(3.16/5.5)。
+// 對應規格書 4.6:個人資料自助編輯視窗。表單(姓名必填/暱稱/電話/簡介 + 頭像上傳),
+// 送出呼叫 updateMyStaffProfile(3.16/5.5)。
+//
+// ⚠️ 2026-09-24:原本還有一個「對外聯絡 Email」欄位(merchant_staff.contact_email),已隨
+//    migration 20260924040800_drop_person_contact_email.sql 一起移除——使用者裁決
+//    「客服和服務人員應該也是一樣只需要一個 Email 即可」,那個唯一的 Email 就是登入用的信箱
+//    (有自己一套 request_staff_login_email_change 流程,不從這個「編輯個人資料」表單改)。
+//    這個前端改動**必須**跟那支 migration 同一次部署上線:migration 會 drop 舊的 7 引數
+//    update_my_staff_profile,舊的呼叫端在那之後一按「儲存」就會整個失敗。
+//    (界線:商家本身的 public.merchants.contact_email 一律保留,那是給消費者看的店家聯絡信箱,
+//     跟「人」的 contact_email 無關。)
 //
 // 頭像上傳直接複用既有 src/modules/staff-agent/StaffAvatarUploader.tsx,不另外複製一份——
 // 那個元件本來就只吃 currentAvatarUrl/onUpload 兩個 prop,完全不耦合「上傳到哪個路徑」這件事,
@@ -47,7 +56,6 @@ export function EditMyStaffProfileDialog({
   const [name, setName] = useState(staff.name);
   const [nickname, setNickname] = useState(staff.nickname ?? "");
   const [phone, setPhone] = useState(staff.phone ?? "");
-  const [contactEmail, setContactEmail] = useState(staff.contact_email ?? "");
   const [intro, setIntro] = useState(staff.intro ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(staff.avatar_url);
   const [saving, setSaving] = useState(false);
@@ -57,7 +65,6 @@ export function EditMyStaffProfileDialog({
       setName(staff.name);
       setNickname(staff.nickname ?? "");
       setPhone(staff.phone ?? "");
-      setContactEmail(staff.contact_email ?? "");
       setIntro(staff.intro ?? "");
       setAvatarUrl(staff.avatar_url);
     }
@@ -89,7 +96,6 @@ export function EditMyStaffProfileDialog({
       name,
       nickname,
       phone: phone.trim(),
-      contactEmail,
       avatarUrl: url,
       intro,
     });
@@ -114,7 +120,6 @@ export function EditMyStaffProfileDialog({
         name,
         nickname,
         phone: phone.trim(),
-        contactEmail,
         avatarUrl,
         intro,
       });
@@ -134,9 +139,7 @@ export function EditMyStaffProfileDialog({
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>編輯個人資料</DialogTitle>
-          <DialogDescription>
-            只能修改姓名/暱稱/電話/對外聯絡 Email/頭像/簡介這幾項。
-          </DialogDescription>
+          <DialogDescription>只能修改姓名/暱稱/電話/頭像/簡介這幾項。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <StaffAvatarUploader currentAvatarUrl={avatarUrl} onUpload={handleAvatarUpload} />
@@ -169,16 +172,6 @@ export function EditMyStaffProfileDialog({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 required
-              />
-            </div>
-            <div>
-              <Label htmlFor="my-staff-email">對外聯絡 Email</Label>
-              <Input
-                id="my-staff-email"
-                type="email"
-                className="mt-2"
-                value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
               />
             </div>
           </div>

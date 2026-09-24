@@ -41,6 +41,6 @@ export const STAFF_PERMISSION_SECTIONS: StaffPermissionSectionDef[] = [
   {
     key: "staff_profile_edit",
     label: "個人資料編輯",
-    description: "開放後這位服務人員可以自己修改姓名/暱稱/電話/對外聯絡 Email/頭像/簡介。",
+    description: "開放後這位服務人員可以自己修改姓名/暱稱/電話/頭像/簡介。",
   },
 ];

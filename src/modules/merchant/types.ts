@@ -46,6 +46,27 @@ export interface MerchantAdminUser {
   id: string;
   merchant_id: string;
   user_id: string;
+  /** 登入帳號的 email(來自 auth.users)。
+   * ⚠️ 2026-09-24 使用者裁決之後,這是一位管理員**唯一**的 Email:
+   *    「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+   *    「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」
+   *    所以 merchant_admins 沒有 contact_email 欄位(原本要加的那支 migration 在上線前就改成
+   *    只加 phone),merchant_staff / merchant_agents 的 contact_email 也已經被 drop 掉。
+   *    要在畫面上顯示「這個人的 Email」時,一律用這一欄。
+   *    (public.merchants.contact_email 是完全不同的東西——那是店家對外給消費者看的信箱,
+   *     店家本身沒有登入帳號,一律保留,見 Merchant 型別。) */
   email: string;
   created_at: string;
+  // =====================================================================
+  // 2026-09-24:get_merchant_admin_users 這支 RPC 新增回傳的三個欄位(是既有欄位的嚴格超集,
+  // 非破壞性)。使用者原話:「目前我這邊看到的只有 Email(新增管理員也是 Email),新增用 Email
+  // 沒問題,但名單要顯示暱稱 / 手機 / Email,這樣才好判斷是誰。」
+  // ⚠️ 這三個欄位對既有管理員都可能是 null——資料庫端刻意不做 coalesce,否則前端無法分辨
+  //    「真的沒填」跟「填了那串預設字」。畫面上的 fallback 由呼叫端負責(見 MerchantAdminList)。
+  // =====================================================================
+  /** 暱稱。null 時畫面 fallback 成登入 email 的 @ 前半段。 */
+  display_name: string | null;
+  /** 職位。null 時畫面 fallback 成「商家管理員」。 */
+  job_title: string | null;
+  phone: string | null;
 }

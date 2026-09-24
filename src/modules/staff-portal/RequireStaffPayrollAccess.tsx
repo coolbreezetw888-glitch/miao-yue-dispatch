@@ -1,4 +1,11 @@
-// 對應規格書 4.5 涉及元件:路由守衛。檢查 role==='staff' 且已開通 staff_payroll_view 權限。
+// 對應規格書 4.5 涉及元件:路由守衛。檢查「我是這間商家在職且已開通登入的服務人員」且已開通
+// staff_payroll_view 權限。
+//
+// ⚠️ 2026-09-24 線上故障修正:守衛條件從 `useCurrentMerchantRole().data === "staff"` 改成
+// 「我有一筆在職的 merchant_staff 紀錄」(useActiveMyStaffRecord)。原本的寫法讓雙重身分
+// (這間商家的客服/管理員 + 同一間商家的服務人員)的使用者永遠被導去 /app/manage,因為
+// useCurrentMerchantRole 對他一律回傳較高權限的 'agent'/'admin',永遠不會是 'staff'。
+// 完整根因與「為什麼這不是放寬權限」的說明見 staffSelfAccessLogic.ts 開頭。
 // 這個元件只是體驗層的路由守衛,不是安全邊界——真正擋住未授權操作的是
 // private.can_view_staff_own_payroll 落實的 RLS/SECURITY DEFINER 函式權限檢查(規則 2.4)。
 //
@@ -13,35 +20,38 @@ import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import { useActiveMyStaffRecord, useMyStaffPermission } from "./context";
+import { shouldRedirectAwayFromStaffSelfPage } from "./staffSelfAccessLogic";
 
 export function RequireStaffPayrollAccess({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
-  const { data: role, isLoading: roleLoading } = useCurrentMerchantRole();
   // 2026-09-24 深夜巡檢問題 6:原本 loading 只算 merchant/role/permission 三項,沒有把
   // useActiveMyStaffRecord 算進來。權限查詢(useMyStaffPermission)內部要先解出自己的 staff_id
   // 才問得到答案,staff_id 還沒解出來的那段時間它等於沒有答案、但 isLoading 已經是 false,於是
   // 一位權限完全正常的服務人員,用網路較慢的手機點「薪資報表」分頁籤,會先閃出一次「尚未開放此
   // 功能,請洽商家管理員開通『抽成/薪資報表檢視』權限」,等 staff_id 解出來才恢復正常。
   // 寫法直接比照同資料夾已經正確的 RequireStaffAvailabilityAccess.tsx,保持一致。
-  const { isLoading: staffLoading } = useActiveMyStaffRecord(merchant?.id ?? null);
+  const { data: staffRow, isLoading: staffLoading } = useActiveMyStaffRecord(merchant?.id ?? null);
   const { data: hasPermission, isLoading: permissionLoading } =
     useMyStaffPermission("staff_payroll_view");
 
-  const loading = merchantLoading || roleLoading || staffLoading || permissionLoading;
-  const isStaff = role === "staff";
+  const loading = merchantLoading || staffLoading || permissionLoading;
+  const isStaffSelf = staffRow != null;
+  const shouldRedirect = shouldRedirectAwayFromStaffSelfPage({
+    loading,
+    hasCurrentMerchant: merchant != null,
+    hasActiveStaffRecord: isStaffSelf,
+  });
 
   useEffect(() => {
-    if (loading) return;
-    if (!merchant || !isStaff) {
+    if (shouldRedirect) {
       navigate("/app/manage", { replace: true });
     }
-  }, [merchant, isStaff, loading, navigate]);
+  }, [shouldRedirect, navigate]);
 
-  if (loading || !merchant || !isStaff) {
+  if (loading || !merchant || !isStaffSelf) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface">
         <p className="text-sm text-muted-foreground">載入中⋯</p>

@@ -1,4 +1,16 @@
-// 後台導覽外殼「首頁」分頁籤(路由 /app)。
+// 後台導覽外殼「個人資料」分頁籤(路由 /app)。
+//
+// 2026-09-24 使用者指定:服務人員端這個分頁籤的標籤從「首頁」改成「個人資料」,內容是
+// 「個人資料卡片 + LINE 綁定」。路由(/app)本身不變,所以既有的深連結/書籤都還通。
+// 分頁籤定義見 appLayoutLogic.ts 的 STAFF_PROFILE_TAB。
+//
+// 2026-09-24 線上故障修正(載入競態):原本這裡是
+//     if (!isStaffView) return <Navigate to="/app/manage" replace />;
+// 完全沒有等角色載入完成。merchantRole 還是 undefined 時 isStaffView 就是 false,所以連
+// **純服務人員** 都會在角色解出來之前先被彈到 /app/manage,再由 ManagePage 彈回來——使用者看到
+// 一次商家端「功能」頁的閃爍,而對沒有客服權限的人而言那一瞬間畫面上就是「目前沒有開放給你的功能」。
+// 現在改成先等 isViewResolved(見 AppLayout.tsx / appLayoutLogic.ts),判斷邏輯本身抽成純函式
+// resolveHomePageOutcome() 並有單元測試。
 //
 // 使用者決策(2026-09-23):底部選單拔掉「首頁」分頁籤(商家管理員/客服視角),原本這裡的內容
 // 分散出去:
@@ -31,12 +43,17 @@ import { useActiveMyStaffRecord, useMyStaffPermission } from "@/modules/staff-po
 // 模組 15(服務人員推播通知)§7.2:比照模組 11 MyLineBindingCard 的既有做法,掛在服務人員本來
 // 就會經過的個人設定區域,不強制新增一個獨立路由。
 import { PushSubscriptionCard } from "@/modules/push-notifications/PushSubscriptionCard";
+// 2026-09-24 使用者指定:「個人資料」分頁籤要含 LINE 綁定。模組 11 既有的 MyLineBindingCard
+// 不能直接重用(它只處理 admin/agent 兩種角色,role==='staff' 時直接 return null),所以在
+// 服務人員端模組自己做一張唯讀版的狀態卡片,見該元件開頭的完整說明。
+import { MyStaffLineBindingCard } from "@/modules/staff-portal/MyStaffLineBindingCard";
 
 import { useAppLayoutContext } from "./AppLayout";
+import { resolveHomePageOutcome } from "./appLayoutLogic";
 import { LoginEmailSection, PendingAdminLoginEmailSuggestionCard } from "./ProfileCardShared";
 
 export default function HomePage() {
-  const { email, newEmail, isStaffView } = useAppLayoutContext();
+  const { email, newEmail, isStaffView, isViewResolved } = useAppLayoutContext();
   const { merchant: currentMerchant } = useCurrentMerchant();
   const merchantId = currentMerchant?.id ?? null;
 
@@ -57,9 +74,21 @@ export default function HomePage() {
     });
   }
 
-  // 不是服務人員端檢視(商家管理員/客服,而且沒有選擇切到服務人員端)——導去「功能」頁,
-  // 這個路由不再是他們的落點。
-  if (!isStaffView) {
+  // 這一段的三個分支邏輯抽成純函式 resolveHomePageOutcome()(見 appLayoutLogic.ts + 對應測試):
+  //   loading            —— 角色還沒解出來,先顯示載入中,絕對不能先把人導走(2026-09-24 修正)。
+  //   redirect-to-manage —— 商家管理員/客服,而且沒有選擇切到服務人員端:這個路由不是他們的落點。
+  //   render-staff-home  —— 往下渲染服務人員自己的個人資料頁。
+  const outcome = resolveHomePageOutcome({ isViewResolved, isStaffView });
+
+  if (outcome === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface">
+        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      </div>
+    );
+  }
+
+  if (outcome === "redirect-to-manage") {
     return <Navigate to="/app/manage" replace />;
   }
 
@@ -94,10 +123,7 @@ export default function HomePage() {
                 {staffRow.name}
                 {staffRow.nickname ? `(${staffRow.nickname})` : ""}
               </p>
-              <p className="text-sm text-muted-foreground">
-                {[staffRow.phone, staffRow.contact_email].filter(Boolean).join(" ・ ") ||
-                  "服務人員"}
-              </p>
+              <p className="text-sm text-muted-foreground">{staffRow.phone || "服務人員"}</p>
               {staffRow.intro ? (
                 <p className="mt-1 text-sm text-muted-foreground">{staffRow.intro}</p>
               ) : null}
@@ -118,6 +144,9 @@ export default function HomePage() {
         </div>
         <LoginEmailSection email={email} newEmail={newEmail} />
       </div>
+
+      {/* 2026-09-24 使用者指定:「個人資料」分頁籤 = 個人資料卡片 + LINE 綁定。 */}
+      <MyStaffLineBindingCard staff={staffRow} />
 
       <PushSubscriptionCard merchantId={merchantId} staffId={staffRow.id} />
 

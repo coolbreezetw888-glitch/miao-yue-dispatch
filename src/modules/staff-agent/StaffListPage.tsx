@@ -83,9 +83,15 @@ import {
   countStaffByFilter,
   matchesStaffListFilter,
   STAFF_LIST_FILTER_TABS,
+  validateStaffBookingDays,
   type StaffListFilter,
 } from "./staffListLogic";
 import {
+  DEFAULT_MAX_BOOKING_DAYS_AHEAD,
+  DEFAULT_MIN_ADVANCE_BOOKING_DAYS,
+  MAX_BOOKING_DAYS_AHEAD_LIMIT,
+  MIN_ADVANCE_BOOKING_DAYS_LIMIT,
+  MIN_BOOKING_DAYS_AHEAD_LIMIT,
   STAFF_BOOLEAN_PERMISSION_FIELDS,
   STAFF_LOGIN_STATUS_LABELS,
   STAFF_NUMBER_PERMISSION_FIELDS,
@@ -104,12 +110,10 @@ const EMPTY_FORM: StaffFormState = {
   name: "",
   nickname: "",
   phone: "",
-  contactEmail: "",
   intro: "",
   avatarUrl: null,
   isListed: false,
   advanceBookingDays: null,
-  bookingWindowMinDays: null,
   bookingWindowMaxDays: null,
   noTimeSlotLimit: false,
   unlimitedBackendEdit: false,
@@ -129,12 +133,10 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
     name: staff.name,
     nickname: staff.nickname ?? "",
     phone: staff.phone ?? "",
-    contactEmail: staff.contact_email ?? "",
     intro: staff.intro ?? "",
     avatarUrl: staff.avatar_url,
     isListed: staff.is_listed,
     advanceBookingDays: staff.advance_booking_days,
-    bookingWindowMinDays: staff.booking_window_min_days,
     bookingWindowMaxDays: staff.booking_window_max_days,
     noTimeSlotLimit: staff.no_time_slot_limit,
     unlimitedBackendEdit: staff.unlimited_backend_edit,
@@ -381,12 +383,15 @@ function StaffFormDialog({
       toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
       return;
     }
-    if (
-      form.bookingWindowMinDays != null &&
-      form.bookingWindowMaxDays != null &&
-      form.bookingWindowMinDays > form.bookingWindowMaxDays
-    ) {
-      toast.error("預約天數範圍下限不能大於上限");
+    // 「預約天數」兩個欄位的驗證邏輯抽到 staffListLogic.ts 的 validateStaffBookingDays()
+    // (純函式,有單元測試釘住負數/0/上限/小數/留空/跨欄位這些邊界)。這裡只負責把訊息丟給 toast。
+    // 範圍必須跟資料庫端的 CHECK 約束一致,常數都放在 types.ts 兩邊共用,見那支函式的說明。
+    const bookingDaysError = validateStaffBookingDays({
+      advanceBookingDays: form.advanceBookingDays ?? null,
+      bookingWindowMaxDays: form.bookingWindowMaxDays ?? null,
+    });
+    if (bookingDaysError) {
+      toast.error(bookingDaysError);
       return;
     }
 
@@ -463,23 +468,15 @@ function StaffFormDialog({
                   請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
                 </p>
               </div>
-              <div>
-                <Label htmlFor="staff-email">對外聯絡 Email</Label>
-                <Input
-                  id="staff-email"
-                  type="email"
-                  className="mt-2"
-                  value={form.contactEmail ?? ""}
-                  onChange={(e) => setField("contactEmail", e.target.value)}
-                />
-                {/* 2026-09-21 使用者人工測試回報問題 2 修正:這欄位(contact_email)容易被誤會成
-                    登入帳號的 email——這裡只是顯示給客戶看的聯絡資訊,登入帳號是完全分開的另一件事
-                    (見 4.7 第 2 點,登入 email 在「邀請登入」Dialog 裡另外輸入,雖然預設會帶入這欄
-                    的值當作起始值,但送出前可以改成不同的 email)。不改欄位名稱/資料結構,只加說明。 */}
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  顯示給客戶看的聯絡信箱,不是登入帳號。登入帳號要在儲存完成後,另外用「邀請登入」設定。
-                </p>
-              </div>
+              {/* ⚠️ 這裡原本有一個「對外聯絡 Email」欄位(merchant_staff.contact_email)。
+                  2026-09-24 使用者裁決把它整個廢除了(欄位本身也 drop 了,見 migration
+                  20260924040800):
+                    「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+                    「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」
+                  服務人員唯一的 Email 就是登入 Email——在人員清單上按「邀請登入」時輸入。
+                  (2026-09-21 使用者人工測試回報的問題 2「這個欄位容易被誤會成登入帳號」,
+                   這次是用「拿掉那個欄位」根本解決,不再需要那段說明文字。)
+                  不要把這個欄位加回來。 */}
             </div>
 
             <div>
@@ -621,27 +618,55 @@ function StaffFormDialog({
                 這些開關目前先存值,對應的功能上線後才會實際生效
               </span>
             </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            {/* 2026-09-24 使用者裁決:三個「預約天數」欄位收斂成兩個(見 types.ts
+                STAFF_NUMBER_PERMISSION_FIELDS 上方的完整裁決註解)。欄位數從 3 變 2,所以格線
+                也從 sm:grid-cols-3 改成 sm:grid-cols-2,兩欄才不會留下一格空白。 */}
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
               {STAFF_NUMBER_PERMISSION_FIELDS.map((field) => {
-                // 明確窄化成三個具體欄位(而不是用泛型 toCamel),避免 form[key] 的型別被推成
+                // 明確窄化成兩個具體欄位(而不是用泛型 toCamel),避免 form[key] 的型別被推成
                 // StaffFormState 全部欄位型別的聯集(含 boolean),導致 <input value> 型別檢查出錯。
-                const numberKey:
-                  "advanceBookingDays" | "bookingWindowMinDays" | "bookingWindowMaxDays" =
+                const numberKey: "advanceBookingDays" | "bookingWindowMaxDays" =
                   field.key === "advance_booking_days"
                     ? "advanceBookingDays"
-                    : field.key === "booking_window_min_days"
-                      ? "bookingWindowMinDays"
-                      : "bookingWindowMaxDays";
+                    : "bookingWindowMaxDays";
                 return (
                   <div key={field.key}>
                     <Label htmlFor={`staff-${field.key}`} className="text-xs">
                       {field.label}
                     </Label>
+                    {/* min/max:刻意跟資料庫端的 CHECK 約束對齊(常數都在 types.ts,兩邊共用同一份)。
+                        ・「最少要提前幾天」:min=0,對應資料庫的 advance_booking_days >= 0。
+                          這條約束是 2026-09-24 資料庫工程師主動補的——原本這欄完全沒有約束,
+                          打 -5 會被靜默存進資料庫,之後實作預約邏輯的人就會拿到一個荒謬的值。
+                        ・「最遠可以預約到幾天後」:min=0、max=3650,對應資料庫的
+                          `between 0 and 3650`(舊的 3~180 會擋掉使用者自己舉例的 365,已放寬;
+                          3650 ≈ 10 年,純粹防打錯字,避免多打幾個 0 變成 99999 天)。
+                          下限 2026-09-24 從 1 放寬成 0——0 = 最遠只能約到今天 = 只接受當天預約
+                          當天服務(使用者澄清後的定義)。資料庫那條約束的放寬還在進行中,見
+                          types.ts 的 MIN_BOOKING_DAYS_AHEAD_LIMIT 說明。
+                        這兩個 HTML 屬性只讓瀏覽器的數字微調鈕不走出範圍,真正的擋關在
+                        validateStaffBookingDays()(給白話中文訊息),資料庫的 CHECK 再擋第三層。
+                        placeholder:兩個欄位留空時會套用的預設值不一樣(0 天 vs 180 天),光靠下方
+                        說明文字容易被略過,所以直接把留空時會用的數字顯示在空白輸入框裡。文案句型
+                        跟說明文字統一成「留空 = N 天」(2026-09-24 主腦裁決),兩欄一致。 */}
                     <Input
                       id={`staff-${field.key}`}
                       type="number"
-                      min={field.key === "advance_booking_days" ? 0 : 3}
-                      max={field.key === "advance_booking_days" ? undefined : 180}
+                      min={
+                        field.key === "advance_booking_days"
+                          ? MIN_ADVANCE_BOOKING_DAYS_LIMIT
+                          : MIN_BOOKING_DAYS_AHEAD_LIMIT
+                      }
+                      max={
+                        field.key === "advance_booking_days"
+                          ? undefined
+                          : MAX_BOOKING_DAYS_AHEAD_LIMIT
+                      }
+                      placeholder={
+                        field.key === "advance_booking_days"
+                          ? `留空 = ${DEFAULT_MIN_ADVANCE_BOOKING_DAYS} 天`
+                          : `留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天`
+                      }
                       className="mt-1"
                       value={form[numberKey] ?? ""}
                       onChange={(e) =>
@@ -702,8 +727,14 @@ function loginStatusBadgeVariant(
   return "outline";
 }
 
-// 模組 14(服務人員端)規格書 4.7 第 2 點:邀請服務人員登入的小 Dialog。可以預先帶入既有的
-// contact_email 當預設值,但允許改成不同的 email。送出後的提示文字區分「邀請信已寄出」跟
+// 模組 14(服務人員端)規格書 4.7 第 2 點:邀請服務人員登入的小 Dialog。
+// ⚠️ 2026-09-24 使用者裁決之後,這個欄位**沒有預設值**,一律由管理員手動輸入。
+//    原本規格書寫「可以預先帶入既有的 contact_email 當預設值」,但 contact_email 這個欄位已經
+//    整個廢除了(「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+//    「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」),沒有其他欄位可以拿來預填
+//    ——這裡輸入的 Email 從此就是這位服務人員**唯一**的 Email。
+//    留空比亂猜一個好:預填一個猜的值,管理員很可能直接按下送出,邀請信就寄到錯的信箱。
+// 送出後的提示文字區分「邀請信已寄出」跟
 // 「這個 email 已經有秒約帳號,已直接開通登入」兩種情境文案(比照模組 3 §4.3 的既有精神)。
 function InviteStaffLoginDialog({
   merchantId,
@@ -715,14 +746,16 @@ function InviteStaffLoginDialog({
   onInvited: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [loginEmail, setLoginEmail] = useState(staff.contact_email ?? "");
+  const [loginEmail, setLoginEmail] = useState("");
   const [inviting, setInviting] = useState(false);
 
+  // 每次打開對話框都清空(而不是留著上次沒送出的內容),沿用本檔案其他對話框的既有慣例。
+  // 沒有可以預填的來源了,理由見上方註解。
   useEffect(() => {
     if (open) {
-      setLoginEmail(staff.contact_email ?? "");
+      setLoginEmail("");
     }
-  }, [open, staff.contact_email]);
+  }, [open]);
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault();

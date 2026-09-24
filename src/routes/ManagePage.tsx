@@ -68,14 +68,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { updateMyAdminProfile } from "@/modules/merchant/api";
 import { useCurrentMerchant, useMyAdminProfile } from "@/modules/merchant/context";
-import { clearAgentPendingLoginEmail, updateMyAgentProfile } from "@/modules/staff-agent/api";
+// 2026-09-24:updateMyAgentProfile 已經不再 import——update_merchant_agent 補上 p_job_title 之後
+// 它能寫的 nickname/job_title 都被涵蓋了,這裡收斂成單一呼叫(那支函式本身依主腦指示先保留不刪)。
+import { clearAgentPendingLoginEmail, updateMerchantAgent } from "@/modules/staff-agent/api";
 import {
   useCurrentMerchantRole,
   useAgentPermission,
   useMyAgentProfile,
 } from "@/modules/staff-agent/context";
+import type { MerchantAgent } from "@/modules/staff-agent/types";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
 
 import { useAppLayoutContext } from "./AppLayout";
@@ -88,43 +92,123 @@ import {
 interface EditProfileDialogProps {
   role: "admin" | "agent";
   merchantId: string;
+  /** 這個欄位對 admin 是 merchant_admins.display_name、對 agent 是 merchant_agents.nickname
+   * (不是 name)。標籤文字由呼叫端給,兩邊語意不同所以不能寫死。 */
   nameLabel: string;
   currentName: string;
   currentJobTitle: string;
+  /** 2026-09-24:電話現在是「管理員與客服都有」的欄位,所以現值由呼叫端統一傳進來
+   * (admin 來自 merchant_admins、agent 來自 merchant_agents),元件內不再各自去猜來源。 */
+  currentPhone: string;
+  /** 2026-09-24 使用者裁決(客服可自行編輯):role === "agent" 時必給——需要 agent.id 才能呼叫
+   * update_merchant_agent,也需要 agent.name 當「姓名」欄位的現值。admin 不需要。 */
+  agent?: MerchantAgent | null;
   onSaved: () => void;
 }
 
 /** 使用者決策(2026-09-23):從舊版 HomePage.tsx 原封不動搬過來——「編輯個人資料」按鈕點擊開啟
- * 的小對話框,可以編輯姓名/暱稱、職位兩個欄位,儲存後由呼叫端 onSaved() 重新整理卡片顯示的資料。
- * 服務人員版本(EditMyStaffProfileDialog)不在這裡,那個留在 HomePage.tsx 給服務人員自己用。 */
+ * 的小對話框,儲存後由呼叫端 onSaved() 重新整理卡片顯示的資料。
+ * 服務人員版本(EditMyStaffProfileDialog)不在這裡,那個留在 HomePage.tsx 給服務人員自己用。
+ *
+ * 2026-09-24 使用者裁決(「客服可自行編輯」那一半):客服這邊多開放兩個欄位——姓名
+ * (merchant_agents.name)、電話。原本這個對話框只有兩個欄位,而且客服那個「暱稱」欄位寫的是
+ * nickname,真正的 name 是邀請時由商家管理員填的,客服自己完全改不到,也沒有任何地方能改電話。
+ *
+ * 2026-09-24 使用者追加裁決(管理員那一半也要做):原話「我認為需要,因為這會影響到整個系統判斷
+ * 這個管理員與集團的關聯或者這個管理員在系統內的資料(以我這個廠商視角)」——使用者是平台方,
+ * 要能掌握每位商家管理員的聯絡方式。所以電話現在是「兩種角色都有」的欄位,狀態共用同一組 state,
+ * 不再是客服專屬。
+ * ⚠️ 但兩邊的「必填/選填」不一樣,不能照抄:
+ *     客服(merchant_agents.phone 是 NOT NULL)→ 電話必填
+ *     管理員(merchant_admins.phone 是 nullable,既有管理員沒有這個值)→ 選填
+ *   選填欄位留空時要送 null(不是空字串),由 handleSubmit 正規化。
+ *
+ * 2026-09-24 後續裁決:三種「人」的角色(管理員/客服/服務人員)都只保留一個登入 Email,所以原本
+ * 這個對話框的「聯絡 Email」欄位(merchant_admins/merchant_agents.contact_email)連同資料庫欄位
+ * 一起移除。⚠️ 商家本身對外給消費者看的 merchants.contact_email 是另一回事,不受這次異動影響。 */
 function EditProfileDialog({
   role,
   merchantId,
   nameLabel,
   currentName,
   currentJobTitle,
+  currentPhone,
+  agent,
   onSaved,
 }: EditProfileDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(currentName);
   const [jobTitle, setJobTitle] = useState(currentJobTitle);
+  // 電話兩種角色共用。agentName 是真正的 merchant_agents.name,跟上面的 name
+  // (管理員=display_name、客服=nickname)是不同欄位,刻意用不同變數名避免自己搞混。
+  const [phone, setPhone] = useState(currentPhone);
+  const [agentName, setAgentName] = useState(agent?.name ?? "");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName(currentName);
       setJobTitle(currentJobTitle);
+      setPhone(currentPhone);
+      setAgentName(agent?.name ?? "");
     }
-  }, [open, currentName, currentJobTitle]);
+  }, [open, currentName, currentJobTitle, currentPhone, agent]);
+
+  const isAgentRole = role === "agent";
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+
+    // 電話用既有的共用函式 isValidTaiwanMobilePhone,跟 AgentListPage.tsx(管理員協助編輯)、
+    // StaffListPage.tsx §8.1 同一支,不另外寫一份正規表示式。
+    const trimmedPhone = phone.trim();
+    if (isAgentRole) {
+      if (!agent) {
+        toast.error("讀不到你的客服資料,請重新整理頁面再試一次");
+        return;
+      }
+      if (!agentName.trim()) {
+        toast.error("請填寫姓名");
+        return;
+      }
+      // merchant_agents.phone 是 NOT NULL 欄位,所以客服的電話必填。
+      if (!trimmedPhone) {
+        toast.error("請填寫電話");
+        return;
+      }
+      if (!isValidTaiwanMobilePhone(trimmedPhone)) {
+        toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
+        return;
+      }
+    } else {
+      // 管理員:merchant_admins.phone 是 nullable,既有管理員本來就沒有這個值,所以「選填」——
+      // 不能照抄客服那邊的必填邏輯,否則既有管理員一打開對話框就被擋著不能存任何東西。
+      // 但「有填就要填對」:填了卻格式錯誤還是要擋,不然存進去的是無效號碼,平台方照樣聯絡不到人。
+      if (trimmedPhone && !isValidTaiwanMobilePhone(trimmedPhone)) {
+        toast.error(TW_MOBILE_PHONE_ERROR_MESSAGE);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       if (role === "admin") {
-        await updateMyAdminProfile(merchantId, name, jobTitle);
-      } else {
-        await updateMyAgentProfile(merchantId, name, jobTitle);
+        // ⚠️ update_my_admin_profile 2026-09-24 從 3 參數改成 4 參數(舊重載已 drop;原本一度是
+        // 5 參數,contact_email 移除後收斂成 4)。參數順序見 merchant/api.ts 的說明。
+        // 選填欄位留空要送 null,不是空字串。
+        await updateMyAdminProfile(merchantId, name, jobTitle, trimmedPhone || null);
+      } else if (agent) {
+        // 2026-09-24:update_merchant_agent 已經補上 p_job_title(舊 5 參數重載已 drop),所以
+        // 這裡從原本「兩支 RPC 都呼叫」收斂成單一呼叫——四個欄位現在在同一個 UPDATE 語句裡,
+        // 是天然的原子交易,原本那段「新的成功、既有的失敗」的部分儲存錯誤處理已經不需要,一併刪除。
+        // update_my_agent_profile 的功能已被完全涵蓋(它能寫的 nickname/job_title 這裡都有),
+        // 依主腦指示這次先不刪除那支函式,但呼叫端不再使用它。
+        await updateMerchantAgent(agent.id, {
+          name: agentName,
+          nickname: name,
+          jobTitle,
+          phone: trimmedPhone,
+        });
       }
       onSaved();
       setOpen(false);
@@ -143,29 +227,76 @@ function EditProfileDialog({
           編輯個人資料
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      {/* 手機版:客服版本現在有 4 個欄位,比原本的 2 個高很多,所以補上
+          max-h-[90vh] + overflow-y-auto,照 StaffListPage.tsx / AgentListPage.tsx 既有對話框
+          同一組寫法,避免在矮螢幕上內容被切掉、儲存按鈕按不到。 */}
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>編輯個人資料</DialogTitle>
           <DialogDescription>只會更新你自己的資料,不會影響到其他人。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="profile-name">{nameLabel}</Label>
-            <Input
-              id="profile-name"
-              className="mt-2"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="profile-job-title">職位</Label>
-            <Input
-              id="profile-job-title"
-              className="mt-2"
-              value={jobTitle}
-              onChange={(e) => setJobTitle(e.target.value)}
-            />
+          {/* 窄螢幕單欄、sm 以上兩欄,比照 AgentListPage.tsx 管理員協助編輯客服那個對話框的排法
+              ——同一組欄位、兩個入口,版面刻意做成一樣的,使用者不用重新學。 */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* 2026-09-24 使用者裁決:客服新增「姓名」欄位。放在最前面,因為這是真正的姓名
+                (merchant_agents.name),原本只有商家管理員在邀請時填得到,客服自己改不了。 */}
+            {isAgentRole ? (
+              <div>
+                <Label htmlFor="profile-agent-name">姓名 *</Label>
+                <Input
+                  id="profile-agent-name"
+                  className="mt-2"
+                  value={agentName}
+                  onChange={(e) => setAgentName(e.target.value)}
+                  required
+                />
+              </div>
+            ) : null}
+            <div>
+              <Label htmlFor="profile-name">{nameLabel}</Label>
+              <Input
+                id="profile-name"
+                className="mt-2"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+              {/* 2026-09-24 主腦裁決把顯示 fallback 改成「暱稱 → 姓名 → 登入信箱前半段」之後,
+                  這句說明也要跟著改成實際行為——原本寫「留空會顯示登入信箱前半段」現在只在姓名
+                  也沒填的時候才成立,照實改寫成「會顯示你的姓名」。 */}
+              {isAgentRole ? (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  給客戶看的稱呼,可以跟本名不一樣;留空的話畫面上會顯示你的姓名。
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="profile-job-title">職位</Label>
+              <Input
+                id="profile-job-title"
+                className="mt-2"
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
+              />
+            </div>
+            {/* 2026-09-24:電話兩種角色都顯示(管理員那一半是使用者這次追加裁決的)。
+                必填與否不同——客服的電話是必填(NOT NULL 欄位),管理員是選填(nullable,
+                既有管理員本來就沒填過)。所以星號、required、說明文字都要跟著角色變,不能寫死。 */}
+            <div>
+              <Label htmlFor="profile-phone">電話{isAgentRole ? " *" : ""}</Label>
+              <Input
+                id="profile-phone"
+                className="mt-2"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="0912345678"
+                required={isAgentRole}
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
+                {isAgentRole ? "" : "可以留空,但填了就要填對格式。"}
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -223,10 +354,18 @@ interface FunctionCardDef {
 
 export default function ManagePage() {
   const navigate = useNavigate();
-  const { data: merchantRole, isLoading: roleLoading } = useCurrentMerchantRole();
+  const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
   const isAgent = merchantRole === "agent";
-  const { email, newEmail, userId, isStaffView } = useAppLayoutContext();
+  const {
+    email,
+    newEmail,
+    userId,
+    isStaffView,
+    isViewResolved,
+    isDualRoleEligible,
+    onToggleStaffView,
+  } = useAppLayoutContext();
   const { merchant: currentMerchant } = useCurrentMerchant();
   const merchantId = currentMerchant?.id ?? null;
 
@@ -240,12 +379,15 @@ export default function ManagePage() {
   // 這段 useEffect 故意放在所有 useAgentPermission hook 呼叫「之前」宣告、但實際的提早 return
   // 放在全部 hooks 呼叫「之後」(見下面 isStaffView 判斷式)——確保不管 isStaffView 是 true/false,
   // 每次 render 呼叫的 hooks 數量/順序都一樣,不違反 React hooks 規則。
+  // 2026-09-24:守衛條件從「角色查詢還在載入中就先不動作」換成共用的 isViewResolved(見
+  // AppLayout.tsx / appLayoutLogic.ts)——原本只看角色查詢的載入狀態,漏掉「商家還沒選定」跟
+  // 「自己的服務人員紀錄還在查」這兩種也還沒有答案的情況。
   useEffect(() => {
-    if (roleLoading) return;
+    if (!isViewResolved) return;
     if (isStaffView) {
       navigate("/app", { replace: true });
     }
-  }, [roleLoading, isStaffView, navigate]);
+  }, [isViewResolved, isStaffView, navigate]);
 
   // 使用者決策(2026-09-23):「首頁」分頁籤拔掉,個人資料卡片(姓名/職位/登入信箱)搬到這裡
   // 最上方,邏輯原封不動搬自舊版 HomePage.tsx(服務人員版本留在 HomePage.tsx,這裡只有
@@ -253,11 +395,22 @@ export default function ManagePage() {
   const adminProfileQuery = useMyAdminProfile(merchantId, userId, isAdmin);
   const agentProfileQuery = useMyAgentProfile(merchantId, userId, isAgent);
 
+  // 2026-09-24 主腦裁決(顯示層 fallback 順序):客服這一段從「暱稱 → 登入信箱前半段」改成
+  // 「暱稱 → 姓名 → 登入信箱前半段」。理由:「顯示信箱前半段」本來就是最後不得已的 fallback,
+  // 有本名卻跳過去顯示 abc123 沒道理;而且客服這次才剛能自己填姓名,填完如果卡片沒變化,會
+  // 誤以為沒存成功。暱稱仍然優先(那是「給人看的稱呼」,本來就該蓋過本名)。
+  //
+  // ⚠️ 已確認這個改動「只影響客服」,沒有波及其他角色:
+  //   ・商家管理員:merchant_admins 這張表只有 display_name,根本沒有 name 欄位,中間沒有值
+  //     可以插進來,所以那一段刻意原樣不動(不是漏改)。
+  //   ・服務人員:根本不走這裡——ManagePage 對 isStaffView 會直接 navigate 走,服務人員的卡片
+  //     在 HomePage.tsx,而且那邊用的是完全不同的格式(「姓名(暱稱)」兩個一起顯示,連
+  //     emailNamePrefix 都沒用到),本來就已經看得到本名,不受影響也不需要跟著改。
   const emailPrefix = emailNamePrefix(email);
   const displayName = isAdmin
     ? adminProfileQuery.data?.displayName || emailPrefix
     : isAgent
-      ? agentProfileQuery.data?.nickname || emailPrefix
+      ? agentProfileQuery.data?.nickname || agentProfileQuery.data?.name || emailPrefix
       : emailPrefix;
   const jobTitleFallback = isAgent ? "客服" : "商家管理員";
   const jobTitle = isAdmin
@@ -274,6 +427,13 @@ export default function ManagePage() {
     ? (adminProfileQuery.data?.jobTitle ?? "")
     : isAgent
       ? (agentProfileQuery.data?.job_title ?? "")
+      : "";
+  // 2026-09-24:電話兩種角色都有,來源不同(管理員來自 merchant_admins、客服來自
+  // merchant_agents),在這裡統一成一個變數餵給對話框,元件內不用再判斷來源。
+  const rawPhone = isAdmin
+    ? (adminProfileQuery.data?.phone ?? "")
+    : isAgent
+      ? (agentProfileQuery.data?.phone ?? "")
       : "";
 
   function refetchProfile() {
@@ -569,12 +729,16 @@ export default function ManagePage() {
             </div>
           </div>
           {merchantId && (isAdmin || isAgent) ? (
+            /* 2026-09-24 使用者裁決(客服可自行編輯):agent 這個 prop 讓客服自助編輯姓名/電話
+               ——需要自己那一列的 id 與現值。admin 傳 null(那一半這次不動,見元件註解)。 */
             <EditProfileDialog
               role={isAdmin ? "admin" : "agent"}
               merchantId={merchantId}
               nameLabel={isAdmin ? "姓名/暱稱" : "暱稱"}
               currentName={rawName}
               currentJobTitle={rawJobTitle}
+              currentPhone={rawPhone}
+              agent={isAdmin ? null : (agentProfileQuery.data ?? null)}
               onSaved={refetchProfile}
             />
           ) : null}
@@ -590,9 +754,32 @@ export default function ManagePage() {
       ) : null}
 
       {visibleCards.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          目前沒有開放給你的功能,請聯絡商家管理員開通權限。
-        </p>
+        /* 2026-09-24 線上故障修正:這個空狀態就是那位雙重身分使用者實際卡住的畫面。原本只有一句
+           「目前沒有開放給你的功能,請聯絡商家管理員開通權限。」—— 對一位「同時是這間商家服務人員」
+           的人來說,這句話是錯誤的指引(他該做的不是聯絡管理員,而是切換到服務人員端),而對
+           「在這間商家只有客服身分、服務人員身分在另一間分店」的人來說,他該做的是先切換商家。
+           所以這裡依情境補上實際可以按的出路,不只留一句死路文字。 */
+        <div className="space-y-3 rounded-md border border-dashed border-border px-3 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            目前沒有開放給你的功能,請聯絡商家管理員開通權限。
+          </p>
+          {isDualRoleEligible ? (
+            <div className="space-y-2">
+              <p className="text-sm text-foreground">
+                你同時也是這間商家的<span className="font-semibold">服務人員</span>
+                ——你要找的個人資料、行事曆、休假設定與薪資報表都在服務人員端。
+              </p>
+              <Button type="button" size="sm" onClick={onToggleStaffView}>
+                切換到服務人員端
+              </Button>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              如果你是<span className="font-medium">其他分店</span>
+              的服務人員,請先用左上角的商家切換器切換到那間商家。
+            </p>
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {visibleCards.map((card) => {

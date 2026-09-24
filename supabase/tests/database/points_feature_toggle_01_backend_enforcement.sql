@@ -10,23 +10,33 @@
 --   ① 負面:關閉後三條「系統自動核發」的路徑全部停擺——
 --      消費累點(compute_member_loyalty_points)、推薦獎勵(referral_bonus)、
 --      生日贈點(grant_pending_birthday_bonuses)。
---   ② 「不留標記」:關閉期間不能把 last_birthday_bonus_year / referral_rewarded_at 標記掉,
---      否則重新打開後連「立刻補發」都做不到,還會留下假紀錄讓之後查帳對不上。
---      這幾條是這份測試裡最容易被寫錯的部分,刻意在重新打開後再驗一次「補發得回來」。
---      ⚠️ 兩條路徑「不標記」實際換到的東西不一樣,讀這份測試時不要誤會成同一件事:
---        ・推薦獎勵:真的完整保住,沒有時間限制(關閉期間沒寫 earn_booking,「第一筆消費累點」
---          的資格還在,重新打開後被推薦人下次消費完成就會觸發)。
---        ・生日贈點:只在「同一個月內」補得回來。grant_pending_birthday_bonuses 只撈
---          「生日在本月」的會員,跨月之後不管有沒有標記年份都撈不到(例:1 月關掉、3 月打開,
---          2 月生日的會員不會補發)。下面第 ⑯⑰ 條之所以驗得出「補得回來」,是因為整份測試在
---          同一個交易、同一個月份內把開關關掉又打開——那正是這個「不標記」唯一真正救得到的情境,
---          不要把它讀成「關多久都補得回來」。
+--   ② 「不留標記」:關閉期間不能把 last_birthday_bonus_year / referral_rewarded_at 標記掉。
+--      ⚠️⚠️ 2026-09-24 第二次使用者裁決把「補不補發」這件事整個反轉了,讀這份測試務必先看懂:
+--        原本(20260924030000)的結論是「不標記 → 會補發」。使用者明確推翻:
+--          「B,原因是紅利點數都關閉了,自然就沒有這個點數派不派發與給不給的問題,
+--            因為這個機制關閉的時候代表根本不存在。」
+--        現在的行為是 **一律不補發**,但**仍然不寫任何假標記**——兩件事同時成立,靠的是
+--        改變「判斷依據」而不是「寫標記」(migration 20260924040300):
+--        ・推薦獎勵:「第一筆消費」的判斷從「第 1 筆 earn_booking 點數異動」改成
+--          「第 1 筆**已完成訂單**」。已完成訂單不受開關影響 → 關閉期間完成的那筆自然把名額
+--          用掉 → 重新打開後不補發,而且完全不需要寫標記。見下面 ⑱~⑳(期望值已整組反轉)。
+--        ・生日贈點:新增 merchant_points_feature_history 記錄開關的異動歷史,核發時逐位會員
+--          問「該會員今年生日**那一天**功能開著嗎」(private.was_points_feature_enabled_on)。
+--          關著 → 永久略過,不補發;而且因為判斷依據是歷史狀態,略過是冪等的,同樣不需要標記。
+--          見 module10_06 那份測試檔案(生日落在關閉區間內的情境需要手工造歷史區間才驗得出來,
+--          在同一個交易裡把開關關掉又打開沒辦法讓一整天落進關閉區間,所以獨立成另一支測試)。
+--        ・「不寫假標記」本身仍然是核心要求(而且比原本更重要):它是「商家把開關關掉五分鐘
+--          測試一下,不會永久吃掉整批當月生日會員獎勵」這個不可逆副作用防護的關鍵。
+--          下面 ⑥⑩ 兩條就是在釘這件事。
 --   ③ 正面回歸(重要):關閉狀態下「手動調整」(adjust_member_points)與「兌換」
 --      (redeem_member_points)仍然必須可用。商家關閉功能後既有餘額不會消失,他需要靠這兩支
 --      把餘額清算掉;一起擋掉會讓商家無法收尾。這幾條是防止之後有人「順手」把保護範圍改寬。
 begin;
 
-select plan(20);
+-- 20 → 22:2026-09-24 第二次使用者裁決(關閉期間錯過的不補發)把 ⑱~⑳ 三條的期望值反轉之後,
+-- 補上兩條「對照組」斷言,證明推薦獎勵在功能開著時仍然正常核發——否則「餘額是 0」這種期望值
+-- 沒辦法分辨「名額被正確用掉」跟「推薦獎勵整體壞掉」。
+select plan(22);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -260,22 +270,31 @@ select is(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- 重新打開開關,驗證「關閉期間沒有被靜默消耗掉的東西,現在都補得回來」。
--- ⚠️ 這裡是「同一個交易、同一個月份」內關掉又打開,所以生日贈點補得回來;跨月就不行了
---    (查詢條件只撈生日在本月的會員),別把下面第 ⑯⑰ 條讀成「關多久都補得回來」。
---    推薦獎勵那兩條(⑱~⑳)沒有這個時間限制。
+-- 重新打開開關。
+-- ⚠️ 2026-09-24 第二次裁決之後,這一段的意義變了,不要照舊理解:
+--    ・⑯⑰(生日贈點)在這個情境下**仍然**會發出去,但原因**不是**「補發」,而是這位會員今年
+--      生日的那一天功能確實是開著的。這個測試檔案的生日 fixture 是「本月 3 號」,而開關的歷史
+--      區間是在這個交易裡才產生的(migration 套用時這個商家根本還不存在),所以本月 3 號那天
+--      落在「完全沒有歷史紀錄涵蓋」的範圍 → private.was_points_feature_enabled_on 回傳 true
+--      (刻意選 true:不拿系統以前沒在記錄這件事去追溯沒收商家的獎勵)。
+--      → 真正的「生日落在關閉區間內 → 不補發」情境,需要手工造出跨越整天的關閉區間才驗得出來
+--        (同一個交易裡關掉又打開只差幾毫秒,沒辦法讓一整天落進關閉區間),
+--        所以獨立寫在 module10_06_points_feature_history_no_backfill.sql。
+--    ・⑱~⑳(推薦獎勵)的期望值已經整組反轉成「不補發」,見該段的註解。
 -- =========================================================================
 update merchant_member_settings set points_feature_enabled = true
 where merchant_id = 'd3000000-0000-4000-8000-000000000020';
 
 select pg_temp.test_set_auth('d3000000-0000-4000-8000-000000000001');
 
--- ⑯⑰ 生日贈點補得回來(關閉期間沒有標記年份,而且現在還在同一個月份內,
---     所以這位「本月生日」的會員仍然在待處理名單裡)。
+-- ⑯⑰ 生日贈點發出去了——但原因是「這位會員今年生日那一天,功能是開著的」(見上方說明:
+--     該日落在完全沒有歷史紀錄涵蓋的範圍,was_points_feature_enabled_on 回傳 true),
+--     不是「關閉期間欠的補發回來」。「生日當天功能關著就不發、而且永不補發」那個情境在
+--     module10_06_points_feature_history_no_backfill.sql 驗證。
 select is(
   grant_pending_birthday_bonuses('d3000000-0000-4000-8000-000000000020'),
   1,
-  '重新打開(同月內):關閉期間沒發的生日贈點補得回來(grant_pending_birthday_bonuses 回傳 1)'
+  '重新打開:生日當天功能是開著的(該日沒有任何關閉歷史涵蓋)→ 生日贈點正常核發,grant_pending_birthday_bonuses 回傳 1'
 );
 
 select is(
@@ -284,8 +303,21 @@ select is(
   '重新打開:生日贈點正確發出 30 點'
 );
 
--- ⑱~⑳ 推薦獎勵也補得回來:關閉期間被推薦人沒有產生任何 earn_booking,
---      所以重新打開後他完成的這一筆才是「第一筆」,推薦獎勵這時才正確觸發。
+-- ⑱~⑳ 推薦獎勵【2026-09-24 第二次使用者裁決:改成「不補發」,這三條的期望值整組反轉】
+--
+-- ⚠️ 這三條原本斷言的是「推薦獎勵補得回來」(關閉期間沒寫 earn_booking,所以名額還在,重新
+--    打開後下一筆就會觸發)。使用者 2026-09-24 明確推翻了這個行為:
+--      「B,原因是紅利點數都關閉了,自然就沒有這個點數派不派發與給不給的問題,
+--        因為這個機制關閉的時候代表根本不存在。」
+--    裁決的具體要求是「關閉期間被推薦人完成了訂單,那次『第一筆消費』的資格要視為已用掉」。
+--
+-- 對應的實作(migration 20260924040300 §6):推薦獎勵的「第一筆消費」判斷從「這是第 1 筆
+-- earn_booking 點數異動」改成「這是這位被推薦人的第 1 筆**已完成訂單**」。已完成訂單這個事實
+-- 不受開關影響,所以上面 ⑦~⑩ 那筆「關閉期間完成的訂單」已經把名額用掉了,下面這筆是第 2 筆
+-- 已完成訂單 → 推薦獎勵不再觸發,而且永遠不會觸發。
+--
+-- 這正是這份測試檔案裡最重要的行為反轉,所以三條都保留、只把期望值改成「沒有發」,
+-- 而不是把它們刪掉——刪掉就沒有東西釘住「不補發」這件事了。
 select id from create_booking(
   p_merchant_id => 'd3000000-0000-4000-8000-000000000020',
   p_staff_id => 'd3000000-0000-4000-8000-000000000041',
@@ -301,20 +333,53 @@ select complete_booking(:'referral_booking_enabled_id'::uuid);
 
 select is(
   (select points_balance from members where id = :'referrer_id'::uuid),
-  50,
-  '重新打開:推薦獎勵正確核發給推薦人(referral_bonus_points = 50)'
+  0,
+  '核心(2026-09-24 使用者裁決「關閉的時候代表根本不存在」):重新打開後,推薦人的餘額仍然是 0——關閉期間被推薦人已經完成過第一筆訂單,那個「第一筆消費」的名額已經用掉了,不補發'
 );
 
 select is(
   (select count(*)::int from member_point_transactions
     where member_id = :'referrer_id'::uuid and transaction_type = 'referral_bonus'),
-  1,
-  '重新打開:referral_bonus 只有一筆(關閉期間那一筆訂單沒有多算一次)'
+  0,
+  '核心:重新打開後完全沒有產生任何 referral_bonus 異動紀錄(不補發,不是延後發)'
 );
 
 select ok(
-  (select referral_rewarded_at is not null from members where id = :'referred_id'::uuid),
-  '重新打開:被推薦人的 referral_rewarded_at 這時才被標記'
+  (select referral_rewarded_at is null from members where id = :'referred_id'::uuid),
+  '核心:被推薦人的 referral_rewarded_at 從頭到尾都是 null——不補發是靠「數已完成訂單」這個判斷自然達成的,不需要寫入任何假的「已發放」標記(這正是刻意避開的那個設計陷阱)'
+);
+
+-- 對照組(關鍵):證明上面那三條的 0 不是因為推薦獎勵整體壞掉了,而是「名額被用掉了」。
+-- 換一組全新的推薦人/被推薦人,在功能**開著**的狀態下完成被推薦人的第一筆訂單,
+-- 推薦獎勵必須正常核發 50 點。
+select id from create_member('d3000000-0000-4000-8000-000000000020', '推薦人2(對照組)', '0955000005') \gset referrer2_
+select id from create_member(
+  'd3000000-0000-4000-8000-000000000020', '被推薦人2(對照組)', '0955000006',
+  p_referred_by_member_id => :'referrer2_id'::uuid
+) \gset referred2_
+
+select id from create_booking(
+  p_merchant_id => 'd3000000-0000-4000-8000-000000000020',
+  p_staff_id => 'd3000000-0000-4000-8000-000000000041',
+  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','d3000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
+  p_start_at => '2026-12-12 10:00:00+08',
+  p_customer_name => '對照組-推薦獎勵正常核發',
+  p_customer_phone => '0955000006',
+  p_payment_method_id => 'd3000000-0000-4000-8000-000000000071',
+  p_member_id => :'referred2_id'::uuid
+) \gset referral_booking_control_
+select confirm_booking(:'referral_booking_control_id'::uuid);
+select complete_booking(:'referral_booking_control_id'::uuid);
+
+select is(
+  (select points_balance from members where id = :'referrer2_id'::uuid),
+  50,
+  '對照組:功能開著的狀態下,被推薦人的第一筆已完成訂單照樣正常核發 50 點推薦獎勵——證明上面的「不補發」是名額被用掉,不是推薦獎勵整體壞掉'
+);
+
+select ok(
+  (select referral_rewarded_at is not null from members where id = :'referred2_id'::uuid),
+  '對照組:真的核發時,被推薦人的 referral_rewarded_at 才會被標記'
 );
 
 select pg_temp.test_clear_auth();

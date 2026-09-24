@@ -386,15 +386,20 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002'); -- X
 
+-- ⚠️ 2026-09-24 使用者裁決:p_contact_email 已經拿掉(merchant_staff.contact_email 欄位本身也
+--    drop 了,見 migration 20260924040800),所以這支函式從 7 參數變成 6 參數。使用者原話:
+--      「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
+--      「A,客服和服務人員應該也是一樣只需要一個 Email 即可。」
+--    服務人員唯一的 Email 就是登入 Email(auth.users),不在 merchant_staff 這張表裡。
 select lives_ok(
-  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000040'::uuid, '服務人員X改名', '阿X', '0922000000', 'x-contact@test.local', null, '自我介紹')$$,
+  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000040'::uuid, '服務人員X改名', '阿X', '0922000000', null, '自我介紹')$$,
   '3.16:X 自助編輯自己的個人資料成功'
 );
 
 select is(
-  (select row(name, nickname, phone, contact_email, intro) from merchant_staff where id = 'e1420000-0000-4000-8000-000000000040')::text,
-  row('服務人員X改名', '阿X', '0922000000', 'x-contact@test.local', '自我介紹')::text,
-  '3.16:六個欄位(除頭像外)正確更新'
+  (select row(name, nickname, phone, intro) from merchant_staff where id = 'e1420000-0000-4000-8000-000000000040')::text,
+  row('服務人員X改名', '阿X', '0922000000', '自我介紹')::text,
+  '3.16:五個欄位(除頭像外)正確更新'
 );
 
 select is(
@@ -404,13 +409,13 @@ select is(
 );
 
 select throws_ok(
-  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000040'::uuid, '', null, null, null, null, null)$$,
+  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000040'::uuid, '', null, null, null, null)$$,
   null, null,
   '3.16:姓名不可為空白字串'
 );
 
 select throws_ok(
-  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000042'::uuid, '偷改Z的名字', null, null, null, null, null)$$,
+  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000042'::uuid, '偷改Z的名字', null, null, null, null)$$,
   '42501', null,
   '規則 2.4(核心必測):X 不能透過 update_my_staff_profile 修改服務人員 Z 的資料'
 );
@@ -429,7 +434,7 @@ select is(
   '規則 2.8:未開通 staff_profile_edit 的 Z 仍然可以讀到自己的資料'
 );
 select throws_ok(
-  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000042'::uuid, 'Z想自己改名', null, null, null, null, null)$$,
+  $$select update_my_staff_profile('e1420000-0000-4000-8000-000000000042'::uuid, 'Z想自己改名', null, null, null, null)$$,
   '42501', null,
   '規則 2.8:未開通 staff_profile_edit 的 Z 無法編輯自己的資料'
 );

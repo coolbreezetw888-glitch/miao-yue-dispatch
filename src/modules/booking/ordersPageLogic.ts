@@ -136,15 +136,36 @@ export type OrdersPageSize = (typeof ORDERS_PAGE_SIZE_OPTIONS)[number];
 
 export const DEFAULT_ORDERS_PAGE_SIZE: OrdersPageSize = 50;
 
-/** 每頁筆數的記憶(localStorage)。
+/** 每頁筆數的記憶(localStorage),**依登入帳號分開存**。
  *
- * 刻意用**不含使用者 id** 的全域 key,跟 merchant/constants.ts 那條「使用者專屬狀態要依使用者 id
- * 分開存」的慣例不同,理由:那條慣例針對的是「會誤導/洩漏成別的帳號的資料」的狀態(例如目前操作
- * 中的商家 id,換帳號讀到舊值會看到不屬於自己的商家)。這裡存的只是「一頁畫幾張卡片」這個純顯示
- * 偏好,不含任何資料、也不會指向任何帳號或商家,同一台裝置上共用反而符合直覺(換帳號登入也不用
- * 重新調)。值不合法/讀不到(無痕視窗、瀏覽器封鎖 localStorage、舊版本殘留值)時一律退回
+ * 2026-09-24 使用者裁決(推翻改版前的「全域共用一個 key」寫法):
+ *   「我要的是,每個使用者依照自己選擇一頁要顯示幾張卡(幾筆單)去顯示,不會因為 A 使用者選 100,
+ *    B 使用者就從原本自己選擇的 500 跳成 100。」
+ *   「預設 50 筆是所有人一開始的預設值,不管 PC/平板/手機,不看裝置而是看帳號。」
+ *
+ * 原本的寫法用一個不含使用者 id 的全域 key(`miaoyue.ordersPageSize`),當時的理由是「這只是一個
+ * 純顯示偏好、同一台裝置共用符合直覺」——但實際上同一台電腦換帳號登入時,B 會看到 A 調的筆數,
+ * 使用者明確不接受。所以這裡改成照 merchant/constants.ts 的既有慣例:**使用者專屬狀態一律用
+ * 目前登入的使用者 id 當作 key 的一部分**(見 getCurrentMerchantStorageKey 的說明,那裡把這條
+ * 訂成通用模式),不同帳號的 key 天生互不影響,不需要在登出時清除。
+ *
+ * 前綴刻意跟改版前的全域 key 同字串、後面才接 `.<userId>`,所以舊的全域殘留值不會被誤讀成某個
+ * 帳號的設定(那個 key 從此不再被讀取,使用者會拿到預設值 50,符合「預設 50 是所有人一開始的
+ * 預設值」)。
+ *
+ * userId 是 null/undefined(登入狀態還沒確認完、或沒有登入)時:讀一律回 DEFAULT_ORDERS_PAGE_SIZE、
+ * 寫直接跳過,不寫進任何 key——不然會留下一個不屬於任何帳號的孤兒值。這也比照
+ * merchant/context.tsx 的 readStoredMerchantId/writeStoredMerchantId 對 userId 為空的處理方式。
+ *
+ * 值不合法/讀不到(無痕視窗、瀏覽器封鎖 localStorage、手動改過)時一律退回
  * DEFAULT_ORDERS_PAGE_SIZE,不讓畫面因為一個偏好設定壞掉。 */
-export const ORDERS_PAGE_SIZE_STORAGE_KEY = "miaoyue.ordersPageSize";
+export const ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX = "miaoyue.ordersPageSize";
+
+/** 依使用者 id 組出專屬的 localStorage key,比照 merchant/constants.ts 的
+ * getCurrentMerchantStorageKey。 */
+export function getOrdersPageSizeStorageKey(userId: string): string {
+  return `${ORDERS_PAGE_SIZE_STORAGE_KEY_PREFIX}.${userId}`;
+}
 
 export function isOrdersPageSize(value: unknown): value is OrdersPageSize {
   return (
@@ -152,9 +173,10 @@ export function isOrdersPageSize(value: unknown): value is OrdersPageSize {
   );
 }
 
-export function readStoredOrdersPageSize(): OrdersPageSize {
+export function readStoredOrdersPageSize(userId: string | null | undefined): OrdersPageSize {
+  if (!userId) return DEFAULT_ORDERS_PAGE_SIZE;
   try {
-    const raw = window.localStorage.getItem(ORDERS_PAGE_SIZE_STORAGE_KEY);
+    const raw = window.localStorage.getItem(getOrdersPageSizeStorageKey(userId));
     if (raw === null) return DEFAULT_ORDERS_PAGE_SIZE;
     const parsed = Number(raw);
     return isOrdersPageSize(parsed) ? parsed : DEFAULT_ORDERS_PAGE_SIZE;
@@ -164,9 +186,13 @@ export function readStoredOrdersPageSize(): OrdersPageSize {
   }
 }
 
-export function writeStoredOrdersPageSize(pageSize: OrdersPageSize): void {
+export function writeStoredOrdersPageSize(
+  userId: string | null | undefined,
+  pageSize: OrdersPageSize,
+): void {
+  if (!userId) return;
   try {
-    window.localStorage.setItem(ORDERS_PAGE_SIZE_STORAGE_KEY, String(pageSize));
+    window.localStorage.setItem(getOrdersPageSizeStorageKey(userId), String(pageSize));
   } catch {
     // 寫不進去就算了,只是下次進頁面要重選一次,不影響任何功能。
   }

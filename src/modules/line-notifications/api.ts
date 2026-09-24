@@ -87,6 +87,68 @@ export async function disconnectMerchantLine(merchantId: string): Promise<void> 
   if (error) throw error;
 }
 
+// =========================================================================
+// 2026-09-24 新增:get_merchant_line_bot_public_info(LINE 官方帳號的「公開資訊」)。
+//
+// ⚠️ 為什麼需要這一支,而不是繼續用上面的 fetchMerchantLineConfigStatus:
+//    get_merchant_line_config_status 的第一行就是 `if not private.is_merchant_admin(...)
+//    then raise 42501`,只有商家管理員能呼叫。但「產生自己的 LINE 綁定碼」這個流程需要兩樣
+//    商家層級的資訊——(1) 商家到底有沒有串好 LINE、(2) 加好友連結的來源 line_bot_basic_id
+//    ——而需要這兩樣的人包含客服跟服務人員。
+//    這造成一個一直存在的 bug:客服打開「我的 LINE 綁定」卡片時,那支查詢必定 42501,
+//    於是即使商家早就串好了,畫面上永遠顯示「商家尚未完成 LINE 串接」、拿不到加好友連結。
+//    解法是後端新增一支只回傳三個公開欄位的窄函式(migration 20260924040900),
+//    而不是放寬管理員專用的那一支(它會回傳 channel_access_token_masked / channel_id /
+//    last_test_result 這些串接管理資訊,那是管理員的東西)。
+// =========================================================================
+export interface MerchantLineBotPublicInfo {
+  /** 商家是否已完成串接並通過測試連線。false 時不該顯示「產生綁定碼」按鈕(按了也沒意義)。 */
+  isConnected: boolean;
+  /** LINE 官方帳號的顯示名稱。 */
+  displayName: string | null;
+  /** 官方帳號 basic id,組加好友連結用(請用 buildLineAddFriendUrl 組,不要自己字串拼接)。 */
+  lineBotBasicId: string | null;
+}
+
+interface RawMerchantLineBotPublicInfo {
+  is_connected: boolean;
+  display_name: string | null;
+  line_bot_basic_id: string | null;
+}
+
+export async function fetchMerchantLineBotPublicInfo(
+  merchantId: string,
+): Promise<MerchantLineBotPublicInfo> {
+  const { data, error } = await supabase.rpc("get_merchant_line_bot_public_info", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  // 這支 RPC 回傳的是 jsonb(types.ts 推導成 Json),形狀轉換沿用本檔案 fetchMerchantLineConfigStatus
+  // 對 get_merchant_line_config_status 的既有寫法。
+  const row = data as RawMerchantLineBotPublicInfo | null;
+  if (!row) throw new Error("查不到這間商家的 LINE 官方帳號資訊");
+  return {
+    // 嚴格比對 true(比照專案既有的 fail-closed 慣例),形狀不如預期時一律當成「沒串接」。
+    isConnected: row.is_connected === true,
+    displayName: row.display_name ?? null,
+    lineBotBasicId: row.line_bot_basic_id ?? null,
+  };
+}
+
+/** 供兩張「我的 LINE 綁定」卡片(管理員/客服用的 MyLineBindingCard、服務人員用的
+ * MyStaffLineBindingCard)共用。retry: false —— 這支函式失敗最典型的原因是後端 42501
+ * (呼叫者不是這間商家的在職成員),重試三次只會讓畫面多停留幾秒,不會有不同結果。 */
+export function useMerchantLineBotPublicInfo(
+  merchantId: string | null | undefined,
+): UseQueryResult<MerchantLineBotPublicInfo> {
+  return useQuery({
+    queryKey: ["line-notifications-module", "bot-public-info", merchantId],
+    queryFn: () => fetchMerchantLineBotPublicInfo(merchantId as string),
+    enabled: Boolean(merchantId),
+    retry: false,
+  });
+}
+
 /** Edge Function 呼叫共同的錯誤訊息擷取邏輯(比照 src/modules/staff-agent/api.ts
  * inviteMerchantAgent 既有寫法):supabase.functions.invoke 對非 2xx 回應丟出的
  * FunctionsHttpError 不含 Edge Function 回傳的 JSON 錯誤訊息本文,要另外從 error.context
@@ -149,6 +211,20 @@ export function generateOwnAgentLineBindingCode(
   return issueBindingCode("generate_own_agent_line_binding_code", merchantId);
 }
 
+/** 2026-09-24 新增(使用者裁決「要讓服務人員自己綁定」):在職且已開通登入的服務人員幫自己
+ * 產生綁定碼。刻意只傳 merchantId —— 資料庫函式自己用 auth.uid() 解析出「呼叫者在這間商家的
+ * 那一列」,前端沒有辦法指定別人(如果這裡收 staffId,就等於開了一個「幫別人產生綁定碼」的洞)。
+ * 綁定碼規則(6 碼/10 分鐘/舊碼立刻失效)跟 3.6 完全一致,後端共用同一支內部函式。 */
+export async function generateOwnStaffLineBindingCode(
+  merchantId: string,
+): Promise<LineBindingCodeResult> {
+  const { data, error } = await supabase.rpc("generate_own_staff_line_binding_code", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return firstBindingCodeRow(data ?? []);
+}
+
 /** 3.6:商家管理員幫服務人員產生綁定碼(沿用模組 3 既有權限邊界,一之二節第 1 點)。 */
 export async function generateStaffLineBindingCode(
   staffId: string,
@@ -171,8 +247,11 @@ export async function generateMemberLineBindingCode(
   return firstBindingCodeRow(data as { code: string; expires_at: string }[]);
 }
 
-/** 3.19:解除 LINE 綁定(admin/agent 允許本人或管理員;staff 只允許管理員;member 檢查
- * can_manage_members,詳見資料庫端函式的權限邊界)。 */
+/** 3.19:解除 LINE 綁定(admin/agent/staff 三者都允許「本人或商家管理員」;member 檢查
+ * can_manage_members,詳見資料庫端函式的權限邊界)。
+ * ⚠️ 2026-09-24 使用者裁決「要讓服務人員自己綁定」之後,staff 分支從「只允許商家管理員」放寬成
+ *    「管理員或本人」(migration 20260924040900)。「本人」是資料庫端用 auth.uid() 對照
+ *    merchant_staff.user_id 判斷的,前端傳什麼 id 都無法冒充別人。 */
 export async function unbindLineAccount(
   targetType: LineBindingTargetType,
   targetId: string,

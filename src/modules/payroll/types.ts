@@ -135,22 +135,53 @@ export interface StaffMonthlyPayrollSummary {
  * 名稱也從「概估毛利」改成「商家總淨利」,JSON 欄位名稱不變。§11.8(2026-09-22 新增):
  * total_monthly_salary_base 改用歷史資料逐月加總,新增 salary_estimation_applied——查詢區間涵蓋
  * 機制上線前的月份時為 true(僅供參考)。per_staff_breakdown 維持現況,不逐月還原歷史人員名單
- * (§11.9,決策記錄)。 */
+ * (§11.9,決策記錄)。
+ *
+ * 2026-09-24 使用者裁決(月薪只在「選了完整月份」時才計算):新增 salary_applicable,月薪相關的
+ * 三個數字改成 `number | null`——salary_applicable=false(自訂區間不是完整月份)時它們一律是
+ * **null,不是 0**,呼叫端必須顯示「需選擇完整月份才能計算」而不是顯示 0(顯示 0 會讓商家以為
+ * 真的沒有月薪成本)。營收/稅金/料錢/抽成/訂單數不受影響,照常有值。 */
 export interface MerchantBillingSummary {
   total_revenue_excl_tax: number;
   total_tax_amount: number;
   total_material_cost: number;
   total_commission_payout: number;
-  total_monthly_salary_base: number;
-  total_monthly_salary_deduction: number;
-  estimated_net_margin: number;
+  /** salary_applicable=false 時是 null(不是 0)。 */
+  total_monthly_salary_base: number | null;
+  /** salary_applicable=false 時是 null(不是 0)。 */
+  total_monthly_salary_deduction: number | null;
+  /** 商家總淨利。計算式含月薪成本,所以 salary_applicable=false 時也是 null(不是 0)。 */
+  estimated_net_margin: number | null;
   per_staff_breakdown: Array<{
     staff_id: string;
     staff_name: string;
     compensation_type: "monthly_salary" | "piece_rate";
     order_count: number;
+    /** 月薪制服務人員的月薪淨額。按件計酬的人本來就是 null;月薪制的人在
+     * salary_applicable=false 時也是 null。 */
     net_pay: number | null;
     commission_amount: number | null;
+    /** 這個人**現在**是否仍在職。false = 現在已離職,但在查詢的那個期間是在職的,所以他的數字
+     * 照算、照出現在明細裡。
+     *
+     * 2026-09-24 使用者裁決(「一樣是留歷史紀錄的概念,即便這個人離職,紀錄還是存在…既然有紀錄
+     * 怎麼可能跨月就把紀錄刪除了?」):明細表的在職判斷從「**現在**誰在職」改成「**那個時間點**
+     * 誰在職」,跟月薪基本額那一邊的判斷基準對齊。改版前兩邊問的問題不一樣(基本額回頭查歷史、
+     * 扣款與明細表只看現在),導致離職人員的當月請假扣款漏掉、整個人也不出現在明細裡,明細加總
+     * 跟上方卡片永遠對不起來。
+     *
+     * ✅ 2026-09-24:資料庫端已上線,這支 RPC 一定會回傳這個欄位,所以型別是必填的 boolean
+     * (開發期間曾為了「前端可能先拿到還沒有這個欄位的舊回應」標成 optional 並在呼叫端寫
+     * `?? true`,那個過渡防禦已經收掉)。false 時明細列要顯示「已離職」標籤。 */
+    is_active_as_of: boolean;
   }>;
   salary_estimation_applied: boolean;
+  /** 這次查詢的區間是不是「完整月份」(起始日是某月 1 號 且 結束日是某月最後一天,可跨多月,
+   * 例如 2/1~4/30 也算)。按年月查詢的 get_merchant_billing_summary 永遠是完整月份,固定 true。
+   *
+   * ✅ 2026-09-24:資料庫端已上線,這支 RPC 一定會回傳這個欄位,所以型別是必填的 boolean
+   * (開發期間曾為了「前端可能先上線、拿到還沒有這個欄位的舊回應」標成 optional 並在呼叫端寫
+   * `?? true`,那個過渡防禦已經收掉)。false 時月薪相關數字一律顯示「需選擇完整月份才能計算」,
+   * 不顯示 0。 */
+  salary_applicable: boolean;
 }

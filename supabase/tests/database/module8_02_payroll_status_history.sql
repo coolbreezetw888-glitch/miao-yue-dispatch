@@ -5,7 +5,9 @@
 -- 三種核心情境)。
 begin;
 
-select plan(49);
+-- 49 → 51:2026-09-24 使用者裁決推翻了 §11.9「per_staff_breakdown 維持目前在職名單」那條決策
+-- 記錄(見下方 ⑨ 區塊),原本那一條改寫成三條,驗新的「該月月底當時在職」歷史母體。
+select plan(51);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -537,14 +539,48 @@ select is(
 );
 
 -- =========================================================================
--- ⑨ §11.9(決策記錄):per_staff_breakdown 維持「目前在職名單」,不逐月還原歷史人員名單——
--- 查詢過去(2026-02)、現在(2026-08)不同月份,in-職名單長度應該一致(都是目前 status=active 的
--- 服務人員數,不會因為查詢的月份不同而增減)。
+-- ⑨ ⚠️ §11.9 那條決策記錄已經被 2026-09-24 的使用者裁決推翻,這一條的意義跟著改了。
+--
+-- 原本這裡斷言的是「per_staff_breakdown 的人數**不**隨查詢月份改變(維持目前在職名單,
+-- 不逐月還原歷史人員名單)」。使用者 2026-09-24 明確要求相反的行為:
+--   「一樣是留歷史紀錄的概念,即便這個人離職,紀錄還是存在…既然有紀錄怎麼可能跨月就把紀錄
+--     刪除了?」
+-- 對應 migration 20260924040000 把母體改成「該月月底當時 existed 且 status=active」。
+--
+-- 這個 fixture 的三個人(I/J/K)在 2026-02 與 2026-08 兩個查詢時間點的「當時在職」狀態剛好
+-- 一樣(I/J 兩位都在職,K 的 effective_from 晚於這兩個時間點所以兩邊都 existed=false),
+-- 所以人數仍然相等——但那是這個 fixture 的巧合,不再是函式的設計保證。
+-- 因此把這一條改寫成驗「新的母體規則」本身:兩個月份都只含 I/J、不含 K,而且「查現在」時 K 會
+-- 出現。「人數會隨月份改變」那件事由 module8_03 用 9 月/10 月各 3 人/2 人的情境正式釘住。
 -- =========================================================================
 select is(
   jsonb_array_length(get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) -> 'per_staff_breakdown'),
-  jsonb_array_length(get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 8) -> 'per_staff_breakdown'),
-  '§11.9(決策記錄):per_staff_breakdown 的人數不隨查詢月份改變,維持「目前在職名單」,不逐月還原歷史人員名單'
+  2,
+  '§11.9 已推翻(2026-09-24):per_staff_breakdown 改成「該月月底當時在職」的歷史母體 → 2026-02 只含 I/J 兩人,K 那時候還不存在(existed=false)所以不列入'
+);
+
+select ok(
+  not exists (
+    select 1 from jsonb_array_elements(
+      get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) -> 'per_staff_breakdown'
+    ) as elem
+    where elem ->> 'staff_id' = 'e8020000-0000-4000-8000-000000000038'
+  ),
+  '§11.9 已推翻(2026-09-24):K(機制上線後才加入)不會出現在 2026-02 的明細裡——母體跟 11.6 算基本額那一邊用同一個 as_of、同一組條件,兩邊永遠一致'
+);
+
+select ok(
+  exists (
+    select 1 from jsonb_array_elements(
+      get_merchant_billing_summary(
+        'e8020000-0000-4000-8000-000000000022',
+        extract(year from clock_timestamp())::int,
+        extract(month from clock_timestamp())::int
+      ) -> 'per_staff_breakdown'
+    ) as elem
+    where elem ->> 'staff_id' = 'e8020000-0000-4000-8000-000000000038'
+  ),
+  '§11.9 已推翻(2026-09-24,對照組):查「現在」這個月份時 K 確實出現在明細裡,證明他不是被永久排除,只是在 2026-02 那個時間點還不存在'
 );
 
 select pg_temp.test_clear_auth();

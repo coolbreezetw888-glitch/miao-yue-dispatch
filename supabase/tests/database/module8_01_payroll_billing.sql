@@ -2,7 +2,11 @@
 -- 核心必測:規則 2.4(抽成快照建立後不自動重算)、規則 2.6(手動重算僅限管理員)。
 begin;
 
-select plan(96);
+-- 96 → 99:2026-09-24 完成時間基準(migration 20260924040000)新增三條斷言——
+--   (1) 用訂單虛構的 start_at 月份(2026-12)查詢營收應該是 0(把口徑改變本身釘成回歸保護)
+--   (2)(3) 單月版/區間版各一條 cmp_ok(>= 3500),避免「改成兩邊互相對照」之後出現
+--          「兩邊都是 0 也會通過」的空轉斷言。
+select plan(99);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -912,17 +916,66 @@ select is(
   '規則 2.5/§3.9:P2 本月以助手身份參與 1 筆訂單(只是參考資訊,不影響上面的抽成總計 500.00)'
 );
 
--- §3.11:店家帳務報表(2026-12,只含 R1/R2/R3 三筆訂單 + P2 服務項目層級抽成造成的金額)。
+-- §3.11:店家帳務報表(只含 R1/R2/R3 三筆訂單 + P2 服務項目層級抽成造成的金額)。
 -- 商家端三項調整規格書 §三 3.1:total_revenue 拆成 total_revenue_excl_tax + total_tax_amount,
 -- 這三筆訂單都沒有開稅金,所以 excl_tax 金額跟原本含稅口徑的數字相同。
+--
+-- ⚠️ 2026-09-24(使用者裁決「都已完成時間做依據」「完成代表收到錢」,migration
+--    20260924040000):營收的月份基準從 b.start_at 改成完成時間 coalesce(completed_at, start_at)。
+--    這三筆訂單的 start_at 是本測試檔案為了排程方便虛構的 2026-12-03,但它們是透過
+--    complete_booking() 在「測試執行當下」被標記完成的(completed_at = now()),所以它們現在
+--    歸屬的是「執行當下那個月」,不是 2026-12。
+--    → 查詢月份改成 extract(...from now()),跟這個檔案下面 total_commission_payout 那條斷言
+--      早就在用的同一套做法一致(它用 computed_at 當基準,也是同樣不能寫死月份的理由)。
+--    期望值 3500.00 完全不變:證明的是「彙整金額本身正確」,只是認列的月份換了口徑。
+-- ⚠️ 期望值不能再寫死 3500.00:完成時間基準之後,這個測試檔案前面各個區塊建立的**所有**已完成
+--    訂單(它們的 start_at 散落在好幾個虛構月份,但全部是在測試執行當下被 complete_booking
+--    標記完成的)都會一起認列在「執行當下那個月」,總額自然大於這三筆的 3500。
+--    改成跟這個檔案下面 total_commission_payout 那條斷言完全一樣的做法:直接對照「用同一套
+--    完成時間篩選條件」手動加總的結果是否一致——驗證的是彙整邏輯本身正確,不受這個檔案
+--    前面到底建立了幾筆訂單影響。
+select is(
+  (get_merchant_billing_summary(
+    'e8000000-0000-4000-8000-000000000021',
+    extract(year from now())::int,
+    extract(month from now())::int
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  (select coalesce(sum(b.subtotal_amount_snapshot - b.discount_amount_snapshot), 0)
+   from bookings b
+   where b.merchant_id = 'e8000000-0000-4000-8000-000000000021'
+     and b.status = 'completed'
+     and coalesce(b.completed_at, b.start_at) >= date_trunc('month', now())
+     and coalesce(b.completed_at, b.start_at) < date_trunc('month', now()) + interval '1 month'),
+  '§3.11 + 2026-09-24 完成時間基準:total_revenue_excl_tax 用 coalesce(completed_at, start_at) 當月份基準,跟直接對 bookings 用相同篩選條件加總 Σ(subtotal − discount) 的結果一致'
+);
+
+-- 同時釘住「這三筆(R1/R2/R3 共 3500)真的有被認列在完成當月」,否則上面那條自我對照的斷言
+-- 在「兩邊都是 0」的情況下也會通過,等於什麼都沒驗到。
+select cmp_ok(
+  (get_merchant_billing_summary(
+    'e8000000-0000-4000-8000-000000000021',
+    extract(year from now())::int,
+    extract(month from now())::int
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  '>=',
+  3500.00,
+  '§3.11 + 2026-09-24 完成時間基準:完成當月的未稅營收至少包含 R1(1000)+R2(已折扣後1500)+R3(1000)= 3500.00,證明這三筆確實被認列在「完成當下」那個月'
+);
+
+-- 對照組(釘住這次的口徑改變,避免之後有人又把基準改回 start_at):同樣三筆訂單,用它們虛構的
+-- 訂單月份 2026-12 去查,現在應該是 0.00——因為它們的完成時間不在 2026-12。
 select is(
   (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_revenue_excl_tax')::numeric,
-  3500.00,
-  '§3.11:total_revenue_excl_tax = 1000(R1) + 1500(R2,已折扣500) + 1000(R3) = 3500.00(這三筆都沒開稅金)'
+  0.00,
+  '2026-09-24 完成時間基準(對照組):用訂單的虛構 start_at 月份(2026-12)查詢,營收是 0.00——證明報表真的改用「完成時間」認列,不是用預約時間'
 );
 
 select is(
-  (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_tax_amount')::numeric,
+  (get_merchant_billing_summary(
+    'e8000000-0000-4000-8000-000000000021',
+    extract(year from now())::int,
+    extract(month from now())::int
+  ) ->> 'total_tax_amount')::numeric,
   0.00,
   '§3.1:total_tax_amount = 0.00(這三筆訂單都沒有開稅金)'
 );
@@ -1118,32 +1171,62 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 
--- A. 複用 ⑨ 區塊已經建立的 R1(12/3,1000)/R2(12/3,已折扣後1500)/R3(12/3,1000)三筆訂單:
--- 區間版本涵蓋整個 12 月,應該跟月份版本算出完全相同的未稅營收/稅金小計。
+-- A. 複用 ⑨ 區塊已經建立的 R1(1000)/R2(已折扣後1500)/R3(1000)三筆訂單:
+-- 區間版本涵蓋「完成當下」那整個月,應該跟月份版本算出完全相同的未稅營收/稅金小計。
+--
+-- ⚠️ 2026-09-24(migration 20260924040000,完成時間基準):這三筆訂單的完成時間是測試執行當下,
+--    不是它們虛構的 start_at(2026-12-03),所以區間要用「執行當下那個月」才撈得到它們。
+--    刻意用「整個月」(1 號到月底)而不是隨便一段日期,因為任務 3 之後只有完整月份的查詢
+--    salary_applicable 才會是 true,這樣才真的跟月份版本等價可比。
+-- 這條斷言的本意就是「區間版本 == 月份版本」,所以直接拿兩支函式互相對照,比寫死一個數字更貼近
+-- 它要驗的事(而且不受這個檔案前面建立了幾筆訂單影響,理由同上面 ⑨ 區塊的說明)。
 select is(
   (get_merchant_billing_summary_by_range(
-    'e8000000-0000-4000-8000-000000000021', '2026-12-01'::date, '2026-12-31'::date
+    'e8000000-0000-4000-8000-000000000021',
+    date_trunc('month', now())::date,
+    (date_trunc('month', now()) + interval '1 month - 1 day')::date
   ) ->> 'total_revenue_excl_tax')::numeric,
+  (get_merchant_billing_summary(
+    'e8000000-0000-4000-8000-000000000021',
+    extract(year from now())::int,
+    extract(month from now())::int
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  '§3.6 + 2026-09-24 完成時間基準:get_merchant_billing_summary_by_range(完成當月整月)的 total_revenue_excl_tax 跟月份版本 get_merchant_billing_summary(完成當月)算出完全相同的數字'
+);
+
+-- 並且同樣釘住「不是兩邊都 0」(否則上面那條互相對照的斷言沒有驗到東西)。
+select cmp_ok(
+  (get_merchant_billing_summary_by_range(
+    'e8000000-0000-4000-8000-000000000021',
+    date_trunc('month', now())::date,
+    (date_trunc('month', now()) + interval '1 month - 1 day')::date
+  ) ->> 'total_revenue_excl_tax')::numeric,
+  '>=',
   3500.00,
-  '§3.6:get_merchant_billing_summary_by_range([12/1,12/31]) 的 total_revenue_excl_tax 跟月份版本算出同樣的 3500.00(R1+R2+R3)'
+  '§3.6:區間版本(完成當月整月)的未稅營收至少包含 R1+R2+R3 = 3500.00'
 );
 
 select is(
   (get_merchant_billing_summary_by_range(
-    'e8000000-0000-4000-8000-000000000021', '2026-12-01'::date, '2026-12-31'::date
+    'e8000000-0000-4000-8000-000000000021',
+    date_trunc('month', now())::date,
+    (date_trunc('month', now()) + interval '1 month - 1 day')::date
   ) ->> 'total_tax_amount')::numeric,
   0.00,
   '§3.6:get_merchant_billing_summary_by_range 的 total_tax_amount 跟月份版本一致(0.00,這三筆都沒開稅金)'
 );
 
--- B. 縮小區間到 [12/4,12/31](R1/R2/R3 全部發生在 12/3,不在這個區間內),證明區間查詢真的是
--- 依日期篩選、會正確排除範圍外的訂單,不是原封不動回傳月份版本的數字。
+-- B. 把區間移到「明天開始」(三筆訂單都是今天完成的,不在這個區間內),證明區間查詢真的是依
+-- 日期篩選、會正確排除範圍外的訂單,不是原封不動回傳月份版本的數字。
+-- (原本這條用 [12/4,12/31] 排除「12/3 建立的訂單」;完成時間基準之後那個日期已經不是這三筆
+--  訂單的認列依據了,改成用完成時間的隔天起算,才是真的在驗「依日期篩選」這件事。)
 select is(
   (get_merchant_billing_summary_by_range(
-    'e8000000-0000-4000-8000-000000000021', '2026-12-04'::date, '2026-12-31'::date
+    'e8000000-0000-4000-8000-000000000021',
+    (current_date + 1)::date, (current_date + 2)::date
   ) ->> 'total_revenue_excl_tax')::numeric,
   0.00,
-  '§3.6:縮小區間到 [12/4,12/31](排除 12/3 當天建立的 R1/R2/R3 三筆訂單)後,total_revenue_excl_tax 正確變成 0.00,證明真的是依日期篩選'
+  '§3.6:把區間移到明天起算(排除今天完成的 R1/R2/R3 三筆訂單)後,total_revenue_excl_tax 正確變成 0.00,證明真的是依完成日期篩選'
 );
 
 -- C. 區間上限保護(核心必測):剛好 366 天允許,367 天擋下,結束早於起始擋下。

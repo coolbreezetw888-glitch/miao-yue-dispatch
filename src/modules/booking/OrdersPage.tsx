@@ -29,7 +29,7 @@
 // 左側色條顯示用,資料表/RLS/RPC 完全不動,寫入邏輯(updateMerchantBookingStatusColors)一併
 // 搬去 MerchantSettingsPage.tsx,不在這個檔案裡重複一份。
 
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { getVerifiedUser } from "@/lib/auth-guard";
 import { cn } from "@/lib/utils";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
@@ -67,6 +68,7 @@ import { addDays, buildTaipeiIso, isoToTaipeiDateTimeWithSeconds, toDateKey } fr
 import { formatAmount } from "./orderAmount";
 import {
   adjustPageForPageSizeChange,
+  DEFAULT_ORDERS_PAGE_SIZE,
   formatCardDateTime,
   formatGroupDateHeading,
   groupBookingsByDateField,
@@ -135,10 +137,33 @@ function OrdersPageInner() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
+  // 目前登入的使用者 id,只用來當「每頁筆數」偏好設定的 localStorage key 的一部分(見下方)。
+  // 沿用既有慣例:元件裡要知道自己是誰時,用 useEffect + getVerifiedUser() 取(比照
+  // line-notifications/MyLineBindingCard.tsx 的既有寫法),不自己呼叫 supabase.auth.getUser()/
+  // getSession()(理由見 src/lib/auth-guard.ts)。
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getVerifiedUser().then((user) => {
+      if (!cancelled) setUserId(user?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // 分頁狀態(2026-09-24 使用者裁決:渲染上限改成真正的分頁,見 ordersPageLogic.ts 的說明)。
-  // 每頁筆數用 useState 的初始化函式讀 localStorage,只在第一次掛載時讀一次(不是每次 render 都讀),
-  // 讀不到/值不合法時會拿到 DEFAULT_ORDERS_PAGE_SIZE。
-  const [pageSize, setPageSize] = useState<OrdersPageSize>(() => readStoredOrdersPageSize());
+  //
+  // 每頁筆數依**帳號**記憶(2026-09-24 使用者裁決,見 ordersPageLogic.ts 的說明):A 帳號選 100
+  // 不該讓同一台電腦上的 B 帳號從自己原本的 500 跳成 100。因為使用者身份是非同步取得的,
+  // 第一次 render 時還不知道是誰,所以初始值一律是 DEFAULT_ORDERS_PAGE_SIZE(50,「所有人一開始
+  // 的預設值」),等身份確定之後再讀那個帳號自己的設定套上去。
+  const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
+  useEffect(() => {
+    // 依賴只有 userId:身份確定(或換成了另一個帳號)時才重讀一次,使用者在頁面上自己調整過的
+    // 選擇不會被這個 effect 蓋掉。userId 還是 null 時讀回來就是預設值 50,等同不動。
+    setPageSize(readStoredOrdersPageSize(userId));
+  }, [userId]);
   const [page, setPage] = useState(1);
   // 換頁後把畫面捲回列表頂端——不然使用者按了底部的「下一頁」,畫面還停在原本的捲動位置,
   // 看起來像「按了沒反應」(實際上清單已經換成另一批訂單了)。
@@ -251,7 +276,9 @@ function OrdersPageInner() {
     // adjustPageForPageSizeChange 的說明),不要把使用者彈回第 1 頁或彈到不相干的位置。
     setPage((prev) => adjustPageForPageSizeChange(prev, pageSize, nextPageSize));
     setPageSize(nextPageSize);
-    writeStoredOrdersPageSize(nextPageSize);
+    // 依帳號存。身份還沒確認完(userId 還是 null)時這支會直接跳過不寫,只是這次選擇不會被記住,
+    // 畫面行為完全不受影響。
+    writeStoredOrdersPageSize(userId, nextPageSize);
   }
 
   function openEditForm(bookingId: string) {
