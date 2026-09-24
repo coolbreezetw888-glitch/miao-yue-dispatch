@@ -2,6 +2,12 @@
 -- .project\specs\服務人員推播通知.md 第二節(2.1~2.4)、規則 4.7 引用的 can_manage_push_notification
 -- (7.3)、7.4 seed_default_push_event_settings + create_group_and_merchant/create_merchant_in_group
 -- 疊加、7.5 get_staff_push_subscription_count、7.9 update_push_event_setting。
+--
+-- ⚠️ 2026-09-25「手機推播擴及三種角色」批次改動了兩處(其餘一字未動):
+--    ① staff_push_subscriptions → push_subscriptions(主體改成 auth.users.id,§2.1/§3.1)
+--    ⑦ get_staff_push_subscription_count → get_staff_push_status(回傳 jsonb,§3.3)
+--    另外 ⑤ 寫入 push_notification_log 的欄位 staff_id → target_type/target_id(§2.4/§3.2)。
+--    新增的資料表/函式(§2.2/§2.5/§2.6/§5.1/§6.6/§4.6)測試放在 module15_02_push_multi_role.sql。
 begin;
 
 select plan(37);
@@ -62,95 +68,100 @@ insert into merchant_staff (id, merchant_id, user_id, name, status, login_status
   ('ec500000-0000-4000-8000-000000000062', 'ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000007', '服務人員乙', 'active', 'active', '0900000102');
 
 -- =========================================================================
--- ① 2.1 staff_push_subscriptions:CHECK/唯一索引/RLS(核心必測)。
+-- ① §2.1 push_subscriptions:CHECK/唯一索引/RLS(核心必測)。
+--
+-- ⚠️ 2026-09-25「手機推播擴及三種角色」批次:這張表原本叫 staff_push_subscriptions,
+--    主體是 merchant_staff.id;現在改成 push_subscriptions,主體是 auth.users.id(§2.1),
+--    因為裝置屬於登入帳號、不屬於某間店的某個職務。下面的斷言逐條沿用原本的驗證意圖
+--    (本人可讀寫自己的/看不到別人的/endpoint UNIQUE/沒有 UPDATE 政策/刪不掉別人的),
+--    只是判斷欄位從 staff_id 換成 user_id。**一條都沒有刪掉。**
 -- =========================================================================
 select throws_ok(
-  $$insert into staff_push_subscriptions (merchant_id, staff_id, endpoint, p256dh_key, auth_key)
-    values ('ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000061', null, 'p', 'a')$$,
+  $$insert into push_subscriptions (user_id, endpoint, p256dh_key, auth_key)
+    values ('ec500000-0000-4000-8000-000000000006', null, 'p', 'a')$$,
   '23502', null,
-  '2.1:endpoint not null 擋下'
+  '§2.1:endpoint not null 擋下'
 );
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000006'); -- 服務人員甲
 select lives_ok(
-  $$insert into staff_push_subscriptions (merchant_id, staff_id, endpoint, p256dh_key, auth_key, user_agent)
-    values ('ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000061', 'https://fcm.example/aaa', 'p256dh-1', 'auth-1', 'iPhone Safari')$$,
-  '2.1(核心必測):服務人員甲新增自己的訂閱成功'
+  $$insert into push_subscriptions (user_id, endpoint, p256dh_key, auth_key, user_agent)
+    values ('ec500000-0000-4000-8000-000000000006', 'https://fcm.example/aaa', 'p256dh-1', 'auth-1', 'iPhone Safari')$$,
+  '§2.1(核心必測):服務人員甲新增自己的裝置登記成功'
 );
 
 select is(
-  (select count(*)::int from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000061'),
+  (select count(*)::int from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000006'),
   1,
-  '2.1:服務人員甲看得到自己剛新增的那一筆'
+  '§2.1:服務人員甲看得到自己剛新增的那一筆'
 );
 
 select throws_ok(
-  format($$insert into staff_push_subscriptions (merchant_id, staff_id, endpoint, p256dh_key, auth_key)
-    values ('ec500000-0000-4000-8000-000000000021', '%s', 'https://fcm.example/bbb', 'p', 'a')$$,
-    'ec500000-0000-4000-8000-000000000062'),
+  $$insert into push_subscriptions (user_id, endpoint, p256dh_key, auth_key)
+    values ('ec500000-0000-4000-8000-000000000007', 'https://fcm.example/bbb', 'p', 'a')$$,
   '42501', null,
-  '2.1(核心必測):服務人員甲無法幫服務人員乙新增訂閱(with check 擋下)'
+  '§2.1(核心必測):服務人員甲無法幫服務人員乙新增裝置登記(with check 擋下)'
 );
 select pg_temp.test_clear_auth();
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000007'); -- 服務人員乙
 select lives_ok(
-  $$insert into staff_push_subscriptions (merchant_id, staff_id, endpoint, p256dh_key, auth_key)
-    values ('ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000062', 'https://fcm.example/ccc', 'p256dh-2', 'auth-2')$$,
-  '2.1:服務人員乙新增自己的訂閱成功'
+  $$insert into push_subscriptions (user_id, endpoint, p256dh_key, auth_key)
+    values ('ec500000-0000-4000-8000-000000000007', 'https://fcm.example/ccc', 'p256dh-2', 'auth-2')$$,
+  '§2.1:服務人員乙新增自己的裝置登記成功'
 );
 select is(
-  (select count(*)::int from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000061'),
+  (select count(*)::int from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000006'),
   0,
-  '2.1(核心必測):服務人員乙看不到服務人員甲的訂閱'
+  '§2.1(核心必測):服務人員乙看不到服務人員甲的裝置登記'
 );
 select pg_temp.test_clear_auth();
 
 -- endpoint 唯一索引(核心必測)。
 select throws_ok(
-  $$insert into staff_push_subscriptions (merchant_id, staff_id, endpoint, p256dh_key, auth_key)
-    values ('ec500000-0000-4000-8000-000000000021', 'ec500000-0000-4000-8000-000000000062', 'https://fcm.example/aaa', 'p', 'a')$$,
+  $$insert into push_subscriptions (user_id, endpoint, p256dh_key, auth_key)
+    values ('ec500000-0000-4000-8000-000000000007', 'https://fcm.example/aaa', 'p', 'a')$$,
   '23505', null,
-  '2.1(核心必測):endpoint 唯一索引擋下重複的 endpoint'
+  '§2.1(核心必測):endpoint 唯一索引擋下重複的 endpoint'
 );
 
--- 商家管理員沒有直接 SELECT 政策(2.1 邊界情況)。
+-- 商家管理員沒有直接 SELECT 政策(§2.1 邊界情況:管理員只能看數量,走 get_staff_push_status)。
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000001'); -- A店管理員
 select is(
-  (select count(*)::int from staff_push_subscriptions where merchant_id = 'ec500000-0000-4000-8000-000000000021'),
+  (select count(*)::int from push_subscriptions),
   0,
-  '2.1:商家管理員沒有 SELECT 政策,直接查這張表看不到任何一筆'
+  '§2.1:商家管理員沒有 SELECT 政策,直接查這張表看不到任何一筆'
 );
 select pg_temp.test_clear_auth();
 
 -- 沒有 UPDATE 政策:一般角色不能更新 last_seen_at(WITH 子句包 UPDATE 必須是頂層陳述式,
 -- 這裡改成「先執行 UPDATE(靜默受 0 筆影響)→ 另外查詢確認沒有變化」兩個獨立陳述式)。
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000006');
-update staff_push_subscriptions set last_seen_at = now()
-where staff_id = 'ec500000-0000-4000-8000-000000000061';
+update push_subscriptions set last_seen_at = now()
+where user_id = 'ec500000-0000-4000-8000-000000000006';
 select is(
-  (select last_seen_at from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000061'),
+  (select last_seen_at from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000006'),
   null,
-  '2.1:沒有 UPDATE 政策,服務人員本人也無法更新 last_seen_at(RLS 靜默擋下,仍是 null)'
+  '§2.1:沒有 UPDATE 政策,本人也無法更新 last_seen_at(RLS 靜默擋下,仍是 null)'
 );
 select pg_temp.test_clear_auth();
 
--- 刪除:服務人員可以刪除自己的訂閱,不能刪除別人的。
+-- 刪除:本人可以刪除自己的裝置登記,不能刪除別人的。
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000007');
-delete from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000061';
+delete from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000006';
 select pg_temp.test_clear_auth();
 
--- 商家管理員對這張表沒有 SELECT 政策,這裡改用超級使用者身分(不受 RLS 限制)確認實際資料列數。
+-- 管理員對這張表沒有 SELECT 政策,這裡改用超級使用者身分(不受 RLS 限制)確認實際資料列數。
 select is(
-  (select count(*)::int from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000061'),
+  (select count(*)::int from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000006'),
   1,
-  '2.1(核心必測):服務人員乙嘗試刪除服務人員甲的訂閱,RLS 靜默擋下,甲的訂閱仍在(用超級使用者身分確認,不受 RLS 限制)'
+  '§2.1(核心必測):服務人員乙嘗試刪除服務人員甲的裝置登記,RLS 靜默擋下,甲的那一筆仍在(用超級使用者身分確認,不受 RLS 限制)'
 );
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000007');
 select lives_ok(
-  $$delete from staff_push_subscriptions where staff_id = 'ec500000-0000-4000-8000-000000000062'$$,
-  '2.1:服務人員乙刪除自己的訂閱成功'
+  $$delete from push_subscriptions where user_id = 'ec500000-0000-4000-8000-000000000007'$$,
+  '§2.1:服務人員乙刪除自己的裝置登記成功'
 );
 select pg_temp.test_clear_auth();
 
@@ -289,8 +300,9 @@ select throws_ok(
 select pg_temp.test_clear_auth();
 
 -- 用超級使用者身分(不受 RLS 限制)模擬 Edge Function service role 寫入一筆記錄。
-insert into push_notification_log (merchant_id, event_type, booking_id, staff_id, status, skip_reason, device_count, success_count, rendered_title, rendered_body)
-values ('ec500000-0000-4000-8000-000000000021', 'booking_created', null, 'ec500000-0000-4000-8000-000000000061', 'sent', null, 1, 1, '新訂單通知', '測試內文');
+-- 2026-09-25:staff_id 欄位已移除(§3.2),收件人改用 target_type/target_id 表示(§2.4)。
+insert into push_notification_log (merchant_id, event_type, booking_id, target_type, target_id, status, skip_reason, device_count, success_count, rendered_title, rendered_body)
+values ('ec500000-0000-4000-8000-000000000021', 'booking_created', null, 'staff', 'ec500000-0000-4000-8000-000000000061', 'sent', null, 1, 1, '新訂單通知', '測試內文');
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000001');
 select is(
@@ -348,21 +360,25 @@ select is(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ⑦ 7.5 get_staff_push_subscription_count:管理員可看數量,不回傳任何 endpoint 內容。
+-- ⑦ §3.3 get_staff_push_status(取代 7.5 get_staff_push_subscription_count):
+-- 管理員可看「裝置數 + 有沒有開啟任何事件」,不回傳任何 endpoint 內容。
+--
+-- ⚠️ 2026-09-25:函式改名/改回傳值的理由見 §3.3 —— 裝置登記現在屬於登入帳號,所以
+--    「已開通 N 台」不再等於「他會收到這間店的通知」。原本兩條斷言的驗證意圖完全保留。
 -- =========================================================================
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000001');
 select is(
-  get_staff_push_subscription_count('ec500000-0000-4000-8000-000000000061'),
-  1,
-  '7.5:商家管理員查詢服務人員甲的推播裝置數,正確回傳 1(先前只留下甲那一筆,乙那筆已在①刪除)'
+  get_staff_push_status('ec500000-0000-4000-8000-000000000061'),
+  jsonb_build_object('device_count', 1, 'any_event_enabled', false),
+  '§3.3:商家管理員查詢服務人員甲的推播狀態 —— 有 1 台裝置(①留下的那一筆),但沒有任何事件訂閱,所以 any_event_enabled=false'
 );
 select pg_temp.test_clear_auth();
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000002'); -- B店管理員
 select throws_ok(
-  $$select get_staff_push_subscription_count('ec500000-0000-4000-8000-000000000061')$$,
+  $$select get_staff_push_status('ec500000-0000-4000-8000-000000000061')$$,
   '42501', null,
-  '7.5(核心必測):B店管理員查詢 A 店服務人員的裝置數被擋下(跨商家隔離)'
+  '§3.3(核心必測):B店管理員查詢 A 店服務人員的推播狀態被擋下(跨商家隔離)'
 );
 select pg_temp.test_clear_auth();
 

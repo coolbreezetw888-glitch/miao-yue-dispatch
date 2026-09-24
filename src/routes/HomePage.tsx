@@ -148,7 +148,16 @@ export default function HomePage() {
       {/* 2026-09-24 使用者指定:「個人資料」分頁籤 = 個人資料卡片 + LINE 綁定。 */}
       <MyStaffLineBindingCard staff={staffRow} />
 
-      <PushSubscriptionCard merchantId={merchantId} staffId={staffRow.id} />
+      {/* §7.3:2026-09-25「手機推播擴及三種角色」批次 —— props 從 staffId 換成
+          targetType/targetId。這裡刻意維持明確傳 targetType="staff",不要改成用
+          useCurrentMerchantRole(§7.2 的警語:那會讓同時是客服的人在服務人員端看到客服的卡片)。 */}
+      <PushSubscriptionCard
+        merchantId={merchantId}
+        targetType="staff"
+        targetId={staffRow.id}
+        targetLabel="服務人員"
+        merchantName={currentMerchant?.name ?? null}
+      />
 
       {staffRow.pending_admin_login_email ? (
         <PendingAdminLoginEmailSuggestionCard

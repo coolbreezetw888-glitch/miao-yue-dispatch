@@ -18,6 +18,21 @@ export default tseslint.config(
       // Supabase CLI 依照資料庫 schema 自動產生的型別檔,每次重新產生都會蓋掉手動調整,
       // 不該納入 lint/format。同步也寫進 .prettierignore。
       "src/integrations/supabase/types.ts",
+      // ─────────────────────────────────────────────────────────────────
+      // #713(2026-09-25):Supabase Edge Function 是 **Deno** 執行環境,不是這個專案的
+      // Vite/Node 環境 —— 它用 `https://esm.sh/...` / `npm:` / `jsr:` 這種 URL import,
+      // 而且**有自己的 linter**(`deno lint`,設定在 supabase/functions/deno.json)。
+      //
+      // 為什麼一定要排除:那些檔案裡的 `// deno-lint-ignore no-explicit-any` 是 Deno 的指令,
+      // ESLint 根本不認得,於是同一行同時被兩套 linter 檢查 —— Deno 放行、ESLint 報
+      // `@typescript-eslint/no-explicit-any` 錯誤。過去之所以沒人發現,是因為派工時都寫
+      // `npx eslint src e2e`(只掃兩個資料夾),`npx eslint .` 一跑就會冒出 6 個 error。
+      //
+      // 這次的重點不是消掉那 6 個 error,是讓 **`npx eslint .` 變成一個可信的單一指令** ——
+      // 不用再靠人記得「這次要掃哪幾個資料夾」。package.json 的 `npm run lint` 就是 `eslint .`。
+      //
+      // ⚠️ 排除不等於沒人檢查:supabase/functions/** 由 `deno lint` / `deno check` 負責。
+      "supabase/functions/**",
     ],
   },
   {

@@ -155,10 +155,15 @@ async function handleRequest(req: Request): Promise<Response> {
       continue;
     }
 
+    // §5.4 / 裁決 Q2：【這一行就是「之後要開放給管理員/客服時要改的那一行」】
+    // 前一天提醒是【逐筆】發送的：服務人員收的是自己的單，一天幾筆就幾則；管理員/客服收的是
+    // 全店的單，明天 20 筆預約就是早上連收 20 則。使用者 2026-09-25 裁決（Q2 選 A）：
+    // 這一批逐筆提醒只開放給服務人員，管理員/客服連這個選項都看不到（UI 也隱藏）。
     await dispatchPushForBooking(deps, {
       merchantId: booking.merchant_id,
       bookingId: booking.id,
       eventType: "booking_reminder_next_day",
+      onlyStaffRecipients: true,
     });
     processedCount += 1;
   }

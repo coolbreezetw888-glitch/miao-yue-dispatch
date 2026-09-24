@@ -8,7 +8,7 @@
 
 import webpush from "npm:web-push@3.6.7";
 
-import type { SendPushResult, StaffPushSubscriptionRow } from "./pushDispatchCore.ts";
+import type { PushPayload, PushSubscriptionRow, SendPushResult } from "./pushDispatchCore.ts";
 
 export interface VapidDetails {
   subject: string;
@@ -25,8 +25,8 @@ interface WebPushErrorLike {
 
 export async function sendWebPush(
   vapidDetails: VapidDetails,
-  subscription: StaffPushSubscriptionRow,
-  payload: { title: string; body: string; url: string },
+  subscription: PushSubscriptionRow,
+  payload: PushPayload,
 ): Promise<SendPushResult> {
   try {
     const res = await webpush.sendNotification(

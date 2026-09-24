@@ -2044,8 +2044,52 @@ export type Database = {
         }
         Relationships: []
       }
+      push_event_subscriptions: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          event_type: string
+          id: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          event_type: string
+          id?: string
+          merchant_id: string
+          target_id: string
+          target_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          target_id?: string
+          target_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_event_subscriptions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       push_notification_log: {
         Row: {
+          ack_subscription_id: string | null
+          ack_token: string | null
+          acked_at: string | null
           attempted_at: string
           booking_id: string | null
           device_count: number
@@ -2056,11 +2100,15 @@ export type Database = {
           rendered_body: string | null
           rendered_title: string | null
           skip_reason: string | null
-          staff_id: string | null
           status: string
           success_count: number
+          target_id: string | null
+          target_type: string | null
         }
         Insert: {
+          ack_subscription_id?: string | null
+          ack_token?: string | null
+          acked_at?: string | null
           attempted_at?: string
           booking_id?: string | null
           device_count?: number
@@ -2071,11 +2119,15 @@ export type Database = {
           rendered_body?: string | null
           rendered_title?: string | null
           skip_reason?: string | null
-          staff_id?: string | null
           status: string
           success_count?: number
+          target_id?: string | null
+          target_type?: string | null
         }
         Update: {
+          ack_subscription_id?: string | null
+          ack_token?: string | null
+          acked_at?: string | null
           attempted_at?: string
           booking_id?: string | null
           device_count?: number
@@ -2086,11 +2138,19 @@ export type Database = {
           rendered_body?: string | null
           rendered_title?: string | null
           skip_reason?: string | null
-          staff_id?: string | null
           status?: string
           success_count?: number
+          target_id?: string | null
+          target_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "push_notification_log_ack_subscription_id_fkey"
+            columns: ["ack_subscription_id"]
+            isOneToOne: false
+            referencedRelation: "push_subscriptions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "push_notification_log_booking_id_fkey"
             columns: ["booking_id"]
@@ -2103,13 +2163,6 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "push_notification_log_staff_id_fkey"
-            columns: ["staff_id"]
-            isOneToOne: false
-            referencedRelation: "merchant_staff"
             referencedColumns: ["id"]
           },
         ]
@@ -2139,6 +2192,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_seen_at: string | null
+          p256dh_key: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_seen_at?: string | null
+          p256dh_key: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_seen_at?: string | null
+          p256dh_key?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       service_categories: {
         Row: {
@@ -2416,57 +2502,6 @@ export type Database = {
           },
         ]
       }
-      staff_push_subscriptions: {
-        Row: {
-          auth_key: string
-          created_at: string
-          endpoint: string
-          id: string
-          last_seen_at: string | null
-          merchant_id: string
-          p256dh_key: string
-          staff_id: string
-          user_agent: string | null
-        }
-        Insert: {
-          auth_key: string
-          created_at?: string
-          endpoint: string
-          id?: string
-          last_seen_at?: string | null
-          merchant_id: string
-          p256dh_key: string
-          staff_id: string
-          user_agent?: string | null
-        }
-        Update: {
-          auth_key?: string
-          created_at?: string
-          endpoint?: string
-          id?: string
-          last_seen_at?: string | null
-          merchant_id?: string
-          p256dh_key?: string
-          staff_id?: string
-          user_agent?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "staff_push_subscriptions_merchant_id_fkey"
-            columns: ["merchant_id"]
-            isOneToOne: false
-            referencedRelation: "merchants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "staff_push_subscriptions_staff_id_fkey"
-            columns: ["staff_id"]
-            isOneToOne: false
-            referencedRelation: "merchant_staff"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       staff_salary_settings: {
         Row: {
           created_at: string
@@ -2552,6 +2587,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ack_push_test_notification: {
+        Args: { p_ack_token: string }
+        Returns: boolean
+      }
       adjust_member_points: {
         Args: { p_member_id: string; p_note: string; p_points_delta: number }
         Returns: {
@@ -2815,6 +2854,10 @@ export type Database = {
       consume_line_binding_code: {
         Args: { p_code: string; p_line_user_id: string; p_merchant_id: string }
         Returns: Json
+      }
+      count_my_recent_test_pushes: {
+        Args: { p_merchant_id: string }
+        Returns: number
       }
       create_booking: {
         Args: {
@@ -3246,6 +3289,13 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      get_merchant_push_event_enabled_map: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          enabled: boolean
+          event_type: string
+        }[]
+      }
       get_my_booking_schedule: {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
         Returns: Json
@@ -3262,6 +3312,7 @@ export type Database = {
         Args: { p_date: string; p_staff_id: string }
         Returns: Json
       }
+      get_my_push_identity: { Args: { p_merchant_id: string }; Returns: Json }
       get_staff_commission_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
@@ -3287,10 +3338,7 @@ export type Database = {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
         Returns: Json
       }
-      get_staff_push_subscription_count: {
-        Args: { p_staff_id: string }
-        Returns: number
-      }
+      get_staff_push_status: { Args: { p_staff_id: string }; Returns: Json }
       get_staff_schedule_overview: {
         Args: {
           p_end_date: string
@@ -3318,6 +3366,14 @@ export type Database = {
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined
+      }
+      is_staff_push_event_disabled: {
+        Args: {
+          p_event_type: string
+          p_merchant_id: string
+          p_staff_id: string
+        }
+        Returns: boolean
       }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }
@@ -3574,6 +3630,19 @@ export type Database = {
           p_staff_leave_record_id?: string
         }
         Returns: Json
+      }
+      resolve_push_recipients: {
+        Args: {
+          p_booking_staff_id: string
+          p_event_type: string
+          p_merchant_id: string
+        }
+        Returns: {
+          target_id: string
+          target_name: string
+          target_type: string
+          target_user_id: string
+        }[]
       }
       restore_merchant_agent: {
         Args: { p_agent_id: string }
@@ -4104,6 +4173,30 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      upsert_my_push_subscription: {
+        Args: {
+          p_auth_key: string
+          p_endpoint: string
+          p_p256dh_key: string
+          p_user_agent?: string
+        }
+        Returns: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_seen_at: string | null
+          p256dh_key: string
+          user_agent: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "push_subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never
@@ -4239,3 +4332,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

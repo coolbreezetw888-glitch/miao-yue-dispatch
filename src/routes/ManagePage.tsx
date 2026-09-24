@@ -81,6 +81,7 @@ import {
 } from "@/modules/staff-agent/context";
 import type { MerchantAgent } from "@/modules/staff-agent/types";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
+import { MyPushSubscriptionCard } from "@/modules/push-notifications/MyPushSubscriptionCard";
 
 import { useAppLayoutContext } from "./AppLayout";
 import {
@@ -835,6 +836,11 @@ export default function ManagePage() {
           頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上
           不會發生)或還沒有選定商家時回傳 null。2026-09-23:使用者要求移到頁面最下方。 */}
       <MyLineBindingCard />
+
+      {/* 模組 15 擴充 §7.2:管理員/客服的「手機推播通知」卡片,刻意緊接在 LINE 綁定卡片
+          後面 —— 服務人員端 HomePage 的順序也是「LINE 綁定 → 手機推播」,兩個頁面一致。
+          元件本身依角色判斷是否顯示(不是 admin/agent 時回傳 null)。 */}
+      <MyPushSubscriptionCard />
     </div>
   );
 }

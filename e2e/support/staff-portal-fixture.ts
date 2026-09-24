@@ -166,6 +166,92 @@ export async function setupStaffPortalFixture(): Promise<StaffPortalFixture> {
   };
 }
 
+/**
+ * 模組 15 擴充 §7.4:用管理員身份切換「商家總開關」。
+ * e2e 要驗「商家總開關關閉時,個人開關那一列會灰掉並寫明原因」,而新商家種出來的 4 種事件
+ * 預設全部是關的(seed_default_push_event_settings),所以「關閉」不用特別做,
+ * 「打開」才需要這支 helper。
+ */
+export async function setMerchantPushEventEnabled(
+  fixture: StaffPortalFixture,
+  eventType: string,
+  enabled: boolean,
+): Promise<void> {
+  const client = createFixtureSupabaseClient();
+  const { error: sessionError } = await client.auth.setSession({
+    access_token: fixture.adminSession.access_token,
+    refresh_token: fixture.adminSession.refresh_token,
+  });
+  if (sessionError) throw new Error(`還原管理員 session 失敗:${sessionError.message}`);
+
+  const { error } = await client.rpc("update_push_event_setting", {
+    p_merchant_id: fixture.merchantId,
+    p_event_type: eventType,
+    p_enabled: enabled,
+    p_message_title: "E2E 推播標題",
+    p_message_body: "E2E 推播內文",
+  });
+  if (error) throw new Error(`切換商家推播總開關失敗:${error.message}`);
+}
+
+/**
+ * 模組 15 擴充:清掉這次 e2e 在 push_subscriptions / push_event_subscriptions 留下的列。
+ *
+ * ⚠️ **一定要在 teardownStaffPortalFixture() 之前呼叫**:這兩張表的 RLS 分別是
+ * `user_id = auth.uid()` 與 `private.owns_push_target(...)`,而 owns_push_target 要求
+ * 服務人員 status='active' —— teardown 會把服務人員軟移除,之後本人就再也刪不掉自己的
+ * 事件訂閱列了(會變成永遠清不掉的孤兒,正是 automated-testing SKILL 第五節記錄的那個問題)。
+ */
+export async function cleanupPushFixtureRows(fixture: StaffPortalFixture): Promise<string[]> {
+  const actions: string[] = [];
+  const client = createFixtureSupabaseClient();
+  const { error: sessionError } = await client.auth.setSession({
+    access_token: fixture.staffSession.access_token,
+    refresh_token: fixture.staffSession.refresh_token,
+  });
+  if (sessionError) {
+    return [`警告:無法還原服務人員 session,略過推播資料清理(${sessionError.message})`];
+  }
+
+  // CLAUDE.md 第 5-1 條:刪除前先用相同篩選條件 SELECT 核對到底會刪到什麼。
+  const { data: devices } = await client.from("push_subscriptions").select("id, endpoint");
+  actions.push(`push_subscriptions 準備刪除 ${devices?.length ?? 0} 列(全部是這個 e2e 帳號自己的)`);
+  if (devices && devices.length > 0) {
+    const { error } = await client
+      .from("push_subscriptions")
+      .delete()
+      .in(
+        "id",
+        devices.map((d) => (d as { id: string }).id),
+      );
+    actions.push(
+      error ? `push_subscriptions 刪除失敗:${error.message}` : "push_subscriptions 已刪除",
+    );
+  }
+
+  const { data: events } = await client
+    .from("push_event_subscriptions")
+    .select("id")
+    .eq("merchant_id", fixture.merchantId);
+  actions.push(`push_event_subscriptions 準備刪除 ${events?.length ?? 0} 列`);
+  if (events && events.length > 0) {
+    const { error } = await client
+      .from("push_event_subscriptions")
+      .delete()
+      .in(
+        "id",
+        events.map((e) => (e as { id: string }).id),
+      );
+    actions.push(
+      error
+        ? `push_event_subscriptions 刪除失敗:${error.message}`
+        : "push_event_subscriptions 已刪除",
+    );
+  }
+
+  return actions;
+}
+
 async function injectSession(page: Page, session: Session): Promise<void> {
   const storageKey = getSupabaseAuthStorageKey();
   await page.addInitScript(

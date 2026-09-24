@@ -7,20 +7,27 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const useStaffPushSubscriptionsMock = vi.fn();
-const insertStaffPushSubscriptionMock = vi.fn();
-const deleteStaffPushSubscriptionByEndpointMock = vi.fn();
-const deleteStaffPushSubscriptionByIdMock = vi.fn();
+const usePushSubscriptionsMock = vi.fn();
+const upsertMyPushSubscriptionMock = vi.fn();
+const seedMyPushEventSubscriptionsMock = vi.fn();
+const deletePushSubscriptionByEndpointMock = vi.fn();
+const deletePushSubscriptionByIdMock = vi.fn();
 const detectIosSafariMock = vi.fn();
 const isRunningStandaloneMock = vi.fn();
 
 vi.mock("./api", () => ({
-  useStaffPushSubscriptions: (...args: unknown[]) => useStaffPushSubscriptionsMock(...args),
-  insertStaffPushSubscription: (...args: unknown[]) => insertStaffPushSubscriptionMock(...args),
-  deleteStaffPushSubscriptionByEndpoint: (...args: unknown[]) =>
-    deleteStaffPushSubscriptionByEndpointMock(...args),
-  deleteStaffPushSubscriptionById: (...args: unknown[]) =>
-    deleteStaffPushSubscriptionByIdMock(...args),
+  MY_PUSH_SUBSCRIPTIONS_QUERY_KEY: ["push-notifications-module", "my-push-subscriptions"],
+  pushEventSubscriptionsQueryKey: (...args: unknown[]) => [
+    "push-notifications-module",
+    "my-event-subscriptions",
+    ...args,
+  ],
+  usePushSubscriptions: (...args: unknown[]) => usePushSubscriptionsMock(...args),
+  upsertMyPushSubscription: (...args: unknown[]) => upsertMyPushSubscriptionMock(...args),
+  seedMyPushEventSubscriptions: (...args: unknown[]) => seedMyPushEventSubscriptionsMock(...args),
+  deletePushSubscriptionByEndpoint: (...args: unknown[]) =>
+    deletePushSubscriptionByEndpointMock(...args),
+  deletePushSubscriptionById: (...args: unknown[]) => deletePushSubscriptionByIdMock(...args),
 }));
 
 vi.mock("@/components/InstallPwaHint", () => ({
@@ -36,24 +43,24 @@ import {
 
 function Probe({
   merchantId,
-  staffId,
+  targetId,
   onResult,
 }: {
   merchantId: string;
-  staffId: string;
+  targetId: string;
   onResult: (result: UsePushSubscriptionResult) => void;
 }) {
-  const result = usePushSubscription(merchantId, staffId);
+  const result = usePushSubscription(merchantId, "staff", targetId);
   onResult(result);
   return null;
 }
 
-function renderProbe(merchantId = "merchant-1", staffId = "staff-1") {
+function renderProbe(merchantId = "merchant-1", targetId = "staff-1") {
   const queryClient = new QueryClient();
   let captured: UsePushSubscriptionResult | undefined;
   render(
     <QueryClientProvider client={queryClient}>
-      <Probe merchantId={merchantId} staffId={staffId} onResult={(r) => (captured = r)} />
+      <Probe merchantId={merchantId} targetId={targetId} onResult={(r) => (captured = r)} />
     </QueryClientProvider>,
   );
   return () => captured as UsePushSubscriptionResult;
@@ -66,10 +73,11 @@ describe("usePushSubscription", () => {
   let unsubscribeMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    useStaffPushSubscriptionsMock.mockReset().mockReturnValue({ data: [], isLoading: false });
-    insertStaffPushSubscriptionMock.mockReset();
-    deleteStaffPushSubscriptionByEndpointMock.mockReset();
-    deleteStaffPushSubscriptionByIdMock.mockReset();
+    usePushSubscriptionsMock.mockReset().mockReturnValue({ data: [], isLoading: false });
+    upsertMyPushSubscriptionMock.mockReset();
+    seedMyPushEventSubscriptionsMock.mockReset().mockResolvedValue(undefined);
+    deletePushSubscriptionByEndpointMock.mockReset();
+    deletePushSubscriptionByIdMock.mockReset();
     detectIosSafariMock.mockReset().mockReturnValue(false);
     isRunningStandaloneMock.mockReset().mockReturnValue(false);
 
@@ -122,8 +130,8 @@ describe("usePushSubscription", () => {
     expect(getResult().isSupported).toBe(true);
   });
 
-  it("subscribe():使用者同意後,呼叫 pushManager.subscribe 並把結果 insert 進資料庫,參數正確", async () => {
-    insertStaffPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
+  it("subscribe():使用者同意後,呼叫 pushManager.subscribe 並把結果寫進資料庫,參數正確", async () => {
+    upsertMyPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
     const getResult = renderProbe("merchant-1", "staff-1");
     await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
 
@@ -133,14 +141,31 @@ describe("usePushSubscription", () => {
 
     expect(requestPermissionMock).toHaveBeenCalledTimes(1);
     expect(subscribeMock).toHaveBeenCalledWith(expect.objectContaining({ userVisibleOnly: true }));
-    expect(insertStaffPushSubscriptionMock).toHaveBeenCalledWith({
-      merchantId: "merchant-1",
-      staffId: "staff-1",
+    // §4.1(核心安全規則):寫入參數裡**沒有、也不可以有** user_id / target_id ——
+    // 裝置的主人一律由資料庫從 auth.uid() 自己解析。
+    expect(upsertMyPushSubscriptionMock).toHaveBeenCalledWith({
       endpoint: "https://fcm.example/new-endpoint",
       p256dhKey: "p256dh-value",
       authKey: "auth-value",
       userAgent: "test-agent",
     });
+  });
+
+  it("subscribe()(裁決 Q7):訂閱成功後把四個事件開關一次種成全開", async () => {
+    upsertMyPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
+    const getResult = renderProbe("merchant-1", "staff-1");
+    await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
+
+    await act(async () => {
+      await getResult().subscribe();
+    });
+
+    expect(seedMyPushEventSubscriptionsMock).toHaveBeenCalledWith(
+      "merchant-1",
+      "staff",
+      "staff-1",
+      ["booking_created", "booking_cancelled", "booking_updated", "booking_reminder_next_day"],
+    );
   });
 
   it("subscribe():使用者拒絕權限時,不呼叫 pushManager.subscribe、不寫入資料庫", async () => {
@@ -153,7 +178,7 @@ describe("usePushSubscription", () => {
     });
 
     expect(subscribeMock).not.toHaveBeenCalled();
-    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+    expect(upsertMyPushSubscriptionMock).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------
@@ -171,7 +196,7 @@ describe("usePushSubscription", () => {
     );
     // 連權限視窗都不該跳出來——根本不可能成功,不要浪費使用者一次授權決定。
     expect(requestPermissionMock).not.toHaveBeenCalled();
-    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+    expect(upsertMyPushSubscriptionMock).not.toHaveBeenCalled();
   });
 
   it("subscribe():瀏覽器不支援推播時,丟出看得懂的中文錯誤", async () => {
@@ -186,33 +211,34 @@ describe("usePushSubscription", () => {
     );
   });
 
-  it("subscribe():沒有商家 id / 沒有服務人員 id 時,各自丟出對應的中文錯誤", async () => {
+  it("subscribe():沒有商家 id / 沒有身份 id 時,各自丟出對應的中文錯誤", async () => {
     const getWithoutMerchant = renderProbe("", "staff-1");
     await waitFor(() => expect(getWithoutMerchant().isLoadingSubscriptions).toBe(false));
     await expect(getWithoutMerchant().subscribe()).rejects.toThrow(
       PUSH_SUBSCRIBE_BLOCKED_MESSAGES.noMerchant,
     );
 
-    const getWithoutStaff = renderProbe("merchant-1", "");
-    await waitFor(() => expect(getWithoutStaff().isLoadingSubscriptions).toBe(false));
-    await expect(getWithoutStaff().subscribe()).rejects.toThrow(
-      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.noStaff,
+    const getWithoutTarget = renderProbe("merchant-1", "");
+    await waitFor(() => expect(getWithoutTarget().isLoadingSubscriptions).toBe(false));
+    await expect(getWithoutTarget().subscribe()).rejects.toThrow(
+      PUSH_SUBSCRIBE_BLOCKED_MESSAGES.noTarget,
     );
 
-    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+    expect(upsertMyPushSubscriptionMock).not.toHaveBeenCalled();
   });
 
-  it("subscribe():真的訂閱成功才回傳 true(呼叫端靠這個值決定要不要報喜)", async () => {
-    insertStaffPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
+  it("subscribe():真的訂閱成功才回傳 subscribed=true(呼叫端靠這個值決定要不要報喜),並帶回這台裝置的 endpoint", async () => {
+    upsertMyPushSubscriptionMock.mockResolvedValue({ id: "sub-1" });
     const getResult = renderProbe();
     await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
 
-    let returned: boolean | undefined;
+    let returned: { subscribed: boolean; endpoint: string | null } | undefined;
     await act(async () => {
       returned = await getResult().subscribe();
     });
 
-    expect(returned).toBe(true);
+    // §7.5 第 1 點:endpoint 要帶回去,測試推播才能「只測剛剛這一台」。
+    expect(returned).toEqual({ subscribed: true, endpoint: "https://fcm.example/new-endpoint" });
   });
 
   it("subscribe():使用者沒給權限時回傳 false——即使這個瀏覽器「曾經」被允許過通知,也不能誤報成功", async () => {
@@ -224,13 +250,13 @@ describe("usePushSubscription", () => {
     const getResult = renderProbe();
     await waitFor(() => expect(getResult().isLoadingSubscriptions).toBe(false));
 
-    let returned: boolean | undefined;
+    let returned: { subscribed: boolean; endpoint: string | null } | undefined;
     await act(async () => {
       returned = await getResult().subscribe();
     });
 
-    expect(returned).toBe(false);
-    expect(insertStaffPushSubscriptionMock).not.toHaveBeenCalled();
+    expect(returned?.subscribed).toBe(false);
+    expect(upsertMyPushSubscriptionMock).not.toHaveBeenCalled();
   });
 
   it("unsubscribeThisDevice():有現有訂閱時,呼叫瀏覽器端 unsubscribe() + 依 endpoint 刪除資料庫那一筆", async () => {
@@ -246,7 +272,7 @@ describe("usePushSubscription", () => {
     });
 
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
-    expect(deleteStaffPushSubscriptionByEndpointMock).toHaveBeenCalledWith(
+    expect(deletePushSubscriptionByEndpointMock).toHaveBeenCalledWith(
       "https://fcm.example/existing-endpoint",
     );
   });
@@ -260,7 +286,7 @@ describe("usePushSubscription", () => {
       await getResult().unsubscribeThisDevice();
     });
 
-    expect(deleteStaffPushSubscriptionByEndpointMock).not.toHaveBeenCalled();
+    expect(deletePushSubscriptionByEndpointMock).not.toHaveBeenCalled();
   });
 
   it("removeDevice():依 id 刪除清單裡任一筆", async () => {
@@ -269,12 +295,11 @@ describe("usePushSubscription", () => {
 
     await act(async () => {
       // removeDevice 內部只用得到 id/endpoint 兩個欄位,測試只填這兩個就夠,其餘欄位補假值
-      // 滿足型別(StaffPushSubscription 是完整資料表列型別)。
+      // 滿足型別(PushSubscription 是完整資料表列型別)。
       await getResult().removeDevice({
         id: "sub-2",
         endpoint: "https://fcm.example/other",
-        merchant_id: "merchant-1",
-        staff_id: "staff-1",
+        user_id: "user-1",
         p256dh_key: "p",
         auth_key: "a",
         user_agent: null,
@@ -283,7 +308,7 @@ describe("usePushSubscription", () => {
       });
     });
 
-    expect(deleteStaffPushSubscriptionByIdMock).toHaveBeenCalledWith("sub-2");
+    expect(deletePushSubscriptionByIdMock).toHaveBeenCalledWith("sub-2");
   });
 
   it("isIosBlocked:iOS Safari 且非獨立視窗模式時為 true(第六節規則 3)", async () => {
