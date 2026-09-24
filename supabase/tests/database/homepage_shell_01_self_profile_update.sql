@@ -144,9 +144,20 @@ select pg_temp.test_clear_auth();
 
 -- ---------------------------------------------------------------------------
 -- ③ 權限邊界:anon 不能呼叫這兩支函式(比照既有 RPC 的 revoke 檢查方式)。
+--
+-- ⚠️ 2026-09-24 修正(主腦跑 pgTAP 時抓到,整個測試套件因此 FAIL):這裡原本寫成
+--    `(uuid, text, text, text, text)`(5 個參數),那是 20260924040600 開發過程中曾經存在、
+--    但**從未上線**的草稿簽章(含 p_contact_email)。使用者同日裁決三種「人」的角色只留一個
+--    Email,那個草稿被改成只加 phone,函式最終是 **4 個參數** (uuid, text, text, text)。
+--
+--    為什麼這個錯誤特別難查:`has_function_privilege()` 在函式不存在時**不是回傳 false,
+--    而是直接 raise**(`function ... does not exist`),所以整支測試腳本會在這裡中斷、
+--    後面的斷言完全不執行。pgTAP 的回報是「planned 12 but ran 10 / Failed: 0」——
+--    看起來像「少跑兩條」而不是「有東西壞了」,很容易被誤判成 plan() 數字寫錯而把 12 改成 10,
+--    那樣就會把兩條真正的權限邊界斷言默默丟掉。**不要那樣修。**
 -- ---------------------------------------------------------------------------
 select ok(
-  not has_function_privilege('anon', 'public.update_my_admin_profile(uuid, text, text, text, text)', 'execute'),
+  not has_function_privilege('anon', 'public.update_my_admin_profile(uuid, text, text, text)', 'execute'),
   'anon 角色不能執行 update_my_admin_profile'
 );
 
