@@ -1,5 +1,5 @@
-// 對應模組 8(薪資與帳務)規格書 §4.4:師傅報表頁(新路由 /app/staff-report)。服務人員選擇 +
-// 年月選擇器,依選中服務人員的計酬類型顯示不同版面(按件計酬:訂單明細+總計;月薪制:扣款明細+
+// 對應模組 8(薪資與帳務)規格書 §4.4:服務人員報表頁(原名「師傅報表」,2026-09-24 改名;路由 /app/staff-report 不變)。服務人員選擇 +
+// 年月選擇器,依選中服務人員的計酬類型顯示不同版面(抽成制:訂單明細+總計;月薪制:扣款明細+
 // 淨額)+ CSV 匯出按鈕。
 
 import { Fragment, useEffect, useState } from "react";
@@ -114,7 +114,7 @@ export function PieceRateStaffReport({
     const periodLabel = dateRange
       ? `${dateRange.startDate}_${dateRange.endDate}`
       : `${year}-${String(month).padStart(2, "0")}`;
-    downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
+    downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
@@ -190,7 +190,7 @@ export function PieceRateStaffReport({
           {!showSummaryCards ? (
             /* 2026-09-24 稽核修正(問題 4):金額顯示統一走 formatAmount,不要一邊用
                formatAmount(摘要卡片)一邊直接印原始值(這裡跟下面的明細列),
-               否則同一個數字在同一頁會長得不一樣,師傅會懷疑是不是被扣了錢。 */
+               否則同一個數字在同一頁會長得不一樣,服務人員會懷疑是不是被扣了錢。 */
             <CardDescription>
               總計 {summary.total_orders} 筆訂單,抽成合計{" "}
               {formatAmount(summary.total_commission_amount)}
@@ -223,7 +223,7 @@ export function PieceRateStaffReport({
                         <TableCell>{d.customer_name}</TableCell>
                         {/* 2026-09-24 稽核修正(問題 4):明細列原本直接印原始值(例如 99.5),
                             摘要卡片卻走 formatAmount(四捨五入成 $100),同一頁兩種格式,
-                            師傅拿計算機加明細會跟卡片對不上,產生「是不是被扣了」的信任問題。
+                            服務人員拿計算機加明細會跟卡片對不上,產生「是不是被扣了」的信任問題。
                             這裡改成一律走同一支 formatAmount,格式統一。 */}
                         <TableCell className="text-right">
                           {formatAmount(d.commission_base_amount)}
@@ -335,7 +335,7 @@ export function MonthlySalaryStaffReport({
     const periodLabel = dateRange
       ? `${dateRange.startDate}_${dateRange.endDate}`
       : `${year}-${String(month).padStart(2, "0")}`;
-    downloadCsv(`師傅報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
+    downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
   if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
@@ -481,7 +481,7 @@ function StaffReportPageInner() {
         </Link>
       </div>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">師傅報表</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員報表</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           「{merchant!.name}」個別服務人員的抽成/薪資報表
         </p>

@@ -145,11 +145,39 @@ export function shouldShowSalaryUnavailableNotice(salaryApplicable: boolean | un
 /** 明細列 / CSV 用得到的欄位。 */
 export type StaffBreakdownRow = MerchantBillingSummary["per_staff_breakdown"][number];
 
+// =========================================================================
+// 計酬類型的顯示名稱(2026-09-24 使用者要求:「按件計酬」全面改稱「抽成制」)
+// =========================================================================
+
+/**
+ * 計酬類型在畫面與 CSV 上的中文名稱。
+ *
+ * 資料庫存的是英文 'monthly_salary' / 'piece_rate',中文字串只存在前端顯示層,所以改名只動這裡。
+ * 用 Record<compensation_type, string> 釘住 key:哪天資料庫多一種計酬類型,這裡沒補就會是型別錯誤,
+ * 不會默默顯示 undefined。
+ */
+export const COMPENSATION_TYPE_LABELS: Record<StaffBreakdownRow["compensation_type"], string> = {
+  monthly_salary: "月薪制",
+  piece_rate: "抽成制",
+};
+
+/**
+ * 明細表「計酬類型」欄與 CSV 同名欄共用的文字。
+ *
+ * 抽出來的理由跟下面 commissionCellText / commissionCsvValue 一模一樣:改名前畫面與 CSV 各寫一次
+ * `=== "monthly_salary" ? "月薪制" : "按件計酬"`,同一個判斷寫兩份,改名就得改兩處,漏一處就會出現
+ * 「畫面叫抽成制、匯出檔叫按件計酬」——沒有錯誤訊息、只有對帳的人看得出不對。現在兩條路徑在結構上
+ * 只能從這一支拿字串,想只改一邊得先把函式拆開,不可能「順手」發生。
+ */
+export function compensationTypeText(row: Pick<StaffBreakdownRow, "compensation_type">): string {
+  return COMPENSATION_TYPE_LABELS[row.compensation_type];
+}
+
 /**
  * 明細表「抽成金額 / 月薪淨額」那一欄,月薪制那一半要顯示的文字。
  *
  * 原本寫 `row.net_pay ?? 0` → 區間不是完整月份時會顯示「0 元(淨額)」,這正是使用者裁決要避免的
- * 誤導。按件計酬的抽成不受這個旗標影響,由呼叫端自己處理,不走這支函式。
+ * 誤導。抽成制的抽成不受這個旗標影響,由呼叫端自己處理,不走這支函式。
  */
 export function monthlySalaryCellText(
   salaryApplicable: boolean | undefined,
@@ -189,7 +217,7 @@ export function salaryCsvValue(
  * CSV「月薪淨額」欄的一格。
  *
  * 月薪算不出來時寫進說明文字,**不留空白格**——CSV 的空白格在 Excel 裡看起來跟 0 很像,會重演
- * 「商家以為這段期間沒有月薪成本」這個誤會。按件計酬的人本來就沒有月薪淨額,維持原本的空字串。
+ * 「商家以為這段期間沒有月薪成本」這個誤會。抽成制的人本來就沒有月薪淨額,維持原本的空字串。
  * 判斷條件跟畫面表格那一欄走同一支 resolveSalaryDisplay,讓畫面跟匯出檔永遠一致。
  */
 export function monthlySalaryCsvCell(
@@ -234,7 +262,7 @@ export function commissionCsvValue(row: Pick<StaffBreakdownRow, "commission_amou
 }
 
 /**
- * 明細表「抽成金額 / 月薪淨額」欄,按件計酬那一半要顯示的完整文字。
+ * 明細表「抽成金額 / 月薪淨額」欄,抽成制那一半要顯示的完整文字。
  *
  * 格式 `X 元(抽成)` 跟改動前一模一樣(這次只換「X 怎麼算出來」,沒有動畫面用字)。
  * 數字刻意透過 commissionCsvValue() 取得,而不是自己再寫一次 `?? COMMISSION_FALLBACK`:

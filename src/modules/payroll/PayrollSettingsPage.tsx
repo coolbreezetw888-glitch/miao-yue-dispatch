@@ -1,10 +1,10 @@
 // 對應模組 8(薪資與帳務)規格書 §4.1:抽成與薪資設定頁(新路由 /app/payroll-settings)。
-// 三個區塊:商家層級設定(抽成基準/月折算天數)、按件計酬服務人員清單(服務項目層級抽成設定)、
+// 三個區塊:商家層級設定(抽成基準/月折算天數)、抽成制服務人員清單(服務項目層級抽成設定)、
 // 月薪制服務人員清單(月薪/月休天數參考)。每個區塊都附帶前端純函式的即時預覽計算機
 // (previewCalculators.ts),純粹輔助理解,不影響任何實際計算——真正的計算永遠以資料庫
 // 函式(compute_booking_commission/get_staff_monthly_payroll_summary)為準。
 //
-// 商家端三項調整規格書 §二 2.8.1/2.8.2:「商家預設抽成比例」欄位已經拿掉,按件計酬服務人員的
+// 商家端三項調整規格書 §二 2.8.1/2.8.2:「商家預設抽成比例」欄位已經拿掉,抽成制服務人員的
 // 抽成改成逐一服務項目分開設定(StaffServiceCommissionDialog),取代原本單一比例的
 // StaffCommissionRateDialog。可接服務開關直接複用模組 3 既有的 addStaffServiceItem/
 // removeStaffServiceItem/fetchStaffServiceItemIds(src/modules/staff-agent/api.ts,決策4——
@@ -112,7 +112,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>商家層級設定</CardTitle>
         <CardDescription>
-          抽成計算基準,套用到所有按件計酬服務人員;每個人實際抽成多少,到下方「按件計酬服務人員」
+          抽成計算基準,套用到所有抽成制服務人員;每個人實際抽成多少,到下方「抽成制服務人員」
           逐一設定。
         </CardDescription>
       </CardHeader>
@@ -122,7 +122,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
         ) : (
           <>
             <div>
-              <Label>抽成基準</Label>
+              <Label>【抽成制】抽成基準</Label>
               {/* 2026-09-24 稽核修正(問題 3)的防禦性套用:這是 RadioGroup 不是 Select,
                   Radix RadioGroup 內部用的是隱藏的 <input type="radio">,**沒有**那個會補發
                   空字串的隱藏原生 <select>,所以嚴格說沒有幽靈空值事件的問題。
@@ -160,7 +160,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
             </div>
 
             <div>
-              <Label>月折算天數</Label>
+              <Label>【月薪制】月折算天數</Label>
               {/* §十 10.1:這次拿掉商家手動填寫的固定天數,改成系統依「當月實際天數」自動計算
                   (28~31 天),不需要另外設定,也不再是這裡可以編輯的欄位。 */}
               <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -181,7 +181,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
 }
 
 // =========================================================================
-// 區塊二:按件計酬服務人員清單(服務項目層級抽成設定)。
+// 區塊二:抽成制服務人員清單(服務項目層級抽成設定)。
 // =========================================================================
 
 /** 單一服務項目那一列:開關(可接服務)+ 開關=開時顯示模式下拉選單/數值輸入框(決策6:
@@ -511,7 +511,7 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>按件計酬服務人員</CardTitle>
+        <CardTitle>抽成制服務人員</CardTitle>
         <CardDescription>
           逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元
         </CardDescription>
@@ -520,7 +520,7 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
         {isLoading ? (
           <p className="text-sm text-muted-foreground">載入中⋯</p>
         ) : pieceRateStaff.length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前沒有按件計酬的服務人員。</p>
+          <p className="text-sm text-muted-foreground">目前沒有抽成制的服務人員。</p>
         ) : (
           <ul className="space-y-2">
             {pieceRateStaff.map((staff) => (
@@ -679,16 +679,16 @@ function StaffSalarySettingsDialog({
                 onChange={(e) => setQuotaDays(e.target.value)}
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                只是顯示在師傅報表旁邊當作參考,不會牽動請假扣款計算(假別扣款請到「假別設定」頁面
-                個別調整)。
+                只是顯示在服務人員報表旁邊當作參考,不會牽動請假扣款計算(假別扣款請到「月薪人員假別設定」
+                頁面個別調整)。
               </p>
             </div>
 
             {!Number.isNaN(numericBaseSalary) ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                依本月實際天數({payDaysPerMonth} 天)換算,一天薪水約{" "}
-                <strong>{dayRate.toFixed(2)}</strong> 元(假別扣款「扣一天全薪」模式會用到這個數字;
-                每個月的實際天數不同,系統會依請假當月自動換算,這裡只是用本月天數預覽試算)。
+                試算:以本月 {payDaysPerMonth} 天換算,一天薪水約{" "}
+                <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」;
+                天數由系統依請假當月自動換算,不用另外設定(詳見上方「【月薪制】月折算天數」)。
               </p>
             ) : null}
 
@@ -810,7 +810,7 @@ function PayrollSettingsPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">抽成與薪資設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的抽成計算基準、按件計酬服務人員的服務項目抽成、月薪制服務人員薪資
+          「{merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪制服務人員薪資
           設定。
         </p>
       </div>

@@ -352,6 +352,26 @@ interface FunctionCardDef {
   visible: boolean;
 }
 
+/** ⚠️ 2026-09-24 使用者指示:「排班一覽這個功能可以先拔掉(隱藏起來),對應的權限開關也要跟著
+ * 拔掉(隱藏起來)。」——關鍵字是**隱藏**,不是刪除,所以做成一個開關常數,不是把程式碼刪掉。
+ *
+ * 這是刻意隱藏,不是遺漏。**要還原就把下面這一行改成 false**,「排班一覽」卡片就會照原本的
+ * scheduling 權限判斷(showSchedulingCard)重新出現,不需要改任何其他地方。
+ *
+ * 一起被隱藏、還原時要一起改回來的地方只有另外一處:
+ *   ・src/modules/staff-agent/types.ts 的 AGENT_PERMISSION_SECTIONS 裡 key: "scheduling" 那一項
+ *     的 hidden 旗標(客服權限設定頁的開關)。
+ *
+ * 刻意**沒有**被動到、所以還原時不用處理的東西:
+ *   ・路由 /app/scheduling(src/App.tsx)、頁面 src/modules/scheduling/SchedulingOverviewPage.tsx、
+ *     RequireSchedulingAccess.tsx、describeScheduleCell 與其測試 —— 全部保留可用。
+ *     ⚠️ 路由保留是必要的:src/routes/appLayoutLogic.test.ts 有一條結構性測試會直接讀 App.tsx,
+ *        要求每一條 /app/* 路由都有對應的頁首標題,所以 appLayoutLogic.ts 裡
+ *        `{ pattern: "/app/scheduling", title: "排班一覽" }` 那一列也必須留著。
+ *   ・資料庫裡既有的 scheduling 權限授權紀錄 —— 一列都不動,入口不顯示就沒有副作用,
+ *     還原之後原本開通過的客服依然是開通狀態,不用重新授權。 */
+const SCHEDULING_FEATURE_HIDDEN = true;
+
 export default function ManagePage() {
   const navigate = useNavigate();
   const { data: merchantRole } = useCurrentMerchantRole();
@@ -474,7 +494,7 @@ export default function ManagePage() {
   const { data: canViewScheduling } = useAgentPermission("scheduling");
   const showSchedulingCard = isAdmin || canViewScheduling === true;
   // 模組 8(薪資與帳務)§4.6:commission_settings/staff_report 兩把獨立鑰匙,分別決定
-  // 「抽成與薪資設定」「師傅報表」兩張卡片的顯示權限。「店家帳務報表」(billing)2026-09-23
+  // 「抽成與薪資設定」「服務人員報表」兩張卡片的顯示權限。「店家帳務報表」(billing)2026-09-23
   // 已升級成底部分頁籤(見 AppLayout.tsx),billing 這個 section_key 的判斷邏輯搬到
   // RequireBillingAccess.tsx,不再是這個頁面的卡片。
   const { data: canManageCommissionSettings } = useAgentPermission("commission_settings");
@@ -521,7 +541,7 @@ export default function ManagePage() {
       key: "staff",
       to: "/app/staff",
       label: "服務人員",
-      description: "管理師傅/服務人員名錄與可承接的服務項目",
+      description: "管理服務人員名錄與可承接的服務項目",
       icon: Users,
       visible: showStaffCard,
     },
@@ -568,7 +588,9 @@ export default function ManagePage() {
     {
       key: "leave-types",
       to: "/app/leave-types",
-      label: "假別設定",
+      // 2026-09-24 使用者指定改名:「假別設定」→「月薪人員假別設定」。要跟 appLayoutLogic.ts 的
+      // 頁首標題、LeaveTypesPage.tsx 的 <h1> 三處一致。
+      label: "月薪人員假別設定",
       description: "管理商家自訂的請假分類清單",
       icon: CalendarOff,
       visible: showTeamLeaveCards,
@@ -587,7 +609,10 @@ export default function ManagePage() {
       label: "排班一覽",
       description: "跨服務人員的每週時段/例外/請假總覽",
       icon: CalendarRange,
-      visible: showSchedulingCard,
+      // ⚠️ 刻意隱藏(2026-09-24 使用者指示),不是遺漏、也不是權限判斷壞掉:
+      //    SCHEDULING_FEATURE_HIDDEN 改成 false 就會還原成原本的 showSchedulingCard 判斷。
+      //    完整的還原說明見這個檔案上方 SCHEDULING_FEATURE_HIDDEN 的註解。
+      visible: !SCHEDULING_FEATURE_HIDDEN && showSchedulingCard,
     },
     {
       key: "payroll-settings",
@@ -600,7 +625,9 @@ export default function ManagePage() {
     {
       key: "staff-report",
       to: "/app/staff-report",
-      label: "師傅報表",
+      // 2026-09-24 使用者指定改名:「師傅報表」→「服務人員報表」。要跟 appLayoutLogic.ts 的
+      // /app/staff-report 頁首標題、StaffReportPage.tsx 自己的 <h1> 保持完全一致。
+      label: "服務人員報表",
       description: "查看個別服務人員的抽成或薪資明細",
       icon: FileBarChart,
       visible: showStaffReportCard,

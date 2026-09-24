@@ -21,7 +21,7 @@ export const INDUSTRY_TYPE_LABELS: Record<IndustryType, string> = {
 };
 
 export const INDUSTRY_TYPE_DESCRIPTIONS: Record<IndustryType, string> = {
-  on_site_dispatch: "師傅到客戶指定地點提供服務,例如冷氣、水電、防水工程。",
+  on_site_dispatch: "服務人員到客戶指定地點提供服務,例如冷氣、水電、防水工程。",
   in_store_beauty: "客戶到店消費,例如美髮美容、按摩整骨、洗車美容等。",
 };
 

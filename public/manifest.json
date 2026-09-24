@@ -1,7 +1,7 @@
 {
   "name": "秒約 Miao Yue",
   "short_name": "秒約",
-  "description": "客戶預約、師傅排程、帳務結算一次搞定",
+  "description": "客戶預約、服務人員排程、帳務結算一次搞定",
   "start_url": "/app",
   "scope": "/app",
   "display": "standalone",

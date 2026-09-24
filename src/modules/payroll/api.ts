@@ -277,7 +277,7 @@ export async function upsertLeaveTypeDeductionRule(
 }
 
 // =========================================================================
-// §3.9/§5.4:師傅報表(按件計酬)。
+// §3.9/§5.4:服務人員報表(抽成制)。
 // =========================================================================
 export async function fetchStaffCommissionSummary(
   staffId: string,
@@ -293,7 +293,7 @@ export async function fetchStaffCommissionSummary(
   return data as unknown as StaffCommissionSummary;
 }
 
-/** §5.4 對外介面:某位按件計酬服務人員某年月的抽成明細+總計,供 4.4 師傅報表頁使用。 */
+/** §5.4 對外介面:某位抽成制服務人員某年月的抽成明細+總計,供 4.4 服務人員報表頁使用。 */
 export function useStaffCommissionSummary(
   staffId: string | null | undefined,
   year: number | null | undefined,
@@ -307,7 +307,7 @@ export function useStaffCommissionSummary(
 }
 
 // =========================================================================
-// §3.10/§5.4:師傅報表(月薪制,規則 2.8)。
+// §3.10/§5.4:服務人員報表(月薪制,規則 2.8)。
 // =========================================================================
 export async function fetchStaffMonthlyPayrollSummary(
   staffId: string,
@@ -323,7 +323,7 @@ export async function fetchStaffMonthlyPayrollSummary(
   return data as unknown as StaffMonthlyPayrollSummary;
 }
 
-/** §5.4 對外介面:某位月薪制服務人員某年月的請假扣款明細與淨額,供 4.4 師傅報表頁使用。 */
+/** §5.4 對外介面:某位月薪制服務人員某年月的請假扣款明細與淨額,供 4.4 服務人員報表頁使用。 */
 export function useStaffMonthlyPayrollSummary(
   staffId: string | null | undefined,
   year: number | null | undefined,
@@ -444,7 +444,7 @@ export async function fetchStaffCommissionSummaryByRange(
   return data as unknown as StaffCommissionSummary;
 }
 
-/** §3.6/§15.2 對外介面:某位按件計酬服務人員某段區間(最長一年)的抽成明細+總計。 */
+/** §3.6/§15.2 對外介面:某位抽成制服務人員某段區間(最長一年)的抽成明細+總計。 */
 export function useStaffCommissionSummaryByRange(
   staffId: string | null | undefined,
   startDate: string | null | undefined,

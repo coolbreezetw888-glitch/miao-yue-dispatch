@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeScheduleCell,
+  filterMonthlySalaryStaff,
   getLeaveRecordDisplayStatus,
+  MONTHLY_SALARY_COMPENSATION_TYPE,
   type ScheduleOverviewDay,
 } from "./types";
 
@@ -243,5 +245,56 @@ describe("describeScheduleCell(規格書 §4.4 第 2 點顯示優先權)", () =>
       tone: "normal",
       label: "09:00-18:00・1 筆預約・部分時段臨時關閉",
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4.3 請假紀錄管理頁:服務人員下拉選單只列月薪制的人(2026-09-24 使用者指定)。
+// 這幾條測試釘住的是「客服在請假紀錄頁的下拉選單裡看得到誰」——寫錯的後果是某位月薪制服務人員
+// 從選單裡消失、永遠無法被登記請假,而畫面上完全看不出異常,所以一定要有測試。
+// ---------------------------------------------------------------------------
+describe("filterMonthlySalaryStaff", () => {
+  const monthly = { id: "s1", name: "月薪阿明", compensation_type: "monthly_salary" };
+  const pieceRate = { id: "s2", name: "抽成阿華", compensation_type: "piece_rate" };
+
+  it("只留下月薪制的服務人員", () => {
+    expect(filterMonthlySalaryStaff([monthly, pieceRate])).toEqual([monthly]);
+  });
+
+  it("抽成制(piece_rate)的服務人員不會出現", () => {
+    const result = filterMonthlySalaryStaff([monthly, pieceRate]);
+    expect(result.some((s) => s.id === pieceRate.id)).toBe(false);
+  });
+
+  it("全部都是抽成制時回傳空陣列(呼叫端會顯示「目前沒有月薪制的服務人員」)", () => {
+    expect(filterMonthlySalaryStaff([pieceRate, { ...pieceRate, id: "s3" }])).toEqual([]);
+  });
+
+  it("清單本身是空陣列時回傳空陣列", () => {
+    expect(filterMonthlySalaryStaff([])).toEqual([]);
+  });
+
+  it("react-query 還沒拿到資料(null/undefined)時回傳空陣列,不會炸掉", () => {
+    expect(filterMonthlySalaryStaff(null)).toEqual([]);
+    expect(filterMonthlySalaryStaff(undefined)).toEqual([]);
+  });
+
+  it("compensation_type 是 null 或其他未知值的資料一律排除(寧可少列,不要讓客服選到註定失敗的人)", () => {
+    const unknown = { id: "s4", name: "未知阿美", compensation_type: null };
+    const legacy = { id: "s5", name: "舊資料阿龍", compensation_type: "something_else" };
+    expect(filterMonthlySalaryStaff([monthly, unknown, legacy])).toEqual([monthly]);
+  });
+
+  it("維持原本的順序(呼叫端依姓名排序過,過濾不應該重新排列)", () => {
+    const a = { id: "a", name: "A", compensation_type: "monthly_salary" };
+    const b = { id: "b", name: "B", compensation_type: "monthly_salary" };
+    expect(filterMonthlySalaryStaff([a, pieceRate, b]).map((s) => s.id)).toEqual(["a", "b"]);
+  });
+
+  it("比較的是資料庫的英文值,不是畫面上的中文顯示文字", () => {
+    expect(MONTHLY_SALARY_COMPENSATION_TYPE).toBe("monthly_salary");
+    expect(
+      filterMonthlySalaryStaff([{ id: "s6", name: "假的", compensation_type: "月薪制" }]),
+    ).toEqual([]);
   });
 });

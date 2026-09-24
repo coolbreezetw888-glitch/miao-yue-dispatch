@@ -59,6 +59,7 @@ import {
 } from "./context";
 import { RequireTeamLeaveAccess } from "./RequireTeamLeaveAccess";
 import {
+  filterMonthlySalaryStaff,
   getLeaveRecordDisplayStatus,
   LEAVE_RECORD_DISPLAY_STATUS_LABELS,
   type StaffLeaveConflictBooking,
@@ -93,14 +94,9 @@ function CreateLeaveDialog({
   const [confirmDespiteConflicts, setConfirmDespiteConflicts] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const monthlySalaryStaff = useMemo(
-    () => (staffList ?? []).filter((s) => s.compensation_type === "monthly_salary"),
-    [staffList],
-  );
-  const pieceRateStaff = useMemo(
-    () => (staffList ?? []).filter((s) => s.compensation_type !== "monthly_salary"),
-    [staffList],
-  );
+  // 2026-09-24 使用者指定:下拉選單只列月薪制的人,抽成制的人完全不出現(原本是列出來但設成
+  // disabled + 加註記)。過濾規則抽成純函式 filterMonthlySalaryStaff(見 types.ts 的說明)。
+  const monthlySalaryStaff = useMemo(() => filterMonthlySalaryStaff(staffList), [staffList]);
 
   useEffect(() => {
     if (open) {
@@ -213,13 +209,16 @@ function CreateLeaveDialog({
                     </SelectItem>
                   ))
                 )}
-                {pieceRateStaff.map((s) => (
-                  <SelectItem key={s.id} value={s.id} disabled>
-                    {s.name}(按件計酬,無法登記請假)
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
+            {/* 2026-09-24 主腦裁決:選單裡抽成制的人是「整個不出現」(不是 disabled 灰掉),管理員要幫
+                某位抽成制的人登記時會找不到那個人、卻不知道原因。刻意不把 disabled 選項加回來(選單
+                會變長,而且抽成制本來就永遠不能登記),改在這裡用一行小字把因果講清楚。樣式沿用
+                PayrollSettingsPage.tsx 等頁面欄位底下說明文字的既有寫法(mt-1 text-xs text-muted-foreground)。 */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              這個選單只會列出月薪制的服務人員。找不到某位服務人員,表示他的計酬類型是抽成制——抽成制
+              不需要登記請假,他不接單的時段由他本人在服務人員端的「休假設定」自己設定。
+            </p>
           </div>
 
           <div>
@@ -231,7 +230,7 @@ function CreateLeaveDialog({
               <SelectContent>
                 {(leaveTypes ?? []).length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    目前沒有可用的假別,請先到假別設定新增
+                    目前沒有可用的假別,請先到「月薪人員假別設定」新增
                   </div>
                 ) : (
                   (leaveTypes ?? []).map((lt) => (
@@ -326,6 +325,9 @@ function LeaveRecordsPageInner() {
   const queryClient = useQueryClient();
 
   const { data: staffList } = useMerchantStaffList(merchantId);
+  // 2026-09-24 使用者指定:上方篩選的服務人員下拉選單只列月薪制的人(抽成制的人根本不會有請假
+  // 紀錄,列出來只是讓客服多看一堆永遠篩不出東西的選項)。同一條規則跟登記表單共用同一個純函式。
+  const monthlySalaryStaff = useMemo(() => filterMonthlySalaryStaff(staffList), [staffList]);
   const [filterStaffId, setFilterStaffId] = useState("__all__");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -384,7 +386,7 @@ function LeaveRecordsPageInner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>篩選</CardTitle>
+          <CardTitle>月薪服務人員篩選</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3">
           <div>
@@ -394,8 +396,12 @@ function LeaveRecordsPageInner() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all__">全部服務人員</SelectItem>
-                {(staffList ?? []).map((s) => (
+                {/* 「全部」的語意跟著下面的清單一起收斂成「全部月薪制服務人員」——清單裡已經只剩
+                    月薪制的人,如果這一項還寫「全部服務人員」會讓人以為抽成制的人也被算進來。
+                    ⚠️ 底層查詢條件不變:選這一項就是 staffId = null(不帶服務人員條件),
+                       實際回傳範圍由 RLS 決定,而抽成制的人本來就不會有請假紀錄。 */}
+                <SelectItem value="__all__">全部月薪制服務人員</SelectItem>
+                {monthlySalaryStaff.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
                   </SelectItem>

@@ -83,7 +83,7 @@ export function formatStaffCommissionItemBreakdown(d: {
     .join("; ");
 }
 
-/** §3.9 get_staff_commission_summary 回傳形狀(按件計酬師傅報表)。商家端三項調整規格書
+/** §3.9 get_staff_commission_summary 回傳形狀(抽成制服務人員報表)。商家端三項調整規格書
  * §二 2.7.5:拿掉單一比例欄位 commission_rate_percentage(服務項目層級抽成之下不再具有單一
  * 比例的意義),改成逐項明細 item_breakdown;legacy_rate_percentage 只有改版前的舊制紀錄
  * (item_breakdown 是空陣列)才會有值,用來顯示「這筆是舊制紀錄,抽成比例 X%」。 */
@@ -107,7 +107,7 @@ export interface StaffCommissionSummary {
   total_amount: number;
 }
 
-/** §3.10 get_staff_monthly_payroll_summary 回傳形狀(月薪制師傅報表,規則 2.8)。§11.7(2026-09-22
+/** §3.10 get_staff_monthly_payroll_summary 回傳形狀(月薪制服務人員報表,規則 2.8)。§11.7(2026-09-22
  * 新增):monthly_base_salary 改查「該月當時」的歷史值(區間版本改成逐月加總),新增
  * salary_history_estimated——查詢的月份/區間早於機制上線前時為 true(此時金額是用機制上線種子
  * 回推估算,僅供參考);查詢的月份早於這位服務人員實際加入商家的時間點時,金額顯示 0 且這個欄位
@@ -157,7 +157,7 @@ export interface MerchantBillingSummary {
     staff_name: string;
     compensation_type: "monthly_salary" | "piece_rate";
     order_count: number;
-    /** 月薪制服務人員的月薪淨額。按件計酬的人本來就是 null;月薪制的人在
+    /** 月薪制服務人員的月薪淨額。抽成制的人本來就是 null;月薪制的人在
      * salary_applicable=false 時也是 null。 */
     net_pay: number | null;
     commission_amount: number | null;

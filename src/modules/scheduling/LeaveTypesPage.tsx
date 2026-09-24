@@ -212,10 +212,26 @@ function LeaveTypesPageInner() {
         </Link>
       </div>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">假別設定</h1>
+        {/* 2026-09-24 使用者指定:標題加上「月薪人員」前綴,讓商家一眼看出這份假別清單只跟月薪制
+            服務人員有關(抽成制服務人員不走請假登記,走的是自己的可預約時段設定)。
+            2026-09-24 主腦裁決:三處(這個 <h1> / src/routes/appLayoutLogic.ts 的 /app/leave-types
+            頁首標題 / src/routes/ManagePage.tsx 的功能卡片 label)已統一成「月薪人員假別設定」。
+            ⚠️ 之後改任一處,另外兩處要同步改——appLayoutLogic.ts 的規則是「頁首標題一律取各頁面
+               <h1> 現在顯示的文字」,只改這裡不改那邊,頁首跟內文就會對不起來。 */}
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">月薪人員假別設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」自訂的請假分類清單,登記月薪制服務人員請假時可選用。
+          「{merchant!.name}」自訂的請假分類清單,登記月薪制服務人員請假時可選用。這一頁只負責
+          「有哪些假別可以選」,實際的請假登記不在這裡——要幫某位月薪制服務人員登記或取消請假,
+          請到「請假紀錄」那一頁操作,而且只有客服或商家管理員可以登記,服務人員本人沒有辦法自己登記。
         </p>
+        {/* 頁內導向照 MemberDetailPage.tsx「查看完整點數紀錄 →」那條既有慣例
+            (react-router <Link> + text-sm text-brand hover:underline + 箭頭結尾),不另創寫法。 */}
+        <Link
+          to="/app/leave-records"
+          className="mt-2 inline-block text-sm text-brand hover:underline"
+        >
+          前往「請假紀錄」登記請假 →
+        </Link>
       </div>
 
       <Card>

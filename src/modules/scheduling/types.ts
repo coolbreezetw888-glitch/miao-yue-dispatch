@@ -81,6 +81,42 @@ export const LEAVE_RECORD_DISPLAY_STATUS_LABELS: Record<LeaveRecordDisplayStatus
 };
 
 // ---------------------------------------------------------------------------
+// 4.3 請假紀錄管理頁:兩個「服務人員」下拉選單(上方篩選 + 登記請假表單)的名單過濾邏輯。
+//
+// 2026-09-24 使用者指定:「服務人員下拉選單只需顯示月薪人員即可,抽成制的服務人員不顯示。」
+// 原本的做法是全部人都列出來,抽成制的那幾位加上「(無法登記請假)」的註記並設成 disabled;
+// 改成直接不列出來之後那個註記就沒有意義了(清單裡根本不會出現),所以一併移除。
+//
+// 為什麼抽成純函式放在這裡(比照 src/routes/appLayoutLogic.ts、
+// src/modules/staff-agent/staffListLogic.ts 的既有慣例):「這個人該不該出現在這個下拉選單裡」
+// 是一條會直接影響「客服看得到誰」的規則,寫在元件本體裡的 .filter() 沒辦法被測試釘死,
+// 而它一旦寫錯的後果是「某位月薪制服務人員永遠無法被登記請假」——畫面上看起來完全正常,
+// 只是那個人不見了,很難靠肉眼發現。
+//
+// ⚠️ 這裡只做「畫面上列出誰」的過濾,不是安全邊界:真正擋住「幫抽成制服務人員登記請假」的是
+//    資料庫端 create_staff_leave 的檢查(規則 2.2)。前端這一層只是不要讓使用者選到註定失敗的選項。
+// ---------------------------------------------------------------------------
+
+/** 資料庫 merchant_staff.compensation_type 欄位裡代表「月薪制」的值。
+ * ⚠️ 資料庫存的是英文,中文顯示文字(月薪制/抽成制)只在畫面層,不要拿中文來比較。 */
+export const MONTHLY_SALARY_COMPENSATION_TYPE = "monthly_salary";
+
+/** 過濾出「可以登記請假」的服務人員 = 計酬類型是月薪制的人。
+ *
+ * 刻意用泛型 + 最小結構型別(只要求有 compensation_type 這個欄位)而不是直接吃 MerchantStaff:
+ * ① 模組 7 不需要為了一個過濾函式去 import 模組 3 的型別(維持模組獨立性);
+ * ② 呼叫端傳進去什麼型別,回傳的就是同一個型別,不會在下游丟掉 id/name 這些欄位。
+ *
+ * 傳 null/undefined(react-query 還沒拿到資料)一律回傳空陣列,呼叫端不用再自己寫 `?? []`。 */
+export function filterMonthlySalaryStaff<T extends { compensation_type: string | null }>(
+  staffList: T[] | null | undefined,
+): T[] {
+  return (staffList ?? []).filter(
+    (staff) => staff.compensation_type === MONTHLY_SALARY_COMPENSATION_TYPE,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4.4 排班一覽頁:單一儲存格的顯示優先權判斷(規格書 §4.4 第 2 點),抽成純函式方便 Vitest 測試,
 // 不用整個渲染 SchedulingOverviewPage.tsx。
 //

@@ -112,10 +112,10 @@ export function LeaveDeductionRuleDialog({
   // 的實際天數預覽試算(純粹輔助理解,不是任何寫入依據)。
   const exampleMonthlySalary = 3000;
   const now = new Date();
-  const exampleDayRate = calculateDayRate(
-    exampleMonthlySalary,
-    getDaysInMonth(now.getFullYear(), now.getMonth() + 1),
-  );
+  // 抽成變數是為了讓下面的試算文字能寫出「以本月 N 天換算」,跟 PayrollSettingsPage.tsx 月薪制
+  // 服務人員編輯對話框的試算句型一致(2026-09-24 使用者要求兩邊用語統一)。
+  const exampleDaysInMonth = getDaysInMonth(now.getFullYear(), now.getMonth() + 1);
+  const exampleDayRate = calculateDayRate(exampleMonthlySalary, exampleDaysInMonth);
   const previewPerDay = previewLeaveDeductionPerDay(
     exampleDayRate,
     mode,
@@ -185,10 +185,16 @@ export function LeaveDeductionRuleDialog({
               </div>
             ) : null}
 
+            {/* 2026-09-24:句型跟 PayrollSettingsPage.tsx 月薪制服務人員編輯對話框的「試算:以本月 N 天
+                換算⋯天數由系統依請假當月自動換算,不用另外設定」對齊,讓兩個對話框講同一套話。
+                跟那邊刻意不同的兩點:(1) 這裡是全店共用的假別、不綁定特定人,所以月薪是假想數字,
+                「僅供參考、實際以每位服務人員自己的月薪為準」這句不能省;(2) 這裡不在薪資設定頁,
+                不寫「詳見上方【月薪制】月折算天數」,那個欄位不在這一頁,指過去會讓人找不到。 */}
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              範例試算:假設月薪 {exampleMonthlySalary} 元(依本月實際天數換算,一天薪水約{" "}
-              {exampleDayRate.toFixed(2)} 元),請這個假一天扣 <strong>{previewPerDay}</strong>{" "}
-              元(僅供參考,實際扣款以每位服務人員自己的月薪、 請假當月的實際天數計算為準)。
+              試算:假設月薪 {exampleMonthlySalary} 元,以本月 {exampleDaysInMonth} 天換算,一天薪水約{" "}
+              {exampleDayRate.toFixed(2)} 元,請這個假一天扣 <strong>{previewPerDay}</strong> 元。
+              天數由系統依請假當月自動換算,不用另外設定;這裡的月薪只是範例,僅供參考,實際扣款以每位
+              服務人員自己的月薪計算為準。
             </p>
 
             <DialogFooter>

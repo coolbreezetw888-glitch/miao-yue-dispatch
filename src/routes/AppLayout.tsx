@@ -325,10 +325,16 @@ export default function AppLayout() {
             </div>
             {/* 刻意用 <p> 而不是 <h1>:每一個子頁面自己已經有一個 <h1> 寫著同一個標題
                 (這裡的文字就是從那些 <h1> 抄過來的,見 appLayoutLogic.ts 的說明),頁首再放一個
-                <h1> 會讓同一頁出現兩個第一級標題、把標題大綱弄亂。 */}
+                <h1> 會讓同一頁出現兩個第一級標題、把標題大綱弄亂。
+                2026-09-24 使用者反映頁首標題字太小,從 text-sm(14px)放大。手機跟寬螢幕刻意用不同尺寸,
+                `sm:text-lg` 不是多餘的:這個 <p> 是 flex-1 truncate,左邊是商家切換器、右邊是「登出」
+                (兩側各佔 min-w-[3.25rem]),Chromium 實測 320px 寬的手機只剩 158px 給標題、375px 剩 213px;
+                目前最長的標題「月薪人員假別設定」8 個字實測 16px 下 128px、18px 下 144px——18px 在 320px
+                手機上只剩 14px 餘裕,之後標題再長一個字就會被截成省略號,所以手機維持 text-base(16px),
+                640px 以上才放到 text-lg(18px)。 */}
             <p
               data-testid="app-header-title"
-              className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-foreground"
+              className="min-w-0 flex-1 truncate text-center text-base font-semibold text-foreground sm:text-lg"
             >
               {headerTitle}
             </p>
@@ -358,7 +364,7 @@ export default function AppLayout() {
       </main>
 
       {/* 模組 7(排班與休假管理)§6.5:安裝提示元件,掛在共用後台殼層(見第〇節判斷 8,
-          PWA 這次疊加在既有 /app 殼層上,不是獨立師傅端)。 */}
+          PWA 這次疊加在既有 /app 殼層上,不是獨立服務人員端)。 */}
       <InstallPwaHint />
 
       {/* 位置/層級取自 src/lib/fixedLayers.ts 的 BOTTOM_LAYER_TAB_BAR,不在這裡寫死

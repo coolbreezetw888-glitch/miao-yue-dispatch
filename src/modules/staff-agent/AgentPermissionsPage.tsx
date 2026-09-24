@@ -13,7 +13,10 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { fetchAgentPermissions, fetchMerchantAgents, setAgentPermission } from "./api";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
-import { AGENT_PERMISSION_SECTIONS } from "./types";
+// ⚠️ 刻意用 visibleAgentPermissionSections() 而不是直接用 AGENT_PERMISSION_SECTIONS:
+//    後者是完整定義,包含「刻意隱藏、不顯示在這個畫面上」的項目(2026-09-24:排班一覽),
+//    詳見 types.ts 裡 AgentPermissionSectionDef.hidden 的說明。
+import { visibleAgentPermissionSections } from "./types";
 
 const permissionsQueryKey = (agentId: string) =>
   ["staff-agent-module", "agent-permissions", agentId] as const;
@@ -71,7 +74,7 @@ function AgentPermissionsInner() {
             <p className="text-sm text-muted-foreground">載入中⋯</p>
           ) : (
             <ul className="space-y-2">
-              {AGENT_PERMISSION_SECTIONS.map((section) => (
+              {visibleAgentPermissionSections().map((section) => (
                 <li
                   key={section.key}
                   className="flex items-center justify-between rounded-md border border-border px-3 py-2"

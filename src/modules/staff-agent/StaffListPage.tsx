@@ -123,8 +123,10 @@ const EMPTY_FORM: StaffFormState = {
   googleCalendarSyncEnabled: false,
   canCreateEditOrders: false,
   canUploadConstructionPhotos: false,
-  // 模組 7(排班與休假管理)§4.1/第〇節判斷 1:預先選取「按件計酬」為預設選項,對既有資料
+  // 模組 7(排班與休假管理)§4.1/第〇節判斷 1:預先選取「抽成制」為預設選項,對既有資料
   // 行為影響最小,但要求管理員明確看過再送出,不是隱藏欄位。
+  // ⚠️ 2026-09-24 使用者決定:畫面上的中文一律改稱「抽成制」(原本叫「按件計酬」,使用者認為
+  //    不夠直覺)。資料庫存的值仍然是英文 'piece_rate',只有前端顯示文字改,不動資料庫。
   compensationType: "piece_rate",
 };
 
@@ -503,9 +505,11 @@ function StaffFormDialog({
               />
             </div>
 
-            {/* 模組 7(排班與休假管理)§4.1:計酬類型單選,預設選取「按件計酬」(第〇節判斷 1)。
-                只有月薪制的服務人員才能登記請假紀錄(規則 2.2),按件計酬對應的是「調整可預約
-                時段」(既有的 staff_availability_windows/unlimited_backend_edit 機制)。 */}
+            {/* 模組 7(排班與休假管理)§4.1:計酬類型單選,預設選取「抽成制」(第〇節判斷 1)。
+                只有月薪制的服務人員才能登記請假紀錄(規則 2.2),抽成制對應的是「調整可預約
+                時段」(既有的 staff_availability_windows/unlimited_backend_edit 機制)。
+                ⚠️ 2026-09-24:選項的中文從「按件計酬」改成「抽成制」,底層的值 'piece_rate'
+                   完全不動(資料庫存的是英文,中文只在這一層顯示)。 */}
             <div className="rounded-md border border-border px-3 py-2">
               <p className="text-sm font-medium text-foreground">計酬類型</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -520,7 +524,7 @@ function StaffFormDialog({
               >
                 <label className="flex items-center gap-2 text-sm text-foreground">
                   <RadioGroupItem value="piece_rate" id="staff-compensation-piece-rate" />
-                  按件計酬
+                  抽成制
                 </label>
                 <label className="flex items-center gap-2 text-sm text-foreground">
                   <RadioGroupItem value="monthly_salary" id="staff-compensation-monthly-salary" />
@@ -930,9 +934,7 @@ function StaffListInner() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            「{merchant!.name}」的師傅/服務人員名錄
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的服務人員名錄</p>
         </div>
         <StaffFormDialog
           merchantId={merchantId}
@@ -944,7 +946,7 @@ function StaffListInner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>人員名單</CardTitle>
+          <CardTitle>服務人員名單</CardTitle>
           <CardDescription>包含已上架、未上架與已移除的服務人員,可用下方分類篩選</CardDescription>
           {staffList && staffList.length > 0 ? (
             <Tabs
@@ -1016,14 +1018,15 @@ function StaffListInner() {
                         {staff.name}
                         {staff.nickname ? `(${staff.nickname})` : ""}
                       </p>
-                      {/* flex-wrap:最多會同時出現「已上架/按件計酬/尚未開通/已移除」四顆徽章,
+                      {/* flex-wrap:最多會同時出現「已上架/抽成制/尚未開通/已移除」四顆徽章,
                           窄螢幕放不下就換行,不要撐開容器。 */}
                       <div className="mt-0.5 flex flex-wrap gap-1.5">
                         <Badge variant={staff.is_listed ? "default" : "secondary"}>
                           {staff.is_listed ? "已上架" : "未上架"}
                         </Badge>
                         <Badge variant="outline">
-                          {staff.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬"}
+                          {/* 2026-09-24:徽章文字「按件計酬」→「抽成制」,判斷用的欄位值不變。 */}
+                          {staff.compensation_type === "monthly_salary" ? "月薪制" : "抽成制"}
                         </Badge>
                         {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態徽章。 */}
                         <Badge

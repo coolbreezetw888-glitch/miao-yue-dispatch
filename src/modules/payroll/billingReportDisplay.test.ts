@@ -23,12 +23,16 @@
 // 顯示那個數字,不可以被「算不出來」吞掉。只測 happy path + 只測「不適用」都不夠,兩個方向都要測,
 // 否則一個「永遠回傳說明文字」的壞函式也能讓測試全綠。
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
   BILLING_SUMMARY_LABELS,
   type BillingCsvSummaryFields,
   COMMISSION_FALLBACK,
+  COMPENSATION_TYPE_LABELS,
   CSV_PERIOD_LABEL,
   CSV_SUMMARY_AMOUNT_HEADER,
   CSV_SUMMARY_ITEM_HEADER,
@@ -41,6 +45,7 @@ import {
   buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
+  compensationTypeText,
   employmentStatusCsvText,
   formatCsvPeriodText,
   isStillEmployed,
@@ -305,7 +310,7 @@ describe("monthlySalaryCsvCell(CSV「月薪淨額」欄)", () => {
     expect(monthlySalaryCsvCell(true, staffRow({ net_pay: 0 }))).toBe(0);
   });
 
-  it("按件計酬的人 → 這一欄留空(他的錢在「抽成金額」那一欄),不受月薪旗標影響", () => {
+  it("抽成制的人 → 這一欄留空(他的錢在「抽成金額」那一欄),不受月薪旗標影響", () => {
     const row = staffRow({
       compensation_type: "piece_rate",
       net_pay: null,
@@ -429,6 +434,63 @@ describe("抽成金額(行為 C:畫面跟 CSV 的 null fallback 必須是同一�
 // =========================================================================
 // 行為 B:is_active_as_of === false → 顯示「已離職」
 // =========================================================================
+
+// =========================================================================
+// 計酬類型名稱(2026-09-24 使用者要求:「按件計酬」全面改稱「抽成制」)
+// =========================================================================
+
+describe("compensationTypeText(「計酬類型」欄:畫面與 CSV 共用同一個文字來源)", () => {
+  it("月薪制 → 「月薪制」", () => {
+    expect(compensationTypeText(staffRow({ compensation_type: "monthly_salary" }))).toBe("月薪制");
+  });
+
+  it("抽成制(piece_rate)→ 「抽成制」,舊稱「按件計酬」不可以再出現", () => {
+    const text = compensationTypeText(staffRow({ compensation_type: "piece_rate" }));
+
+    expect(text).toBe("抽成制");
+    expect(text).not.toContain("按件計酬");
+  });
+
+  it("兩種計酬類型的名稱都不可以是空字串,而且彼此不同", () => {
+    const labels = Object.values(COMPENSATION_TYPE_LABELS);
+
+    expect(labels).toHaveLength(2);
+    expect(new Set(labels).size).toBe(2);
+    for (const label of labels) expect(label.trim()).not.toBe("");
+  });
+
+  // ⚠️ 真正防漂移的那一條。這個欄位改名前的 bug 結構跟行為 C 一模一樣:畫面明細表與 CSV 匯出各寫
+  //    一次 `=== "monthly_salary" ? "月薪制" : "按件計酬"`,只改其中一邊就會漂移。純函式本身沒辦法
+  //    證明「頁面兩條路徑真的都在呼叫我」,所以這裡直接讀 BillingReportPage.tsx 的原始碼(同
+  //    appLayoutLogic.test.ts 讀 App.tsx 的做法),釘死兩件事:
+  //    (1) 頁面的程式碼裡不可以再有寫死的計酬類型中文字串(不管是舊稱還是新稱);
+  //    (2) compensationTypeText() 至少被呼叫兩次(畫面一次、CSV 一次)。
+  //    只要有人把其中一邊改回寫死字串,這裡就會紅。
+  //    (刻意**不**禁止頁面裡出現 `compensation_type ===`:明細表還要靠它決定那一列該顯示
+  //    「抽成金額」還是「月薪淨額」,那是另一個正當的分支,不在這條測試的守備範圍。)
+  it("【防漂移】畫面明細表與 CSV 對同一列必須得到相同字串,且兩邊都只能從 compensationTypeText 拿", () => {
+    for (const type of ["monthly_salary", "piece_rate"] as const) {
+      const row = staffRow({ compensation_type: type });
+      const screenCell = compensationTypeText(row);
+      const csvCell = compensationTypeText(row);
+
+      expect(screenCell).toBe(csvCell);
+      expect(screenCell).toBe(COMPENSATION_TYPE_LABELS[type]);
+    }
+
+    const source = readFileSync(
+      resolve(process.cwd(), "src/modules/payroll/BillingReportPage.tsx"),
+      "utf8",
+    );
+    // 把區塊註解與整行的 // 註解拿掉,只檢查真正會執行的程式碼(註解裡引用舊稱是允許的)。
+    const codeOnly = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+    expect(codeOnly).not.toContain('"按件計酬"');
+    expect(codeOnly).not.toContain('"抽成制"');
+    expect(codeOnly).not.toContain('"月薪制"');
+    expect(codeOnly.match(/compensationTypeText\(/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+});
 
 describe("isStillEmployed / shouldShowResignedBadge(行為 B:明細列的「已離職」標籤)", () => {
   it("is_active_as_of = true → 在職,不顯示「已離職」標籤", () => {

@@ -12,7 +12,7 @@
 // 商家端調整批次(2026-09-22,.project/SPECS-INDEX.md #609,.project/specs/服務人員端.md
 // §15.1):這個頁面從「掛在 /app/manage 底下的一張卡片連結」改成 AppLayout 底部「休假設定」
 // 分頁籤直接可達,/app/manage 這個路由對服務人員角色而言已經不存在對應的入口。原本「不符合就
-// 導回 /app/manage」的行為因此不再適用——規格書明講分頁籤永遠顯示,沒有權限/非按件計酬的服務
+// 導回 /app/manage」的行為因此不再適用——規格書明講分頁籤永遠顯示,沒有權限/非抽成制的服務
 // 人員點進來要看到既有的空狀態文字(比照 4.3 MyCalendarPage.tsx 的既有模式),不是被導離。
 // 只有「根本不是服務人員角色」這種理論上不會發生的情況(這個路由只會被服務人員底部分頁籤連到)
 // 才維持導離,當成防呆。
@@ -68,7 +68,7 @@ export function RequireStaffAvailabilityAccess({ children }: { children: ReactNo
     return (
       <div className="mx-auto max-w-3xl px-5 py-12">
         <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          這個功能僅提供給按件計酬的服務人員使用。
+          這個功能僅提供給抽成制的服務人員使用。
         </p>
       </div>
     );

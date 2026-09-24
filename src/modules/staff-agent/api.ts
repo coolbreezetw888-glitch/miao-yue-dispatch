@@ -92,7 +92,8 @@ export interface UpsertMerchantStaffInput {
   canCreateEditOrders?: boolean;
   canUploadConstructionPhotos?: boolean;
   /** 模組 7(排班與休假管理)§1.1/§4.1:計酬類型,'monthly_salary'(月薪制)/'piece_rate'
-   * (按件計酬)。不指定時資料庫層預設回填 'piece_rate'(第〇節判斷 1)。 */
+   * (抽成制,資料庫值仍是英文 'piece_rate',2026-09-24 只改中文顯示用語)。
+   * 不指定時資料庫層預設回填 'piece_rate'(第〇節判斷 1)。 */
   compensationType?: "monthly_salary" | "piece_rate";
 }
 

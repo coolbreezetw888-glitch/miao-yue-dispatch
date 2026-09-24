@@ -42,6 +42,7 @@ import {
   buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
+  compensationTypeText,
   employmentStatusCsvText,
   monthlySalaryCellText,
   monthlySalaryCsvCell,
@@ -86,7 +87,7 @@ function BillingReportPageInner() {
   // 下面的 JSX 只負責挑要印哪一個 <p>。
   const netMarginDisplay = resolveSalaryDisplay(salaryApplicable, summary?.estimated_net_margin);
 
-  // §一 §3.3 折衷方案的「查看明細 →」連結需要帶一個具體的年/月給師傅報表頁(那個頁面這次不在
+  // §一 §3.3 折衷方案的「查看明細 →」連結需要帶一個具體的年/月給服務人員報表頁(那個頁面這次不在
   // §3.6 範圍內,繼續用單一年月),這裡用區間結束日期所在的年月當作連結目標,是最貼近「使用者
   // 目前在看哪一段期間」的合理落點。
   const linkYear = Number(endDate.slice(0, 4));
@@ -116,7 +117,7 @@ function BillingReportPageInner() {
     const headers = ["姓名", "計酬類型", "在職狀態", "訂單筆數", "抽成金額", "月薪淨額"];
     const rows = summary.per_staff_breakdown.map((row) => [
       row.staff_name,
-      row.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬",
+      compensationTypeText(row),
       employmentStatusCsvText(row),
       row.order_count,
       // 2026-09-24 使用者裁決(選項 A):抽成是 null 時這裡原本寫 `?? ""`(空白格),而畫面明細表
@@ -312,13 +313,11 @@ function BillingReportPageInner() {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {row.compensation_type === "monthly_salary" ? "月薪制" : "按件計酬"}
-                        </TableCell>
+                        <TableCell>{compensationTypeText(row)}</TableCell>
                         <TableCell className="text-right">{row.order_count}</TableCell>
                         {/* 2026-09-24 使用者裁決:月薪制那一欄原本寫 `row.net_pay ?? 0`,
                             區間不是完整月份時會顯示「0 元(淨額)」——這正是要避免的誤導。
-                            改成顯示說明文字。按件計酬的抽成裁決是「null 一律當 0」(沒接單的抽成
+                            改成顯示說明文字。抽成制的抽成裁決是「null 一律當 0」(沒接單的抽成
                             確實就是 0),顯示格式跟以前完全一樣,只是把「怎麼算出那個數字」搬進
                             commissionCellText() —— CSV 那一欄也是呼叫同一條路徑,不會再漂移。 */}
                         <TableCell className="text-right">
@@ -329,7 +328,7 @@ function BillingReportPageInner() {
                         <TableCell className="text-right">
                           {/* SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):
                               兩個報表維持分開頁面,但這裡加一個捷徑連結,點下去直接帶著這位服務
-                              人員導到「師傅報表」頁面(該頁面 §3.6 不在區間篩選範圍內,繼續用
+                              人員導到「服務人員報表」頁面(該頁面 §3.6 不在區間篩選範圍內,繼續用
                               單一年月,這裡用區間結束日期所在的年月當作連結目標)。 */}
                           <Link
                             to={`/app/staff-report?staffId=${encodeURIComponent(row.staff_id)}&year=${linkYear}&month=${linkMonth}`}

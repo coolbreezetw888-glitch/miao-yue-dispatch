@@ -1,7 +1,7 @@
 // 模組 8(薪資與帳務)規格書 §7/§8 明確要求的兩支 Playwright 測試:
 //   1. 店家端帳務報表(§4.3):完成一筆按件計酬訂單後,當月帳務報表正確出現對應抽成金額;
 //      新增一筆月薪制服務人員的請假紀錄後,報表正確反映扣款。
-//   2. 師傅報表(§4.4):切換不同計酬類型的服務人員,報表版面正確切換顯示對應內容。
+//   2. 服務人員報表(§4.4,原名「師傅報表」,2026-09-24 改名):切換不同計酬類型的服務人員,報表版面正確切換顯示對應內容。
 //
 // fixture 資料建立/清理見 e2e/support/payroll-fixture.ts。
 
@@ -92,9 +92,9 @@ test("店家帳務報表(§4.3):完成訂單的抽成 + 請假扣款正確反映
   await expect(monthlyRow.getByText(`${expectedNetPay} 元(淨額)`)).toBeVisible();
 });
 
-test("師傅報表(§4.4):切換不同計酬類型的服務人員,版面正確切換", async ({ page }) => {
+test("服務人員報表(§4.4):切換不同計酬類型的服務人員,版面正確切換", async ({ page }) => {
   await page.goto("/app/staff-report");
-  await expect(page.getByRole("heading", { name: "師傅報表" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "服務人員報表" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 

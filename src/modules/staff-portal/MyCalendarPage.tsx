@@ -78,7 +78,7 @@ function BookingListItem({
           {booking.customer_name}
           {booking.customer_phone ? `・${booking.customer_phone}` : ""}
         </p>
-        {/* 任務 2:商家切成「到店服務」之後,師傅的手機上也不該再看到客戶住家地址,所以條件是
+        {/* 任務 2:商家切成「到店服務」之後,服務人員的手機上也不該再看到客戶住家地址,所以條件是
             「商家目前的產業需要地址」且「這筆預約真的有地址值」,不是只看有沒有值。 */}
         {showCustomerAddress && booking.customer_address ? (
           <p className="mt-0.5 text-xs text-muted-foreground">{booking.customer_address}</p>

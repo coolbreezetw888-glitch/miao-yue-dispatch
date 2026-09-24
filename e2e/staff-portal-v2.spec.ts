@@ -11,7 +11,7 @@
 //   10.3.3:「時段排休」依商家實際營業時間顯示時段列表,切換單一半小時休息,商家管理員視角能
 //     看到同樣的「例外關閉」樣式(交叉驗證同一份底層資料)。
 //   10.4.6(核心情境,必測):薪資報表頁標題/月份箭頭切換/摘要卡片,且找不到 CSV 匯出按鈕,
-//     按件計酬服務人員視角的「我的抽成」數字跟商家管理員視角(師傅報表頁)的「抽成合計」一致。
+//     按件計酬服務人員視角的「我的抽成」數字跟商家管理員視角(服務人員報表頁)的「抽成合計」一致。
 //
 // fixture 資料建立/清理見 e2e/support/staff-portal-v2-fixture.ts。
 import { expect, test, type Browser } from "@playwright/test";
@@ -276,7 +276,7 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   //
   // 2026-09-24:這幾行原本是直接對「整頁」找金額文字(page.getByText("$500"))。StaffReportPage
   // 這次把「訂單明細」表格裡的金額也統一改走 formatAmount(稽核問題 4:同一頁不能一邊印 $500、
-  // 一邊印原始值 500,師傅會以為被扣錢),所以 $500 現在同時出現在摘要卡片跟明細列的抽成欄,
+  // 一邊印原始值 500,服務人員會以為被扣錢),所以 $500 現在同時出現在摘要卡片跟明細列的抽成欄,
   // $1,000 同時出現在摘要卡片跟明細列的抽成基數欄 → page.getByText 一次命中兩個節點,
   // Playwright strict mode 判定失敗。這是格式統一造成的,不是數字算錯。
   // 驗證意圖不變(而且更精準):斷言限定在「這張摘要卡片」上,確認卡片本身顯示的是正確金額。
@@ -313,7 +313,7 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   await endInput.fill(thisMonth);
   await expect(doneOrdersCard).toContainText("1 筆", { timeout: LOAD_TIMEOUT });
 
-  // ---- 跨視角一致性:商家管理員視角(師傅報表頁)同一位服務人員同一個月的「抽成合計」
+  // ---- 跨視角一致性:商家管理員視角(服務人員報表頁)同一位服務人員同一個月的「抽成合計」
   // 要跟服務人員自助視角的「我的抽成」完全一致,而且商家管理員視角回歸測試:CSV 匯出按鈕仍在
   // (不能因為服務人員頁面拿掉這顆按鈕就連帶波及商家管理員既有功能)。----
   const adminContext = await browser.newContext();
@@ -321,7 +321,7 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   await injectAdminSession(adminPage, fixture);
   await adminPage.goto("/app");
   await adminPage.goto("/app/staff-report");
-  await expect(adminPage.getByRole("heading", { name: "師傅報表" })).toBeVisible({
+  await expect(adminPage.getByRole("heading", { name: "服務人員報表" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await adminPage.getByLabel("服務人員").click();

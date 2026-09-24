@@ -31,7 +31,7 @@ export const STAFF_PERMISSION_SECTIONS: StaffPermissionSectionDef[] = [
     key: "staff_availability_self_manage",
     label: "可預約時段/休假自助調整",
     description:
-      "開放後這位服務人員可以自己設定每週固定可預約時段、標記單日臨時休假。僅按件計酬服務人員可以使用,月薪制服務人員即使開通這項也不會生效。",
+      "開放後這位服務人員可以自己設定每週固定可預約時段、標記單日臨時休假。僅抽成制服務人員可以使用,月薪制服務人員即使開通這項也不會生效。",
   },
   {
     key: "staff_payroll_view",

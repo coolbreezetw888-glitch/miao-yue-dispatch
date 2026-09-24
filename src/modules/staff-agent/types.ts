@@ -232,6 +232,23 @@ export interface AgentPermissionSectionDef {
   key: string;
   label: string;
   description: string;
+  /** ⚠️ true = 這個權限開關「刻意不顯示在客服權限設定畫面上」,不是被刪掉。
+   *
+   * 為什麼要有這個旗標而不是直接把那一項從陣列裡刪掉:被隱藏的那個功能之後可能會還原,
+   * 而 key/label/description 這些文字重寫一次很容易寫錯(描述文字都很長、寫的是權限邊界);
+   * 留在原地加一個旗標,還原時只要把旗標拿掉,文字一個字都不會變。
+   *
+   * ⚠️ 這**不是**安全邊界,只是畫面上不列出來:
+   *   ・資料庫裡既有的授權紀錄完全不動(還原後原本開通過的客服依然是開通狀態);
+   *   ・對應的 useAgentPermission(key) 判斷、RLS/SECURITY DEFINER 檢查全部照常運作。
+   * 換句話說隱藏的只有「商家管理員能不能在畫面上撥這個開關」。 */
+  hidden?: boolean;
+}
+
+/** 畫面上真的要列出來的權限項目(AgentPermissionsPage.tsx 用這個,不要直接用
+ * AGENT_PERMISSION_SECTIONS —— 那份是完整定義,包含被刻意隱藏的項目)。 */
+export function visibleAgentPermissionSections(): AgentPermissionSectionDef[] {
+  return AGENT_PERMISSION_SECTIONS.filter((section) => !section.hidden);
 }
 
 export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
@@ -260,7 +277,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     key: "billing",
     label: "帳務管理",
     description:
-      "開放後客服可以查看店家端帳務報表(對應模組 8 薪資與帳務)。這把鑰匙也「連帶」讓客服可以查看師傅報表(師傅報表檢查的權限範圍比較寬,billing 或 staff_report 任一即可),但反過來不成立——只開 staff_report 不能看帳務報表。",
+      "開放後客服可以查看店家端帳務報表(對應模組 8 薪資與帳務)。這把鑰匙也「連帶」讓客服可以查看服務人員報表(服務人員報表檢查的權限範圍比較寬,billing 或 staff_report 任一即可),但反過來不成立——只開 staff_report 不能看帳務報表。",
   },
   {
     key: "team_leave",
@@ -293,7 +310,9 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   },
   {
     key: "staff_report",
-    label: "師傅報表",
+    // 2026-09-24 使用者指定改名:「師傅報表」→「服務人員報表」。這個 label 是客服權限設定頁上實際顯示的
+    // 開關名稱,要跟 appLayoutLogic.ts 的頁首標題、ManagePage.tsx 的功能卡片 label 用同一個詞。
+    label: "服務人員報表",
     description:
       "開放後客服可以查看個別服務人員的抽成/薪資報表(對應模組 8 薪資與帳務)。注意:重新計算已完成訂單抽成金額這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
   },
@@ -302,6 +321,12 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     label: "排班一覽",
     description:
       "開放後客服可以檢視跨服務人員的每週時段/單日例外/請假彙整總覽頁(對應模組 7 排班與休假管理),是純唯讀檢視權限,跟「團隊休假」(有寫入行為)是兩把獨立的鑰匙。",
+    // ⚠️ 2026-09-24 使用者指示:「排班一覽這個功能可以先拔掉(隱藏起來),對應的權限開關也要跟著
+    //    拔掉(隱藏起來)。」——這是刻意隱藏,不是遺漏。**還原就把下面這一行刪掉**(或改成 false),
+    //    這個開關就會重新出現在客服權限設定頁上。
+    //    一起要改回來的另一處:src/routes/ManagePage.tsx 的 SCHEDULING_FEATURE_HIDDEN(功能卡片),
+    //    那裡有完整的還原說明。資料庫裡既有的 scheduling 授權紀錄一列都不用動。
+    hidden: true,
   },
   {
     key: "business_hours",
@@ -317,7 +342,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     key: "commission_settings",
     label: "抽成設定",
     description:
-      "開放後客服可以調整商家抽成基準/預設比例、月折算天數、按件計酬服務人員個人抽成比例覆寫、月薪制服務人員薪資設定、假別扣款規則(對應模組 8 薪資與帳務)。注意:重新計算已完成訂單抽成金額這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
+      "開放後客服可以調整商家抽成基準/預設比例、月折算天數、抽成制服務人員個人抽成比例覆寫、月薪制服務人員薪資設定、假別扣款規則(對應模組 8 薪資與帳務)。注意:重新計算已完成訂單抽成金額這個敏感操作永遠只有商家管理員能做,不受這個開關影響。",
   },
   {
     key: "line_notification",

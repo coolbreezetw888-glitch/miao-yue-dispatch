@@ -65,12 +65,12 @@ const features = [
   {
     icon: MessagesSquare,
     title: "LINE 通知整合",
-    desc: "預約狀態變化自動發送 LINE 通知給客戶與師傅。",
+    desc: "預約狀態變化自動發送 LINE 通知給客戶與服務人員。",
   },
   {
     icon: Banknote,
     title: "彈性計薪",
-    desc: "按件計酬與月薪制並存，系統自動算薪、自動算請假扣款。",
+    desc: "抽成制與月薪制並存，系統自動算薪、自動算請假扣款。",
   },
   {
     icon: CalendarRange,
@@ -94,7 +94,7 @@ const features = [
   },
   {
     icon: Smartphone,
-    title: "師傅端行動排程介面",
+    title: "服務人員端行動排程介面",
     desc: "手機瀏覽器即可查看訂單、回報完工、確認排休，不需另外下載 App。",
   },
 ];
@@ -110,15 +110,15 @@ const beforeItems = [
 const afterItems = [
   "智慧建單自動解析",
   "行事曆跨店共用，自動避開衝突",
-  "按件計酬／月薪雙軌自動算薪",
+  "抽成制／月薪雙軌自動算薪",
   "排休時段化＋月休天數自動核算",
   "會員紅利／推薦系統整合",
 ];
 
 const steps = [
   "客戶或客服建單",
-  "系統智慧解析並指派師傅",
-  "師傅接單、到場、完工回報",
+  "系統智慧解析並指派服務人員",
+  "服務人員接單、到場、完工回報",
   "系統自動核算抽成與薪資",
 ];
 
@@ -132,8 +132,8 @@ const faqs = [
     a: "不需要。以月為單位訂閱，隨時可以停用，資料在停用後仍保留一段時間供您匯出。",
   },
   {
-    q: "師傅端要下載 App 嗎？",
-    a: "不用。師傅端是響應式網頁，用手機瀏覽器開啟連結就能看訂單、回報完工與確認排休。",
+    q: "服務人員端要下載 App 嗎？",
+    a: "不用。服務人員端是響應式網頁，用手機瀏覽器開啟連結就能看訂單、回報完工與確認排休。",
   },
   {
     q: "LINE 通知怎麼設定？",
@@ -232,7 +232,7 @@ function Hero() {
         </Reveal>
         <Reveal delay={160}>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            客戶預約、師傅排程、帳務結算，一套系統全部串起來——到店服務、到府派工都適用。
+            客戶預約、服務人員排程、帳務結算，一套系統全部串起來——到店服務、到府派工都適用。
           </p>
         </Reveal>
         <Reveal delay={240}>
@@ -272,7 +272,7 @@ function Showcase() {
         <SectionHeading
           eyebrow="Real-time"
           title="今天的單，所有人同一個畫面"
-          subtitle="客服建單、師傅接單、客戶收到 LINE 通知，狀態即時同步，不必再互相追問。"
+          subtitle="客服建單、服務人員接單、客戶收到 LINE 通知，狀態即時同步，不必再互相追問。"
         />
         <Reveal className="mt-12">
           <div className="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl shadow-primary/5">
@@ -293,7 +293,7 @@ function Showcase() {
                   <span className="w-14 font-semibold tabular-nums text-foreground">{o.time}</span>
                   <span className="font-medium text-foreground">{o.name}</span>
                   <span className="text-muted-foreground">{o.item}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">師傅：{o.staff}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">服務人員：{o.staff}</span>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(o.status)}`}
                   >
@@ -304,7 +304,7 @@ function Showcase() {
             </ul>
             <div className="flex items-center gap-2 border-t border-border bg-surface px-5 py-3 text-xs text-muted-foreground">
               <MessageCircle className="size-4 text-cta" />
-              LINE 通知已於 08:12 發送給 4 位客戶與 3 位師傅
+              LINE 通知已於 08:12 發送給 4 位客戶與 3 位服務人員
             </div>
           </div>
         </Reveal>
@@ -365,7 +365,7 @@ function Positioning() {
       <div className="mx-auto max-w-3xl px-5 text-center">
         <Reveal>
           <p className="text-lg leading-loose font-medium text-foreground sm:text-xl">
-            秒約是為到店服務與到府派工業者打造的派工預約系統，提供商家後台、師傅端排程介面、客戶自助預約頁，一套系統涵蓋接單到結算全流程。
+            秒約是為到店服務與到府派工業者打造的派工預約系統，提供商家後台、服務人員端排程介面、客戶自助預約頁，一套系統涵蓋接單到結算全流程。
           </p>
         </Reveal>
       </div>
@@ -439,10 +439,10 @@ function StaffMobile() {
               Staff interface
             </p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              師傅端，用手機瀏覽器就能開
+              服務人員端，用手機瀏覽器就能開
             </h2>
             <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-              師傅端是響應式網頁介面，透過手機瀏覽器開啟即可使用，不是需要安裝的原生 App，
+              服務人員端是響應式網頁介面，透過手機瀏覽器開啟即可使用，不是需要安裝的原生 App，
               也不需要通過任何商店審核或更新。
             </p>
             <ul className="mt-7 space-y-3">
@@ -454,7 +454,7 @@ function StaffMobile() {
               ))}
             </ul>
             <p className="mt-7 rounded-xl border border-border bg-surface px-5 py-4 text-sm text-muted-foreground">
-              「師傅端不用下載 App，手機瀏覽器打開就能用」
+              「服務人員端不用下載 App，手機瀏覽器打開就能用」
             </p>
           </div>
         </Reveal>
@@ -525,7 +525,7 @@ function Pricing() {
                 每間商家 $399/月
                 <span className="block text-lg">+ 每位服務人員 $199/月</span>
               </p>
-              <p className="mt-3 text-sm text-muted-foreground">適合多分店、多師傅團隊</p>
+              <p className="mt-3 text-sm text-muted-foreground">適合多分店、多位服務人員的團隊</p>
               <Button asChild variant="cta" size="lg" className="mt-8 w-full">
                 <Link to="/signup">建立帳號</Link>
               </Button>
@@ -550,7 +550,7 @@ function Industries() {
     {
       icon: Home,
       title: "到府派工",
-      desc: "冷氣維修／防水工程／水電等，師傅到府服務，依區域與時段指派最適人選。",
+      desc: "冷氣維修／防水工程／水電等，服務人員到府服務，依區域與時段指派最適人選。",
     },
   ];
   return (
@@ -699,7 +699,7 @@ function Contact() {
               <Input id="branches" type="number" min={0} className="mt-2" placeholder="2" />
             </div>
             <div>
-              <Label htmlFor="staff">師傅人數</Label>
+              <Label htmlFor="staff">服務人員人數</Label>
               <Input id="staff" type="number" min={0} className="mt-2" placeholder="6" />
             </div>
             <div>

@@ -1,6 +1,6 @@
 // 對應規格書(服務人員端)4.7 第 3 點:服務人員權限勾選畫面(新路由 /app/staff/:staffId/permissions)。
 // 直接參考既有 AgentPermissionsPage.tsx 改寫,列出四個 section_key,逐項提供開關,並在
-// 「可預約時段/休假自助調整」這一項旁附註「僅按件計酬服務人員可以使用」(規則 2.2)。
+// 「可預約時段/休假自助調整」這一項旁附註「僅抽成制服務人員可以使用」(規則 2.2)。
 
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
