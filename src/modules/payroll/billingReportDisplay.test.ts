@@ -26,15 +26,23 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BILLING_SUMMARY_LABELS,
+  type BillingCsvSummaryFields,
   COMMISSION_FALLBACK,
+  CSV_PERIOD_LABEL,
+  CSV_SUMMARY_AMOUNT_HEADER,
+  CSV_SUMMARY_ITEM_HEADER,
   EMPLOYED_LABEL,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
   type SalarySummaryFields,
   type StaffBreakdownRow,
+  buildBillingCsvSummaryItems,
+  buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
   employmentStatusCsvText,
+  formatCsvPeriodText,
   isStillEmployed,
   monthlySalaryCellText,
   monthlySalaryCsvCell,
@@ -448,5 +456,216 @@ describe("employmentStatusCsvText(CSV「在職狀態」欄)", () => {
   it("is_active_as_of = false → 「已離職」(帶離系統後在 Excel 裡一樣分得出來)", () => {
     expect(employmentStatusCsvText(staffRow({ is_active_as_of: false }))).toBe(RESIGNED_LABEL);
     expect(employmentStatusCsvText(staffRow({ is_active_as_of: false }))).toBe("已離職");
+  });
+});
+
+// =========================================================================
+// CSV 總計區塊(2026-09-24 使用者裁決 A:總計放在同一個 CSV 的最上面)
+//
+// 這一段測試守的是同一個「畫面正常、數字是假的」失敗模式,只是搬到匯出檔上:匯出的 CSV 沒有人會
+// 每次打開來檢查,商家拿去對帳、發現數字對不起來時,幾乎不可能回頭懷疑是匯出功能寫錯。尤其是
+// 月薪四項 —— 只要有人在這裡補一個 `?? 0`,Excel 上就會出現「月薪基本額 0、商家總淨利 = 營收
+// 全額」,而且完全沒有任何症狀。
+// =========================================================================
+
+function csvSummaryFields(
+  overrides: Partial<BillingCsvSummaryFields> = {},
+): BillingCsvSummaryFields {
+  return {
+    total_revenue_excl_tax: 2000,
+    total_tax_amount: 100,
+    total_material_cost: 0,
+    total_commission_payout: 0,
+    salary_applicable: true,
+    total_monthly_salary_base: 30000,
+    total_monthly_salary_deduction: 0,
+    estimated_net_margin: -28000,
+    ...overrides,
+  };
+}
+
+/** 從總計區塊裡撈出某一個項目的值。找不到就直接丟錯,而不是回傳 undefined —— 「那一列整個不見了」
+ * 跟「那一列的值不對」都是失敗,不該有一種能靜悄悄地通過。 */
+function csvSummaryValue(summary: BillingCsvSummaryFields, label: string): string | number {
+  const item = buildBillingCsvSummaryItems(summary).find((entry) => entry.label === label);
+  if (item === undefined) {
+    throw new Error(`CSV 總計區塊少了「${label}」這一列`);
+  }
+  return item.value;
+}
+
+describe("CSV 總計區塊:項目與順序", () => {
+  it("八個項目、順序固定,而且標籤逐字沿用畫面上統計卡的文案", () => {
+    const labels = buildBillingCsvSummaryItems(csvSummaryFields()).map((item) => item.label);
+
+    expect(labels).toEqual([
+      "總營收(未稅)",
+      "稅金小計",
+      "總料錢成本",
+      "總抽成支出",
+      "月薪基本額合計",
+      "月薪扣款合計",
+      "月薪實發合計",
+      "商家總淨利",
+    ]);
+    // 畫面 JSX 用的也是這同一組常數(BillingReportPage.tsx 的 SummaryCard/CardTitle),所以這條
+    // 斷言等於同時釘住「畫面改了文案、CSV 卻留著舊名稱」這種漂移。
+    expect(labels).toEqual(Object.values(BILLING_SUMMARY_LABELS));
+  });
+});
+
+describe("CSV 總計區塊:salary_applicable = true(月薪算得出來)", () => {
+  it("八個項目全部是數字,而且逐項對得上 summary", () => {
+    const summary = csvSummaryFields();
+
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.revenueExclTax)).toBe(2000);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.taxAmount)).toBe(100);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.materialCost)).toBe(0);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.commissionPayout)).toBe(0);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryBase)).toBe(30000);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryDeduction)).toBe(0);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryNet)).toBe(30000);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.netMargin)).toBe(-28000);
+
+    for (const item of buildBillingCsvSummaryItems(summary)) {
+      expect(typeof item.value).toBe("number");
+    }
+  });
+
+  it("月薪實發 = 基本額 − 扣款(不是直接抄某一個欄位)", () => {
+    const summary = csvSummaryFields({
+      total_monthly_salary_base: 30000,
+      total_monthly_salary_deduction: 2500,
+    });
+
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryNet)).toBe(27500);
+  });
+
+  it("扣款真的是 0 時寫 0,不可以被當成「算不出來」吞掉", () => {
+    // 反向保護:一個「永遠回傳說明文字」的壞函式也能讓上面那些「不是 0」的斷言全綠,所以一定要
+    // 有這條相反方向的測試。
+    const summary = csvSummaryFields({ total_monthly_salary_deduction: 0 });
+
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryDeduction)).toBe(0);
+  });
+});
+
+describe("CSV 總計區塊:salary_applicable = false(月薪四項絕對不可以寫 0)", () => {
+  const summary = csvSummaryFields({
+    salary_applicable: false,
+    total_monthly_salary_base: null,
+    total_monthly_salary_deduction: null,
+    estimated_net_margin: null,
+  });
+
+  it("月薪基本額 / 月薪扣款 / 月薪實發 / 商家總淨利 四格都寫說明文字", () => {
+    for (const label of [
+      BILLING_SUMMARY_LABELS.monthlySalaryBase,
+      BILLING_SUMMARY_LABELS.monthlySalaryDeduction,
+      BILLING_SUMMARY_LABELS.monthlySalaryNet,
+      BILLING_SUMMARY_LABELS.netMargin,
+    ]) {
+      const value = csvSummaryValue(summary, label);
+      expect(value).toBe(SALARY_UNAVAILABLE_TEXT);
+      // 「不是 0、不是 "0"、不是 "0 元"、不是空字串」—— CSV 的空白格在 Excel 裡看起來跟 0 幾乎
+      // 沒差別,所以空字串跟 0 一樣要擋。
+      expectNeverLooksLikeZero(value);
+    }
+  });
+
+  it("CSV 這四格的內容,跟畫面上那四張卡顯示的是同一段文字(共用同一個 fallback 來源)", () => {
+    // 畫面:salaryCardValue() → null → SummaryCard 印 unavailableText(renderedSummaryCard 模擬)。
+    // CSV :同一支 resolveSalaryDisplay() → 直接把那段文字寫進格子。
+    // 兩邊都只能從 resolveSalaryDisplay 拿答案,所以這條斷言在「有人只改其中一邊」時會紅。
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryBase)).toBe(
+      renderedSummaryCard(salaryCardValue(false, null)),
+    );
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.netMargin)).toBe(
+      renderedSummaryCard(salaryCardValue(false, null)),
+    );
+  });
+
+  it("營收 / 稅金 / 料錢 / 抽成 不受影響,照常是數字", () => {
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.revenueExclTax)).toBe(2000);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.taxAmount)).toBe(100);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.materialCost)).toBe(0);
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.commissionPayout)).toBe(0);
+  });
+});
+
+describe("CSV 總計區塊:商家總淨利是負數(虧損)時要如實輸出", () => {
+  it("estimated_net_margin = -28000 → 就是 -28000,不是「算不出來」也不是 0", () => {
+    // 虧損是合法的真實數字。把負數吞掉(當成 null / 空白 / 0)比顯示不出來更危險:老闆會以為
+    // 這段期間打平或小賺。
+    const value = csvSummaryValue(csvSummaryFields(), BILLING_SUMMARY_LABELS.netMargin);
+
+    expect(value).toBe(-28000);
+    expect(typeof value).toBe("number");
+    expect(value).not.toBe(SALARY_UNAVAILABLE_TEXT);
+    expectNeverLooksLikeZero(value);
+  });
+
+  it("月薪實發算出來是負數(扣款大於基本額)也照樣輸出負數", () => {
+    const summary = csvSummaryFields({
+      total_monthly_salary_base: 10000,
+      total_monthly_salary_deduction: 12000,
+    });
+
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.monthlySalaryNet)).toBe(-2000);
+  });
+});
+
+describe("formatCsvPeriodText(報表區間文字)", () => {
+  it("格式是「起始日 ~ 結束日」", () => {
+    expect(formatCsvPeriodText("2026-09-01", "2026-09-30")).toBe("2026-09-01 ~ 2026-09-30");
+  });
+
+  it("自訂區間(跨月)一樣照實寫,不做任何美化", () => {
+    expect(formatCsvPeriodText("2026-02-15", "2026-03-15")).toBe("2026-02-15 ~ 2026-03-15");
+  });
+});
+
+describe("buildBillingCsvSummarySection(總計區塊完整的 CSV 列)", () => {
+  it("區間 → 空白列 → 項目/金額標題 → 八個項目 → 空白列", () => {
+    const section = buildBillingCsvSummarySection(csvSummaryFields(), "2026-09-01", "2026-09-30");
+
+    expect(section[0]).toEqual([CSV_PERIOD_LABEL, "2026-09-01 ~ 2026-09-30"]);
+    // 空陣列 = CSV 裡的一整列空白,兩段不同形狀的表格靠它隔開(沒有它,Excel 打開後總計跟明細
+    // 會糊成一片)。
+    expect(section[1]).toEqual([]);
+    expect(section[2]).toEqual([CSV_SUMMARY_ITEM_HEADER, CSV_SUMMARY_AMOUNT_HEADER]);
+    expect(section.slice(3, 11)).toEqual(
+      buildBillingCsvSummaryItems(csvSummaryFields()).map((item) => [item.label, item.value]),
+    );
+    expect(section[section.length - 1]).toEqual([]);
+    expect(section).toHaveLength(12);
+  });
+
+  it("salary_applicable = false 時,整個區塊裡不存在任何一格是 0 或空字串的月薪數字", () => {
+    const section = buildBillingCsvSummarySection(
+      csvSummaryFields({
+        salary_applicable: false,
+        total_monthly_salary_base: null,
+        total_monthly_salary_deduction: null,
+        estimated_net_margin: null,
+      }),
+      "2026-09-05",
+      "2026-09-20",
+    );
+    const salaryLabels: string[] = [
+      BILLING_SUMMARY_LABELS.monthlySalaryBase,
+      BILLING_SUMMARY_LABELS.monthlySalaryDeduction,
+      BILLING_SUMMARY_LABELS.monthlySalaryNet,
+      BILLING_SUMMARY_LABELS.netMargin,
+    ];
+
+    const salaryLines = section.filter(
+      (line) => line.length === 2 && salaryLabels.includes(String(line[0])),
+    );
+    expect(salaryLines).toHaveLength(4);
+    for (const line of salaryLines) {
+      expect(line[1]).toBe(SALARY_UNAVAILABLE_TEXT);
+      expectNeverLooksLikeZero(line[1]);
+    }
   });
 });

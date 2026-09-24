@@ -160,6 +160,32 @@ export function monthlySalaryCellText(
 }
 
 /**
+ * 把一個 SalaryDisplay 轉成「寫進 CSV 的那一格」:能算就是數字(Excel 打開後可以繼續加總),
+ * 不能算就是那段說明文字。
+ *
+ * ⚠️ 這支函式是 CSV 這一側**唯一**一處把「算不出來」翻成使用者看得到的內容的地方,而且它吃的是
+ *    resolveSalaryDisplay() 的結果 —— 也就是跟畫面(salaryCardValue → salaryDisplayValue)共用
+ *    同一個判斷來源。這是 2026-09-24 第二次踩坑之後定下來的做法:不是「兩邊各自記得要寫一樣的
+ *    fallback」,而是讓兩邊在結構上都只能從 resolveSalaryDisplay 拿答案,想只改其中一邊就得先把
+ *    函式拆開,不可能「順手」發生(同 COMMISSION_FALLBACK 那一段的理由)。
+ */
+export function salaryDisplayCsvCell(display: SalaryDisplay): string | number {
+  return display.kind === "value" ? display.value : display.text;
+}
+
+/**
+ * CSV 總計區塊的一格月薪數字。跟畫面 SummaryCard 的 salaryCardValue() 是同一支
+ * resolveSalaryDisplay() 的兩個薄包裝,差別只在「算不出來」時畫面回傳 null(交給 SummaryCard 去
+ * 印 unavailableText)、CSV 直接把同一段文字寫進格子裡(CSV 沒有元件可以幫忙渲染)。
+ */
+export function salaryCsvValue(
+  salaryApplicable: boolean | undefined,
+  value: number | null | undefined,
+): string | number {
+  return salaryDisplayCsvCell(resolveSalaryDisplay(salaryApplicable, value));
+}
+
+/**
  * CSV「月薪淨額」欄的一格。
  *
  * 月薪算不出來時寫進說明文字,**不留空白格**——CSV 的空白格在 Excel 裡看起來跟 0 很像,會重演
@@ -173,8 +199,7 @@ export function monthlySalaryCsvCell(
   if (row.compensation_type !== "monthly_salary") {
     return row.net_pay ?? "";
   }
-  const display = resolveSalaryDisplay(salaryApplicable, row.net_pay);
-  return display.kind === "value" ? display.value : display.text;
+  return salaryCsvValue(salaryApplicable, row.net_pay);
 }
 
 // =========================================================================
@@ -252,4 +277,140 @@ export function employmentStatusCsvText(
   row: Pick<StaffBreakdownRow, "is_active_as_of">,
 ): typeof EMPLOYED_LABEL | typeof RESIGNED_LABEL {
   return isStillEmployed(row) ? EMPLOYED_LABEL : RESIGNED_LABEL;
+}
+
+// =========================================================================
+// CSV 匯出的「總計區塊」(2026-09-24 使用者裁決 A:總計放在同一個 CSV 的最上面)
+// =========================================================================
+
+/**
+ * 店家報表頁上方那幾張統計卡的標題文字。
+ *
+ * ⚠️ 為什麼要把畫面上的 label 抽成常數(而不是讓 JSX 和 CSV 各寫一次同樣的中文字):
+ *    這次 CSV 要新增的「總計區塊」逐項對應的就是這幾張卡,使用者的要求是「欄位名稱一律沿用畫面
+ *    上統計卡的既有文案」。如果兩邊各打一次中文字,哪天有人在畫面上把「總料錢成本」改成別的說法,
+ *    匯出檔會留著舊名稱,商家對帳時會以為是兩個不同的東西 —— 這跟本檔案前面那兩次 fallback 漂移
+ *    是同一種失敗模式(沒有錯誤訊息、只有人看得出來不對),所以一樣用「共用同一個來源」解掉。
+ *
+ * 稅金與商家總淨利在畫面上是 <CardTitle> 而不是 SummaryCard,但對商家來說一樣是「上方那一組
+ * 統計數字」,所以一起收在這裡。
+ */
+export const BILLING_SUMMARY_LABELS = {
+  revenueExclTax: "總營收(未稅)",
+  taxAmount: "稅金小計",
+  materialCost: "總料錢成本",
+  commissionPayout: "總抽成支出",
+  monthlySalaryBase: "月薪基本額合計",
+  monthlySalaryDeduction: "月薪扣款合計",
+  monthlySalaryNet: "月薪實發合計",
+  netMargin: "商家總淨利",
+} as const;
+
+/** 總計區塊最上面那一列的欄位名。存成檔案之後,光看檔名不一定分得出是哪一段期間的報表,所以
+ * 區間一定要寫進檔案內容裡。 */
+export const CSV_PERIOD_LABEL = "報表區間";
+
+/** 總計區塊自己的兩欄標題。 */
+export const CSV_SUMMARY_ITEM_HEADER = "項目";
+export const CSV_SUMMARY_AMOUNT_HEADER = "金額";
+
+/** 報表區間那一格的文字。格式 `YYYY-MM-DD ~ YYYY-MM-DD`,跟檔名用的起訖日期同一組值。 */
+export function formatCsvPeriodText(startDate: string, endDate: string): string {
+  return `${startDate} ~ ${endDate}`;
+}
+
+/** 總計區塊需要用到的 summary 欄位。用 Pick 而不是整個 MerchantBillingSummary,測試才不用為了測
+ * 八列數字去編一整份含明細的報表。 */
+export type BillingCsvSummaryFields = Pick<
+  MerchantBillingSummary,
+  | "total_revenue_excl_tax"
+  | "total_tax_amount"
+  | "total_material_cost"
+  | "total_commission_payout"
+  | "salary_applicable"
+  | "total_monthly_salary_base"
+  | "total_monthly_salary_deduction"
+  | "estimated_net_margin"
+>;
+
+/** 總計區塊的一個項目:左邊是畫面上那張卡的標題,右邊是數字或「算不出來」的說明文字。 */
+export interface BillingCsvSummaryItem {
+  readonly label: string;
+  readonly value: string | number;
+}
+
+/** CSV 的一列(空陣列 = 一整列空白,用來把兩段表格隔開)。 */
+export type CsvLine = Array<string | number>;
+
+/**
+ * 總計區塊的八個項目。順序刻意跟使用者裁決時列出的順序一致:營收 → 稅金 → 料錢 → 抽成 →
+ * 月薪三項 → 商家總淨利,也就是「收進來多少 → 扣掉哪些 → 最後剩多少」的對帳順序
+ * (畫面上稅金卡為了版面被排在月薪三張卡之後,但對帳時緊接在營收後面比較好讀)。
+ *
+ * ⚠️ 月薪四項(基本額/扣款/實發/商家總淨利)在 salary_applicable=false 時寫的是
+ *    SALARY_UNAVAILABLE_TEXT,**不是 0、不是空白**。這四格走的是 salaryCsvValue() /
+ *    resolveNetMonthlySalary(),跟畫面那四張卡同一個判斷來源 —— 理由見 salaryDisplayCsvCell()
+ *    的註解(本專案 2026-09-24 已經因為「畫面與 CSV 各寫一份 fallback」踩過兩次)。
+ *
+ * ⚠️ 反過來,estimated_net_margin 是負數(虧損,例如 -28000)時要**如實輸出負數**。負數是合法的
+ *    真實數字,不是「算不出來」;把虧損吞掉只留空白,比顯示 0 更容易讓老闆誤判。
+ */
+export function buildBillingCsvSummaryItems(
+  summary: BillingCsvSummaryFields,
+): BillingCsvSummaryItem[] {
+  const salaryApplicable = summary.salary_applicable;
+  return [
+    { label: BILLING_SUMMARY_LABELS.revenueExclTax, value: summary.total_revenue_excl_tax },
+    { label: BILLING_SUMMARY_LABELS.taxAmount, value: summary.total_tax_amount },
+    { label: BILLING_SUMMARY_LABELS.materialCost, value: summary.total_material_cost },
+    { label: BILLING_SUMMARY_LABELS.commissionPayout, value: summary.total_commission_payout },
+    {
+      label: BILLING_SUMMARY_LABELS.monthlySalaryBase,
+      value: salaryCsvValue(salaryApplicable, summary.total_monthly_salary_base),
+    },
+    {
+      label: BILLING_SUMMARY_LABELS.monthlySalaryDeduction,
+      value: salaryCsvValue(salaryApplicable, summary.total_monthly_salary_deduction),
+    },
+    {
+      label: BILLING_SUMMARY_LABELS.monthlySalaryNet,
+      // 月薪實發 = 基本額 − 扣款,跟畫面那張卡走同一支 resolveNetMonthlySalary(),不在這裡自己減
+      // 一次(自己減就等於又開了一條可以漂移的路徑)。
+      value: salaryDisplayCsvCell(resolveNetMonthlySalary(summary)),
+    },
+    {
+      label: BILLING_SUMMARY_LABELS.netMargin,
+      value: salaryCsvValue(salaryApplicable, summary.estimated_net_margin),
+    },
+  ];
+}
+
+/**
+ * 總計區塊的完整 CSV 列(區間 → 空白列 → 項目/金額標題 → 八個項目 → 空白列)。
+ *
+ * ⚠️ 這個格式的取捨,以及為什麼刻意長成這樣(請不要在沒有問過使用者的情況下改掉):
+ *    把「總計區塊」跟「服務人員明細表」放進同一個 CSV,代表這個檔案裡有**兩種不同形狀的表格**
+ *    (上面兩欄、下面六欄),嚴格來說它不再是一份乾淨的、機器可讀的 CSV —— 用程式去 parse 會比較
+ *    麻煩,得先跳過前面幾列。
+ *    2026-09-24 使用者是在知道這個取捨的情況下選擇 A(總計放同一個檔案的最上面)的,理由是這份
+ *    報表的真實用途是「商家用 Excel 打開來對帳」,不是餵給程式;分成兩個檔案或只給明細,反而讓
+ *    商家得自己重新加總一次,那正是這次要解決的問題。
+ *    所以:**看到這個 CSV「格式怪怪的」不是 bug,是裁決**。真的需要機器可讀的輸出時,請另外開一支
+ *    匯出(例如模組 12 的報表匯出中心),不要把這一份改掉。
+ *
+ * 結尾那一列空白是刻意的:沒有它,總計區塊的最後一項會跟明細的標題列黏在一起,Excel 打開後兩段
+ * 表格糊成一片,很難一眼看出「下面換一張表了」。
+ */
+export function buildBillingCsvSummarySection(
+  summary: BillingCsvSummaryFields,
+  startDate: string,
+  endDate: string,
+): CsvLine[] {
+  return [
+    [CSV_PERIOD_LABEL, formatCsvPeriodText(startDate, endDate)],
+    [],
+    [CSV_SUMMARY_ITEM_HEADER, CSV_SUMMARY_AMOUNT_HEADER],
+    ...buildBillingCsvSummaryItems(summary).map((item): CsvLine => [item.label, item.value]),
+    [],
+  ];
 }

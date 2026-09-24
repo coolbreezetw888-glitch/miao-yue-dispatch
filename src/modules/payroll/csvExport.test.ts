@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildCsvContent } from "./csvExport";
+import { buildCsvContent, buildCsvContentFromRows } from "./csvExport";
 
 describe("buildCsvContent", () => {
   it("正常欄位直接用逗號組合,並帶有 UTF-8 BOM 開頭", () => {
@@ -35,5 +35,35 @@ describe("buildCsvContent", () => {
   it("多筆資料列正確用 CRLF 分隔", () => {
     const csv = buildCsvContent(["姓名"], [["甲"], ["乙"], ["丙"]]);
     expect(csv.split("\r\n")).toHaveLength(4);
+  });
+});
+
+// 2026-09-24 使用者裁決 A:店家報表的 CSV 變成「兩段不同形狀的表格疊在同一個檔案」(上面兩欄的
+// 總計區塊、下面六欄的人員明細),中間靠一列空白隔開。空白列是這個格式能被人看懂的關鍵,所以
+// 這裡把「空陣列 → 一整列空白」這個行為釘住,不要哪天被當成無意義的空資料順手過濾掉。
+describe("buildCsvContentFromRows(沒有單一表頭的 CSV,給總計區塊 + 明細疊在一起用)", () => {
+  it("每個陣列輸出一列,一樣帶 UTF-8 BOM 開頭", () => {
+    const csv = buildCsvContentFromRows([
+      ["報表區間", "2026-09-01 ~ 2026-09-30"],
+      ["項目", "金額"],
+      ["總營收(未稅)", 2000],
+    ]);
+
+    expect(csv).toBe("\uFEFF報表區間,2026-09-01 ~ 2026-09-30\r\n項目,金額\r\n總營收(未稅),2000");
+  });
+
+  it("空陣列輸出一整列空白(兩段表格之間的分隔列)", () => {
+    const csv = buildCsvContentFromRows([["項目", "金額"], [], ["姓名", "計酬類型"]]);
+
+    expect(csv).toBe("\uFEFF項目,金額\r\n\r\n姓名,計酬類型");
+  });
+
+  it("buildCsvContent 就是「第一列當表頭」的這支函式(兩者不會各寫一份跳脫規則)", () => {
+    expect(buildCsvContent(["姓名", "金額"], [["王小明", 100]])).toBe(
+      buildCsvContentFromRows([
+        ["姓名", "金額"],
+        ["王小明", 100],
+      ]),
+    );
   });
 });

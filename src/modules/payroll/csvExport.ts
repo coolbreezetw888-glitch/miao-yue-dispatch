@@ -12,16 +12,26 @@ function escapeCsvCell(value: string | number | null | undefined): string {
   return text;
 }
 
+/**
+ * 把一整組列組成完整的 CSV 字串(含 UTF-8 BOM,避免 Excel 開啟中文亂碼)。
+ *
+ * 為什麼需要這支「沒有表頭概念」的版本:店家報表的 CSV 現在是**兩段不同形狀的表格疊在一起**
+ * (上面是兩欄的總計區塊、下面是六欄的人員明細,中間隔一列空白),整份檔案不存在單一表頭,
+ * 用 buildCsvContent(headers, rows) 表達不出來。空陣列 `[]` 會輸出一整列空白,就是段落之間的
+ * 分隔列。這個格式的取捨與理由見 billingReportDisplay.ts 的 buildBillingCsvSummarySection()。
+ */
+export function buildCsvContentFromRows(
+  rows: Array<Array<string | number | null | undefined>>,
+): string {
+  return "﻿" + rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
 /** 把表頭 + 資料列組成完整的 CSV 字串(含 UTF-8 BOM,避免 Excel 開啟中文亂碼)。 */
 export function buildCsvContent(
   headers: string[],
   rows: Array<Array<string | number | null | undefined>>,
 ): string {
-  const lines = [headers.map(escapeCsvCell).join(",")];
-  for (const row of rows) {
-    lines.push(row.map(escapeCsvCell).join(","));
-  }
-  return "﻿" + lines.join("\r\n");
+  return buildCsvContentFromRows([headers, ...rows]);
 }
 
 /** 觸發瀏覽器下載 CSV 檔案。純粹的瀏覽器 API 操作,不呼叫任何後端。 */

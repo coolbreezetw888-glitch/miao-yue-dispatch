@@ -36,8 +36,10 @@ import { useMerchantBillingSummaryByRange } from "./api";
 // 測試。抽出來的理由寫在那支檔案的檔頭:這一頁的失敗模式是「畫面完全正常、數字是假的」,靠人工
 // 點畫面幾乎不可能發現,必須有測試釘住。
 import {
+  BILLING_SUMMARY_LABELS,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
+  buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
   employmentStatusCsvText,
@@ -50,7 +52,7 @@ import {
   shouldShowResignedBadge,
   shouldShowSalaryUnavailableNotice,
 } from "./billingReportDisplay";
-import { buildCsvContent, downloadCsv } from "./csvExport";
+import { buildCsvContentFromRows, downloadCsv } from "./csvExport";
 import { RequireBillingAccess } from "./RequireBillingAccess";
 import { ReportPeriodPicker, useReportPeriodState } from "./ReportPeriodPicker";
 
@@ -92,6 +94,21 @@ function BillingReportPageInner() {
 
   function handleExportCsv() {
     if (!summary) return;
+    // ⚠️ 2026-09-24 使用者裁決 A ——「總計區塊放在同一個 CSV 的最上面」,以及這個決定的已知取捨:
+    //
+    //   改動前,匯出的 CSV 只有下面那段六欄的人員明細,畫面上方那幾張統計卡(總營收、稅金、料錢、
+    //   抽成、月薪三項、商家總淨利)一個都沒進去,商家拿去對帳時得自己重新加總一次 —— 而那正是
+    //   這一頁本來就已經幫他算好的東西。
+    //
+    //   選項 A 的代價說清楚:總計區塊是兩欄、明細是六欄,兩段不同形狀的表格疊在同一個檔案裡,
+    //   嚴格來說這份 CSV 不再是乾淨的機器可讀格式(程式要 parse 得先跳過前面幾列)。使用者是在
+    //   知道這件事的前提下選 A 的,理由是這份報表的真實用途是「用 Excel 打開來對帳給人看」,
+    //   不是餵給程式;拆成兩個檔案反而讓對帳的人要同時開兩個視窗。
+    //
+    //   ➜ 所以看到這個 CSV「上下兩段長得不一樣」不是壞掉,是裁決。需要機器可讀的輸出時請另外開
+    //     一支匯出(模組 12 報表匯出中心),不要把這一份改掉。格式細節與逐列的值怎麼決定,在
+    //     billingReportDisplay.ts 的 buildBillingCsvSummarySection()(有單元測試釘住)。
+    const summarySection = buildBillingCsvSummarySection(summary, startDate, endDate);
     // 「在職狀態」欄:CSV 一樣要帶這個資訊。理由——匯出的用途正是「把報表帶離系統」(丟給會計、
     // 自己在 Excel 對帳),那個情境下使用者看不到畫面上的「已離職」標籤,離職人員的數字就跟現職
     // 人員混在一起,完全無法分辨,等於把「以為系統出錯」這個困惑原封不動搬到一個更難查證的地方
@@ -113,7 +130,11 @@ function BillingReportPageInner() {
       // 讓畫面跟匯出檔永遠一致。
       monthlySalaryCsvCell(salaryApplicable, row),
     ]);
-    downloadCsv(`帳務報表_${startDate}_${endDate}.csv`, buildCsvContent(headers, rows));
+    downloadCsv(
+      `帳務報表_${startDate}_${endDate}.csv`,
+      // 總計區塊(自帶結尾的空白分隔列)→ 明細標題列 → 明細資料列。明細那一段完全沒動。
+      buildCsvContentFromRows([...summarySection, headers, ...rows]),
+    );
   }
 
   return (
@@ -153,25 +174,37 @@ function BillingReportPageInner() {
         <p className="text-sm text-destructive">載入失敗,請確認你有查看帳務報表的權限。</p>
       ) : summary ? (
         <>
+          {/* 2026-09-24:這幾張卡的標題文字改成從 BILLING_SUMMARY_LABELS 取,不再寫死在 JSX ——
+              CSV 總計區塊的「項目」欄逐項對應的就是這幾張卡,使用者要求兩邊用同一套文案。兩邊各打
+              一次中文字的話,哪天有人只改了畫面,匯出檔會留著舊名稱,商家會以為是兩個不同的東西。 */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <SummaryCard label="總營收(未稅)" value={summary.total_revenue_excl_tax} />
-            <SummaryCard label="總料錢成本" value={summary.total_material_cost} />
-            <SummaryCard label="總抽成支出" value={summary.total_commission_payout} />
+            <SummaryCard
+              label={BILLING_SUMMARY_LABELS.revenueExclTax}
+              value={summary.total_revenue_excl_tax}
+            />
+            <SummaryCard
+              label={BILLING_SUMMARY_LABELS.materialCost}
+              value={summary.total_material_cost}
+            />
+            <SummaryCard
+              label={BILLING_SUMMARY_LABELS.commissionPayout}
+              value={summary.total_commission_payout}
+            />
             {/* 2026-09-24 使用者裁決:月薪這三張卡在「區間不是完整月份」時顯示說明文字,不顯示
                 0(顯示 0 會讓商家以為真的沒有月薪成本)。判斷一律以 salaryApplicable 為準,
                 同時把值本身當成 null 傳下去,避免「旗標說不能算、卡片卻還印著一個數字」的不一致。 */}
             <SummaryCard
-              label="月薪基本額合計"
+              label={BILLING_SUMMARY_LABELS.monthlySalaryBase}
               value={salaryCardValue(salaryApplicable, summary.total_monthly_salary_base)}
               unavailableText={SALARY_UNAVAILABLE_TEXT}
             />
             <SummaryCard
-              label="月薪扣款合計"
+              label={BILLING_SUMMARY_LABELS.monthlySalaryDeduction}
               value={salaryCardValue(salaryApplicable, summary.total_monthly_salary_deduction)}
               unavailableText={SALARY_UNAVAILABLE_TEXT}
             />
             <SummaryCard
-              label="月薪實發合計"
+              label={BILLING_SUMMARY_LABELS.monthlySalaryNet}
               value={netMonthlySalary}
               unavailableText={SALARY_UNAVAILABLE_TEXT}
             />
@@ -202,7 +235,7 @@ function BillingReportPageInner() {
               出來、不計入淨利」這個關係連在一起看),其餘統計卡維持原本的 grid 排列不變。 */}
           <Card>
             <CardHeader>
-              <CardTitle>稅金小計</CardTitle>
+              <CardTitle>{BILLING_SUMMARY_LABELS.taxAmount}</CardTitle>
               <CardDescription>
                 這段期間完成訂單的稅金加總,已經從「商家總淨利」的計算中排除。
               </CardDescription>
@@ -216,7 +249,7 @@ function BillingReportPageInner() {
 
           <Card>
             <CardHeader>
-              <CardTitle>商家總淨利</CardTitle>
+              <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
               <CardDescription>
                 總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。只是
                 概估,不含房租/水電等其他營運成本,不是完整的財務損益表。
