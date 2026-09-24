@@ -14,8 +14,15 @@ export default mergeConfig(
       // 大部分測試對象是 React hooks / 瀏覽器 API(localStorage 等),用 jsdom 模擬瀏覽器環境。
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
-      // 只收 src 底下的 *.test.ts(x),Playwright 的 e2e/**、pgTAP 的 supabase/tests/** 不歸這裡管。
-      include: ["src/**/*.test.{ts,tsx}"],
+      // 只收 src 底下的 *.test.ts(x);pgTAP 的 supabase/tests/** 不歸這裡管。
+      //
+      // SPECS-INDEX #714:額外收 `e2e/support/**/*.test.{ts,tsx}` 這一條窄路徑——
+      // e2e/support/env-file.ts 是一支純字串解析函式(跟瀏覽器、資料庫都無關),用 Vitest
+      // 秒跑就能逐條驗完,不值得為它啟動 dev server + 真實瀏覽器。
+      // ⚠️ 這條路徑刻意只收 `*.test.ts`:**Playwright 的檔案一律是 `*.spec.ts`**,不會被
+      //    Vitest 誤收進來(誤收的話 Vitest 會去 import @playwright/test 然後整批爆掉)。
+      //    新增 e2e 測試時請維持這個命名分工:Playwright = `.spec.ts`,Vitest = `.test.ts`。
+      include: ["src/**/*.test.{ts,tsx}", "e2e/support/**/*.test.{ts,tsx}"],
       css: false,
     },
   }),

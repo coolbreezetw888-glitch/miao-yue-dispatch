@@ -13,6 +13,16 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // 🔴 SPECS-INDEX #714:**一定要明寫 testMatch,不要用預設值。**
+  // Playwright 的預設 testMatch 是 `**/*.@(spec|test).?(c|m)[jt]s?(x)`——**連 `*.test.ts` 也收**。
+  // 2026-09-25 新增的 e2e/support/env-file.test.ts 是一支 Vitest 測試(純字串解析函式,不需要
+  // 瀏覽器),放在 e2e/ 底下之後,Playwright 會把它當成自己的測試檔載入 → import 到 `vitest`
+  // → 在收集階段整個爆掉,`npx playwright test --list` 的輸出變成
+  // **「Total: 0 tests in 0 files」**(實測)。
+  // ⚠️ 這個失效模式極度危險:它不是「一條測試紅了」,而是**整套 e2e 靜默變成 0 條**,
+  //    CI 上看起來像是「全部通過」。收斂成只收 `*.spec.ts` 之後,兩層測試的命名分工就固定了:
+  //    **Playwright = `*.spec.ts`,Vitest = `*.test.ts`**(vitest.config.ts 的 include 也是照這個分)。
+  testMatch: "**/*.spec.ts",
   fullyParallel: true,
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 1 : 0,

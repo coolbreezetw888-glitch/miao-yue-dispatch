@@ -46,6 +46,7 @@ import {
 } from "./support/mobile-overflow-fixture";
 import { primeCurrentMerchant } from "./support/app-shell";
 import { assertNoHorizontalOverflow } from "./support/overflow-assert";
+import { readOptionalEnvValue } from "./support/env-file";
 
 // **重要,踩過的坑**:光是 `page.setViewportSize({width:375,...})` 不夠——那只是把桌面版
 // Chromium 的視窗改窄,不會套用 `isMobile`/`hasTouch` 這些手機模擬旗標。實測發現,Radix
@@ -286,28 +287,42 @@ test("訂單管理頁 /app/orders(分頁控制項 + 長內容訂單卡片)", asy
 });
 
 // ---------------------------------------------------------------------------
-// 超級管理員後台:選用區塊,預設略過。
+// 超級管理員後台:需要一組預先建立好的平台管理員測試帳號。
 //
 // platform_admins 這張表刻意沒有開放一般使用者自助寫入(見超級管理員後台規格書 2.8「超級
 // 管理員本人種子資料不進版控」的設計精神——這張表的異動一律走人工 SQL,不是前端 client
 // 呼叫範圍內能做的事),所以沒辦法在這支測試裡自動建立/清除一個「臨時的」平台管理員測試帳號。
+// **上面這段仍然成立**,但下面這個結論已經不成立了:
 //
-// 如果要涵蓋這幾個頁面,需要先由有 Supabase 資料庫直接存取權限的人手動建立一個專用的、
-// 長期保留的測試帳號並登記進 platform_admins,把帳密存進本機 .env(不要 commit):
-//   E2E_PLATFORM_ADMIN_EMAIL=...
-//   E2E_PLATFORM_ADMIN_PASSWORD=...
-// 這是主腦/使用者需要確認是否要建立的一個長期 fixture(牽涉到 platform_admins 這張
-// 敏感表格),這次交付先用臨時建立+立即刪除的方式人工驗證過 MerchantDetailPage.tsx 的修正
-// 有效(見交付報告),沒有把這個帳號留在資料庫裡長期存在。
+// 🔴 2026-09-25(SPECS-INDEX #711)更正:那組專用的、長期保留的平台管理員測試帳號**已經
+//    由主腦手動建立好並登記進 platform_admins**,帳密也已經寫進本機 .env(不進版控):
+//      E2E_PLATFORM_ADMIN_EMAIL=...
+//      E2E_PLATFORM_ADMIN_PASSWORD=...
+//    所以這個區塊的 3 條測試在本機**應該要真的執行**,不是「預設略過」。
+//
+// 🔴 **在本機看到這 3 條顯示 skipped,就是故障,不是過關**,一律往下查兩種可能的原因:
+//    ① 取值方式錯了:必須用 e2e/support/env-file.ts 的 readOptionalEnvValue()。
+//       playwright.config.ts 刻意沒有掛 dotenv、package.json 的 test:e2e 是裸
+//       `playwright test`,所以 `.env` 的內容**不會**進到 process.env——舊版這裡直接寫
+//       `process.env["E2E_PLATFORM_ADMIN_EMAIL"]`,值永遠是 undefined,下面那個
+//       test.skip 的條件永遠成立,這 3 條從專案建立至今一次都沒被執行過。
+//    ② 被 serial 模式吃掉:這個檔案 L73 是**檔案層級**的
+//       `test.describe.configure({ mode: "serial" })`,前面 7 條任何一條失敗,這 3 條也會
+//       顯示 skipped——**畫面跟原因 ① 長得一模一樣**。所以驗收時要核對三個數字:
+//       宣告數(目前 10)=「Running N tests」= 「N passed」,而且 0 skipped。
+//
+// ⚠️ 下面的 test.skip(...) 條件式防呆**要保留**:別人 clone 這個 repo 時 .env 裡沒有這兩個
+//    值,不該讓整支測試爆掉。它只是「別人的機器上可以略過」,不是「我們自己的機器上可以略過」。
 // ---------------------------------------------------------------------------
-test.describe("超級管理員後台(選用,需要預先設定好的平台管理員測試帳號)", () => {
-  const platformAdminEmail = process.env["E2E_PLATFORM_ADMIN_EMAIL"];
-  const platformAdminPassword = process.env["E2E_PLATFORM_ADMIN_PASSWORD"];
+test.describe("超級管理員後台(需要預先設定好的平台管理員測試帳號)", () => {
+  // ⚠️ 一定要用 readOptionalEnvValue(),不要改回 process.env["..."]——理由見上面的區塊註解。
+  const platformAdminEmail = readOptionalEnvValue("E2E_PLATFORM_ADMIN_EMAIL");
+  const platformAdminPassword = readOptionalEnvValue("E2E_PLATFORM_ADMIN_PASSWORD");
 
   test.skip(
     !platformAdminEmail || !platformAdminPassword,
     "未設定 E2E_PLATFORM_ADMIN_EMAIL / E2E_PLATFORM_ADMIN_PASSWORD,略過超級管理員後台檢查" +
-      "(見這個 describe 區塊開頭的完整說明)。",
+      "(見這個 describe 區塊開頭的完整說明)。**在本機看到這句話就是故障,不是過關。**",
   );
 
   test.beforeEach(async ({ page }) => {
