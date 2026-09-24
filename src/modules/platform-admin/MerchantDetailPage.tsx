@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -31,16 +32,31 @@ import { adminDisplayName, adminJobTitle, adminPhone } from "@/modules/merchant/
 import { useMerchantAdmins } from "@/modules/merchant/context";
 import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
+// 規則 6:所有中文標籤都從既有常數 import,不要在這個檔案裡再寫死一次字串。
+// 用語的「家」在模組 3(merchant_staff / merchant_agents 這兩張表屬於模組 3),
+// platform-admin 本來就已經在 import @/modules/merchant/*,再 import
+// @/modules/staff-agent/types(純型別/常數,不含 React 也不含 supabase client)方向一致。
+import {
+  AGENT_STATUS_LABELS,
+  STAFF_COMPENSATION_TYPE_LABELS,
+  STAFF_LOGIN_STATUS_LABELS,
+  type AgentStatus,
+  type StaffCompensationType,
+  type StaffLoginStatus,
+} from "@/modules/staff-agent/types";
 
 import {
   platformAddMerchantAdmin,
   platformFetchGroupById,
+  platformFetchMerchantAgents,
   platformFetchMerchantById,
+  platformFetchMerchantStaff,
   platformGetUserEmail,
   platformRemoveMerchantAdmin,
   platformSetGroupAdmin,
 } from "./api";
 import { getErrorMessage } from "./getErrorMessage";
+import { agentJobTitle, personDisplayName, personLoginEmail } from "./personDisplay";
 import { PlatformAdminShell } from "./PlatformAdminShell";
 
 const ALL_MERCHANTS_QUERY_KEY = ["platform-admin", "all-merchants"] as const;
@@ -49,6 +65,29 @@ const groupQueryKey = (id: string) => ["platform-admin", "group", id] as const;
 const userEmailQueryKey = (id: string) => ["platform-admin", "user-email", id] as const;
 const merchantAdminsQueryKey = (merchantId: string) =>
   ["merchant-module", "merchant-admins", merchantId] as const;
+// 規格書「超級管理員商家詳情強化」#702/#703:兩張唯讀名單卡片的 queryKey,
+// 沿用這個檔案既有的 ["platform-admin", …] 前綴命名慣例。
+const merchantStaffQueryKey = (merchantId: string) =>
+  ["platform-admin", "merchant-staff", merchantId] as const;
+const merchantAgentsQueryKey = (merchantId: string) =>
+  ["platform-admin", "merchant-agents", merchantId] as const;
+
+/** 客服狀態徽章的顏色,規則完全比照 AgentListPage.tsx 既有的 statusBadgeVariant()。
+ *  刻意在這裡複製一份三行的規則、而不是從 AgentListPage.tsx import:那個檔案是一整頁
+ *  商家端畫面(帶著表單、dialog、mutation),平台端只為了一個 variant 去 import 它,
+ *  會把整頁的相依一起拉進這個 bundle。 */
+function agentStatusBadgeVariant(status: string): "default" | "secondary" | "destructive" {
+  if (status === "active") return "default";
+  if (status === "invited") return "secondary";
+  return "destructive";
+}
+
+/** #704 第 3 點:卡片底部的人數統計。removedCount === 0 時不顯示括號那一段。
+ *  total === 0 時回傳 null,由呼叫端改走 #705 的空清單文案。 */
+function personCountSummary(total: number, removedCount: number): string | null {
+  if (total === 0) return null;
+  return removedCount > 0 ? `共 ${total} 位(其中 ${removedCount} 位已移除)` : `共 ${total} 位`;
+}
 
 export default function MerchantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -77,6 +116,30 @@ export default function MerchantDetailPage() {
   });
 
   const { data: admins, isLoading: adminsLoading } = useMerchantAdmins(id);
+
+  // #702/#703:兩張唯讀名單。`enabled: Boolean(id)` 避免 id 還沒解析出來時白跑一次
+  // (函式端對 p_merchant_id => null 會回 0 筆不 raise,但沒必要浪費一次往返)。
+  // ⚠️ 這兩個 query 刻意**只有** useQuery、沒有任何 mutation——規格書第五節規則 1:
+  //    這兩張卡片永遠不寫入資料庫。
+  const {
+    data: staffList,
+    isLoading: staffLoading,
+    error: staffError,
+  } = useQuery({
+    queryKey: merchantStaffQueryKey(id ?? ""),
+    queryFn: () => platformFetchMerchantStaff(id as string),
+    enabled: Boolean(id),
+  });
+
+  const {
+    data: agentList,
+    isLoading: agentsLoading,
+    error: agentsError,
+  } = useQuery({
+    queryKey: merchantAgentsQueryKey(id ?? ""),
+    queryFn: () => platformFetchMerchantAgents(id as string),
+    enabled: Boolean(id),
+  });
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -469,6 +532,152 @@ export default function MerchantDetailPage() {
                     </Button>
                   ) : null}
                 </form>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ⚠️ 這兩張卡片刻意是唯讀的,沒有編輯/移除/權限按鈕,這是使用者裁決的結果,不是漏做。
+            理由(規格書「超級管理員商家詳情強化」2.2):
+              ① 責任界線:服務人員/客服是商家自己僱用、自己管理的人。平台方越過商家去改別人家的
+                 員工,改錯了責任歸屬會很亂,而系統裡沒有稽核軌跡可以分辨是誰改的。
+              ② 這兩張表的寫入都帶連動副作用(排班、可預約時段、抽成/薪資、通知對象、
+                 agent_permissions),平台端開一條繞過商家的寫入路徑,等於要把模組 3/6/7/8/11/15
+                 的規則在平台端全部再驗證一次。
+              ③ 這次需求的痛點是「看不到」,不是「改不了」。
+            ⚠️ 也不要因為「三張卡片要一致」就把上面的「管理員名單」改成唯讀——那張本來就可以
+               新增/移除,是模組 2 的既有功能(功能 3.4/3.5)。
+            ⚠️ 位置刻意放在「集團管理者」之後(整頁最後兩張):前三張都跟「誰能管理這間店」有關,
+               這兩張性質不同(是「這間店有哪些人在做事」),而且附加在最後對既有 JSX 的侵入最小。 */}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>服務人員名單</CardTitle>
+            <CardDescription>
+              唯讀。這間店目前登記的服務人員。新增/修改/移除請由商家自己在「人員管理」頁操作,平台方不代為修改。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* #705 三種狀態。⚠️「讀取失敗」這個分支不能省、也不能靜默當成空清單:
+                如果哪天權限退化(函式被誤 revoke、或 SECURITY DEFINER 被拿掉),失敗的表現
+                形式很可能是「空清單」而不是例外——把 error 分支明確畫出來,是唯一能讓人分辨
+                「這間店真的沒有服務人員」和「我讀不到」的辦法。
+                ⚠️ 用 getErrorMessage(err),不要用 `err instanceof Error ? …`——Supabase 回傳的
+                   error 不是 Error 子類別(見 getErrorMessage.ts 檔頭)。 */}
+            {staffLoading ? (
+              <p className="text-sm text-muted-foreground">載入中⋯</p>
+            ) : staffError ? (
+              <p className="text-sm text-destructive">載入失敗:{getErrorMessage(staffError)}</p>
+            ) : (staffList ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">目前沒有服務人員紀錄</p>
+            ) : (
+              <>
+                <ul className="space-y-2">
+                  {/* #704 第 2 點:排序完全由資料庫決定(在職 → 已移除,同組內依姓名),
+                      前端不要再排一次。 */}
+                  {(staffList ?? []).map((staff) => (
+                    <li
+                      key={staff.id}
+                      className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      {/* #706 手機版不溢出:窄螢幕上下堆疊、sm 以上左右排;左側資訊區 min-w-0;
+                          姓名 break-words(不要 truncate——姓名是最重要的資訊,寧可換行也不要
+                          切掉);手機與 Email 用 break-all(這兩種字串沒有空白可以斷行,只有
+                          break-words 仍會撐開容器)。不要在外層補 overflow-x-auto。 */}
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="break-words font-medium text-foreground">
+                          {personDisplayName(staff)}
+                        </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          <span className="break-all">手機:{staff.phone}</span>
+                          <span className="break-all">Email:{personLoginEmail(staff)}</span>
+                        </div>
+                      </div>
+                      {/* 最多會同時出現三顆徽章,所以要 flex-wrap;寬螢幕時不要被壓縮。 */}
+                      <div className="flex flex-wrap gap-1.5 sm:shrink-0">
+                        <Badge variant="outline">
+                          {
+                            STAFF_COMPENSATION_TYPE_LABELS[
+                              staff.compensation_type as StaffCompensationType
+                            ]
+                          }
+                        </Badge>
+                        <Badge variant="secondary">
+                          {STAFF_LOGIN_STATUS_LABELS[staff.login_status as StaffLoginStatus]}
+                        </Badge>
+                        {/* #704 第 1 點:已移除的人也要顯示(removed 是軟刪除,平台維運常見的
+                            問題是「這個人到底有沒有在這間店做過」,過濾掉就查不到了)。 */}
+                        {staff.status === "removed" ? (
+                          <Badge variant="destructive">已移除</Badge>
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {personCountSummary(
+                    (staffList ?? []).length,
+                    (staffList ?? []).filter((s) => s.status === "removed").length,
+                  )}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>客服名單</CardTitle>
+            <CardDescription>
+              唯讀。這間店目前登記的客服。新增/修改/移除與權限設定請由商家自己在「人員管理」頁操作,平台方不代為修改。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {agentsLoading ? (
+              <p className="text-sm text-muted-foreground">載入中⋯</p>
+            ) : agentsError ? (
+              <p className="text-sm text-destructive">載入失敗:{getErrorMessage(agentsError)}</p>
+            ) : (agentList ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">目前沒有客服紀錄</p>
+            ) : (
+              <>
+                <ul className="space-y-2">
+                  {(agentList ?? []).map((agent) => (
+                    <li
+                      key={agent.id}
+                      className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        {/* 暱稱 + 小字職稱壓在同一行,比照同一頁「管理員名單」的既有做法
+                            (平台維運視角:一次可能看很多商家,列高越矮越好)。 */}
+                        <p className="break-words font-medium text-foreground">
+                          {personDisplayName(agent)}
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            {agentJobTitle(agent)}
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          <span className="break-all">手機:{agent.phone}</span>
+                          <span className="break-all">Email:{personLoginEmail(agent)}</span>
+                        </div>
+                      </div>
+                      {/* ⚠️ 客服沒有計酬類型、也沒有 login_status(實查 information_schema),
+                          不要為了跟服務人員對稱而硬湊這兩顆徽章。客服的「有沒有開通登入」
+                          就是看 status(invited = 邀請信已寄出但還沒接受)。 */}
+                      <div className="flex flex-wrap gap-1.5 sm:shrink-0">
+                        <Badge variant={agentStatusBadgeVariant(agent.status)}>
+                          {AGENT_STATUS_LABELS[agent.status as AgentStatus]}
+                        </Badge>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-muted-foreground">
+                  {personCountSummary(
+                    (agentList ?? []).length,
+                    (agentList ?? []).filter((a) => a.status === "removed").length,
+                  )}
+                </p>
               </>
             )}
           </CardContent>

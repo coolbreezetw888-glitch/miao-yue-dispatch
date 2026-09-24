@@ -33,6 +33,21 @@ export const STAFF_LOGIN_STATUS_LABELS: Record<StaffLoginStatus, string> = {
   active: "已開通登入",
 };
 
+/** 服務人員的計酬類型。資料庫欄位 merchant_staff.compensation_type,CHECK 只允許這兩個值。 */
+export type StaffCompensationType = "monthly_salary" | "piece_rate";
+
+/** 計酬類型的中文顯示用語(規格書「超級管理員商家詳情強化」#700)。
+ *  ⚠️ 2026-09-24 用語統一:`piece_rate` 顯示「抽成制」(舊稱「按件計酬」,不要再用)。
+ *     資料庫存的值仍然是英文 'piece_rate',只有中文顯示改。
+ *  ⚠️ 這份用語目前在系統裡有第二處:StaffListPage.tsx 的 inline 三元運算式
+ *     (`staff.compensation_type === "monthly_salary" ? "月薪制" : "抽成制"`)。
+ *     這次刻意不動那一行(規格書明列「不要動 StaffListPage.tsx」),
+ *     但之後有人動到那附近時,請順手改成 import 這份常數,把用語收成一處。 */
+export const STAFF_COMPENSATION_TYPE_LABELS: Record<StaffCompensationType, string> = {
+  monthly_salary: "月薪制",
+  piece_rate: "抽成制",
+};
+
 /** 1.1.1 權限功能開關欄位,對應規格表「服務人員-權限功能」逐條(白話文字給 4.2 畫面使用)。 */
 export interface StaffPermissionFieldDef {
   key: keyof Pick<

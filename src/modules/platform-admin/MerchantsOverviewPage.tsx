@@ -83,8 +83,12 @@ export default function MerchantsOverviewPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">集團與商家總覽</h1>
+          {/* #693:這一頁最初只寫「可以篩選、可以啟用/停用」,加上商家名稱的連結樣式跟旁邊的
+              純文字一模一樣(見 #692),使用者因此以為「總覽只有停用/啟用」,完全不知道可以
+              點進詳情頁。視覺提示(#691/#692)加上這一句白話說明,兩層一起做,才不會下一輪
+              又問同一件事。 */}
           <p className="mt-1 text-sm text-muted-foreground">
-            系統裡所有的集團與商家，可以篩選、可以啟用/停用任一間店
+            系統裡所有的集團與商家,可以篩選、可以啟用/停用任一間店。點商家名稱或右側「查看詳情」,可以進到單一商家的詳情頁,查看並編輯基本資料、管理員、集團管理者,以及檢視服務人員與客服名單。
           </p>
         </div>
 
@@ -132,9 +136,15 @@ export default function MerchantsOverviewPage() {
               {filtered.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell>
+                    {/* #692:這個連結一直都在,但 `text-foreground` 就是普通正文的顏色,跟右邊
+                        「所屬集團/產業」那幾欄長得一模一樣,而 `hover:underline` 在手機上根本
+                        沒有 hover 可以觸發——所以使用者完全看不出商家名稱可以點。只換顏色
+                        token 成 `text-brand`(全專案已有 25 處在用的品牌色),其餘不動:
+                        不要改成 <Button>、不要加圖示、也不要改成常駐底線(既有慣例是
+                        hover:underline,見 MemberDetailPage.tsx 的「查看完整點數紀錄 →」)。 */}
                     <Link
                       to={`/platform-admin/merchants/${m.id}`}
-                      className="font-medium text-foreground hover:underline"
+                      className="font-medium text-brand hover:underline"
                     >
                       {m.name}
                     </Link>
@@ -156,14 +166,30 @@ export default function MerchantsOverviewPage() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{m.admin_count}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={togglingId === m.id}
-                      onClick={() => handleToggleStatus(m.id, m.status)}
-                    >
-                      {m.status === "active" ? "停用" : "啟用"}
-                    </Button>
+                    {/* #691:「操作」欄原本只有一顆停用/啟用按鈕,所以使用者看不出這一頁還能
+                        下鑽。這裡補一個文字連結放在按鈕左邊,沿用 MemberDetailPage.tsx
+                        L486-491 的既有慣例(`text-sm text-brand hover:underline` + 「→」),
+                        不自創新的 class 組合。
+                        ⚠️ 已停用的商家(status='disabled')這個連結照樣要顯示——停用只是客戶端
+                           不能下單,平台方當然還要能進去看。所以這裡刻意沒有任何條件判斷。
+                        ⚠️ 外層 TableCell 的 text-right 不動,只在裡面多包一層 flex 讓兩個元素
+                           靠右並排。 */}
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        to={`/platform-admin/merchants/${m.id}`}
+                        className="text-sm text-brand hover:underline"
+                      >
+                        查看詳情 →
+                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={togglingId === m.id}
+                        onClick={() => handleToggleStatus(m.id, m.status)}
+                      >
+                        {m.status === "active" ? "停用" : "啟用"}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

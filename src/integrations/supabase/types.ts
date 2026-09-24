@@ -3337,6 +3337,37 @@ export type Database = {
           merchant_id: string
         }[]
       }
+      platform_get_merchant_agents: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          job_title: string
+          login_email: string
+          merchant_id: string
+          name: string
+          nickname: string
+          phone: string
+          status: string
+          user_id: string
+        }[]
+      }
+      platform_get_merchant_staff: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          compensation_type: string
+          created_at: string
+          id: string
+          login_email: string
+          login_status: string
+          merchant_id: string
+          name: string
+          nickname: string
+          phone: string
+          status: string
+          user_id: string
+        }[]
+      }
       platform_get_user_email: { Args: { p_user_id: string }; Returns: string }
       platform_list_merchant_bulk_operations: {
         Args: { p_merchant_id: string }

@@ -8,7 +8,13 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { IndustryType } from "@/modules/merchant/types";
-import type { IndustryFeaturePresetRow, PlatformGroupRow, PlatformMerchantRow } from "./types";
+import type {
+  IndustryFeaturePresetRow,
+  PlatformAgentRow,
+  PlatformGroupRow,
+  PlatformMerchantRow,
+  PlatformStaffRow,
+} from "./types";
 
 /**
  * 這次品管抓到的 bug 的根本原因與修法(見 getErrorMessage.ts 開頭更詳細的說明):
@@ -131,6 +137,41 @@ export async function platformGetUserEmail(userId: string): Promise<string | nul
   const { data, error } = await supabase.rpc("platform_get_user_email", { p_user_id: userId });
   if (error) throwSupabaseError(error);
   return data ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// 規格書「超級管理員商家詳情強化」#698:商家詳情頁兩張唯讀名單卡片的讀取函式。
+//
+// ⚠️ 為什麼不能直接 `supabase.from("merchant_staff").select(...)`:
+//    merchant_staff 的 SELECT 政策有 7 個 OR 分支、merchant_agents 有 2 個,
+//    **兩條裡都沒有 private.is_platform_admin()**(2026-09-24 實查 pg_policies)。
+//    平台管理員直接查表拿到的是「靜默的 0 筆」而不是錯誤——畫面上會顯示「目前沒有服務
+//    人員」,是最難察覺的失敗模式(規格書第 0.4 節有實測數據:涼風工匠實際有 3 筆 staff /
+//    1 筆 agent,平台管理員身分直查兩者都是 0)。
+//    所以這兩張名單一律走 SECURITY DEFINER 的 RPC,跟同一頁「管理員名單」走
+//    get_merchant_admin_users 的既有做法一致(規則 2.3:刻意不疊加 RLS)。
+//
+// ⚠️ 兩支 RPC 都是 stable 唯讀,沒有對應的 mutation——這兩張卡片永遠不寫入資料庫
+//    (規格書 2.2:平台方只看,不代為修改別人家的員工)。
+// ---------------------------------------------------------------------------
+
+/** 唯讀:平台管理員檢視任一商家的服務人員名單。
+ *  ⚠️ 不能直接查 merchant_staff 表——理由見上方區塊註解。 */
+export async function platformFetchMerchantStaff(merchantId: string): Promise<PlatformStaffRow[]> {
+  const { data, error } = await supabase.rpc("platform_get_merchant_staff", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throwSupabaseError(error);
+  return (data ?? []) as PlatformStaffRow[];
+}
+
+/** 唯讀:平台管理員檢視任一商家的客服名單。同上,不能直接查 merchant_agents 表。 */
+export async function platformFetchMerchantAgents(merchantId: string): Promise<PlatformAgentRow[]> {
+  const { data, error } = await supabase.rpc("platform_get_merchant_agents", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throwSupabaseError(error);
+  return (data ?? []) as PlatformAgentRow[];
 }
 
 /** 功能 3.4:超級管理員代替商家新增管理員(對方必須已經是秒約註冊帳號)。 */
