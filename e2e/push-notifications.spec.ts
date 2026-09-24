@@ -152,16 +152,58 @@ async function stubServiceWorkerAndPushManager(
 /**
  * §7.5:訂閱成功後前端會自動呼叫 push-send-test 這支 Edge Function。e2e 不該對真實的
  * Edge Function 發請求(會真的燒推播配額、也會在 push_notification_log 塞測試資料),
- * 所以一律攔下來回一個「沒有裝置」的結果。
+ * 所以一律攔下來。
+ *
+ * ⚠️ 2026-09-25 品管複查後改寫:原本固定回「沒有裝置」,結果 §7.5 的狀態機**永遠只走到
+ *    no_device 那一支**,`[data-testid="push-test-status"]` 的文字一次都沒有被斷言過 ——
+ *    而那三句文案正是使用者最在意的 §6.5 誠實紅線。現在改成可以指定回應,讓每一支分支
+ *    都真的被畫面驗證到。
  */
-async function stubTestPushEndpoint(page: import("@playwright/test").Page): Promise<void> {
+type TestPushStubResult =
+  { kind: "no_device" } | { kind: "sent"; ackToken: string } | { kind: "rate_limited" };
+
+async function stubTestPushEndpoint(
+  page: import("@playwright/test").Page,
+  result: TestPushStubResult = { kind: "no_device" },
+): Promise<void> {
   await page.route("**/functions/v1/push-send-test", async (route) => {
+    if (result.kind === "rate_limited") {
+      await route.fulfill({
+        status: 429,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "測試通知發太多次了,請等一分鐘再試" }),
+      });
+      return;
+    }
+    const body =
+      result.kind === "sent"
+        ? { sent: 1, failed: 0, ack_tokens: [result.ackToken] }
+        : { sent: 0, failed: 0, reason: "no_subscription", ack_tokens: [] };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ sent: 0, failed: 0, reason: "no_subscription", ack_tokens: [] }),
+      body: JSON.stringify(body),
     });
   });
+}
+
+/** §6.3 第 3 點:模擬 service worker 收到推播之後對所有分頁 postMessage。 */
+async function dispatchServiceWorkerMessage(
+  page: import("@playwright/test").Page,
+  data: unknown,
+): Promise<void> {
+  await page.evaluate((payload) => {
+    (window as unknown as { __e2eDispatchSwMessage: (d: unknown) => void }).__e2eDispatchSwMessage(
+      payload,
+    );
+  }, data);
+}
+
+/** 開啟這台裝置的通知,並等到卡片進入「已開通」狀態(測試通知區塊才會出現)。 */
+async function subscribeThisDevice(page: import("@playwright/test").Page): Promise<void> {
+  await page.getByRole("button", { name: "開啟通知" }).click();
+  await expect(page.getByText("這台裝置已開啟通知")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId("push-test-section")).toBeVisible({ timeout: LOAD_TIMEOUT });
 }
 
 test("推播通知設定頁(§7.9):管理員切換開關並編輯文案後正確儲存,重新整理後仍然生效", async ({
@@ -384,4 +426,141 @@ test("事件開關(§7.4 第 6 點):切換一個開關之後重新整理仍然�
   await expect(
     page.getByTestId("push-event-toggle-booking_created").getByRole("switch"),
   ).toHaveAttribute("data-state", "unchecked");
+});
+
+// =========================================================================
+// §6.3 / §7.5:測試通知的狀態機。
+//
+// 🔴 2026-09-25 品管複查後補上。這一塊特別重要,因為那幾句文案正是使用者最在意的
+//    §6.5 誠實紅線所在(裁決 Q5:「文案絕對不可以寫成無法兌現的『已生效』」)。
+//    在這之前,紅線只有 Vitest 在守「字串內容」,**沒有任何東西在守「畫面上真的顯示對的那一句」**。
+// =========================================================================
+test("測試通知(§6.3 核心):送出後先顯示「正在確認」,收到 service worker 回報才改成「已確認你的裝置收到」", async ({
+  page,
+}) => {
+  await stubServiceWorkerAndPushManager(page);
+  await stubTestPushEndpoint(page, {
+    kind: "sent",
+    ackToken: "3f2504e0-4f89-41d3-9a0c-0305e82c33e2",
+  });
+  await injectStaffSession(page, fixture);
+  await page.goto("/app");
+  await expect(page.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  await subscribeThisDevice(page);
+
+  // 分支一:waiting —— 只陳述「已送出、正在確認」,不承諾任何事。
+  const status = page.getByTestId("push-test-status");
+  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // §6.3 第 3 點:service worker 收到推播 → postMessage → 畫面立刻反應(不用等輪詢)。
+  await dispatchServiceWorkerMessage(page, { type: "push-test-received" });
+
+  // 分支二:device_acked —— 只說「裝置收到」,而且同一則訊息要誠實提醒「裝置收到 ≠ 你看得到」。
+  await expect(status).toContainText("已確認你的裝置收到通知", { timeout: LOAD_TIMEOUT });
+  await expect(status).toContainText("靜音或專注模式");
+
+  // 🔴 §6.5 禁止字眼:畫面上這一段絕對不可以出現這些無法兌現的保證。
+  const sectionText = (await page.getByTestId("push-test-section").innerText()) || "";
+  for (const forbidden of [
+    "已生效",
+    "已確認生效",
+    "通知功能正常",
+    "設定完成,你會收到通知",
+    "已成功開啟並生效",
+  ]) {
+    expect(sectionText).not.toContain(forbidden);
+  }
+});
+
+test("測試通知(§6.3):無關的 service worker 訊息不會讓畫面誤報「已確認」", async ({ page }) => {
+  await stubServiceWorkerAndPushManager(page);
+  await stubTestPushEndpoint(page, {
+    kind: "sent",
+    ackToken: "3f2504e0-4f89-41d3-9a0c-0305e82c33e3",
+  });
+  await injectStaffSession(page, fixture);
+  await page.goto("/app");
+  await subscribeThisDevice(page);
+
+  const status = page.getByTestId("push-test-status");
+  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 一般推播的廣播(§13.5 鈴鐺那一批會用到)不是測試推播的回報,不可以拿來當成「已確認」。
+  await dispatchServiceWorkerMessage(page, { type: "push-received" });
+  await dispatchServiceWorkerMessage(page, { type: "something-else" });
+
+  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯");
+  await expect(status).not.toContainText("已確認");
+});
+
+test("測試通知(§6.5 核心):15 秒內沒有任何回報 → 顯示「沒有收到你裝置的回報」+ 排查清單,而不是報喜", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await stubServiceWorkerAndPushManager(page);
+  // 用一個資料庫裡不存在的 ack_token:輪詢的 have_my_test_pushes_been_acked 會一直回 false,
+  // 15 秒之後狀態機必須落到 no_ack。
+  await stubTestPushEndpoint(page, {
+    kind: "sent",
+    ackToken: "3f2504e0-4f89-41d3-9a0c-0305e82c33e4",
+  });
+  await injectStaffSession(page, fixture);
+  await page.goto("/app");
+  await subscribeThisDevice(page);
+
+  const status = page.getByTestId("push-test-status");
+  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 分支三:no_ack。⚠️ 這裡要等 §6.3 第 4 點的 15 秒逾時,所以 timeout 放寬到 30 秒。
+  await expect(status).toContainText("通知已送出,但系統沒有收到你裝置的回報", {
+    timeout: 30_000,
+  });
+  await expect(status).toContainText("如果你的手機剛剛有跳出通知就沒問題");
+  // 排查清單要真的列出來(不是只有一句話就結束)。
+  await expect(page.getByText("手機開了靜音或專注模式")).toBeVisible();
+  await expect(page.getByText("iPhone 沒有先把秒約加到主畫面(Apple 的限制)")).toBeVisible();
+
+  // 🔴 最重要的一條:沒有回報時,畫面絕對不可以出現「已確認」。
+  await expect(status).not.toContainText("已確認");
+});
+
+test("測試通知(§7.5):這個人一台裝置都沒開通時,顯示「沒有東西可以測試」而不是假警告", async ({
+  page,
+}) => {
+  await stubServiceWorkerAndPushManager(page);
+  await stubTestPushEndpoint(page, { kind: "no_device" });
+  await injectStaffSession(page, fixture);
+  await page.goto("/app");
+  await subscribeThisDevice(page);
+
+  await expect(page.getByTestId("push-test-status")).toHaveText(
+    "你還沒有在任何裝置上開啟通知,所以沒有東西可以測試",
+    { timeout: LOAD_TIMEOUT },
+  );
+});
+
+test("測試通知(§6.6):「再發一次測試通知」被頻率限制擋下時,顯示等一分鐘再試", async ({ page }) => {
+  await stubServiceWorkerAndPushManager(page);
+  await stubTestPushEndpoint(page, { kind: "rate_limited" });
+  await injectStaffSession(page, fixture);
+  await page.goto("/app");
+  await subscribeThisDevice(page);
+
+  // 開啟通知時自動打的那一次就已經被擋下了。
+  const status = page.getByTestId("push-test-status");
+  await expect(status).toHaveText("測試通知發太多次了,請等一分鐘再試", { timeout: LOAD_TIMEOUT });
+
+  // §7.5 第 4 點:測試失敗不可以讓「開啟通知」這件事看起來失敗 —— 卡片仍然是已開通狀態。
+  await expect(page.getByText("這台裝置已開啟通知")).toBeVisible();
+
+  // 常駐的「再發一次測試通知」按鈕存在,而且再按一次仍然是同一句話。
+  await page.getByRole("button", { name: "再發一次測試通知" }).click();
+  await expect(status).toHaveText("測試通知發太多次了,請等一分鐘再試", { timeout: LOAD_TIMEOUT });
 });

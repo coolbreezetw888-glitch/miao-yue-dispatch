@@ -364,17 +364,28 @@ export async function sendTestPush(
   };
 }
 
-/** §6.3:查這幾個 ack token 有沒有任何一個已經回報送達。 */
+/**
+ * §6.3 第 4 點:查這幾個 ack token 有沒有任何一個已經回報送達(postMessage 主路徑的備援)。
+ *
+ * 🔴 2026-09-25 品管上線後複查抓到的真缺陷,這裡記錄為什麼**不能**直接查 push_notification_log:
+ *    那張表的 SELECT 政策是 `private.can_manage_push_notification(merchant_id)`,
+ *    = 商家管理員 OR「被開通 push_notification 權限的在職客服」。
+ *    **服務人員完全不在這個判斷裡**,而客服那條路徑在正式環境也走不通
+ *    (merchant_agent_permissions 2026-09-25 實查是 0 筆)。
+ *    而 RLS 是「靜默過濾」不是丟錯 —— 服務人員會拿到空陣列、被判定成「還沒回報」,
+ *    15 秒後必定看到「⚠️ 通知已送出,但系統沒有收到你裝置的回報」這個**假警告**。
+ *    而服務人員正是這個功能的主要使用者。
+ *
+ *    修法是開一支只回 boolean 的窄函式(比照 §2.6 的既有做法),
+ *    **不是**放寬那張表的 RLS —— 放寬會順手改掉「誰能看全店發送記錄」這件事。
+ */
 export async function hasAnyAckedTestPush(ackTokens: string[]): Promise<boolean> {
   if (ackTokens.length === 0) return false;
-  const { data, error } = await supabase
-    .from("push_notification_log")
-    .select("acked_at")
-    .in("ack_token", ackTokens)
-    .not("acked_at", "is", null)
-    .limit(1);
+  const { data, error } = await supabase.rpc("have_my_test_pushes_been_acked", {
+    p_ack_tokens: ackTokens,
+  });
   if (error) throw error;
-  return (data ?? []).length > 0;
+  return data === true;
 }
 
 // =========================================================================

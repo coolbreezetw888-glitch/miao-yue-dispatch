@@ -7,7 +7,7 @@
 --   §5.1(resolve_push_recipients 六種情境 + anon/authenticated 被擋下)、§6.6(頻率限制)。
 begin;
 
-select plan(59);
+select plan(83);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -509,6 +509,161 @@ select is(
   (select count(*)::int from push_event_subscriptions where target_id = 'ed500000-0000-4000-8000-000000000042'),
   0,
   '§4.6 第 3 點:硬刪除客服之後,AFTER DELETE 觸發器清掉對應的孤兒訂閱列'
+);
+
+-- =========================================================================
+-- ⑩ §6.4 ack_push_test_notification:一次性 + 10 分鐘有效 + 更新 last_seen_at
+--    (2026-09-25 品管複查後補:這支函式原本只有 Edge Function 層的手動驗證,
+--     資料庫層的「一次性」「過期」「只更新那一台裝置」三個語意沒有任何自動化保護。)
+-- =========================================================================
+insert into push_subscriptions (id, user_id, endpoint, p256dh_key, auth_key) values
+  ('ed500000-0000-4000-8000-0000000000d1', 'ed500000-0000-4000-8000-000000000004', 'https://fcm.example/ack-device-1', 'p', 'a'),
+  ('ed500000-0000-4000-8000-0000000000d2', 'ed500000-0000-4000-8000-000000000004', 'https://fcm.example/ack-device-2', 'p', 'a');
+
+insert into push_notification_log
+  (id, merchant_id, event_type, status, target_type, target_id, ack_token, ack_subscription_id, attempted_at)
+values
+  -- 有效(剛剛才送出)
+  ('ed500000-0000-4000-8000-0000000000e1', 'ed500000-0000-4000-8000-000000000021', 'test', 'sent',
+   'staff', 'ed500000-0000-4000-8000-000000000051',
+   'ed500000-0000-4000-8000-0000000000b1', 'ed500000-0000-4000-8000-0000000000d1', now()),
+  -- 過期(11 分鐘前送出)
+  ('ed500000-0000-4000-8000-0000000000e2', 'ed500000-0000-4000-8000-000000000021', 'test', 'sent',
+   'staff', 'ed500000-0000-4000-8000-000000000051',
+   'ed500000-0000-4000-8000-0000000000b2', 'ed500000-0000-4000-8000-0000000000d2', now() - interval '11 minutes');
+
+select ok(
+  ack_push_test_notification('ed500000-0000-4000-8000-0000000000b1'),
+  '§6.4:有效的 token 回報成功'
+);
+select isnt(
+  (select acked_at from push_notification_log where id = 'ed500000-0000-4000-8000-0000000000e1'),
+  null,
+  '§6.4:acked_at 被寫入'
+);
+select isnt(
+  (select last_seen_at from push_subscriptions where id = 'ed500000-0000-4000-8000-0000000000d1'),
+  null,
+  '§6.4 第 3 點:**對應那一台裝置**的 last_seen_at 被寫入(這是 last_seen_at 第一次真的有程式碼會寫它)'
+);
+select is(
+  (select last_seen_at from push_subscriptions where id = 'ed500000-0000-4000-8000-0000000000d2'),
+  null,
+  '§6.4 第 3 點(核心):**只有**那一台裝置被標記,不是把這個人全部的裝置都標成收到 —— 那會是謊報'
+);
+
+select ok(
+  not ack_push_test_notification('ed500000-0000-4000-8000-0000000000b1'),
+  '§6.4 第 2 點(核心必測):一次性 —— 同一個 token 第二次回 false'
+);
+select ok(
+  not ack_push_test_notification('ed500000-0000-4000-8000-0000000000b2'),
+  '§6.4 第 2 點(核心必測):超過 10 分鐘的 token 不再更新'
+);
+select is(
+  (select acked_at from push_notification_log where id = 'ed500000-0000-4000-8000-0000000000e2'),
+  null,
+  '§6.4:過期的那一列 acked_at 仍然是 null(真的沒有被改到)'
+);
+select ok(
+  not ack_push_test_notification('ed500000-0000-4000-8000-0000000000bf'),
+  '§6.4:根本不存在的 token 回 false'
+);
+select ok(
+  not ack_push_test_notification(null),
+  '§6.4:null token 回 false,不丟錯'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.ack_push_test_notification(uuid)', 'execute'),
+  '§6.4/權限衛生規則 1(核心必測):anon 沒有 EXECUTE —— 呼叫它的 push-test-ack 是公開端點,靠的是 token 不是這支函式的權限'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.ack_push_test_notification(uuid)', 'execute'),
+  '§6.4/權限衛生規則 1(核心必測):authenticated 也沒有 EXECUTE(只有 service_role)'
+);
+
+-- =========================================================================
+-- ⑪ §6.3 第 4 點 have_my_test_pushes_been_acked:前端輪詢的窄窗口
+--    (2026-09-25 品管複查抓到的功能缺陷的修正:原本前端直接查 push_notification_log,
+--     但那張表的 SELECT RLS 是 can_manage_push_notification —— 服務人員完全讀不到,
+--     會靜默拿到 0 列而看到假警告。)
+-- =========================================================================
+-- 先證明「直接查那張表」對服務人員真的是 0 列(這就是原本的缺陷)。
+select pg_temp.test_set_auth('ed500000-0000-4000-8000-000000000004'); -- 服務人員丁本人
+select is(
+  (select count(*)::int from push_notification_log where ack_token = 'ed500000-0000-4000-8000-0000000000b1'),
+  0,
+  '🔴 缺陷本身:服務人員直接查 push_notification_log 拿到 0 列(RLS 靜默過濾,不丟錯)—— 所以備援輪詢對他永遠失效'
+);
+select ok(
+  have_my_test_pushes_been_acked(array['ed500000-0000-4000-8000-0000000000b1']::uuid[]),
+  '🔴 修正後(核心必測):同一位服務人員透過窄函式查得到「我那一則已經回報送達」'
+);
+select ok(
+  not have_my_test_pushes_been_acked(array['ed500000-0000-4000-8000-0000000000b2']::uuid[]),
+  '§6.3:還沒回報的 token 回 false'
+);
+select pg_temp.test_clear_auth();
+
+-- 別人的 token 一律 false(核心必測:這支函式只回 boolean,但也不能變成「猜 token」的工具)。
+select pg_temp.test_set_auth('ed500000-0000-4000-8000-000000000005'); -- 服務人員戊(不是收件人)
+select ok(
+  not have_my_test_pushes_been_acked(array['ed500000-0000-4000-8000-0000000000b1']::uuid[]),
+  '§4.1(核心必測):帶別人的 ack_token 進來一律回 false —— 身分是從 auth.uid() 反查的,前端指定不了'
+);
+select pg_temp.test_clear_auth();
+
+select pg_temp.test_set_auth('ed500000-0000-4000-8000-000000000006'); -- B 店管理員,完全無關
+select ok(
+  not have_my_test_pushes_been_acked(array['ed500000-0000-4000-8000-0000000000b1']::uuid[]),
+  '§4.1:跨商家的人帶同一個 token 也是 false'
+);
+select pg_temp.test_clear_auth();
+
+-- 未登入(anon 身分,auth.uid() 為 null)。
+select ok(
+  not have_my_test_pushes_been_acked(array['ed500000-0000-4000-8000-0000000000b1']::uuid[]),
+  '§4.1:未登入一律 false'
+);
+
+-- 邊界:空陣列 / null / 超過 50 個。
+select pg_temp.test_set_auth('ed500000-0000-4000-8000-000000000004');
+select ok(
+  not have_my_test_pushes_been_acked(array[]::uuid[]),
+  '§6.3:空陣列回 false'
+);
+select ok(
+  not have_my_test_pushes_been_acked(null),
+  '§6.3:null 回 false,不丟錯'
+);
+select ok(
+  not have_my_test_pushes_been_acked(
+    array(select 'ed500000-0000-4000-8000-0000000000b1'::uuid from generate_series(1, 51))),
+  '§6.3:一次帶超過 50 個 token 一律回 false(避免被當成批次猜 token 的工具)'
+);
+select pg_temp.test_clear_auth();
+
+select ok(
+  not has_function_privilege('anon', 'public.have_my_test_pushes_been_acked(uuid[])', 'execute'),
+  '§6.3/權限衛生規則 1:anon 沒有 EXECUTE'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.have_my_test_pushes_been_acked(uuid[])', 'execute'),
+  '§6.3:authenticated 有 EXECUTE(這就是給前端呼叫的),範圍由函式內部的 auth.uid() 鎖死'
+);
+
+-- ⚠️ 確認這次修正**沒有**順手放寬 push_notification_log 的 RLS(品管特別交代的紅線)。
+select is(
+  (select count(*)::int from pg_policy where polrelid = 'public.push_notification_log'::regclass),
+  1,
+  '🔴 紅線:push_notification_log 仍然只有一條政策(SELECT),沒有因為這次修正被放寬'
+);
+select is(
+  (select pg_get_expr(polqual, polrelid) from pg_policy
+   where polrelid = 'public.push_notification_log'::regclass),
+  'private.can_manage_push_notification(merchant_id)',
+  '🔴 紅線:那條 SELECT 政策的條件一字未改'
 );
 
 select * from finish();

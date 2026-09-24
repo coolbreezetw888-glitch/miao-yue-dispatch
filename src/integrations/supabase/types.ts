@@ -3355,6 +3355,10 @@ export type Database = {
         Args: { p_staff_id: string }
         Returns: undefined
       }
+      have_my_test_pushes_been_acked: {
+        Args: { p_ack_tokens: string[] }
+        Returns: boolean
+      }
       import_historical_bookings_batch: {
         Args: { p_merchant_id: string; p_rows: Json }
         Returns: string
