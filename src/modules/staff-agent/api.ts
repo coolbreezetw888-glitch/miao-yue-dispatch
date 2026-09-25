@@ -294,7 +294,12 @@ export interface InviteMerchantAgentInput {
   email: string;
   name: string;
   nickname?: string | null;
-  phone?: string | null;
+  /** #645:merchant_agents.phone 是 NOT NULL 欄位(CHECK phone ~ '^09\d{8}$'),所以這裡刻意
+   * 是必填的 `string`,不是 `string | null | undefined`——讓「呼叫端忘了帶電話」在 tsc 就被擋下,
+   * 而不是送到 Edge Function insert 才違反約束。呼叫端(邀請表單)必須自行保證送進來的是已經用
+   * isValidTaiwanMobilePhone 驗證過的非空字串,寫法比照本檔案 UpdateMerchantAgentInput.phone /
+   * addMerchantStaff() 的既有處理。 */
+  phone: string;
 }
 
 export interface InviteMerchantAgentResult {
@@ -317,7 +322,10 @@ export async function inviteMerchantAgent(
       email: input.email.trim(),
       name: input.name.trim(),
       nickname: toNullIfEmpty(input.nickname),
-      phone: toNullIfEmpty(input.phone),
+      // #645:phone 不能用 toNullIfEmpty——merchant_agents.phone 是 NOT NULL,空字串被靜默轉成
+      // null 之後會在 Edge Function 那一端 insert 失敗,而且錯誤訊息是資料庫的英文約束名稱,
+      // 使用者完全看不懂。這裡只 trim(),跟 updateMerchantAgent() 的 p_phone 一致。
+      phone: input.phone.trim(),
     },
   });
 
@@ -448,6 +456,27 @@ export async function restoreMerchantAgent(agentId: string): Promise<MerchantAge
   return data as MerchantAgent;
 }
 
+/** SPECS-INDEX #798(2026-09-25 使用者裁決「選 A+C」):真正刪除(硬刪除)一位客服。
+ * 完全比照上方 hardDeleteMerchantStaff() 的先例:只能對 status='removed' 的客服操作、只有商家管理員
+ * 可以呼叫,兩個檢查都在資料庫端的 SECURITY DEFINER 函式 hard_delete_merchant_agent 裡(前端藏按鈕
+ * 只是體驗,不是安全邊界)。錯誤訊息用既有的 getErrorMessage() 原樣顯示。
+ *
+ * ⚠️ 過渡寫法(等 migration 20260925040001 套用到正式庫、types.ts 重新產生之後,請改回一般的
+ *    `supabase.rpc("hard_delete_merchant_agent", …)`,並刪掉這段):
+ *    src/integrations/supabase/types.ts 是由正式庫產生的,新函式還沒套用就不會出現在裡面;而且該檔
+ *    目前在另一批平行施工(站內通知中心)的 diff 裡,本批刻意不碰它。這裡把 rpc 收窄成一個最小的
+ *    函式型別,只是為了通過型別檢查,執行期跟一般的 supabase.rpc 完全相同。 */
+type PendingRpcCall = (
+  fn: string,
+  args: Record<string, unknown>,
+) => PromiseLike<{ error: { message: string } | null }>;
+
+export async function hardDeleteMerchantAgent(agentId: string): Promise<void> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as PendingRpcCall;
+  const { error } = await rpc("hard_delete_merchant_agent", { p_agent_id: agentId });
+  if (error) throw error;
+}
+
 /** 3.8:客服完成設定密碼流程後,轉場頁載入時呼叫,把自己所有 invited 狀態的紀錄轉為 active。 */
 export async function markAgentActiveIfSelf(): Promise<void> {
   const { error } = await supabase.rpc("mark_agent_active_if_self");
@@ -529,28 +558,13 @@ export async function fetchMyStaffRow(
 
 // =========================================================================
 // 對應規格書「首頁外殼與主題色優化」1.2/1.3:首頁個人資料卡片(客服這一半)。
+//
+// ⚠️ 2026-09-25(SPECS-INDEX #796):原本這裡有一支 @deprecated 的 updateMyAgentProfile()
+//    (呼叫資料庫函式 update_my_agent_profile),已連同資料庫函式一起移除(migration 20260925040000)。
+//    客服自助編輯自己的資料請走上方的 updateMerchantAgent()——它的「本人」授權路徑就是為此保留的,
+//    「功能」頁的 EditProfileDialog(ManagePage.tsx)也早已改用它。不要把舊函式加回來:同一個欄位
+//    兩個寫入入口、兩套授權判斷,遲早會有人只改其中一邊。
 // =========================================================================
-
-/** @deprecated 2026-09-24 起已無呼叫端,功能被 updateMerchantAgent() 完全涵蓋——
- * update_merchant_agent 補上 p_job_title 之後,一支呼叫就能寫姓名/暱稱/電話/職位,
- * 而且是單一 UPDATE 語句的原子交易。依主腦指示這次「先留著不刪除」(資料庫那支函式也還在),
- * 但不要在新程式碼裡使用它;之後確認沒有其他依賴時可以連同資料庫函式一起移除。
- *
- * 1.3:客服自助編輯自己的暱稱/職位,呼叫 SECURITY DEFINER RPC update_my_agent_profile
- * (資料庫端只檢查呼叫者是不是這筆紀錄本人,不是權限判斷)。姓名沿用既有的 name 欄位,不開放編輯,
- * 這裡只開放 nickname/job_title 兩個欄位,跟資料庫 RPC 的參數一致。 */
-export async function updateMyAgentProfile(
-  merchantId: string,
-  nickname: string,
-  jobTitle: string,
-): Promise<void> {
-  const { error } = await supabase.rpc("update_my_agent_profile", {
-    p_merchant_id: merchantId,
-    p_nickname: nickname,
-    p_job_title: jobTitle,
-  });
-  if (error) throw error;
-}
 
 // =========================================================================
 // 對應規格書(帳號登入安全性優化)2.4.1/2.4.2/2.4.3:登入信箱變更機制,服務人員/客服共用一套

@@ -1,7 +1,11 @@
 // 對應規格書 4.3:客服管理頁(新路由 /app/agents)。
 // 清單(姓名/暱稱/email/狀態徽章)+ 新增表單(呼叫 Edge Function)+ 移除按鈕。
+// 2026-09-24:補上「編輯」(#789)與「恢復」(#790)。
+// 2026-09-25(規格書「客服編輯功能」#797 / #798,使用者裁決「選 A+C」):補上「全部 / 在職 / 已移除」
+// 分頁籤,以及已移除那一列旁的「真正刪除」——兩者都照抄 StaffListPage.tsx 服務人員頁的既有做法,
+// 使用者不用多學一套操作。
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -31,6 +35,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -39,12 +44,19 @@ import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/v
 import {
   clearAgentPendingLoginEmail,
   fetchMerchantAgents,
+  hardDeleteMerchantAgent,
   inviteMerchantAgent,
   removeMerchantAgent,
   requestAgentLoginEmailChange,
   restoreMerchantAgent,
   updateMerchantAgent,
 } from "./api";
+import {
+  AGENT_LIST_FILTER_TABS,
+  countAgentsByFilter,
+  matchesAgentListFilter,
+  type AgentListFilter,
+} from "./agentListLogic";
 import { AdminSuggestLoginEmailDialog, LoginEmailStatusDisplay } from "./AdminLoginEmailManager";
 import { useAgentLoginEmailStatus } from "./context";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
@@ -239,6 +251,14 @@ function AgentFormDialog({
                 客服唯一的 Email 就是登入信箱,要改請用清單上的「修改登入信箱」。
                 (2026-09-21 使用者人工測試回報的問題 2「這個欄位容易被誤會成登入帳號」,
                  這次是用「拿掉那個欄位」根本解決。)不要加回來。 */}
+            {/* ⚠️ 規格書「客服編輯功能」#792(2026-09-25 裁決):這個表單刻意**沒有**「是否上架」開關,
+                也**沒有**「狀態」欄位,不要加。
+                ・客服沒有「上架」這個概念:merchant_agents 根本沒有 is_listed 欄位(服務人員才有),
+                  客服是內勤角色、不會被客戶挑選,做出來是純裝飾。
+                ・status(邀請信已寄出 / 已啟用 / 已移除)是登入開通進度,由邀請流程與
+                  mark_agent_active_if_self() 自動推進;做成手動開關會讓管理員把從沒登入過的人標成
+                  「已啟用」,那個人之後真的去設密碼時 mark_agent_active_if_self()(只撈 invited)
+                  撈不到他,會永遠卡在錯誤狀態。要改狀態請用清單上的「移除 / 恢復」。 */}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
@@ -267,6 +287,16 @@ function AgentListInner() {
   const [phone, setPhone] = useState("");
   const [inviting, setInviting] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [hardDeletingId, setHardDeletingId] = useState<string | null>(null);
+
+  // #797:名單狀態篩選(全部 / 在職 / 已移除)。篩選與計數邏輯在 agentListLogic.ts(有 Vitest),
+  // 這裡只負責接上 UI,做法比照 StaffListPage.tsx 的 listFilter / filterCounts / filteredStaffList。
+  const [listFilter, setListFilter] = useState<AgentListFilter>("all");
+  const filterCounts = useMemo(() => countAgentsByFilter(agents ?? []), [agents]);
+  const filteredAgents = useMemo(
+    () => (agents ?? []).filter((agent) => matchesAgentListFilter(agent, listFilter)),
+    [agents, listFilter],
+  );
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: agentListQueryKey(merchantId) });
@@ -327,8 +357,6 @@ function AgentListInner() {
   // [恢復/真正刪除]按鈕的恢復對吧?如果是的話那就要增加恢復按鈕。」「要做。」
   // 按鈕文字與 toast 用語刻意跟 StaffListPage.tsx 服務人員那邊的「恢復」對齊(那邊的 toast 是
   // 「已重新上架這位服務人員」,客服沒有「上架」這個概念,所以這裡講「已恢復這位客服」)。
-  // 注意:客服這邊刻意「沒有」對應的「真正刪除」按鈕——服務人員那顆是規格書
-  // 「服務人員管理優化與硬刪除」§3.4 特別要求的,客服這次的裁決只提到恢復,不自己加碼。
   async function handleRestore(agentId: string) {
     try {
       await restoreMerchantAgent(agentId);
@@ -336,6 +364,25 @@ function AgentListInner() {
       toast.success("已恢復這位客服");
     } catch (err) {
       toast.error("恢復失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  // #798(2026-09-25 使用者裁決「選 A+C」):「真正刪除」。2026-09-24 這裡原本刻意沒有做(當時的裁決
+  // 只點名「恢復」,不自己加碼),後來查出「邀請信 Email 打錯字 → 那一列永遠停在邀請中 → 移除也只是
+  // 軟移除 → 名單上永遠掛著一筆清不掉的幽靈資料」這個會真的發生的後果,使用者裁決補上。
+  // 做法完全照抄 StaffListPage.tsx 的 handleHardDelete:toast 用語、錯誤顯示都一致。
+  // 權限檢查(只有商家管理員、而且必須先軟移除)在資料庫函式 hard_delete_merchant_agent 裡,
+  // 這一頁整頁走 RequireMerchantAdmin 只是體驗上不讓非管理員看到入口,不是安全邊界。
+  async function handleHardDelete(agentId: string) {
+    setHardDeletingId(agentId);
+    try {
+      await hardDeleteMerchantAgent(agentId);
+      await refetch();
+      toast.success("已真正刪除");
+    } catch (err) {
+      toast.error("無法真正刪除", { description: getErrorMessage(err) });
+    } finally {
+      setHardDeletingId(null);
     }
   }
 
@@ -419,12 +466,39 @@ function AgentListInner() {
       <Card>
         <CardHeader>
           <CardTitle>客服名單</CardTitle>
+          <CardDescription>包含在職與已移除的客服,可用下方分類篩選</CardDescription>
+          {/* #797:三顆分頁籤「全部 / 在職 (n) / 已移除 (n)」。只有名單非空才顯示(比照服務人員頁),
+              空名單顯示分頁籤沒有意義。
+              ⚠️ 客服只有三顆、沒有服務人員頁的「未上架 / 已上架」——客服沒有 is_listed(#792)。 */}
+          {agents && agents.length > 0 ? (
+            <Tabs
+              value={listFilter}
+              onValueChange={(v) => setListFilter(v as AgentListFilter)}
+              className="pt-2"
+            >
+              {/* 手機版面(照抄 StaffListPage.tsx L958-962 的踩坑紀錄):服務人員頁四顆分頁籤在 375px
+                  手機上總寬 327px、放不進 285px 的卡片內寬,預設 TabsList 既不換行也不橫向捲動,後面
+                  的分頁籤會直接被裁掉看不到。客服雖然只有三顆、比較寬鬆,但規格書 #797 要求「仍然要實測、
+                  不要假設放得下」,所以這裡沿用同一組 h-auto + w-full + flex-wrap 解法,並由
+                  e2e/agent-management.spec.ts T7 在 375px 實測不溢出。 */}
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
+                {AGENT_LIST_FILTER_TABS.map((tab) => (
+                  <TabsTrigger key={tab.value} value={tab.value}>
+                    {tab.label}
+                    {tab.value === "all" ? "" : ` (${filterCounts[tab.value]})`}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : null}
         </CardHeader>
         <CardContent>
           {isLoading ? (
             <p className="text-sm text-muted-foreground">載入中⋯</p>
           ) : !agents || agents.length === 0 ? (
             <p className="text-sm text-muted-foreground">目前還沒有任何客服。</p>
+          ) : filteredAgents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">這個分類目前沒有客服。</p>
           ) : (
             /* 手機版版面(2026-09-24):這一列這次多出「編輯」(所有未移除的客服)跟「恢復」
                (已移除的客服)兩顆按鈕,右側按鈕群組會變成「權限設定 + 編輯 + 移除」三顆。
@@ -437,7 +511,7 @@ function AgentListInner() {
                  ・按鈕群組 flex-wrap(窄螢幕放不下就換行)+ sm:shrink-0(寬螢幕維持原本行為)。
                刻意不在外層補 overflow-x-auto:那只是把「看不到」換成「要左右滑才看得到」。 */
             <ul className="space-y-2">
-              {agents.map((agent) => (
+              {filteredAgents.map((agent) => (
                 <li
                   key={agent.id}
                   className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
@@ -498,13 +572,53 @@ function AgentListInner() {
                         </AlertDialog>
                       </>
                     ) : (
-                      /* 2026-09-24 使用者裁決:已移除的客服補上「恢復」按鈕。做法照抄
-                         StaffListPage.tsx 服務人員「恢復」那顆——同樣是 variant="outline"
-                         size="sm" 直接觸發、不套確認對話框(恢復是可逆的良性操作,再按一次
-                         「移除」就回去了,不像「真正刪除」那種不可逆動作需要 AlertDialog 攔一道)。 */
-                      <Button variant="outline" size="sm" onClick={() => handleRestore(agent.id)}>
-                        恢復
-                      </Button>
+                      <>
+                        {/* 2026-09-24 使用者裁決:已移除的客服補上「恢復」按鈕。做法照抄
+                            StaffListPage.tsx 服務人員「恢復」那顆——同樣是 variant="outline"
+                            size="sm" 直接觸發、不套確認對話框(恢復是可逆的良性操作,再按一次
+                            「移除」就回去了,不像「真正刪除」那種不可逆動作需要 AlertDialog 攔一道)。 */}
+                        <Button variant="outline" size="sm" onClick={() => handleRestore(agent.id)}>
+                          恢復
+                        </Button>
+                        {/* #798(2026-09-25 使用者裁決「選 A+C」):「真正刪除」只在「已移除」狀態旁顯示,
+                            用 variant="destructive" 讓視覺上明顯跟「恢復」不同,避免手滑點錯;
+                            按鈕、對話框、確認文案的嚴謹度全部照抄 StaffListPage.tsx 服務人員那顆。
+                            這一頁整頁走 RequireMerchantAdmin,所以不需要像服務人員頁再判斷 isAdmin
+                            (那頁對有「服務人員管理」權限的客服也開放,客服管理頁沒有這種情況);
+                            底層 hard_delete_merchant_agent 仍然自己檢查 is_merchant_admin。 */}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={hardDeletingId === agent.id}
+                            >
+                              真正刪除
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>確定要真正刪除「{agent.name}」嗎?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                這個動作無法復原!這位客服的紀錄與權限設定會被徹底刪除,之後在名單上
+                                再也找不到,也無法用「恢復」救回。對方的秒約帳號本身不受影響,同一個
+                                Email 之後仍然可以重新邀請。只有在確定不再需要這筆資料(例如邀請時
+                                Email 打錯字、對方永遠不會來註冊)時才使用;若只是暫時停用,請維持
+                                「已移除」狀態即可。
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>取消</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleHardDelete(agent.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                確定真正刪除
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
                     )}
                   </div>
                 </li>

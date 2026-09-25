@@ -4,9 +4,16 @@
 --
 -- 對應 supabase/migrations/20260916170000_homepage_shell_profile_fields.sql 的
 -- update_my_admin_profile() / update_my_agent_profile()。
+--
+-- ⚠️ 2026-09-25(SPECS-INDEX #796,migration 20260925040000):update_my_agent_profile 已經被移除。
+--    它能做的事(客服改自己的 nickname / job_title)在 2026-09-24 起被 update_merchant_agent 的
+--    「本人」授權路徑完全涵蓋(pgTAP 見 module3_05_agent_update_and_restore.sql),前端也早已不再呼叫。
+--    原本這份檔案 ② 那一段(4 條)+ ③ 的 anon 斷言(1 條)是在測那支函式,現在改成一條
+--    hasnt_function 絆線(防止有人把它加回來),plan 從 12 變成 7(拿掉 6 條、加 1 條)。
+--    客服那兩列 fixture 保留不動——刪掉沒有好處,留著也沒有副作用。
 begin;
 
-select plan(12);
+select plan(7);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -104,46 +111,18 @@ select throws_ok(
 select pg_temp.test_clear_auth();
 
 -- ---------------------------------------------------------------------------
--- ② 客服 A 更新自己的暱稱/職位,應該成功。
+-- ② (2026-09-25,#796)客服自助改暱稱/職位的舊函式 update_my_agent_profile 已移除。
+--    原本這裡 4 條斷言在測它;現在改成一條絆線:它必須「不存在」。
+--    客服自助編輯的行為測試在 module3_05_agent_update_and_restore.sql(走 update_merchant_agent 的
+--    「本人」授權路徑),不在這裡重複。
 -- ---------------------------------------------------------------------------
-select pg_temp.test_set_auth('a3000000-0000-4000-8000-000000000003');
-
-select lives_ok(
-  $$select update_my_agent_profile('a3000000-0000-4000-8000-000000000020', '客服 A 暱稱', '客服專員')$$,
-  '客服 A 可以成功更新自己在 M1 的 nickname/job_title'
-);
-
-select is(
-  (select nickname from merchant_agents where id = 'a3000000-0000-4000-8000-000000000030'),
-  '客服 A 暱稱',
-  '客服 A 自己的 nickname 確實被更新'
-);
-
-select is(
-  (select job_title from merchant_agents where id = 'a3000000-0000-4000-8000-000000000030'),
-  '客服專員',
-  '客服 A 自己的 job_title 確實被更新'
-);
-
--- 隔離檢查:客服 B 的資料完全沒被動到。
-select is(
-  (select nickname from merchant_agents where id = 'a3000000-0000-4000-8000-000000000031'),
-  null,
-  '客服 A 更新自己的資料,不會影響到同一間商家另一位客服 B 的 nickname'
-);
-
--- 帶別人的 merchant_id(M2):找不到符合條件的列,應該拋出例外。
-select throws_ok(
-  $$select update_my_agent_profile('a3000000-0000-4000-8000-000000000021', '竄改暱稱', '竄改職位')$$,
-  'P0002',
-  NULL,
-  '客服 A 帶別人商家(M2)的 merchant_id 呼叫時,找不到符合條件的列,直接被擋下'
-);
-
-select pg_temp.test_clear_auth();
+select hasnt_function('public', 'update_my_agent_profile', array['uuid', 'text', 'text'],
+  '#796:public.update_my_agent_profile(uuid,text,text) 已由 20260925040000 移除,不得再存在(同一個欄位兩個寫入入口、兩套授權判斷,是隱性的不一致來源;要改客服資料一律走 update_merchant_agent)');
 
 -- ---------------------------------------------------------------------------
--- ③ 權限邊界:anon 不能呼叫這兩支函式(比照既有 RPC 的 revoke 檢查方式)。
+-- ③ 權限邊界:anon 不能呼叫 update_my_admin_profile(比照既有 RPC 的 revoke 檢查方式)。
+--    (update_my_agent_profile 那一條在 #796 隨函式一起移除——函式不存在時
+--     has_function_privilege 會直接 raise,見下方說明。)
 --
 -- ⚠️ 2026-09-24 修正(主腦跑 pgTAP 時抓到,整個測試套件因此 FAIL):這裡原本寫成
 --    `(uuid, text, text, text, text)`(5 個參數),那是 20260924040600 開發過程中曾經存在、
@@ -159,11 +138,6 @@ select pg_temp.test_clear_auth();
 select ok(
   not has_function_privilege('anon', 'public.update_my_admin_profile(uuid, text, text, text)', 'execute'),
   'anon 角色不能執行 update_my_admin_profile'
-);
-
-select ok(
-  not has_function_privilege('anon', 'public.update_my_agent_profile(uuid, text, text)', 'execute'),
-  'anon 角色不能執行 update_my_agent_profile'
 );
 
 select * from finish();
