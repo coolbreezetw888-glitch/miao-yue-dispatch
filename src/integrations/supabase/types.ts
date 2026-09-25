@@ -2582,6 +2582,63 @@ export type Database = {
           },
         ]
       }
+      user_notifications: {
+        Row: {
+          body: string
+          booking_id: string | null
+          created_at: string
+          event_type: string
+          id: string
+          merchant_id: string
+          read_at: string | null
+          target_id: string
+          target_type: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          booking_id?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          merchant_id: string
+          read_at?: string | null
+          target_id: string
+          target_type: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          booking_id?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          merchant_id?: string
+          read_at?: string | null
+          target_id?: string
+          target_type?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notifications_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notifications_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -3381,6 +3438,7 @@ export type Database = {
       }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }
+      mark_my_notifications_read: { Args: { p_ids?: string[] }; Returns: number }
       mark_staff_login_active_if_self: { Args: never; Returns: undefined }
       platform_add_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
@@ -3483,6 +3541,7 @@ export type Database = {
           start_at: string
         }[]
       }
+      prune_user_notifications: { Args: never; Returns: number }
       reactivate_member: {
         Args: { p_member_id: string }
         Returns: {

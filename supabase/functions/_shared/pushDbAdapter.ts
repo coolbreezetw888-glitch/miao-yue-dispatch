@@ -11,6 +11,8 @@
 //   - getStaffSubscriptions(staffId) → getSubscriptionsForUsers(userIds)(§4.3)
 //   - 新增 resolveRecipients(§5.1)與 isStaffEventDisabled(§4.2 第 3 點)
 //   - 訂閱表 staff_push_subscriptions → push_subscriptions(§2.1/§3.1)
+//
+// 2026-09-25「站內通知中心(鈴鐺)」批次(§13.4,#753):新增 writeInAppNotification。
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -21,6 +23,7 @@ import type {
   PushNotificationLogInsert,
   PushRecipient,
   PushSubscriptionRow,
+  UserNotificationInsert,
 } from "./pushDispatchCore.ts";
 import { sendWebPush, type VapidDetails } from "./webpushAdapter.ts";
 
@@ -147,6 +150,17 @@ export function buildPushDispatchDeps(
     async writeLog(row: PushNotificationLogInsert) {
       const { error } = await adminClient.from("push_notification_log").insert(row);
       if (error) console.error("[push-dispatch] writeLog 失敗", error);
+    },
+
+    // §13.4:站內通知中心(鈴鐺)。這張表沒有任何 INSERT 政策,而且表層 GRANT 也把
+    // anon/authenticated 的 insert 收掉了(§13.2 第 3/4 點),所以**只有 service role 寫得進去**
+    // —— 這裡用的正是 service role client。
+    //
+    // 🔴 比照上面的 writeLog:寫失敗只 console.error 後繼續,絕對不能因為站內通知寫失敗就讓
+    //    推播不發(§13.4 最後一段)。
+    async writeInAppNotification(row: UserNotificationInsert) {
+      const { error } = await adminClient.from("user_notifications").insert(row);
+      if (error) console.error("[push-dispatch] writeInAppNotification 失敗", error);
     },
 
     async sendPush(subscription, payload) {

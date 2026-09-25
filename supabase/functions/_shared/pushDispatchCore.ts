@@ -17,6 +17,17 @@
 //   三支既有純函式 renderMessageTemplate / shouldDeleteSubscriptionOnFailure / computeLogStatus
 //   **一個字都沒有動**(§5.2 第 4 點),既有的 Deno 測試也沒有被刪掉重寫。
 // =========================================================================
+//
+// =========================================================================
+// 2026-09-25「站內通知中心(鈴鐺)」批次(規格書 §13.4,#753/#754)追加:
+//   PushDispatchDeps 多一支 writeInAppNotification,在「套完文案之後、呼叫 sendPush 之前」
+//   逐收件人寫一列 user_notifications。一個收件人 → 一列 log + 一列站內通知,一對一。
+//
+//   📌 §13.4 有一個 🔴 警告說「現行程式碼在 subscriptions.length === 0 時直接 return,而套文案
+//      在那個 return 之後才做,所以有訂閱但沒裝置的人根本沒算出過文案,必須把套文案往前搬」。
+//      **那件事在同一天稍早的 §5.2 改寫裡就已經做完了**(見下面「⚠️ §5.2 / §〇.11」那一段註解),
+//      這一批只是**依賴**那個順序,沒有再搬一次。順序已經是對的,不要再搬回去。
+// =========================================================================
 
 export type PushDispatchEventType =
   "booking_created" | "booking_cancelled" | "booking_updated" | "booking_reminder_next_day";
@@ -82,6 +93,29 @@ export interface PushNotificationLogInsert {
   rendered_body: string | null;
 }
 
+/**
+ * §13.2 / §13.4:站內通知中心(鈴鐺)的一列。
+ *
+ * ⚠️ 刻意不含「點下去要去哪裡」的網址 —— 只存 event_type / target_type / booking_id,
+ *    點擊時由前端用純函式即時算出目的地(§13.7)。理由是 §〇.5 那個 bug 的直接教訓:
+ *    把目的地網址存進資料庫,錯誤就會被永久冷凍在每一列歷史紀錄裡。
+ *
+ * ⚠️ title 刻意是 renderedTitle **本身**,不是 buildRecipientTitle() 加過商家名稱前綴的版本。
+ *    §13.2 明文要求「就是 push_notification_log.rendered_title / rendered_body 的同一份內容」,
+ *    而 §4.8 的商家名稱前綴是為了「手機通知列上分不出是哪一間店」才加的 —— 鈴鐺面板本身就會
+ *    另外顯示商家名稱(§13.7),再加一次前綴是重複。
+ */
+export interface UserNotificationInsert {
+  user_id: string;
+  merchant_id: string;
+  target_type: PushTargetType;
+  target_id: string;
+  event_type: PushDispatchEventType;
+  booking_id: string | null;
+  title: string;
+  body: string;
+}
+
 export interface PushPayload {
   title: string;
   body: string;
@@ -117,6 +151,15 @@ export interface PushDispatchDeps {
   deleteSubscription(id: string): Promise<void>;
   renderBookingVariables(bookingId: string): Promise<Record<string, string>>;
   writeLog(row: PushNotificationLogInsert): Promise<void>;
+  /**
+   * §13.4:站內通知中心(鈴鐺)的寫入。一個收件人 → 一列 log + 一列站內通知,一對一。
+   *
+   * 🔴 這一支寫失敗**絕對不能**讓推播不發(§13.4 最後一段)。呼叫端(下面的
+   *    dispatchPushForBooking)已經把每一次呼叫包在 try/catch 裡,所以就算實作本身丟例外也不會
+   *    中斷派送 —— 但實作端仍然應該比照既有的 writeLog 自己 console.error 後 resolve,
+   *    這樣錯誤訊息才會留在 Edge Function 的日誌裡。
+   */
+  writeInAppNotification(row: UserNotificationInsert): Promise<void>;
   sendPush(subscription: PushSubscriptionRow, payload: PushPayload): Promise<SendPushResult>;
 }
 
@@ -335,6 +378,36 @@ export async function dispatchPushForBooking(
   const renderedTitle = renderMessageTemplate(eventSetting.message_title, variables);
   const renderedBody = renderMessageTemplate(eventSetting.message_body, variables);
   const merchantName = variables["merchant_name"] ?? null;
+
+  // ---------------------------------------------------------------------
+  // §13.4:站內通知中心(鈴鐺)。**位置是規格明文要求的**——「算出收件人清單、套完文案之後、
+  //        實際呼叫 sendPush 之前」就寫入,而且完全不看發送結果:
+  //          - 推播回 500、回 404/410(裝置失效被刪除)→ 站內通知照樣在;
+  //          - 連「這個收件人一台裝置都沒開通」(no_subscription)也要寫 —— 那時候站內通知是他
+  //            唯一看得到的東西,正是「留得住紀錄」最有價值的場合。
+  //        不寫的只有一種情況:**他根本不是收件人**(商家總開關關閉、或他自己把事件關掉了)。
+  //        上面兩個 early return 已經涵蓋這件事,所以這裡不需要再判斷一次。
+  //
+  // 🔴 這個迴圈的每一次呼叫都包在 try/catch 裡:站內通知只是「留一份副本」,**絕對不能**因為
+  //    它寫失敗就讓推播不發(§13.4)。這一層防護刻意寫在核心編排函式裡,而不是只依賴
+  //    pushDbAdapter 自己吞錯 —— 這樣不論 deps 是誰實作的,這個保證都成立。
+  // ---------------------------------------------------------------------
+  for (const recipient of recipients) {
+    try {
+      await deps.writeInAppNotification({
+        user_id: recipient.target_user_id,
+        merchant_id: merchantId,
+        target_type: recipient.target_type,
+        target_id: recipient.target_id,
+        event_type: eventType,
+        booking_id: bookingId,
+        title: renderedTitle,
+        body: renderedBody,
+      });
+    } catch (err) {
+      console.error("[push-dispatch] writeInAppNotification 失敗(推播照樣繼續)", err);
+    }
+  }
 
   // ---------------------------------------------------------------------
   // §4.3:依 endpoint 去重之後才逐台發送。

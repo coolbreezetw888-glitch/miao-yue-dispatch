@@ -23,6 +23,7 @@ import {
   type PushPayload,
   type PushRecipient,
   type PushSubscriptionRow,
+  type UserNotificationInsert,
 } from "./pushDispatchCore.ts";
 
 Deno.test("renderMessageTemplate: 涵蓋所有已定義變數,正確替換", () => {
@@ -80,10 +81,13 @@ function makeFakeDeps(overrides: Partial<PushDispatchDeps> = {}): {
   logs: PushNotificationLogInsert[];
   deletedIds: string[];
   sentPayloads: { endpoint: string; payload: PushPayload }[];
+  /** §13.4:站內通知中心(鈴鐺)寫進去的列。 */
+  inAppNotifications: UserNotificationInsert[];
 } {
   const logs: PushNotificationLogInsert[] = [];
   const deletedIds: string[] = [];
   const sentPayloads: { endpoint: string; payload: PushPayload }[] = [];
+  const inAppNotifications: UserNotificationInsert[] = [];
 
   const defaultSetting: PushEventSettingRow = {
     enabled: true,
@@ -117,13 +121,22 @@ function makeFakeDeps(overrides: Partial<PushDispatchDeps> = {}): {
     writeLog: async (row: PushNotificationLogInsert) => {
       logs.push(row);
     },
+    writeInAppNotification: async (row: UserNotificationInsert) => {
+      inAppNotifications.push(row);
+    },
     sendPush: async (subscription, payload) => {
       sentPayloads.push({ endpoint: subscription.endpoint, payload });
       return { ok: true, status: 201, errorDetail: null };
     },
   };
 
-  return { deps: { ...defaultDeps, ...overrides }, logs, deletedIds, sentPayloads };
+  return {
+    deps: { ...defaultDeps, ...overrides },
+    logs,
+    deletedIds,
+    sentPayloads,
+    inAppNotifications,
+  };
 }
 
 Deno.test("dispatchPushForBooking(核心必測):事件關閉時跳過,寫入 event_disabled", async () => {
@@ -557,5 +570,259 @@ Deno.test(
     assertEquals(staffLog.skip_reason, "no_subscription");
     assertEquals(staffLog.device_count, 0);
     assertEquals(staffLog.rendered_title, "新訂單通知");
+  },
+);
+
+// =========================================================================
+// §13.4 站內通知中心(鈴鐺)的寫入時機 —— 對應規格書 §十之二 的兩列:
+//   「§13.4 寫入時機」四個情境 + 「§13.4 一對一」。
+//
+// 這一組測試的核心命題只有一句:**「你會收到推播的那些通知,都會留在鈴鐺裡」** —— 而且
+// 「會收到」指的是「你是收件人」,不是「推播真的送成功」。所以推播失敗、甚至一台裝置都沒有,
+// 站內通知都要在;只有「他根本不是收件人」才不寫。
+// =========================================================================
+
+Deno.test("§13.4(核心必測):推播送失敗(sendPush 回 500)時,站內通知照樣存在", async () => {
+  const { deps, logs, inAppNotifications } = makeFakeDeps({
+    sendPush: async () => ({ ok: false, status: 500, errorDetail: "boom" }),
+  });
+
+  await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+
+  assertEquals(logs.length, 1);
+  assertEquals(logs[0].status, "failed");
+  // 這才是重點:發送結果是 failed,站內通知照樣有一列。
+  assertEquals(inAppNotifications.length, 1);
+  assertEquals(inAppNotifications[0].title, "新訂單通知");
+  assertEquals(inAppNotifications[0].body, "2026-10-01 10:00 王小明");
+});
+
+Deno.test("§13.4(核心必測):裝置失效被清除(sendPush 回 410)時,站內通知照樣存在", async () => {
+  const { deps, deletedIds, inAppNotifications } = makeFakeDeps({
+    sendPush: async () => ({ ok: false, status: 410, errorDetail: "gone" }),
+  });
+
+  await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+
+  assertEquals(deletedIds, ["sub-1"]);
+  assertEquals(inAppNotifications.length, 1);
+});
+
+Deno.test(
+  "🔴 §13.4(核心必測,§〇.11 順序陷阱的回歸測試):收件人一台裝置都沒有時,站內通知存在**而且 title/body 不是空字串**",
+  async () => {
+    // 這一條守的是「套文案必須在裝置查詢之前」。如果有人把 renderMessageTemplate 搬回
+    // 「查裝置 → 沒有裝置就 return → 才套文案」的舊順序,這一條會立刻紅:不是筆數不對,
+    // 而是 title/body 變成空字串(或這一列根本不存在)。
+    const { deps, logs, sentPayloads, inAppNotifications } = makeFakeDeps({
+      getSubscriptionsForUsers: async () => new Map<string, PushSubscriptionRow[]>(),
+    });
+
+    const result = await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    assertEquals(result.dispatched, false);
+    assertEquals(result.reason, "no_subscription");
+    assertEquals(sentPayloads.length, 0);
+    assertEquals(logs.length, 1);
+    assertEquals(logs[0].skip_reason, "no_subscription");
+
+    // 一台裝置都沒有,站內通知**正是他唯一看得到的東西**。
+    assertEquals(inAppNotifications.length, 1);
+    assertEquals(inAppNotifications[0].title, "新訂單通知");
+    assertEquals(inAppNotifications[0].body, "2026-10-01 10:00 王小明");
+    assertEquals(inAppNotifications[0].title.length > 0, true);
+    assertEquals(inAppNotifications[0].body.length > 0, true);
+    // 變數真的被套進去了,不是留著未替換的原樣。
+    assertEquals(inAppNotifications[0].body.includes("{{"), false);
+  },
+);
+
+Deno.test("§13.4(核心必測):商家總開關關閉時,**一列站內通知都不寫**", async () => {
+  const { deps, logs, inAppNotifications } = makeFakeDeps({
+    getEventSetting: async () => ({ enabled: false, message_title: "x", message_body: "y" }),
+  });
+
+  await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+
+  assertEquals(logs.length, 1);
+  assertEquals(logs[0].skip_reason, "event_disabled");
+  // Q8 裁決 A:鈴鐺跟推播同一套規則 —— 商家關掉總開關,鈴鐺也不該繼續累積。
+  assertEquals(inAppNotifications.length, 0);
+});
+
+Deno.test(
+  "§13.4(核心必測):個人開關關閉的人**沒有**站內通知(連 personal_disabled 那一列也不寫)",
+  async () => {
+    const { deps, logs, inAppNotifications } = makeFakeDeps({
+      resolveRecipients: async () => [],
+      isStaffEventDisabled: async () => true,
+    });
+
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    // log 有兩列(personal_disabled + no_recipient),但這兩列都是「跳過」類,不是收件人。
+    assertEquals(logs.length, 2);
+    assertEquals(inAppNotifications.length, 0);
+  },
+);
+
+Deno.test(
+  "§13.4(核心必測):no_target 這種跳過類的情形,一列站內通知都不寫",
+  async () => {
+    const { deps, logs, inAppNotifications } = makeFakeDeps({
+      getBookingStaffId: async () => null,
+      resolveRecipients: async () => [],
+    });
+
+    const result = await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    assertEquals(result.reason, "no_target");
+    assertEquals(logs.length, 1);
+    assertEquals(inAppNotifications.length, 0);
+  },
+);
+
+Deno.test(
+  "§13.4 一對一(核心必測):三個收件人 → 三列 log + 三列站內通知,而 sendPush 因去重只被呼叫一次",
+  async () => {
+    // 三個身份全部屬於同一個登入帳號、共用同一台裝置(§〇.6 雙重身份 + 同時也是管理員的極端情形)。
+    const dualStaff: PushRecipient = { ...STAFF_1_RECIPIENT, target_user_id: "user-dual" };
+    const dualAgent: PushRecipient = { ...AGENT_RECIPIENT, target_user_id: "user-dual" };
+    const dualAdmin: PushRecipient = { ...ADMIN_RECIPIENT, target_user_id: "user-dual" };
+
+    const { deps, logs, sentPayloads, inAppNotifications } = makeFakeDeps({
+      resolveRecipients: async () => [dualStaff, dualAgent, dualAdmin],
+      getSubscriptionsForUsers: async () =>
+        new Map<string, PushSubscriptionRow[]>([
+          ["user-dual", [{ id: "s1", endpoint: "e-phone", p256dh_key: "p", auth_key: "a" }]],
+        ]),
+    });
+
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    // §4.3 的既有斷言:手機只跳一則。
+    assertEquals(sentPayloads.length, 1);
+    // §13.4 的新斷言:log 三列、站內通知三列,一對一。
+    assertEquals(logs.length, 3);
+    assertEquals(inAppNotifications.length, 3);
+    assertEquals(inAppNotifications.map((n) => n.target_type).sort(), ["admin", "agent", "staff"]);
+    assertEquals(inAppNotifications.map((n) => n.target_id).sort(), [
+      "admin-1",
+      "agent-1",
+      "staff-1",
+    ]);
+    // 三列都是同一個登入帳號(鈴鐺的 RLS 就是靠 user_id)。
+    assertEquals(
+      inAppNotifications.every((n) => n.user_id === "user-dual"),
+      true,
+    );
+  },
+);
+
+Deno.test(
+  "§13.2:站內通知的欄位內容 —— 只存 event_type/target_type/booking_id,刻意沒有目的地網址",
+  async () => {
+    const { deps, inAppNotifications } = makeFakeDeps();
+
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_updated",
+      changeSummary: "時間改成 11:00",
+    });
+
+    assertEquals(inAppNotifications.length, 1);
+    const row = inAppNotifications[0];
+    assertEquals(row.merchant_id, "m1");
+    assertEquals(row.booking_id, "b1");
+    assertEquals(row.event_type, "booking_updated");
+    assertEquals(row.target_type, "staff");
+    assertEquals(row.target_id, "staff-1");
+    assertEquals(row.user_id, "user-staff-1");
+    // 刻意不存 url —— 目的地由前端用純函式即時算(§13.2 的 ⚠️、§〇.5 的教訓)。
+    assertEquals("url" in (row as unknown as Record<string, unknown>), false);
+  },
+);
+
+Deno.test(
+  "§13.2:站內通知的 title 是 rendered_title 本身,**不含** §4.8 給管理員/客服加的商家名稱前綴",
+  async () => {
+    const { deps, logs, sentPayloads, inAppNotifications } = makeFakeDeps({
+      resolveRecipients: async () => [ADMIN_RECIPIENT],
+      getSubscriptionsForUsers: async () =>
+        new Map<string, PushSubscriptionRow[]>([
+          ["user-admin-1", [{ id: "s2", endpoint: "e-admin", p256dh_key: "p", auth_key: "a" }]],
+        ]),
+    });
+
+    await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    // 手機通知列上要有前綴(那裡分不出是哪一間店)。
+    assertEquals(sentPayloads[0].payload.title, "涼風工匠·新訂單通知");
+    // 站內通知跟 push_notification_log.rendered_title 是同一份內容(面板本身會顯示商家名稱)。
+    assertEquals(logs[0].rendered_title, "新訂單通知");
+    assertEquals(inAppNotifications[0].title, "新訂單通知");
+  },
+);
+
+Deno.test(
+  "🔴 §13.4:站內通知寫入**在 sendPush 之前**,而且寫失敗絕對不能讓推播不發",
+  async () => {
+    const order: string[] = [];
+    const { deps } = makeFakeDeps({
+      writeInAppNotification: async () => {
+        order.push("in-app");
+        // 刻意丟例外:模擬 user_notifications 這張表暫時寫不進去(例如 migration 還沒套用)。
+        throw new Error("user_notifications 寫入失敗");
+      },
+      sendPush: async () => {
+        order.push("push");
+        return { ok: true, status: 201, errorDetail: null };
+      },
+    });
+
+    const result = await dispatchPushForBooking(deps, {
+      merchantId: "m1",
+      bookingId: "b1",
+      eventType: "booking_created",
+    });
+
+    // ① 順序:站內通知先寫,推播後送。
+    assertEquals(order, ["in-app", "push"]);
+    // ② 站內通知寫失敗,推播照樣送成功 —— 這是 §13.4 最後一段的硬性要求。
+    assertEquals(result.dispatched, true);
+    assertEquals(result.successCount, 1);
   },
 );
