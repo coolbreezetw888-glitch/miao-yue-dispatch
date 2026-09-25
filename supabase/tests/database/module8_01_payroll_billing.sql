@@ -6,7 +6,11 @@ begin;
 --   (1) 用訂單虛構的 start_at 月份(2026-12)查詢營收應該是 0(把口徑改變本身釘成回歸保護)
 --   (2)(3) 單月版/區間版各一條 cmp_ok(>= 3500),避免「改成兩邊互相對照」之後出現
 --          「兩邊都是 0 也會通過」的空轉斷言。
-select plan(99);
+-- 99 → 102:2026-09-25(#767/#779/#784)新增三條「對照組」反向斷言——用訂單虛構的**預約**
+-- 月份/區間去查,服務人員的抽成報表(單月版 total_orders、助手筆數、區間版 total_orders)
+-- 必須全部是 0,把「服務人員側也改用完成時間認列」這個口徑釘死。只驗正向的話,一個「兩個月
+-- 都算」的錯誤實作也會通過。
+select plan(102);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -882,16 +886,45 @@ select confirm_booking(:'report_booking_r2_id'::uuid);
 select complete_booking(:'report_booking_r2_id'::uuid);
 -- R1: 1000 × 20% = 200.00,R2: (2000-500) × 20% = 300.00,總計 500.00,2 筆訂單。
 
+-- ⚠️ 2026-09-25(#767/#784):服務人員的抽成報表也改用「完成時間」當歸月基準了
+--    (抽成用 bcr.computed_at,跟本檔案下面 total_commission_payout 那條斷言早就在用的同一個
+--     欄位;助手參與筆數用 coalesce(b.completed_at, b.start_at))。
+--    R1/R2/R3 的 start_at 是本檔案為了排程方便虛構的 2026-12-03,但它們是在「測試執行當下」
+--    被 complete_booking() 標記完成的 ⇒ 認列月份是執行當下那個月,不是 2026-12。
+--    ⇒ 查詢年月改成執行當下的年月(用 Asia/Taipei 解讀,跟函式內部換算區間的時區一致;
+--      不要用資料庫的 UTC current_date/date_trunc,台北時間 00:00~08:00 會跨到前一天,
+--      這正是本檔案第 89 條長期在清晨變紅的原因,見 #776)。
+--    🔴 期望值 2 筆 / 500.00 / 助手 1 筆**完全不變**,只換月份座標 —— 絕對不可以用
+--       「期望值改成 0」或刪掉斷言的方式讓它變綠,那等於把這次改動的回歸保護整個拆掉。
+--    pgTAP 整份檔案包在同一個交易裡,同一交易內 now() 是固定值,不會有「跑到一半跨月」的
+--    問題;不要改用 clock_timestamp()。
 select is(
-  (get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12) ->> 'total_orders')::int,
+  (get_staff_commission_summary(
+    'e8000000-0000-4000-8000-000000000048',
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_orders')::int,
   2,
-  '§3.9:get_staff_commission_summary 正確回傳 2 筆訂單'
+  '§3.9:get_staff_commission_summary 正確回傳 2 筆訂單(#767 之後認列在「完成當下」那個月)'
 );
 
 select is(
-  (get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12) ->> 'total_commission_amount')::numeric,
+  (get_staff_commission_summary(
+    'e8000000-0000-4000-8000-000000000048',
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_commission_amount')::numeric,
   500.00,
   '§3.9:get_staff_commission_summary 總抽成金額正確 = 200 + 300 = 500.00'
+);
+
+-- #784 反向守門員(比照上面 total_revenue_excl_tax 那條既有的「對照組」寫法):用這兩筆訂單
+-- 虛構的**預約**月份 2026-12 查詢,必須是 0 筆。只驗正向的話,一個「兩個月都算」的錯誤實作
+-- 也會通過。
+select is(
+  (get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12) ->> 'total_orders')::int,
+  0,
+  '§3.9 + #767(對照組):用訂單虛構的 start_at 月份(2026-12)查詢,服務人員的抽成報表是 0 筆 —— 證明它跟商家帳務報表一樣改用「完成時間」認列'
 );
 
 -- P2 也以助手身份參與一筆 P 的訂單(規則 2.5 參考資訊,不影響金額)。
@@ -910,10 +943,24 @@ select id from create_booking(
 select confirm_booking(:'report_booking_r3_id'::uuid);
 select complete_booking(:'report_booking_r3_id'::uuid);
 
+-- #779:助手參與筆數的基準是 coalesce(b.completed_at, b.start_at)(助手的訂單不會產生
+-- commission record,沒有 computed_at 可用,這跟上面抽成用 bcr.computed_at 是刻意不同的欄位)。
+-- R3 同樣是在測試執行當下被完成的,所以也要用執行當下的年月來查。
+select is(
+  (get_staff_commission_summary(
+    'e8000000-0000-4000-8000-000000000048',
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'assistant_booking_count')::int,
+  1,
+  '規則 2.5/§3.9 + #779:P2 在「完成當月」以助手身份參與 1 筆訂單(只是參考資訊,不影響上面的抽成總計 500.00)'
+);
+
+-- #779 反向守門員:用 R3 虛構的預約月份 2026-12 查詢,助手筆數必須是 0。
 select is(
   (get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12) ->> 'assistant_booking_count')::int,
-  1,
-  '規則 2.5/§3.9:P2 本月以助手身份參與 1 筆訂單(只是參考資訊,不影響上面的抽成總計 500.00)'
+  0,
+  '#779(對照組):助手參與筆數也改用完成時間分月 → 用虛構的預約月份 2026-12 查是 0 筆,跟抽成同一個口徑,不會一個算這個月、一個算那個月'
 );
 
 -- §3.11:店家帳務報表(只含 R1/R2/R3 三筆訂單 + P2 服務項目層級抽成造成的金額)。
@@ -1220,10 +1267,23 @@ select is(
 -- 日期篩選、會正確排除範圍外的訂單,不是原封不動回傳月份版本的數字。
 -- (原本這條用 [12/4,12/31] 排除「12/3 建立的訂單」;完成時間基準之後那個日期已經不是這三筆
 --  訂單的認列依據了,改成用完成時間的隔天起算,才是真的在驗「依日期篩選」這件事。)
+--
+-- 🔴 2026-09-25(#776):這條原本用 `current_date + 1`,在**台北時間 00:00~08:00** 必定變紅。
+--    根因:這個資料庫的時區是 **UTC**(`show timezone` = UTC),所以 `current_date` 是 UTC 的
+--    今天;但被測函式 get_merchant_billing_summary_by_range 內部是用
+--    `p_start_date::timestamp at time zone 'Asia/Taipei'` 去解讀傳進來的日期。
+--    台北 00:00~08:00 這段時間,UTC 還停在「昨天」⇒ `current_date + 1` 其實是「台北的今天」,
+--    而三筆 fixture 訂單的 completed_at = now() 正好落在台北的今天 ⇒ 不但沒被排除,
+--    整個 11400 元都被算進來,斷言必紅。
+--    修法:斷言跟被測函式用**同一套時區**,把 current_date 換成
+--    `(now() at time zone 'Asia/Taipei')::date`。
+--    ⚠️ 真正的危害不是「清晨會紅一條」,是它會養成「那條本來就紅,忽略它」的習慣 ——
+--       全庫 pgTAP 的 `Result:` 應該永遠是 PASS,有一條長期紅著就等於整個警報器失效。
 select is(
   (get_merchant_billing_summary_by_range(
     'e8000000-0000-4000-8000-000000000021',
-    (current_date + 1)::date, (current_date + 2)::date
+    ((now() at time zone 'Asia/Taipei')::date + 1),
+    ((now() at time zone 'Asia/Taipei')::date + 2)
   ) ->> 'total_revenue_excl_tax')::numeric,
   0.00,
   '§3.6:把區間移到明天起算(排除今天完成的 R1/R2/R3 三筆訂單)後,total_revenue_excl_tax 正確變成 0.00,證明真的是依完成日期篩選'
@@ -1248,20 +1308,36 @@ select throws_ok(
 );
 
 -- D. get_staff_commission_summary_by_range:跟月份版本比對,證明區間查詢正確涵蓋同一批訂單。
+-- ⚠️ #767/#784:區間版跟單月版一起改用完成時間當基準了,所以這裡的區間也要換成「完成當月」
+--    的整月區間,不能再用訂單虛構的 2026-12。日期用 Asia/Taipei 算(理由同上面 #776)。
 select is(
   (get_staff_commission_summary_by_range(
-    'e8000000-0000-4000-8000-000000000048', '2026-12-01'::date, '2026-12-31'::date
+    'e8000000-0000-4000-8000-000000000048',
+    date_trunc('month', now() at time zone 'Asia/Taipei')::date,
+    (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_orders')::int,
   2,
-  '§3.6:get_staff_commission_summary_by_range([12/1,12/31]) 訂單筆數跟月份版本一致(2 筆)'
+  '§3.6:get_staff_commission_summary_by_range(完成當月整月)訂單筆數跟月份版本一致(2 筆)'
 );
 
 select is(
   (get_staff_commission_summary_by_range(
-    'e8000000-0000-4000-8000-000000000048', '2026-12-01'::date, '2026-12-31'::date
+    'e8000000-0000-4000-8000-000000000048',
+    date_trunc('month', now() at time zone 'Asia/Taipei')::date,
+    (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_commission_amount')::numeric,
   500.00,
   '§3.6:get_staff_commission_summary_by_range 總抽成金額跟月份版本一致(500.00)'
+);
+
+-- #767 反向守門員(區間版):用訂單虛構的預約月份區間 [2026-12-01, 2026-12-31] 查,必須是 0 筆。
+-- 單月版與區間版兩支都要被釘住,任何一支漏改,兩個畫面就會對同一個月給出不同的數字。
+select is(
+  (get_staff_commission_summary_by_range(
+    'e8000000-0000-4000-8000-000000000048', '2026-12-01'::date, '2026-12-31'::date
+  ) ->> 'total_orders')::int,
+  0,
+  '§3.6 + #767(對照組,區間版):用訂單虛構的預約月份區間 [12/1,12/31] 查是 0 筆 —— 區間版跟單月版用同一個完成時間基準,沒有分岔'
 );
 
 -- E. compute_staff_payroll_by_range(核心必測):跨月區間(10/1~11/30)涵蓋 M2(045)的跨月請假

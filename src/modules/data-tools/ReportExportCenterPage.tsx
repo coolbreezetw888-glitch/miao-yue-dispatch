@@ -133,7 +133,7 @@ function ReportExportCenterPageInner() {
             allRows.push([
               staff.name,
               d.booking_id,
-              d.order_date,
+              d.completion_date,
               d.customer_name,
               d.commission_base_amount,
               formatStaffCommissionItemBreakdown(d),
@@ -149,7 +149,8 @@ function ReportExportCenterPageInner() {
         [
           "服務人員",
           "訂單編號",
-          "訂單日期",
+          // #781:#767 之後這一欄裝的是「按下完成的那一刻」,不是預約日期,標題要誠實。
+          "完成日期",
           "客戶姓名",
           "抽成基準金額",
           "服務項目明細",

@@ -74,6 +74,30 @@ export const STAFF_NAME_PREFIX = "E2E服務人員v2測試";
 export const BOOKING_SUBTOTAL = 1000; // 自訂總金額,固定方便斷言(final_amount_snapshot/total_amount)。
 export const COMMISSION_RATE_PERCENTAGE = 50; // 固定方便斷言(我的抽成 = 500)。
 export const EXPECTED_COMMISSION_AMOUNT = (BOOKING_SUBTOTAL * COMMISSION_RATE_PERCENTAGE) / 100; // 500
+// ⚠️ 這個 fixture 的 EXPECTED_COMMISSION_AMOUNT 是 **500**(1000 × 50%),
+//    payroll-fixture.ts 的是 **200**(1000 × 20%)。兩個是不同的 fixture、不同的數字,不要搞混。
+
+// #788(SPECS-INDEX,規格書 .project/specs/服務人員報表歸月基準修正.md):這個 fixture 的訂單也
+// 改成「上個月預約、今天才按下完成」,讓「服務人員自己打開薪資報表時,上個月做、這個月才完成的
+// 訂單會出現在**這個月**」這件事真的被驗到。建單與完成同一天的話,用預約時間或用完成時間算出來
+// 的月份剛好一樣,測試永遠是綠的,抓不到歸月基準算錯。
+//
+// 🔴 錨點固定用「上個月 15 號」,**不可以**用「今天往前推一個月的同一天」:3/31 往前推會得到
+//    2/31 這個不存在的日期,`new Date(2026, 1, 31)` 在 JS 會**靜默溢位**成 3/3,根本沒有跨月,
+//    測試會假通過。15 號在任何月份都存在,永遠安全;getMonth() - 1 在 1 月會得到 -1,
+//    JS Date 會正確回捲到去年 12 月,也是安全的。
+const bookingAnchorNow = getTaipeiNow();
+const bookingStartAnchor = new Date(
+  bookingAnchorNow.getFullYear(),
+  bookingAnchorNow.getMonth() - 1,
+  15,
+);
+/** 訂單「預約發生」的月份(上個月)——報表**不應該**把這筆訂單算在這個月。 */
+export const BOOKING_START_YEAR = bookingStartAnchor.getFullYear();
+export const BOOKING_START_MONTH = bookingStartAnchor.getMonth() + 1;
+/** 訂單「按下完成 = 收到錢」的月份(這個月)——報表**應該**把這筆訂單算在這個月。 */
+export const COMPLETION_YEAR = bookingAnchorNow.getFullYear();
+export const COMPLETION_MONTH = bookingAnchorNow.getMonth() + 1;
 
 export interface StaffPortalV2Fixture {
   runId: string;
@@ -88,8 +112,17 @@ export interface StaffPortalV2Fixture {
   serviceItemId: string;
   bookingId: string;
   todayDateKey: string;
+  /** #788:訂單的預約日(上個月 15 號)。訂單在這一天發生,但是在**今天**才按下完成,
+   * 所以報表應該把它算在「這個月」。10.2.4 的行事曆測試要用這個日期深連結過去看那筆預約。 */
+  bookingStartDateKey: string;
+  /** #788:訂單預約發生的年/月(上個月)。 */
+  bookingStartYear: number;
+  bookingStartMonth: number;
+  /** #788:訂單按下完成的年/月(這個月)。 */
+  completionYear: number;
+  completionMonth: number;
   /** SPECS-INDEX 編號 485(核心必測)專用:今天以外、沒有任何既有預約的日期,用來標記
-   * 「整天排休」,確保衝突筆數斷言乾淨(=0),也不會跟今天那筆已完成訂單互相干擾。 */
+   * 「整天排休」,確保衝突筆數斷言乾淨(=0),也不會跟那筆已完成訂單互相干擾。 */
   wholeDayOffDateKey: string;
   /** 10.3.3 時段排休測試專用,跟上面那天不同,避免兩個測試互相汙染彼此的斷言。 */
   slotOffDateKey: string;
@@ -231,6 +264,8 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
 
   const today = getTaipeiNow();
   const todayDateKey = toDateKey(today);
+  // #788:訂單的預約日固定在「上個月 15 號」(錨點選擇的理由見上面 bookingStartAnchor 的註解)。
+  const bookingStartDateKey = toDateKey(new Date(today.getFullYear(), today.getMonth() - 1, 15));
   const wholeDayOffDateKey = toDateKey(addDays(today, 10));
   const slotOffDateKey = toDateKey(addDays(today, 11));
 
@@ -252,15 +287,23 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
     );
   }
 
-  // 10.2.4/10.4.6 共用:今天一筆已完成訂單,自訂總金額 1000、抽成 50% = 500,方便斷言
+  // 10.2.4/10.4.6 共用:一筆已完成訂單,自訂總金額 1000、抽成 50% = 500,方便斷言
   // 「服務人員自助視角」與「商家管理員視角」看到的是同一個數字(跨視角一致性)。
+  //
+  // #788:p_start_at 從「今天」改成「上個月 15 號」,`complete_booking` 那幾行維持不動
+  // (仍然是今天完成)⇒ 自動形成「上個月做、這個月才收到錢」的跨月時間軸。
+  // 🔴 這個改動連帶影響 10.2.4(行事曆卡片列表/時間軸格線)那支測試:它原本靠
+  //    `/app/calendar`(預設今天)就能看到這筆預約,現在要用 `?date=${bookingStartDateKey}`
+  //    深連結到預約發生的那一天。已在 staff-portal-v2.spec.ts 該支測試裡一併改掉並寫明理由。
+  //    ⚠️ 規格書 #788 只檢查了三個導出常數不受影響,**沒有提到 10.2.4 也依賴「訂單在今天」**,
+  //       這是實作時實查發現的相依,已回報主腦。
   const { data: bookingRow, error: bookingError } = await adminClient.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: staffId,
     p_service_items: [
       { service_item_id: serviceItemId, quantity: 1, unit_price: BOOKING_SUBTOTAL },
     ],
-    p_start_at: buildTaipeiIso(todayDateKey, "10:00"),
+    p_start_at: buildTaipeiIso(bookingStartDateKey, "10:00"),
     p_customer_name: "E2E測試客戶v2",
     p_customer_phone: "0955888000",
     p_customer_address: "測試地址一號",
@@ -296,6 +339,11 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
     serviceItemId,
     bookingId,
     todayDateKey,
+    bookingStartDateKey,
+    bookingStartYear: BOOKING_START_YEAR,
+    bookingStartMonth: BOOKING_START_MONTH,
+    completionYear: COMPLETION_YEAR,
+    completionMonth: COMPLETION_MONTH,
     wholeDayOffDateKey,
     slotOffDateKey,
   };

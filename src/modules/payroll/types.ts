@@ -90,7 +90,13 @@ export function formatStaffCommissionItemBreakdown(d: {
 export interface StaffCommissionSummary {
   details: Array<{
     booking_id: string;
-    order_date: string;
+    /** #780(規格書 .project/specs/服務人員報表歸月基準修正.md):原本叫 order_date,但 #767
+     * 把歸月基準改成「完成時間」之後,這個欄位裝的是 bcr.computed_at(按下完成的那一刻),
+     * 名字還叫「訂單日期」會直接誤導下一個維護者,所以改名。
+     * ⚠️ 資料庫那一側**過渡期同時輸出 completion_date 與 order_date 兩個 key(值相同)**,
+     * 因為 migration 與 Vercel 部署不是同一個原子操作;但前端這裡**刻意只留新名字**,
+     * 讓 tsc 幫忙抓出任何還在讀舊欄位的地方。舊 key 的移除登記為 #783。 */
+    completion_date: string;
     customer_name: string;
     commission_base_amount: number;
     commission_amount: number;

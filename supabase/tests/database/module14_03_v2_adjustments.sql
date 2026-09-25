@@ -5,7 +5,9 @@
 
 begin;
 
-select plan(29);
+-- 29 → 30:2026-09-25(#784)新增一條反向斷言(用訂單虛構的預約月份 2026-11 查詢,details
+-- 必須是空陣列),把「抽成報表改用完成時間認列」的口徑釘死。
+select plan(30);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -317,34 +319,77 @@ select pg_temp.test_clear_auth();
 
 select pg_temp.test_set_auth('e1430000-0000-4000-8000-000000000002'); -- X 自助查詢
 
+-- ⚠️ 2026-09-25(#767/#784):抽成報表的歸月基準改成 bcr.computed_at(按下完成的那一刻)。
+--    這筆 fixture 訂單的 start_at 是虛構的未來日期 2026-11-16,但它是在「測試執行當下」被
+--    complete_booking() 標記完成的 ⇒ 認列月份是執行當下那個月,不是 2026-11。
+--    所以下面每一條要比對數值的斷言,查詢月份都改成執行當下的年月(用 Asia/Taipei 解讀,
+--    跟函式內部換算區間的時區一致,避免台北時間 00:00~08:00 跑測試時跨月;pgTAP 整份檔案在
+--    同一個交易內,now() 是固定值,不會跑到一半跨月)。
+--    🔴 期望值 1100 / 500 / 1 筆**完全不變** —— 驗的是「金額算得對」,只是認列的月份換了口徑。
+--       絕對不可以用「期望值改成 0」或刪斷言的方式讓它變綠。
 select is(
-  (get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_amount')::numeric,
+  (get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_amount')::numeric,
   1100::numeric,
   '10.4.2:total_amount 正確等於訂單最終實收金額(final_amount_snapshot)加總 = 1100'
 );
 
 select is(
-  (get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_commission_amount')::numeric,
+  (get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_commission_amount')::numeric,
   500::numeric,
   '10.4.2:total_commission_amount(抽成金額,以扣稅前基準 1000 的 50% 計算)= 500'
 );
 
 select ok(
-  (get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_amount')::numeric
-    <> (get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_commission_amount')::numeric,
+  (get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_amount')::numeric
+    <> (get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_commission_amount')::numeric,
   '10.4.2(規格書要求的必測情境):有稅金時 total_amount 與 total_commission_amount 確實是不同的數字,避免日後誤把兩者當成同一件事'
 );
 
 -- 查無完成訂單的月份:total_amount 應為 0,不是 null。
+-- ⚠️ #784:原本這條寫死 2026-06(「一個沒有訂單的月份」)。改用完成時間基準之後,寫死任何一個
+--    月份都有「剛好等於測試執行當月」的風險,所以改成用「上個月」動態算 —— 這份檔案的所有
+--    訂單都是在同一個交易裡用 now() 完成的,上個月保證一筆都沒有,而且永遠不可能等於當月。
 select is(
-  (get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 6) ->> 'total_amount')::numeric,
+  (get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from (now() at time zone 'Asia/Taipei') - interval '1 month')::int,
+    extract(month from (now() at time zone 'Asia/Taipei') - interval '1 month')::int
+  ) ->> 'total_amount')::numeric,
   0::numeric,
-  '10.4.2:查無完成訂單的月份,total_amount 為 0,不是 null'
+  '10.4.2:查無完成訂單的月份(上個月),total_amount 為 0,不是 null'
+);
+
+-- #784 反向守門員:用訂單虛構的**預約**月份(2026-11)查詢必須是 0 筆。
+-- 只驗「完成當月有 1 筆」的話,一個「兩個月都算」的錯誤實作也會通過。
+select is(
+  jsonb_array_length(get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) -> 'details'),
+  0,
+  '10.4.2 + #767(反向):用訂單虛構的預約月份 2026-11 查詢,details 是空陣列 —— 證明報表改用完成時間認列'
 );
 
 -- 回歸測試:既有的 details/item_breakdown 結構不受這次疊加影響。
 select is(
-  jsonb_array_length(get_staff_commission_summary('e1430000-0000-4000-8000-000000000040'::uuid, 2026, 11) -> 'details'),
+  jsonb_array_length(get_staff_commission_summary(
+    'e1430000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) -> 'details'),
   1,
   '10.4.2 回歸測試:details 陣列筆數不受 total_amount 疊加影響'
 );

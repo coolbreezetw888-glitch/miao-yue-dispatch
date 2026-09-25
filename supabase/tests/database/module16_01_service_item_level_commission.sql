@@ -3,7 +3,10 @@
 -- 2.7.6(新表 RLS)。
 begin;
 
-select plan(43);
+-- 43 → 45:2026-09-25(#784)新增兩條——一條前提斷言(防「空明細假通過」:原本那條
+-- `legacy_rate_percentage is null` 在明細整個是空的時候也會通過),一條反向斷言(用訂單虛構的
+-- 預約月份 2026-11 查詢,details 必須是空陣列),把「抽成報表改用完成時間認列」的口徑釘死。
+select plan(45);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -607,11 +610,43 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
 
+-- ⚠️ 2026-09-25(#767/#784):抽成報表的歸月基準改成 bcr.computed_at(按下完成的那一刻)。
+--    這個區塊的 fixture 訂單 start_at 是虛構的未來日期 2026-11-xx,但抽成快照是在「測試執行
+--    當下」產生的(complete_booking → compute_booking_commission,同一個交易的 now()),
+--    下面那筆「模擬舊制紀錄」的 booking_commission_records 也是直接 insert、computed_at 吃
+--    欄位預設的 now() ⇒ 兩筆的認列月份都是執行當下那個月,不是 2026-11。
+--    月份用 Asia/Taipei 解讀(函式內部換算區間用的就是這個時區,見 #776 的教訓)。
+--    🔴 期望值(2 筆 item_breakdown / 30.00 / 空陣列)完全不變,只改查詢的月份座標。
+--
+-- 🔴 前提斷言(本專案連續抓過兩次「空清單假通過」,這不是形式):先證明「完成當月確實查得到
+--    這筆訂單」。沒有這一條的話,下面那條 `legacy_rate_percentage is null` 在**明細整個是空的**
+--    時候也會通過(空集合的 scalar subquery 回傳 NULL,is(NULL, null) 為真)——
+--    #784 這次改月份座標之前,它就是這樣「綠著」但什麼都沒驗到。
+select is(
+  (
+    select count(*)::int
+    from jsonb_array_elements(
+      get_staff_commission_summary(
+        'ec000000-0000-4000-8000-000000000041',
+        extract(year  from now() at time zone 'Asia/Taipei')::int,
+        extract(month from now() at time zone 'Asia/Taipei')::int
+      ) -> 'details'
+    ) elem
+    where elem ->> 'booking_id' = :'multi_item_booking_id'::text
+  ),
+  1,
+  '§2.7.5 前提:完成當月的明細裡確實找得到這筆多項目訂單(防「空明細假通過」)'
+);
+
 select is(
   (
     select jsonb_array_length(elem -> 'item_breakdown')
     from jsonb_array_elements(
-      get_staff_commission_summary('ec000000-0000-4000-8000-000000000041', 2026, 11) -> 'details'
+      get_staff_commission_summary(
+        'ec000000-0000-4000-8000-000000000041',
+        extract(year  from now() at time zone 'Asia/Taipei')::int,
+        extract(month from now() at time zone 'Asia/Taipei')::int
+      ) -> 'details'
     ) elem
     where elem ->> 'booking_id' = :'multi_item_booking_id'::text
   ),
@@ -623,7 +658,11 @@ select is(
   (
     select elem ->> 'legacy_rate_percentage'
     from jsonb_array_elements(
-      get_staff_commission_summary('ec000000-0000-4000-8000-000000000041', 2026, 11) -> 'details'
+      get_staff_commission_summary(
+        'ec000000-0000-4000-8000-000000000041',
+        extract(year  from now() at time zone 'Asia/Taipei')::int,
+        extract(month from now() at time zone 'Asia/Taipei')::int
+      ) -> 'details'
     ) elem
     where elem ->> 'booking_id' = :'multi_item_booking_id'::text
   ),
@@ -654,12 +693,24 @@ select is(
   (
     select row(elem ->> 'legacy_rate_percentage', jsonb_array_length(elem -> 'item_breakdown'))::text
     from jsonb_array_elements(
-      get_staff_commission_summary('ec000000-0000-4000-8000-000000000041', 2026, 11) -> 'details'
+      get_staff_commission_summary(
+        'ec000000-0000-4000-8000-000000000041',
+        extract(year  from now() at time zone 'Asia/Taipei')::int,
+        extract(month from now() at time zone 'Asia/Taipei')::int
+      ) -> 'details'
     ) elem
     where elem ->> 'booking_id' = 'ec000000-0000-4000-8000-000000000090'
   ),
   row('30.00', 0)::text,
   '§2.7.5:改版前的舊制紀錄,legacy_rate_percentage 正確顯示 30.00,item_breakdown 是空陣列'
+);
+
+-- #784 反向守門員:用這兩筆訂單虛構的**預約**月份(2026-11)查詢,明細必須是空的。
+-- 只驗「完成當月查得到」的話,一個「兩個月都算」的錯誤實作也會過。
+select is(
+  jsonb_array_length(get_staff_commission_summary('ec000000-0000-4000-8000-000000000041', 2026, 11) -> 'details'),
+  0,
+  '§2.7.5 + #767(反向):用訂單虛構的預約月份 2026-11 查詢,details 是空陣列 —— 證明報表改用完成時間認列,不是預約時間'
 );
 
 select pg_temp.test_clear_auth();

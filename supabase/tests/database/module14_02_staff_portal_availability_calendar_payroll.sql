@@ -6,7 +6,9 @@
 
 begin;
 
-select plan(47);
+-- 47 → 48:2026-09-25(#784)新增一條反向斷言(用訂單虛構的預約月份查詢必須是 0 筆),
+-- 把「抽成報表改用完成時間認列」這個口徑釘死,避免只驗正向時「兩個月都算」的錯誤實作也會過。
+select plan(48);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -339,15 +341,38 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002'); -- X(自己查自己)
 
+-- ⚠️ 2026-09-25(#767/#784):抽成報表的歸月基準從 b.start_at 改成 bcr.computed_at
+--    (「按下完成的那一刻」)。這個檔案的 fixture 是「建一筆 start_at = 2026-11-xx 的**未來**
+--    預約 → 馬上 complete_booking()」,而 complete_booking() 一律寫 completed_at = now(),
+--    所以這筆訂單的抽成其實認列在「測試執行當下那個月」,不是 2026-11。
+--    ⇒ 凡是「會回傳數值、要拿來比對」的斷言,查詢月份一律改成執行當下的年月;
+--      下面純粹驗權限的 lives_ok/throws_ok 不看回傳值,維持原本寫死的月份即可(改了也沒差)。
+--    🔴 絕對不可以改成「期望值從 1 改成 0」或刪掉斷言讓它變綠 —— 那等於把回歸保護整個拆掉。
+--    月份一律用 Asia/Taipei 解讀(函式內部就是用 Asia/Taipei 換算區間),不要用資料庫的 UTC
+--    current_date,否則台北時間 00:00~08:00 跑測試會跨到前一天/前一個月(#776 就是這樣紅的)。
+--    pgTAP 整份檔案包在同一個交易裡,同一交易內 now() 是固定值,所以不會有「跑到一半跨月」
+--    的問題;不要為了「更即時」改用 clock_timestamp()。
 select lives_ok(
   $$select get_staff_commission_summary('e1420000-0000-4000-8000-000000000040'::uuid, 2026, 11)$$,
-  '3.17:X 自助查詢自己 2026-11 的抽成報表成功'
+  '3.17:X 自助查詢自己的抽成報表成功(這條只驗權限有沒有被擋下,不看回傳值,所以月份寫死無妨)'
 );
 
 select is(
-  (select (get_staff_commission_summary('e1420000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_orders')::int),
+  (select (get_staff_commission_summary(
+    'e1420000-0000-4000-8000-000000000040'::uuid,
+    extract(year  from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
+  ) ->> 'total_orders')::int),
   1,
-  '3.17:X 的抽成報表正確顯示 1 筆完成訂單(booking1)'
+  '3.17:X 的抽成報表正確顯示 1 筆完成訂單(booking1;#767 之後認列在「完成當下」那個月)'
+);
+
+-- #784 的反向守門員:同一筆訂單用它虛構的**預約**月份(2026-11)去查,必須是 0 筆。
+-- 只驗正向(完成月 = 1 筆)的話,一個「兩個月都算」的錯誤實作也會過。
+select is(
+  (select (get_staff_commission_summary('e1420000-0000-4000-8000-000000000040'::uuid, 2026, 11) ->> 'total_orders')::int),
+  0,
+  '3.17 + #767(反向):用訂單虛構的預約月份 2026-11 查詢是 0 筆 —— 證明報表真的改用「完成時間」認列,不是預約時間'
 );
 
 select throws_ok(

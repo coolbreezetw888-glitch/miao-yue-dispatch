@@ -8,6 +8,8 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  COMPLETION_MONTH,
+  COMPLETION_YEAR,
   EXPECTED_COMMISSION_AMOUNT,
   EXPECTED_LEAVE_DEDUCTION,
   MONTHLY_BASE_SALARY,
@@ -128,4 +130,88 @@ test("服務人員報表(§4.4):切換不同計酬類型的服務人員,版面�
 
   const expectedNetPay = MONTHLY_BASE_SALARY - EXPECTED_LEAVE_DEDUCTION;
   await expect(page.getByText(`${expectedNetPay} 元`).first()).toBeVisible();
+});
+
+// =============================================================================
+// #787(SPECS-INDEX,規格書 .project/specs/服務人員報表歸月基準修正.md):
+// 真正的「商家帳務報表 ↔ 服務人員報表」**跨基準**對帳。
+//
+// 🔴 為什麼需要這一支,以及為什麼它看起來「跟別的測試都對同一個常數斷言、好像重複了」:
+//
+//    這條測試的價值**不在**那個常數,而在於「**兩個畫面、兩支不同的資料庫函式、同一個月份、
+//    同一個數字**」:
+//      /app/billing-report → BillingReportPage → get_merchant_billing_summary_by_range
+//                            (抽成基準:booking_commission_records.computed_at)
+//      /app/staff-report   → StaffReportPage   → get_staff_commission_summary
+//                            (抽成基準:2026-09-25 之前是 bookings.start_at → 這就是 #767 的 bug)
+//
+//    2026-09-25 之前,repo 裡**沒有任何一條測試**在守這兩側的一致性:
+//    staff-portal-v2.spec.ts 那條「跨視角一致」比的是 /app/my-payroll 與 /app/staff-report,
+//    **兩頁呼叫的是同一組服務人員側函式**,所以它在結構上永遠不可能抓到基準分岔 ——
+//    兩邊會一起錯、一起相等、一起綠。這正是 #767 能一路漏到今天的原因。
+//
+//    ⇒ **請不要因為「都對 EXPECTED_COMMISSION_AMOUNT 斷言、重複了」而刪掉這支測試。**
+//      它是唯一一條會在「服務人員側與商家帳務側用不同歸月基準」時變紅的 e2e。
+//      (資料庫層的對應守門員是 supabase/tests/database/module8_04_...sql 的跨視角斷言。)
+//
+// fixture 是「上個月 15 號預約、今天才按下完成」(#786),所以兩側都必須把這筆錢認在**這個月**。
+// =============================================================================
+test("#787(核心守門員):商家帳務報表 ↔ 服務人員報表,同一個月同一位服務人員的抽成金額必須一致", async ({
+  page,
+}) => {
+  await page.goto("/app/billing-report");
+  await expect(page.getByRole("heading", { name: "店家報表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 前提 1:人員明細表格真的有列。
+  // 🔴 不先證明表格非空,下面「找得到某一列」「那一列顯示某個金額」的斷言在空表格上會變成
+  //    「0 個節點」,某些寫法(toHaveCount(0) 型)會直接假通過。BillingReportPage 全頁只有
+  //    這一張 <Table>(實查),所以 `table tbody tr` 就是人員明細列。
+  const staffRows = page.locator("table tbody tr");
+  await expect(staffRows.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await staffRows.count()).toBeGreaterThan(0);
+
+  // 前提 2:找得到按件計酬那位服務人員的那一列。
+  const pieceRateRow = page.locator("tr", { hasText: fixture.pieceRateStaffName });
+  await expect(pieceRateRow).toHaveCount(1);
+
+  // 行為 1:商家帳務報表上,這一列顯示的抽成金額(這一側的基準是 bcr.computed_at)。
+  await expect(pieceRateRow.getByText(`${EXPECTED_COMMISSION_AMOUNT} 元(抽成)`)).toBeVisible();
+
+  // 行為 2:🔴 **點那一列真正的「查看明細 →」連結**進到服務人員報表,不要自己組 URL ——
+  //         走使用者真的會走的路徑(BillingReportPage 的
+  //         <Link to="/app/staff-report?staffId=…&year=…&month=…">),
+  //         這樣連帶驗到 staffId / year / month 三個參數有正確傳遞。
+  //         使用者最可能親眼撞見 #767 的就是這條路徑:
+  //         「帳務報表說這位師傅本月抽成 200 元」→ 點下去 →「這個月沒有已完成的訂單」。
+  await pieceRateRow.getByRole("link", { name: "查看明細 →" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(
+      `/app/staff-report\\?staffId=${fixture.pieceRateStaffId}&year=${COMPLETION_YEAR}&month=${COMPLETION_MONTH}$`,
+    ),
+  );
+  await expect(page.getByRole("heading", { name: "服務人員報表" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 前提 3:服務人員報表的訂單明細表格真的有列(同樣防「空清單假通過」)。
+  //         這一條就是 #767 那個 bug 的第一個落點:舊基準下這裡會是
+  //         「這個月沒有已完成的訂單。」,整張表格連 tbody 都不存在。
+  const detailRows = page.locator("table tbody tr");
+  await expect(detailRows.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(await detailRows.count()).toBeGreaterThan(0);
+
+  // 行為 3:🔴 對帳本身 —— 服務人員報表的「抽成合計」必須等於剛剛在帳務報表看到的那個數字。
+  //         (兩邊的顯示格式不同:帳務報表是「200 元(抽成)」,服務人員報表走 formatAmount
+  //          顯示成「抽成合計 $200」;比對的是同一個數值。)
+  await expect(
+    page.getByText(`抽成合計 $${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`, {
+      exact: false,
+    }),
+  ).toBeVisible({ timeout: LOAD_TIMEOUT });
+
+  // 附帶(#781):明細表格的日期欄位標題是「完成日期」,不是「日期」——讓讀報表的人自己就看得懂
+  // 這份報表的認列口徑,這也是 #782 決定「不加說明橫幅」的替代做法。
+  await expect(page.getByRole("columnheader", { name: "完成日期" })).toBeVisible();
 });

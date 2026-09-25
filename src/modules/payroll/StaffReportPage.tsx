@@ -102,9 +102,12 @@ export function PieceRateStaffReport({
 
   function handleExportCsv() {
     if (!summary) return;
-    const headers = ["日期", "客戶", "抽成基準", "服務項目明細", "抽成金額", "已被人工重算"];
+    // #781:欄位標題寫「完成日期」而不是只寫「日期」——#767 之後這一欄裝的是「按下完成的
+    // 那一刻」,報表讀者(服務人員/商家)自己就看得懂這份報表的認列口徑是什麼,
+    // 這比在畫面上掛一個會被關掉、會過時的說明橫幅有效得多(#782 刻意不加橫幅的理由)。
+    const headers = ["完成日期", "客戶", "抽成基準", "服務項目明細", "抽成金額", "已被人工重算"];
     const rows = summary.details.map((d) => [
-      d.order_date,
+      d.completion_date,
       d.customer_name,
       d.commission_base_amount,
       formatStaffCommissionItemBreakdown(d),
@@ -206,7 +209,8 @@ export function PieceRateStaffReport({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>日期</TableHead>
+                  {/* #781:見上面 CSV headers 的說明,畫面與 CSV 兩邊標題要一致。 */}
+                  <TableHead>完成日期</TableHead>
                   <TableHead>客戶</TableHead>
                   <TableHead className="text-right">抽成基準</TableHead>
                   <TableHead className="text-right">抽成金額</TableHead>
@@ -219,7 +223,9 @@ export function PieceRateStaffReport({
                   return (
                     <Fragment key={d.booking_id}>
                       <TableRow>
-                        <TableCell>{new Date(d.order_date).toLocaleDateString("zh-TW")}</TableCell>
+                        <TableCell>
+                          {new Date(d.completion_date).toLocaleDateString("zh-TW")}
+                        </TableCell>
                         <TableCell>{d.customer_name}</TableCell>
                         {/* 2026-09-24 稽核修正(問題 4):明細列原本直接印原始值(例如 99.5),
                             摘要卡片卻走 formatAmount(四捨五入成 $100),同一頁兩種格式,

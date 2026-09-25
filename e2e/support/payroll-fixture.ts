@@ -87,10 +87,33 @@ export const PAY_DAYS_PER_MONTH = new Date(
   payDaysNow.getMonth() + 1,
   0,
 ).getDate();
+// ⚠️ PAY_DAYS_PER_MONTH 算的是「測試執行當下那個月」的天數,而 fixture 的請假紀錄(下面
+// create_staff_leave)也**刻意留在今天**,兩者同月才對得起來。
+// 🔴 #786:訂單改成「上個月建單、今天完成」之後,**絕對不要順手把請假也搬到上個月** ——
+//    那會讓這個常數跟實際扣款落在的月份分岔,EXPECTED_LEAVE_DEDUCTION 立刻對不上,
+//    而且只有在「上個月天數 ≠ 這個月天數」(例如 2 月/3 月之間)才會浮現,平常跑都是綠的。
+//    訂單跨月與請假不跨月是兩件獨立的事,不要統一。
 // 比照後端 round(v_day_rate * overlap_days, 2) 的四捨五入方式(overlap_days 固定請假 1 天),
 // 避免非 30 天的月份(例如 31 天)算出來的小數位跟後端顯示的四捨五入結果對不上。
 export const EXPECTED_LEAVE_DEDUCTION =
   Math.round((MONTHLY_BASE_SALARY / PAY_DAYS_PER_MONTH) * 100) / 100;
+
+// #786(SPECS-INDEX,規格書 .project/specs/服務人員報表歸月基準修正.md):fixture 的訂單改成
+// 「上個月預約、今天才按下完成」,讓「歸月基準」這件事在 e2e 層真的有機會被驗到——建單與完成
+// 同一天的話,用預約時間或用完成時間算出來的月份剛好一樣,測試永遠是綠的,抓不到基準算錯。
+//
+// 🔴 錨點固定用「上個月 15 號」,**不可以**用「今天往前推一個月的同一天」:
+//    `new Date(2026, 2 /* 3月 */, 31)` 往前推一個月會變成 `new Date(2026, 1, 31)` = 2 月 31 日,
+//    JS Date 會**靜默溢位**成 3 月 3 日 —— 根本沒有跨月,測試會假通過。
+//    15 號在任何月份都存在(含 2 月),所以永遠安全。
+//    getMonth() - 1 在 1 月會得到 -1,JS Date 會正確回捲到去年 12 月,這也是安全的。
+const bookingStartAnchor = new Date(payDaysNow.getFullYear(), payDaysNow.getMonth() - 1, 15);
+/** 訂單「預約發生」的月份(上個月)——報表**不應該**把這筆訂單算在這個月。 */
+export const BOOKING_START_YEAR = bookingStartAnchor.getFullYear();
+export const BOOKING_START_MONTH = bookingStartAnchor.getMonth() + 1;
+/** 訂單「按下完成 = 收到錢」的月份(這個月)——報表**應該**把這筆訂單算在這個月。 */
+export const COMPLETION_YEAR = payDaysNow.getFullYear();
+export const COMPLETION_MONTH = payDaysNow.getMonth() + 1;
 
 export interface PayrollFixture {
   runId: string;
@@ -107,8 +130,16 @@ export interface PayrollFixture {
   bookingId: string;
   leaveRecordId: string;
   todayDateKey: string;
+  /** #786:訂單的預約日(上個月 15 號),報表不應該把它算在這一天所屬的月份。 */
+  bookingStartDateKey: string;
   currentYear: number;
   currentMonth: number;
+  /** #786:訂單預約發生的年/月(上個月)。 */
+  bookingStartYear: number;
+  bookingStartMonth: number;
+  /** #786:訂單按下完成的年/月(這個月),等同 currentYear/currentMonth。 */
+  completionYear: number;
+  completionMonth: number;
 }
 
 /** 建立這次測試需要的全部 fixture 資料:一個新商家 + 一位按件計酬服務人員(完成一筆訂單,
@@ -282,6 +313,8 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
 
   const today = getTaipeiNow();
   const todayDateKey = toDateKey(today);
+  // #786:訂單的預約日固定在「上個月 15 號」(錨點選擇的理由見上面 bookingStartAnchor 的註解)。
+  const bookingStartDateKey = toDateKey(new Date(today.getFullYear(), today.getMonth() - 1, 15));
 
   // #604(SPECS-INDEX,對應 supabase/migrations/20260922160600_req604_payment_method_required.sql):
   // create_booking 付款方式已改為必填(p_payment_method_id 不能是 null),否則 RPC 直接 raise
@@ -302,6 +335,10 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
   }
 
   // §3.6/§3.7:建單 → 確認 → 完成,完成當下觸發 compute_booking_commission 產生抽成快照。
+  // #786:p_start_at 改成上個月 15 號,`complete_booking` 那幾行維持不動(仍然是今天完成),
+  // 自動形成「上個月預約、這個月才收到錢」的跨月時間軸。已查證 create_booking / complete_booking
+  // 都沒有「不可建立過去的預約」檢查,而且這個 fixture 的營業時間是七天 00:00-23:59、
+  // 服務人員 no_time_slot_limit=true,上個月的 10:00 不會被任何時段限制擋下。
   const { data: bookingRow, error: bookingError } = await client.rpc("create_booking", {
     p_merchant_id: merchantId as string,
     p_staff_id: (pieceRateStaff as { id: string }).id,
@@ -312,7 +349,7 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
         unit_price: BOOKING_SUBTOTAL,
       },
     ],
-    p_start_at: buildTaipeiIso(todayDateKey, "10:00"),
+    p_start_at: buildTaipeiIso(bookingStartDateKey, "10:00"),
     p_customer_name: "E2E測試客戶",
     p_customer_phone: "0955999000",
     p_custom_total_amount_enabled: true,
@@ -333,6 +370,7 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
   if (completeError) throw new Error(`完成測試訂單失敗:${completeError.message}`);
 
   // §3.3(regel 2.2 情境):登記一筆「事假」整天請假,產生扣款(規則 2.7/2.8)。
+  // 🔴 #786:請假**刻意留在今天**,不跟著訂單搬到上個月——理由見上面 PAY_DAYS_PER_MONTH 的註解。
   const { data: leaveRecord, error: leaveRecordError } = await client.rpc("create_staff_leave", {
     p_staff_id: (monthlySalaryStaff as { id: string }).id,
     p_leave_type_id: leaveTypeId,
@@ -359,8 +397,13 @@ export async function setupPayrollFixture(): Promise<PayrollFixture> {
     bookingId,
     leaveRecordId: (leaveRecord as { id: string }).id,
     todayDateKey,
+    bookingStartDateKey,
     currentYear: today.getFullYear(),
     currentMonth: today.getMonth() + 1,
+    bookingStartYear: BOOKING_START_YEAR,
+    bookingStartMonth: BOOKING_START_MONTH,
+    completionYear: COMPLETION_YEAR,
+    completionMonth: COMPLETION_MONTH,
   };
 }
 
