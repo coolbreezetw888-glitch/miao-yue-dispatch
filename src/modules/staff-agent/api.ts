@@ -461,19 +461,11 @@ export async function restoreMerchantAgent(agentId: string): Promise<MerchantAge
  * 可以呼叫,兩個檢查都在資料庫端的 SECURITY DEFINER 函式 hard_delete_merchant_agent 裡(前端藏按鈕
  * 只是體驗,不是安全邊界)。錯誤訊息用既有的 getErrorMessage() 原樣顯示。
  *
- * ⚠️ 過渡寫法(等 migration 20260925040001 套用到正式庫、types.ts 重新產生之後,請改回一般的
- *    `supabase.rpc("hard_delete_merchant_agent", …)`,並刪掉這段):
- *    src/integrations/supabase/types.ts 是由正式庫產生的,新函式還沒套用就不會出現在裡面;而且該檔
- *    目前在另一批平行施工(站內通知中心)的 diff 裡,本批刻意不碰它。這裡把 rpc 收窄成一個最小的
- *    函式型別,只是為了通過型別檢查,執行期跟一般的 supabase.rpc 完全相同。 */
-type PendingRpcCall = (
-  fn: string,
-  args: Record<string, unknown>,
-) => PromiseLike<{ error: { message: string } | null }>;
-
+ * 📌 SPECS-INDEX #801 已結案(2026-09-26):這裡原本有一段 `as unknown as PendingRpcCall` 的過渡
+ *    寫法,因為當時 migration 20260925040001 還沒套用到正式庫,types.ts 裡就不會有這支函式。
+ *    migration 套用後已重新產生 types.ts,這裡改回一般的 supabase.rpc,型別檢查恢復生效。 */
 export async function hardDeleteMerchantAgent(agentId: string): Promise<void> {
-  const rpc = supabase.rpc.bind(supabase) as unknown as PendingRpcCall;
-  const { error } = await rpc("hard_delete_merchant_agent", { p_agent_id: agentId });
+  const { error } = await supabase.rpc("hard_delete_merchant_agent", { p_agent_id: agentId });
   if (error) throw error;
 }
 

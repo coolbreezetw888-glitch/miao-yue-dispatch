@@ -3408,6 +3408,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: number
       }
+      hard_delete_merchant_agent: {
+        Args: { p_agent_id: string }
+        Returns: undefined
+      }
       hard_delete_merchant_staff: {
         Args: { p_staff_id: string }
         Returns: undefined
@@ -3438,7 +3442,10 @@ export type Database = {
       }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }
-      mark_my_notifications_read: { Args: { p_ids?: string[] }; Returns: number }
+      mark_my_notifications_read: {
+        Args: { p_ids?: string[] }
+        Returns: number
+      }
       mark_staff_login_active_if_self: { Args: never; Returns: undefined }
       platform_add_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
@@ -4196,10 +4203,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      update_my_agent_profile: {
-        Args: { p_job_title: string; p_merchant_id: string; p_nickname: string }
-        Returns: undefined
-      }
       update_my_staff_profile: {
         Args: {
           p_avatar_url: string
@@ -4395,4 +4398,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
