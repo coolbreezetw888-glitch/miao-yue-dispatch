@@ -52,6 +52,7 @@ import { addMerchantStaff } from "@/modules/staff-agent/api";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { importHistoricalBookingsBatch, importMembersBatch, parseErrorReport } from "./api";
+import { checkImportRowPreview, phoneRequiredForMembers } from "./importRowPreview";
 import { RequireDataImportAccess } from "./RequireDataImportAccess";
 import {
   HISTORICAL_BOOKING_IMPORT_TARGET_FIELDS,
@@ -124,15 +125,8 @@ function ImportWizardPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffList } = useMerchantStaffList(merchantId);
-  // ⚠️ 跨模組異動說明(2026-09-22,模組 10 會員與紅利 SPECS-INDEX #618 疊加,由該批次的
-  // engineer 順手修正,已在回報時提出讓主腦知悉,不是本模組自己的規劃):
-  // merchant_member_settings.phone_required_to_create 這個開關已經被 #618 移除(電話不再是
-  // create_member/update_member 的必填欄位,改成純查詢索引,見會員與紅利.md §10.2/§10.6)。
-  // 原本這裡讀取這個設定值來決定步驟四預覽要不要擋下「缺電話」的資料列,現在後端已經不會再擋,
-  // 這裡跟著改成一律不要求電話——不然步驟四預覽會顯示跟後端實際驗證邏輯不一致的錯誤訊息。
-  // 這個常數維持存在(而不是直接刪掉下面的 if 判斷式),是為了在程式碼裡留下清楚的變更紀錄,
-  // 方便之後模組 12 的維護者一眼看懂「這裡曾經有必填檢查,後來因為模組 10 的決策而移除」。
-  const phoneRequiredForMembers = false;
+  // 步驟四預覽的逐列預檢(原本的 rowLooksValid)在 SPECS-INDEX #824 抽到 ./importRowPreview.ts,
+  // 讓它能被 Vitest 單獨測試;#618 那段「電話不再必填」的變更紀錄也一起搬過去了。
 
   const [step, setStep] = useState<WizardStep>("type");
   const [importKind, setImportKind] = useState<ImportKind | null>(null);
@@ -185,30 +179,6 @@ function ImportWizardPageInner() {
       return withRowNumber;
     });
   }, [parsed, mapping, importKind, staffValueMapping]);
-
-  function rowLooksValid(row: Record<string, unknown>): { ok: boolean; reason?: string } {
-    if (importKind === "members") {
-      if (!row["name"]) return { ok: false, reason: "缺少姓名" };
-      if (phoneRequiredForMembers && !row["phone"]) {
-        return { ok: false, reason: "這個商家要求建立會員時必須填寫電話" };
-      }
-      return { ok: true };
-    }
-    if (!row["customer_name"]) return { ok: false, reason: "缺少客戶姓名" };
-    if (!row["customer_phone"]) return { ok: false, reason: "缺少客戶電話" };
-    if (!row["staff_id"]) return { ok: false, reason: "服務人員尚未完成對應" };
-    if (!row["start_at"] || Number.isNaN(Date.parse(String(row["start_at"])))) {
-      return { ok: false, reason: "預約時間格式無法辨識" };
-    }
-    if (
-      row["final_amount"] === undefined ||
-      row["final_amount"] === "" ||
-      Number.isNaN(Number(row["final_amount"]))
-    ) {
-      return { ok: false, reason: "訂單金額缺漏或格式錯誤" };
-    }
-    return { ok: true };
-  }
 
   async function handleFileUpload(file: File) {
     try {
@@ -623,7 +593,7 @@ function ImportWizardPageInner() {
                 </TableHeader>
                 <TableBody>
                   {mappedRows.slice(0, 20).map((row, idx) => {
-                    const validity = rowLooksValid(row);
+                    const validity = checkImportRowPreview(importKind, row);
                     return (
                       <TableRow key={idx}>
                         <TableCell>
