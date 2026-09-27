@@ -26,7 +26,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env["CI"],
   retries: process.env["CI"] ? 1 : 0,
-  reporter: "list",
+  // 🔴 SPECS-INDEX #804:除了 list,再掛一個「執行條數守門」reporter(e2e/support/test-count-gate-reporter.ts)。
+  // 它在每次跑完最後多印一段核對,並在「有測試沒跑到(did not run)」或「整套跑時收錄條數 ≠
+  // e2e/test-count-baseline.json 的基準」時把結果改判成 failed。
+  // 為什麼需要:worker 行程當掉(#804 實際遇到 0xC0000409)時 Playwright 只會用一行黃字說 N did not run,
+  // 加上 #714 那種「整套靜默歸零」——這兩種失效都**不會變紅**,只有拿「應該有幾條」對「實際跑了幾條」
+  // 才抓得到。基準數字用 `npm run test:e2e:count:update` 更新(新增測試後跑一次即可),不用人腦記。
+  reporter: [["list"], ["./e2e/support/test-count-gate-reporter.ts"]],
   timeout: 30_000,
   use: {
     baseURL: "http://localhost:5183",

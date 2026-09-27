@@ -69,8 +69,24 @@ function createFixtureSupabaseClient(): SupabaseClient {
   });
 }
 
-export const PIECE_RATE_STAFF_NAME_PREFIX = "E2E測試按件師傅";
-export const MONTHLY_SALARY_STAFF_NAME_PREFIX = "E2E測試月薪師傅";
+// #800(SPECS-INDEX,2026-09-28):測試資料的名稱前綴改成現行用語——「師傅」→「服務人員」、
+// 「按件(計酬)」→「抽成制」(2026-09-24 全站統一,對照 src/modules/payroll/billingReportDisplay.ts
+// 的 STAFF_COMPENSATION_TYPE_LABELS:piece_rate = "抽成制"、monthly_salary = "月薪制")。
+//
+// 🔴 給之後做 #638(清理正式環境累積的 E2E 孤兒測試資料)的人:
+//    正式庫 merchant_staff 裡**已經存在**一批用「舊前綴」建立的孤兒資料(2026-09-25 查到 66 筆
+//    命中舊「師傅」前綴)。改名之後新舊資料會**同時**存在,清理查詢**一定要同時涵蓋新舊兩種前綴**,
+//    只 like 新前綴會把舊的 66 筆永遠漏在正式庫裡:
+//      舊:'E2E測試按件師傅%'、'E2E測試月薪師傅%'(2026-09-28 之前建立的)
+//      新:'E2E測試抽成制服務人員%'、'E2E測試月薪制服務人員%'(2026-09-28 之後建立的)
+//    ⚠️ 清理前務必遵守 CLAUDE.md 第 5-1 條:先用相同條件跑 SELECT 核對內容,再動手。
+//
+// 📌 這兩個常數是**唯一**的名稱來源:e2e/payroll-reports.spec.ts 只透過 fixture 回傳的
+//    pieceRateStaffName / monthlySalaryStaffName 比對,e2e/leave-and-payroll-pages.spec.ts 直接
+//    import 這兩個常數,全庫 grep 沒有任何地方把字串寫死,所以改這裡就全部生效。
+//    teardown 是 id-based(.in("id", [...])),不靠前綴篩選,改名不影響清理邏輯。
+export const PIECE_RATE_STAFF_NAME_PREFIX = "E2E測試抽成制服務人員";
+export const MONTHLY_SALARY_STAFF_NAME_PREFIX = "E2E測試月薪制服務人員";
 export const COMMISSION_RATE_PERCENTAGE = 20; // 商家預設抽成比例,固定用這個數字方便斷言。
 export const BOOKING_SUBTOTAL = 1000; // 自訂總金額,固定用這個數字方便斷言。
 export const EXPECTED_COMMISSION_AMOUNT = (BOOKING_SUBTOTAL * COMMISSION_RATE_PERCENTAGE) / 100; // 200

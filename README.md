@@ -112,6 +112,8 @@ npx supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,p
 npm run test:db
 
 # 端對端瀏覽器流程——Playwright(會自動幫你啟動/關掉本機 npm run dev)
-npm run test:e2e
-npm run test:e2e:ui        # 有畫面、方便除錯的模式
+npm run test:e2e                 # 開跑前會先核對「應該有幾條測試」的基準(見下)
+npm run test:e2e:ui              # 有畫面、方便除錯的模式
+npm run test:e2e:count           # 只核對 e2e 測試條數是否符合 e2e/test-count-baseline.json(唯讀,幾秒鐘)
+npm run test:e2e:count:update    # 新增/刪除 e2e 測試之後跑一次,更新基準並一起 commit
 ```
