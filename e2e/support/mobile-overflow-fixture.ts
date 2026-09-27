@@ -24,62 +24,15 @@
 // client 呼叫範圍內自動解決的。這次交付驗收時,已經用 Supabase 的直接 SQL 存取權限把當次
 // demo 用的 fixture 完整刪乾淨並查證過(見交付報告),但那是本次交付過程的人工步驟,
 // 不是這個檔案本身能自動做到的事。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(
-      `找不到 .env 裡的 ${key}——mobile-overflow 這個 e2e 測試需要它來建立 fixture 資料。`,
-    );
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-// 比照 src/integrations/supabase/client.ts 的做法:新格式 publishable key(sb_publishable_...)
-// 不是合法的 JWT,supabase-js 預設可能還是塞一個 `Authorization: Bearer <publishable key>`
-// 標頭,要在真正送出的 fetch 裡拿掉,否則伺服器會判斷成一組格式錯誤的 JWT 而回應異常。
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "mobile-overflow 這個 e2e 測試";
 
 // ---------------------------------------------------------------------------
 // 刻意設計成「會撐開沒有防護的 flex 容器」的長文字測試資料(規格書第三節「測試資料」)。
@@ -141,7 +94,7 @@ export interface MobileOverflowFixture {
 /** 建立這次測試需要的全部 fixture 資料,回傳建立好的各項 id,供 spec 檔案在畫面上定位元素、
  * 也供 teardown 使用。任何一步失敗就整個丟出例外,讓測試直接失敗、不要留下半套資料誤導判斷。 */
 export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   // email 本身就刻意夠長(70+ 字元),同時也是「商家設定頁-管理員名單」那一列要顯示的真實
   // 動態內容,一魚兩吃:既是測試帳號的識別字首,也是長 email 的重現素材。
@@ -402,7 +355,7 @@ export async function injectSessionForCredentials(
   email: string,
   password: string,
 ): Promise<void> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error || !data.session) {
     throw new Error(`登入測試帳號 ${email} 失敗:${error?.message ?? "沒有回傳 session"}`);
@@ -422,7 +375,7 @@ export async function injectSessionForCredentials(
 export async function teardownMobileOverflowFixture(
   fixture: MobileOverflowFixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,

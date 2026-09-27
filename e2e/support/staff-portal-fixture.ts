@@ -12,58 +12,14 @@
 // 測試資料清理:跟 payroll-fixture.ts 同一套做法,client 端 anon key 只能做到軟停用/軟移除,
 // 真正的硬刪除(auth.users/merchants 一併清空)由這次交付流程用資料庫直接 SQL 存取權限另外處理
 // 並查證,記錄在回報內容裡。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(
-      `找不到 .env 裡的 ${key}——staff-portal 這個 e2e 測試需要它來建立 fixture 資料。`,
-    );
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "staff-portal 這個 e2e 測試";
 
 export const STAFF_NAME_PREFIX = "E2E測試服務人員";
 
@@ -87,8 +43,8 @@ export async function setupStaffPortalFixture(): Promise<StaffPortalFixture> {
   const staffEmail = `e2e-staffportal-staff-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eStaffPortal!${runId}Aa`;
 
-  const adminClient = createFixtureSupabaseClient();
-  const staffClient = createFixtureSupabaseClient();
+  const adminClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
+  const staffClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
 
   const { data: adminSignUp, error: adminSignUpErr } = await adminClient.auth.signUp({
     email: adminEmail,
@@ -177,7 +133,7 @@ export async function setMerchantPushEventEnabled(
   eventType: string,
   enabled: boolean,
 ): Promise<void> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.adminSession.access_token,
     refresh_token: fixture.adminSession.refresh_token,
@@ -204,7 +160,7 @@ export async function setMerchantPushEventEnabled(
  */
 export async function cleanupPushFixtureRows(fixture: StaffPortalFixture): Promise<string[]> {
   const actions: string[] = [];
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.staffSession.access_token,
     refresh_token: fixture.staffSession.refresh_token,
@@ -273,7 +229,7 @@ export async function injectAdminSession(page: Page, fixture: StaffPortalFixture
 /** 測試結束後盡量把 fixture 清乾淨(client 端 anon key 只能做到軟停用/軟移除,見檔案開頭說明,
  * 真正的硬刪除由本次交付流程用資料庫直接 SQL 存取權限另外處理並查證,見回報內容)。 */
 export async function teardownStaffPortalFixture(fixture: StaffPortalFixture): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.adminSession.access_token,
     refresh_token: fixture.adminSession.refresh_token,

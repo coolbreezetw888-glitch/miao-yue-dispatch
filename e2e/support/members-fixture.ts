@@ -10,57 +10,15 @@
 // (mcp__claude_ai_Supabase__execute_sql)把這個 runId 底下建立的 auth.users/groups/merchants
 // 整組硬刪除乾淨(merchants 硬刪除會 cascade 掉底下所有 merchant_staff/bookings/members/
 // member_point_transactions 等關聯資料),並用 SQL 查詢逐表確認歸零——這件事記錄在回報內容裡。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(`找不到 .env 裡的 ${key}——members 這個 e2e 測試需要它來建立 fixture 資料。`);
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "members 這個 e2e 測試";
 
 export const STAFF_NAME_PREFIX = "E2E測試會員模組師傅";
 export const EXISTING_MEMBER_NAME_PREFIX = "E2E測試既有會員";
@@ -92,7 +50,7 @@ export interface MembersFixture {
  * 方便測兌換)+ 一位被這位會員推薦的會員 + 一筆已連結既有會員並完成的訂單(方便測相關訂單/
  * 訂單詳情頁會員連結)。任何一步失敗就整個丟出例外,不留半套資料誤導判斷。 */
 export async function setupMembersFixture(): Promise<MembersFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const email = `e2e-members-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eMembers!${runId}Aa`;
@@ -289,7 +247,7 @@ export async function injectMembersFixtureSession(
 /** 測試結束後盡量把 fixture 清乾淨(client 端 publishable key 只能做到軟停用/軟移除,見檔案
  * 開頭說明,真正的硬刪除由本次交付流程用資料庫直接 SQL 存取權限另外處理並查證,見回報內容)。 */
 export async function teardownMembersFixture(fixture: MembersFixture): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,

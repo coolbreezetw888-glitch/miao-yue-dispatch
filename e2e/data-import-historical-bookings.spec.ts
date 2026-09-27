@@ -8,12 +8,12 @@ import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 import {
-  createFixtureSupabaseClient,
   injectDataImportHistoricalFixtureSession,
   setupDataImportHistoricalFixture,
   teardownDataImportHistoricalFixture,
   type DataImportHistoricalFixture,
 } from "./support/data-import-historical-fixture";
+import { createFixtureSupabaseClient } from "./support/fixture-supabase-client";
 import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;

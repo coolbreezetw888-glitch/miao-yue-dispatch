@@ -13,12 +13,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import {
-  createFixtureSupabaseClient,
   injectDataImportHistoryFixtureSession,
   setupDataImportHistoryFixture,
   teardownDataImportHistoryFixture,
   type DataImportHistoryFixture,
 } from "./support/data-import-history-fixture";
+import { createFixtureSupabaseClient } from "./support/fixture-supabase-client";
 import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;

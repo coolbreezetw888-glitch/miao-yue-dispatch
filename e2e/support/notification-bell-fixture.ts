@@ -31,10 +31,10 @@
 //    (刻意的),會由 §13.9 的每日排程 prune_user_notifications 在 30 天後清除。
 //
 // 🔴 `.env` 的讀取**一律**走 e2e/support/env-file.ts(SPECS-INDEX #714)。
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
-import { readRequiredEnvValue } from "./env-file";
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 import {
@@ -47,36 +47,6 @@ import {
 export const NOTIFICATION_BELL_MERCHANT_NAME_PREFIX = "E2E鈴鐺通知測試商家";
 
 const ENV_PURPOSE = "站內通知中心(notification-bell)這支 e2e 測試";
-
-// 比照 e2e/support/app-header-fixture.ts:新格式 publishable key(sb_publishable_...)不是合法的
-// JWT,supabase-js 仍可能塞一個 `Authorization: Bearer <publishable key>` 標頭,要在真正送出的
-// fetch 裡拿掉。SPECS-INDEX #766 登記了這組三連發的重複技術債,本批不擴大範圍去收斂。
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readRequiredEnvValue("VITE_SUPABASE_URL", ENV_PURPOSE);
-  const key = readRequiredEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY", ENV_PURPOSE);
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
 
 export interface NotificationBellFixture {
   runId: string;
@@ -104,7 +74,7 @@ async function restoreSession(client: SupabaseClient, session: Session): Promise
 }
 
 export async function setupNotificationBellFixture(): Promise<NotificationBellFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(ENV_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const email = `e2e-notification-bell-please-ignore-${runId}@example-bell-test-domain.test`;
   const password = `E2eBell!${runId}Aa`;
@@ -328,7 +298,7 @@ export async function injectNotificationBellFixtureSession(
 export async function fetchFixtureNotificationReadStates(
   fixture: NotificationBellFixture,
 ): Promise<{ id: string; read_at: string | null }[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(ENV_PURPOSE);
   await restoreSession(client, fixture.session);
   const { data, error } = await client
     .from("user_notifications")
@@ -342,7 +312,7 @@ export async function fetchFixtureNotificationReadStates(
 export async function teardownNotificationBellFixture(
   fixture: NotificationBellFixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(ENV_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,

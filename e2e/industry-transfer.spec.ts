@@ -11,13 +11,13 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  createFixtureSupabaseClient,
   injectIndustryTransferFixtureSession,
   setupIndustryTransferFixture,
   teardownIndustryTransferFixture,
   INITIAL_POINTS_BALANCE,
   type IndustryTransferFixture,
 } from "./support/industry-transfer-fixture";
+import { createFixtureSupabaseClient } from "./support/fixture-supabase-client";
 import { primeCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
