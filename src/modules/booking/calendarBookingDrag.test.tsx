@@ -14,7 +14,27 @@
 // 這裡測不到、只能瀏覽器/實機驗的(規格書 §十二 風險 2):「touchmove preventDefault 真的擋住原生捲動」
 // 與「短滑動真的捲得動」—— jsdom 沒有捲動引擎;這裡只能驗「該不該 preventDefault」的判斷是對的。
 //
-// 【故障注入紀錄(automated-testing 第四節)】見 engineer 回報;每次注入後用 git diff 確認還原乾淨。
+// 【故障注入紀錄(automated-testing 第四節,2026-09-28 實際跑過;每次注入後還原並用 git diff --stat 確認乾淨)】
+//   除了這裡的 jsdom 測試,同一份注入也對「真的 Chromium(Playwright,含 CDP 觸控)+ 跟 CalendarPage
+//   同結構的假格線」跑過一輪(53 條瀏覽器檢查,腳本在 engineer 回報),下面一併記瀏覽器端的紅字。
+//   (a) 拿掉 onBlockPointerDown 的 setPointerCapture → 1 條紅(27 綠):
+//       「按下時對色塊 setPointerCapture」:expected "spy" to be called 1 times, but got 0 times
+//   (b) handleDrop 的 expectedStaffId 改成 payload.source.staffId(填成被拖的那一欄)→ 1 條紅(27 綠):
+//       「規則 3(坑 4)」:- "expectedStaffId": "staff-a" / + "expectedStaffId": "staff-b"
+//       瀏覽器:「桌面規則3:RPC dragged=B expectedStaff=A」FAIL,p_expected_staff_id 送成 B(52/53)
+//   (c) 色塊放回舊的無條件 onClick={() => openDetail(b.id)} → 1 條紅(27 綠):
+//       「拖(> 10px)之後放開,瀏覽器補發的 click 不開詳情」:expected "spy" to not be called at all, but actually been called 1 times
+//       瀏覽器:「拖完放開沒有開詳情(坑 3)」FAIL(log 多了 detail:t1),另外 2 條連帶 FAIL(32/35)
+//   (d1) 原生 touchmove handler 改成無條件 preventDefault → 2 條紅(26 綠):
+//       「① 長按前移動 > 閾值 = 捲動」與「② …touchmove 才 preventDefault」:expected true to be false
+//       🔴 瀏覽器:「手機①:短滑 120px → scrollLeft 真的變大」FAIL,scrollLeft 0 → 0(這就是 #641 被弄壞的症狀,jsdom 只能驗判斷、驗不到捲動本身)
+//   (d2) 原生 touchmove handler 從不 preventDefault(等同只用 React onTouchMove / 只設 touch-action)→ 1 條紅(27 綠):
+//       「② …touchmove 才 preventDefault」:expected false to be true
+//       🔴 瀏覽器:「手機②:長按後移動 → 殘影吸附到第 6 格」FAIL(殘影 null)、「拖動期間 phase 仍是 dragging」FAIL
+//       (被 pointercancel 打斷、之後沒有任何 toast:長按後的拖拉整個被原生捲動吃掉)(45/47)
+//   (f) handleDrop 拿掉 noop 守門 → 2 條紅(26 綠):
+//       「列 6:助手在自己欄位上下拖」「§5.8 放開在原位」:expected "spy" to not be called at all, but actually been called 1 times
+//   全部還原後 npm run test:unit 69 檔 935 條全綠(含 touchTapVsDragOpen 8 條、bookingDragMove 49 條)。
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";

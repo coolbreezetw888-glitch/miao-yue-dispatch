@@ -6,7 +6,11 @@
 //      「已從你的行程移除」給還在單上的主服務人員)
 //   4. RPC 失敗 → 直接 throw、不送推播
 //
-// 【故障注入紀錄】見 engineer 回報。
+// 【故障注入紀錄(2026-09-28 實際跑過,還原後 git diff --stat 乾淨)】
+//   (e) api.ts moveBooking() 拿掉 `...(mainStaffReassigned ? { previousStaffId } : {})` → 2 條紅(4 綠):
+//       「#823 mode=reassign_main:帶 previousStaffId」:expected "spy" to be called with arguments: [ { merchantId: 'm1', …(4) } ]
+//       「斜拖…仍帶 previousStaffId」:expected undefined to be 'staff-a'
+//       (time / reassign_assistant 那兩條「不帶」的測試仍綠 —— 正好證明它們是靠 mode 分辨,不是永遠綠的假測試)
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
