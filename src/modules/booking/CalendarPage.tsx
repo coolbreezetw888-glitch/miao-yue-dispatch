@@ -44,7 +44,12 @@ import { cn } from "@/lib/utils";
 // 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 // 2026-09-24 稽核修正(問題 2):客戶 Email 欄位的格式驗證,沿用電話驗證既有的共用檔案。
-import { EMAIL_ERROR_MESSAGE, isValidEmail } from "@/lib/validation";
+import {
+  EMAIL_ERROR_MESSAGE,
+  isValidEmail,
+  isValidTaiwanPhone,
+  TW_PHONE_ERROR_MESSAGE,
+} from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag } from "@/modules/merchant/api";
@@ -604,14 +609,19 @@ export function BookingFormDialog({
       toast.error("請填寫客戶電話");
       return;
     }
+    // SPECS-INDEX #822(2026-09-27 使用者裁決):客戶電話格式驗證,手機或市話皆可、市話可帶 # 分機、
+    // 分隔符號不強制。規則本體與「為什麼不列舉區碼」見 src/lib/validation.ts 的 isValidTaiwanPhone。
+    // 這裡是體驗層先擋一次,真正的邊界在後端 create_booking/update_booking 的
+    // private.is_valid_taiwan_phone(同一條規則);資料庫 CHECK 約束因舊髒資料還沒清(#638)暫時補不上。
+    // 註:仍然刻意**不**用服務人員/客服那套 isValidTaiwanMobilePhone(只收手機),客戶可能留市話。
+    if (!isValidTaiwanPhone(customerPhone)) {
+      toast.error(TW_PHONE_ERROR_MESSAGE);
+      return;
+    }
     // 2026-09-24 稽核修正(問題 2):客戶 Email 格式驗證。
     // 欄位雖然寫了 type="email",但送出鈕是 type="button" + onClick、外面也沒有 <form>,
     // 所以瀏覽器的原生格式驗證從來不會觸發,客服隨手打 abc 就會直接存進資料庫。
     // **空白要放行**——這是選填欄位,不填是正常情況,只有「填了但格式不對」才擋。
-    //
-    // 註:客戶電話刻意**不**比照服務人員/客服跑 isValidTaiwanMobilePhone 的嚴格手機格式驗證。
-    // 後端 private.normalize_phone 本來就會去掉非數字字元,而且客戶可能留市話,
-    // 擋死會影響正常建單流程(這是稽核時明確確認過的決定,不是漏掉)。
     if (customerEmail.trim() && !isValidEmail(customerEmail)) {
       toast.error(EMAIL_ERROR_MESSAGE);
       return;

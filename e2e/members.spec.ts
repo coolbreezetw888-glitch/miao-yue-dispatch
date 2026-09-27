@@ -24,6 +24,7 @@ import {
   injectMembersFixtureSession,
   POINTS_EARN_RATE,
   setupMembersFixture,
+  STAFF_NAME_PREFIX,
   teardownMembersFixture,
   type MembersFixture,
 } from "./support/members-fixture";
@@ -219,4 +220,70 @@ test("建單表單電話比對連結既有會員(§10.2)+ 訂單詳情頁會員�
   const memberLink = page.getByRole("link", { name: fixture.existingMemberName });
   await expect(memberLink).toBeVisible();
   await expect(memberLink).toHaveAttribute("href", `/app/members/${fixture.existingMemberId}`);
+});
+
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #822(2026-09-27 使用者裁決):客戶電話格式驗證(手機或市話皆可、市話可帶 # 分機、
+// 分隔符號不強制)。規則本身的完整規則表在 src/lib/validation.test.ts(Vitest)與
+// supabase/tests/database/module6_11_customer_phone_format.sql(pgTAP);這裡只驗「前端表單真的有
+// 接上這條驗證、擋下時不會送出」。兩個表單都用「先亂打被擋 → 改成合法值就往下走」的
+// 前提斷言 → 行為斷言兩段式,避免「按鈕根本沒反應」也被當成通過。
+// ---------------------------------------------------------------------------
+test("建單表單:客戶電話亂打會被擋下、不會送出;改成市話+分機就放行(SPECS-INDEX #822)", async ({
+  page,
+}) => {
+  await page.goto("/app/calendar");
+  await page.getByRole("button", { name: "新增預約" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "新增預約" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  // 先把排在電話「前面」的必填項填齊(服務人員、服務項目、客戶姓名;日期時間開啟時已預設帶入),
+  // 否則 handleSubmit 會先被更前面的檢查擋住,根本走不到電話那一條。
+  await dialog.getByText("服務人員 *", { exact: true }).locator("..").getByRole("combobox").click();
+  await page.getByRole("option", { name: `${STAFF_NAME_PREFIX}${fixture.runId}` }).click();
+  const serviceItemLabel = dialog.getByText("E2E測試服務項目(會員模組)");
+  await expect(serviceItemLabel).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await serviceItemLabel.click();
+  await dialog.locator("#booking-customer-name").fill("E2E電話格式測試客戶");
+
+  // 亂打 3 碼(正式庫實查到的髒資料型態)→ 被擋下,對話框還在。
+  await dialog.locator("#booking-customer-phone").fill("123");
+  await dialog.getByRole("button", { name: "建立預約" }).click();
+  await expect(page.getByText("電話格式不正確").first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dialog).toBeVisible();
+
+  // 正向對照:改成「市話 + 分機」再送出,電話那一關要放行、往下走到下一個檢查
+  //(付款方式預設未選,所以下一個 toast 應該是「請選擇付款方式」,而不是電話格式錯誤)。
+  // 刻意停在這一關,不真的建立訂單。
+  await dialog.locator("#booking-customer-phone").fill("02-1234-5678#123");
+  await dialog.getByRole("button", { name: "建立預約" }).click();
+  await expect(page.getByText("請選擇付款方式").first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+});
+
+test("新增會員表單:電話填了但格式不對會被擋下;留空或合法就放行(SPECS-INDEX #822)", async ({
+  page,
+}) => {
+  await page.goto("/app/members");
+  await expect(page.getByRole("heading", { name: "會員管理" })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+
+  const newMemberName = `E2E電話格式會員${fixture.runId}`;
+  await page.getByRole("button", { name: "新增會員" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.getByLabel("姓名 *").fill(newMemberName);
+
+  // 亂打 → 擋下,對話框還在、清單裡沒有這位會員。
+  await page.getByLabel(/^電話/).fill("abc");
+  await dialog.getByRole("button", { name: "建立" }).click();
+  await expect(page.getByText("電話格式不正確").first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dialog).toBeVisible();
+
+  // 正向對照:改成帶分隔符號的市話 → 建立成功,清單看得到。
+  await page.getByLabel(/^電話/).fill("(02) 2345-6789");
+  await dialog.getByRole("button", { name: "建立" }).click();
+  await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });

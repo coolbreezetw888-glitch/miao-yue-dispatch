@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+import { isValidTaiwanPhone, TW_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
@@ -157,6 +158,11 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
     e.preventDefault();
     if (!name.trim()) {
       toast.error("請填寫會員姓名");
+      return;
+    }
+    // SPECS-INDEX #822:會員電話是選填,留空放行;填了就套客戶電話規則(手機或市話,見 validation.ts)。
+    if (phone.trim() && !isValidTaiwanPhone(phone)) {
+      toast.error(TW_PHONE_ERROR_MESSAGE);
       return;
     }
     setSaving(true);

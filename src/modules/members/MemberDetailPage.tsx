@@ -37,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 // 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
+import { isValidTaiwanPhone, TW_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
@@ -90,6 +91,12 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
     e.preventDefault();
     if (!name.trim()) {
       toast.error("請填寫會員姓名");
+      return;
+    }
+    // SPECS-INDEX #822:會員電話是選填,留空放行;填了就套客戶電話規則(手機或市話,見 validation.ts)。
+    // 舊會員如果留著不合規的舊電話,編輯時會被要求先改正(舊資料本身依使用者裁決不主動清)。
+    if (phone.trim() && !isValidTaiwanPhone(phone)) {
+      toast.error(TW_PHONE_ERROR_MESSAGE);
       return;
     }
     setSaving(true);
