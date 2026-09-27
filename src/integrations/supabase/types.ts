@@ -2704,6 +2704,7 @@ export type Database = {
         Args: { p_event_type: string; p_merchant_id: string }
         Returns: boolean
       }
+      can_manage_bookings: { Args: { p_merchant_id: string }; Returns: boolean }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: {
@@ -3447,6 +3448,17 @@ export type Database = {
         Returns: number
       }
       mark_staff_login_active_if_self: { Args: never; Returns: undefined }
+      move_booking: {
+        Args: {
+          p_booking_id: string
+          p_dragged_staff_id: string
+          p_expected_staff_id: string
+          p_expected_start_at: string
+          p_target_staff_id: string
+          p_target_start_at: string
+        }
+        Returns: Json
+      }
       platform_add_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
         Returns: undefined

@@ -395,16 +395,6 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
 // 型別直接用 bookingDragMove.ts 的 MoveBookingInput / MoveBookingResult,不在這裡再宣告一份。
 // =========================================================================
 
-/**
- * ⚠️ 過渡寫法(等 migration 20260928010000_move_booking.sql 套用到正式庫、types.ts 重新產生之後,
- *    請改回一般的 `supabase.rpc("move_booking", …)`,並刪掉這段——做法跟 #801 當時一模一樣):
- *    src/integrations/supabase/types.ts 是由正式庫產生的,新函式還沒套用就不會出現在裡面。
- *    這裡把 rpc 收窄成一個最小的函式型別,只是為了通過型別檢查,執行期跟一般的 supabase.rpc 完全相同。 */
-type PendingMoveBookingRpc = (
-  fn: "move_booking",
-  args: Record<string, unknown>,
-) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
-
 export interface MoveBookingNotifyContext {
   /** 目標服務人員的姓名,只用來組推播的「服務人員改為 OOO」文案;沒帶就用通用文案。 */
   targetStaffName?: string | null;
@@ -433,8 +423,7 @@ export async function moveBooking(
   input: MoveBookingInput,
   ctx: MoveBookingNotifyContext = {},
 ): Promise<MoveBookingResult> {
-  const rpc = supabase.rpc.bind(supabase) as unknown as PendingMoveBookingRpc;
-  const { data, error } = await rpc("move_booking", {
+  const { data, error } = await supabase.rpc("move_booking", {
     p_booking_id: input.bookingId,
     p_dragged_staff_id: input.draggedStaffId,
     p_target_staff_id: input.targetStaffId,
@@ -443,7 +432,7 @@ export async function moveBooking(
     p_expected_staff_id: input.expectedStaffId,
   });
   if (error) throw error;
-  const result = data as MoveBookingResult;
+  const result = data as unknown as MoveBookingResult;
 
   const merchantId = result.booking["merchant_id"];
   if (typeof merchantId === "string" && merchantId) {
