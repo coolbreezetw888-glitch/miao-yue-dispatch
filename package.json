@@ -14,7 +14,9 @@
     "test:unit:watch": "vitest",
     "test:db": "supabase test db --local",
     "test:edge": "node scripts/run-edge-function-tests.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/e2e-test-count.mjs check && playwright test",
+    "test:e2e:count": "node scripts/e2e-test-count.mjs check",
+    "test:e2e:count:update": "node scripts/e2e-test-count.mjs update",
     "test:e2e:ui": "playwright test --ui"
   },
   "overrides": {
