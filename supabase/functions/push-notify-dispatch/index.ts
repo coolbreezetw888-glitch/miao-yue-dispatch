@@ -55,6 +55,8 @@ export interface DispatchRequestBody {
   booking_id?: string;
   event_type?: PushDispatchEventType;
   change_summary?: string;
+  /** SPECS-INDEX #823:被換掉的主服務人員 id(只有 booking_updated 會帶)。詳見 pushDispatchCore.ts。 */
+  previous_staff_id?: string;
 }
 
 const DISPATCHABLE_EVENT_TYPES: PushDispatchEventType[] = [
@@ -154,11 +156,14 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     privateKey: config.vapidPrivateKey,
   });
 
+  const previousStaffId = body.previous_staff_id?.trim();
   const result = await dispatchPushForBooking(pushDeps, {
     merchantId,
     bookingId,
     eventType,
     changeSummary: body.change_summary,
+    // #823:空字串視同沒帶,不要讓 "" 走進去被當成一個 staff id 去查。
+    previousStaffId: previousStaffId ? previousStaffId : null,
   });
 
   return jsonResponse({ ...result }, 200);

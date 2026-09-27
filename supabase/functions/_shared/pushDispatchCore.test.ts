@@ -10,9 +10,11 @@
 
 import { assertEquals } from "jsr:@std/assert@1";
 import {
+  buildReassignedAwaySummary,
   buildRecipientTitle,
   computeLogStatus,
   dispatchPushForBooking,
+  renderReassignedAwayBody,
   pickPayloadForDevice,
   renderMessageTemplate,
   resolvePushUrlForTarget,
@@ -826,3 +828,329 @@ Deno.test(
     assertEquals(result.successCount, 1);
   },
 );
+
+// =========================================================================
+// SPECS-INDEX #823(2026-09-28):訂單轉派之後,原本那位主服務人員也要收到「這筆單已經不是你的了」。
+//
+// 測試設計說明(對應 automated-testing/SKILL.md 第四節「正向對照」):
+//   這一組用的仍然是假 deps,但被驗的是 pushDispatchCore 自己的編排邏輯 —— 「有沒有拿 previousStaffId
+//   再問一次 resolveRecipients、有沒有把他加進收件人、他的內文有沒有換成『已從你的行程移除』」。
+//   真正打資料庫的那一層(pushDbAdapter.resolveRecipients → rpc('resolve_push_recipients'))**一個字都沒改**,
+//   呼叫的還是同一支函式、同一組參數名,所以這裡不會重演 #805「RPC 名字拼錯測試照樣綠」的情況;
+//   那支 RPC 對真資料庫的行為由 supabase/tests/database/module15_02_push_multi_role.sql ⑥ 釘住。
+//
+//   每一條「有通知」的斷言,旁邊都有一條同樣設定但**不帶 previousStaffId** 的對照,證明測試分得出
+//   「有通知」跟「沒通知」,不是永遠綠的假測試。
+// =========================================================================
+
+/** #823 情境的「舊的那位」:staff-0,有訂閱、有一台裝置。 */
+const STAFF_0_PREVIOUS: PushRecipient = {
+  target_type: "staff",
+  target_id: "staff-0",
+  target_user_id: "user-staff-0",
+  target_name: "服務人員乙",
+};
+
+/**
+ * #823:訂單現在指派給 staff-1(接手的人),舊的是 staff-0。兩個人各自有一台裝置。
+ * `recipientsFor` 決定 resolveRecipients 對每個 staffId 回什麼;每一次呼叫都記進 resolveCalls,
+ * 讓測試能斷言「有沒有拿 previousStaffId 再問一次」。
+ */
+function makeReassignDeps(
+  options: {
+    recipientsFor?: (staffId: string | null) => PushRecipient[];
+    overrides?: Partial<PushDispatchDeps>;
+  } = {},
+) {
+  const resolveCalls: { staffId: string | null }[] = [];
+  const recipientsFor =
+    options.recipientsFor ??
+    ((staffId: string | null) => {
+      if (staffId === "staff-1") return [STAFF_1_RECIPIENT];
+      if (staffId === "staff-0") return [STAFF_0_PREVIOUS];
+      return [];
+    });
+  const base = makeFakeDeps({
+    getEventSetting: async () => ({
+      enabled: true,
+      message_title: "訂單內容異動",
+      message_body: "{{booking_date}} {{customer_name}}:{{change_summary}}",
+    }),
+    getBookingStaffId: async () => "staff-1",
+    resolveRecipients: async (_m, _e, staffId) => {
+      resolveCalls.push({ staffId });
+      return recipientsFor(staffId);
+    },
+    getSubscriptionsForUsers: async (userIds: string[]) => {
+      const map = new Map<string, PushSubscriptionRow[]>();
+      if (userIds.includes("user-staff-1")) {
+        map.set("user-staff-1", [{ id: "sub-1", endpoint: "e-new", p256dh_key: "p", auth_key: "a" }]);
+      }
+      if (userIds.includes("user-staff-0")) {
+        map.set("user-staff-0", [{ id: "sub-0", endpoint: "e-old", p256dh_key: "p", auth_key: "a" }]);
+      }
+      return map;
+    },
+    renderBookingVariables: async () => ({
+      booking_date: "2026-10-01 10:00",
+      customer_name: "王小明",
+      merchant_name: "涼風工匠",
+      // render_booking_notification_variables 回的是「目前」的主服務人員 = 接手的人。
+      staff_name: "服務人員甲",
+    }),
+    ...(options.overrides ?? {}),
+  });
+  return { ...base, resolveCalls };
+}
+
+const REASSIGN_PARAMS = {
+  merchantId: "m1",
+  bookingId: "b1",
+  eventType: "booking_updated" as const,
+  changeSummary: "服務人員改為 服務人員甲",
+};
+
+const AWAY_BODY = "2026-10-01 10:00 王小明:這筆預約已改由 服務人員甲 負責,已從你的行程移除";
+const NORMAL_BODY = "2026-10-01 10:00 王小明:服務人員改為 服務人員甲";
+
+Deno.test("#823 buildReassignedAwaySummary:有接手的人就點名;查不到就不點名,不要生出中間空一格的怪句子", () => {
+  assertEquals(buildReassignedAwaySummary("服務人員甲"), "這筆預約已改由 服務人員甲 負責,已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(""), "這筆預約已改派給其他服務人員,已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary("   "), "這筆預約已改派給其他服務人員,已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(null), "這筆預約已改派給其他服務人員,已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(undefined), "這筆預約已改派給其他服務人員,已從你的行程移除");
+});
+
+Deno.test("#823 renderReassignedAwayBody:範本有 {{change_summary}} 就直接替換;範本沒有就補在最後一行", () => {
+  const vars = { booking_date: "10/01 10:00", customer_name: "王小明", change_summary: "原本的異動摘要" };
+  const away = "這筆預約已改由 服務人員甲 負責,已從你的行程移除";
+  assertEquals(
+    renderReassignedAwayBody("{{booking_date}} {{customer_name}}:{{change_summary}}", vars, away),
+    "10/01 10:00 王小明:這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+  );
+  // 商家把 {{change_summary}} 拿掉了 → 對被換掉的人來說重點會整個消失,所以補在最後一行。
+  assertEquals(
+    renderReassignedAwayBody("{{booking_date}} {{customer_name}} 的預約有異動", vars, away),
+    "10/01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+  );
+  // 範本是空的(商家清空了)→ 只剩那句話,不要多一個換行開頭。
+  assertEquals(renderReassignedAwayBody("", vars, away), away);
+});
+
+Deno.test(
+  "🔴 #823(核心必測):帶 previousStaffId 時,原本那位也收到,而且他的內文是「已從你的行程移除」,接手的人內文不變",
+  async () => {
+    const { deps, logs, sentPayloads, inAppNotifications, resolveCalls } = makeReassignDeps();
+
+    const result = await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+    // ① 編排:確實拿 previousStaffId 再問了一次 resolveRecipients(走同一道門檻)。
+    assertEquals(resolveCalls, [{ staffId: "staff-1" }, { staffId: "staff-0" }]);
+    // ② 兩個人都算收件人。
+    assertEquals(result.dispatched, true);
+    assertEquals(result.recipientCount, 2);
+    assertEquals(logs.length, 2);
+    assertEquals(logs.map((l) => l.target_id).sort(), ["staff-0", "staff-1"]);
+
+    // ③ 接手的人:內文是呼叫端帶的異動摘要(跟改動前完全一樣)。
+    const newStaffLog = logs.find((l) => l.target_id === "staff-1")!;
+    assertEquals(newStaffLog.status, "sent");
+    assertEquals(newStaffLog.rendered_body, NORMAL_BODY);
+
+    // ④ 被換掉的人:內文換成「已從你的行程移除」,標題沿用商家設定。
+    const oldStaffLog = logs.find((l) => l.target_id === "staff-0")!;
+    assertEquals(oldStaffLog.status, "sent");
+    assertEquals(oldStaffLog.rendered_title, "訂單內容異動");
+    assertEquals(oldStaffLog.rendered_body, AWAY_BODY);
+
+    // ⑤ 手機上真的送出去的 payload 也是各自的版本(不是 log 對了、推播卻送錯內容)。
+    assertEquals(sentPayloads.length, 2);
+    const oldPayload = sentPayloads.find((x) => x.endpoint === "e-old")!.payload;
+    const newPayload = sentPayloads.find((x) => x.endpoint === "e-new")!.payload;
+    assertEquals(oldPayload.body, AWAY_BODY);
+    assertEquals(oldPayload.url, "/app/calendar");
+    assertEquals(newPayload.body, NORMAL_BODY);
+
+    // ⑥ 鈴鐺(站內通知)一對一,內文同 log。
+    assertEquals(inAppNotifications.length, 2);
+    const oldInApp = inAppNotifications.find((n) => n.target_id === "staff-0")!;
+    assertEquals(oldInApp.user_id, "user-staff-0");
+    assertEquals(oldInApp.body, AWAY_BODY);
+  },
+);
+
+Deno.test(
+  "#823 正向對照(證明上一條不是假測試):同樣的設定但**不帶** previousStaffId → 舊的那位完全沒有出現",
+  async () => {
+    const { deps, logs, sentPayloads, inAppNotifications, resolveCalls } = makeReassignDeps();
+
+    const result = await dispatchPushForBooking(deps, REASSIGN_PARAMS);
+
+    assertEquals(resolveCalls, [{ staffId: "staff-1" }]);
+    assertEquals(result.recipientCount, 1);
+    assertEquals(logs.length, 1);
+    assertEquals(logs[0].target_id, "staff-1");
+    assertEquals(sentPayloads.length, 1);
+    assertEquals(sentPayloads[0].endpoint, "e-new");
+    assertEquals(inAppNotifications.length, 1);
+    assertEquals(logs.some((l) => l.rendered_body?.includes("已從你的行程移除")), false);
+  },
+);
+
+Deno.test("#823:previousStaffId 跟目前的主服務人員是同一個人(其實沒換人)→ 不多問、不多發", async () => {
+  const { deps, logs, resolveCalls } = makeReassignDeps();
+
+  await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-1" });
+
+  assertEquals(resolveCalls, [{ staffId: "staff-1" }]);
+  assertEquals(logs.length, 1);
+});
+
+Deno.test("#823:不是 booking_updated 事件(例如 booking_created)就算帶了 previousStaffId 也一律忽略", async () => {
+  const { deps, logs, resolveCalls } = makeReassignDeps();
+
+  await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+    previousStaffId: "staff-0",
+  });
+
+  assertEquals(resolveCalls, [{ staffId: "staff-1" }]);
+  assertEquals(logs.length, 1);
+  assertEquals(logs[0].target_id, "staff-1");
+});
+
+Deno.test(
+  "#823:舊的那位沒訂閱 / 自己關掉 / 已離職(resolveRecipients 對他回空)→ 不通知他,也不寫任何跟他有關的列",
+  async () => {
+    // 走的是跟接手的人同一道門檻:resolve_push_recipients 回空,就代表他不該收。
+    // 這裡刻意**不**寫 personal_disabled —— 那一列的語意是「被指派的服務人員自己關掉」,被換掉的人
+    // 已經不是被指派的人,照既有規則歸類為「不是收件人」,不塞雜訊。
+    const { deps, logs, resolveCalls } = makeReassignDeps({
+      recipientsFor: (staffId) => (staffId === "staff-1" ? [STAFF_1_RECIPIENT] : []),
+    });
+
+    const result = await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+    // 有問(門檻有走到),但他不在名單裡。
+    assertEquals(resolveCalls, [{ staffId: "staff-1" }, { staffId: "staff-0" }]);
+    assertEquals(result.recipientCount, 1);
+    assertEquals(logs.length, 1);
+    assertEquals(logs[0].target_id, "staff-1");
+  },
+);
+
+Deno.test(
+  "#823(核心必測):接手的人沒訂閱、全店也沒人訂閱,但舊的那位有訂閱 → 他一個人也照樣收到,不會被當成 no_recipient",
+  async () => {
+    const { deps, logs, sentPayloads } = makeReassignDeps({
+      recipientsFor: (staffId) => (staffId === "staff-0" ? [STAFF_0_PREVIOUS] : []),
+    });
+
+    const result = await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+    assertEquals(result.dispatched, true);
+    assertEquals(result.reason, undefined);
+    assertEquals(result.recipientCount, 1);
+    assertEquals(logs.length, 1);
+    assertEquals(logs[0].target_id, "staff-0");
+    assertEquals(logs[0].skip_reason, null);
+    assertEquals(sentPayloads.length, 1);
+    assertEquals(sentPayloads[0].endpoint, "e-old");
+  },
+);
+
+Deno.test(
+  "#823:舊的那位有訂閱但一台裝置都沒有 → 他那一列是 no_subscription,而且 rendered_body / 鈴鐺都是「已從你的行程移除」版本",
+  async () => {
+    const { deps, logs, inAppNotifications } = makeReassignDeps({
+      overrides: {
+        getSubscriptionsForUsers: async () =>
+          new Map<string, PushSubscriptionRow[]>([
+            ["user-staff-1", [{ id: "sub-1", endpoint: "e-new", p256dh_key: "p", auth_key: "a" }]],
+          ]),
+      },
+    });
+
+    await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+    const oldStaffLog = logs.find((l) => l.target_id === "staff-0")!;
+    assertEquals(oldStaffLog.skip_reason, "no_subscription");
+    assertEquals(oldStaffLog.rendered_body, AWAY_BODY);
+    // 一台裝置都沒有的時候,鈴鐺是他唯一看得到的地方(§13.4),內容一定要是給他看的那個版本。
+    const oldInApp = inAppNotifications.find((n) => n.target_id === "staff-0")!;
+    assertEquals(oldInApp.body, AWAY_BODY);
+  },
+);
+
+Deno.test("#823:商家範本沒有 {{change_summary}} 時,舊的那位仍然看得到「已從你的行程移除」(補在最後一行),接手的人不受影響", async () => {
+  const { deps, logs } = makeReassignDeps({
+    overrides: {
+      getEventSetting: async () => ({
+        enabled: true,
+        message_title: "訂單內容異動",
+        message_body: "{{booking_date}} {{customer_name}} 的預約有異動",
+      }),
+    },
+  });
+
+  await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+  const newStaffLog = logs.find((l) => l.target_id === "staff-1")!;
+  const oldStaffLog = logs.find((l) => l.target_id === "staff-0")!;
+  assertEquals(newStaffLog.rendered_body, "2026-10-01 10:00 王小明 的預約有異動");
+  assertEquals(
+    oldStaffLog.rendered_body,
+    "2026-10-01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+  );
+});
+
+Deno.test("#823:staff_name 查不到(空字串)時,用不點名的句子,不會出現「已改由  負責」", async () => {
+  const { deps, logs } = makeReassignDeps({
+    overrides: {
+      renderBookingVariables: async () => ({
+        booking_date: "2026-10-01 10:00",
+        customer_name: "王小明",
+        merchant_name: "涼風工匠",
+        staff_name: "",
+      }),
+    },
+  });
+
+  await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+  const oldStaffLog = logs.find((l) => l.target_id === "staff-0")!;
+  assertEquals(
+    oldStaffLog.rendered_body,
+    "2026-10-01 10:00 王小明:這筆預約已改派給其他服務人員,已從你的行程移除",
+  );
+});
+
+Deno.test("#823:管理員同時也在收件人裡時,管理員不會被重複算,拿的也是一般異動摘要", async () => {
+  const { deps, logs, sentPayloads } = makeReassignDeps({
+    recipientsFor: (staffId) => {
+      if (staffId === "staff-1") return [STAFF_1_RECIPIENT, ADMIN_RECIPIENT];
+      // 第二次問(帶 staff-0)一樣會把管理員回出來 —— 那是 resolve_push_recipients 的正常行為。
+      if (staffId === "staff-0") return [STAFF_0_PREVIOUS, ADMIN_RECIPIENT];
+      return [];
+    },
+    overrides: {
+      getSubscriptionsForUsers: async () =>
+        new Map<string, PushSubscriptionRow[]>([
+          ["user-staff-1", [{ id: "sub-1", endpoint: "e-new", p256dh_key: "p", auth_key: "a" }]],
+          ["user-staff-0", [{ id: "sub-0", endpoint: "e-old", p256dh_key: "p", auth_key: "a" }]],
+          ["user-admin-1", [{ id: "sub-a", endpoint: "e-admin", p256dh_key: "p", auth_key: "a" }]],
+        ]),
+    },
+  });
+
+  await dispatchPushForBooking(deps, { ...REASSIGN_PARAMS, previousStaffId: "staff-0" });
+
+  // 第二次 resolve 也回了管理員,但只取「staff 且 target_id = 舊的那位」那一列,管理員不重複(三列不是四列)。
+  assertEquals(logs.length, 3);
+  assertEquals(logs.map((l) => l.target_id).sort(), ["admin-1", "staff-0", "staff-1"]);
+  const adminPayload = sentPayloads.find((x) => x.endpoint === "e-admin")!.payload;
+  assertEquals(adminPayload.body, NORMAL_BODY);
+  assertEquals(adminPayload.title, "涼風工匠·訂單內容異動");
+});

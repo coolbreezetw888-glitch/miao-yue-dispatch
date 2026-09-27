@@ -403,6 +403,15 @@ export interface DispatchPushNotificationInput {
   eventType: DispatchablePushEventType;
   /** 規則 4.5:訂單內容異動的一句話摘要,只有 eventType === 'booking_updated' 時需要帶。 */
   changeSummary?: string;
+  /**
+   * SPECS-INDEX #823:這次編輯**之前**的主服務人員 id。只有 eventType === 'booking_updated'、而且
+   * 主服務人員真的被換掉時才帶。有帶的話,Edge Function 會讓原本那位也收到一則
+   * 「這筆預約已改由 OOO 負責,已從你的行程移除」。
+   *
+   * 為什麼要由呼叫端帶:訂單沒有編輯歷史表,update_booking 一跑完,舊的那位是誰就查不到了。
+   * 任何會換主服務人員的操作(編輯表單、拖拉轉派……)都應該把它帶上。
+   */
+  previousStaffId?: string;
 }
 
 /**
@@ -425,6 +434,7 @@ export function dispatchPushNotification(input: DispatchPushNotificationInput): 
         booking_id: input.bookingId,
         event_type: input.eventType,
         ...(input.changeSummary ? { change_summary: input.changeSummary } : {}),
+        ...(input.previousStaffId ? { previous_staff_id: input.previousStaffId } : {}),
       },
     })
     .then(({ error }) => {

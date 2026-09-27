@@ -11,11 +11,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpcMock = vi.fn();
 const dispatchPushNotificationMock = vi.fn();
+// SPECS-INDEX #823:updateBooking 會在 RPC 之前用 supabase.from("bookings") 讀一次目前的 staff_id。
+// 這裡把 from 也做成可控制的 mock;預設回「查不到」(data: null),等於改動前的行為。
+const maybeSingleMock = vi.fn();
+const fromMock = vi.fn(() => ({
+  select: () => ({
+    eq: () => ({
+      maybeSingle: (...args: unknown[]) => maybeSingleMock(...args),
+    }),
+  }),
+}));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     rpc: (...args: unknown[]) => rpcMock(...args),
-    from: vi.fn(),
+    from: (...args: unknown[]) => fromMock(...(args as [])),
   },
 }));
 
@@ -35,6 +45,8 @@ const FAKE_BOOKING = {
   id: "booking-1",
   merchant_id: "merchant-1",
   status: "pending_confirmation",
+  // #823:RPC 回來的是「更新後」的訂單,主服務人員是 staff-1。
+  staff_id: "staff-1",
 };
 
 const CREATE_INPUT = {
@@ -113,6 +125,10 @@ describe("updateBooking(§7.8/§9,規格書首次疊加通知呼叫 + 規則 4.5
   beforeEach(() => {
     rpcMock.mockReset();
     dispatchPushNotificationMock.mockReset();
+    fromMock.mockClear();
+    maybeSingleMock.mockReset();
+    // 預設:編輯前的主服務人員就是 staff-1(沒換人)→ 下面既有的三條測試行為跟改動前完全一樣。
+    maybeSingleMock.mockResolvedValue({ data: { staff_id: "staff-1" }, error: null });
   });
 
   const UPDATE_INPUT = {
@@ -159,5 +175,101 @@ describe("updateBooking(§7.8/§9,規格書首次疊加通知呼叫 + 規則 4.5
 
     await expect(updateBooking(UPDATE_INPUT)).rejects.toBeTruthy();
     expect(dispatchPushNotificationMock).not.toHaveBeenCalled();
+  });
+
+  // =======================================================================
+  // SPECS-INDEX #823:主服務人員被換掉時,要把「舊的那位」一起帶給 dispatchPushNotification。
+  // 舊值的來源有三種(見 UpdateBookingInput.previousStaffId 的註解),逐一驗證。
+  // =======================================================================
+  describe("#823 previousStaffId(被換掉的主服務人員)", () => {
+    it("🔴 核心:呼叫端沒帶 previousStaffId → 先讀 bookings.staff_id 當舊值;RPC 回來的 staff_id 不同 → 帶 previousStaffId", async () => {
+      maybeSingleMock.mockResolvedValue({ data: { staff_id: "staff-old" }, error: null });
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      await updateBooking({ ...UPDATE_INPUT, changeSummary: "服務人員改為 王小明" });
+
+      expect(fromMock).toHaveBeenCalledWith("bookings");
+      expect(dispatchPushNotificationMock).toHaveBeenCalledWith({
+        merchantId: "merchant-1",
+        bookingId: "booking-1",
+        eventType: "booking_updated",
+        changeSummary: "服務人員改為 王小明",
+        previousStaffId: "staff-old",
+      });
+    });
+
+    it("正向對照:讀到的舊值跟 RPC 回來的一樣(其實沒換人)→ 不帶 previousStaffId 這個 key", async () => {
+      maybeSingleMock.mockResolvedValue({ data: { staff_id: "staff-1" }, error: null });
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      await updateBooking({ ...UPDATE_INPUT, changeSummary: "預約時間改為 09/26 15:00" });
+
+      const callArgs = dispatchPushNotificationMock.mock.calls[0]?.[0];
+      expect(Object.prototype.hasOwnProperty.call(callArgs, "previousStaffId")).toBe(false);
+    });
+
+    it("那一次「先讀」一定發生在 update_booking RPC **之前**(RPC 跑完 staff_id 就是新的了,讀了也沒用)", async () => {
+      const order: string[] = [];
+      maybeSingleMock.mockImplementation(async () => {
+        order.push("read-previous");
+        return { data: { staff_id: "staff-old" }, error: null };
+      });
+      rpcMock.mockImplementation(async () => {
+        order.push("rpc");
+        return { data: FAKE_BOOKING, error: null };
+      });
+      const { updateBooking } = await importBookingApi();
+
+      await updateBooking(UPDATE_INPUT);
+
+      expect(order).toEqual(["read-previous", "rpc"]);
+    });
+
+    it("呼叫端自己帶了 previousStaffId(字串)→ 直接用,不再多讀一次", async () => {
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      await updateBooking({ ...UPDATE_INPUT, previousStaffId: "staff-explicit" });
+
+      expect(fromMock).not.toHaveBeenCalled();
+      expect(dispatchPushNotificationMock).toHaveBeenCalledWith(
+        expect.objectContaining({ previousStaffId: "staff-explicit" }),
+      );
+    });
+
+    it("呼叫端明確帶 null → 不讀、也不帶 previousStaffId", async () => {
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      await updateBooking({ ...UPDATE_INPUT, previousStaffId: null });
+
+      expect(fromMock).not.toHaveBeenCalled();
+      const callArgs = dispatchPushNotificationMock.mock.calls[0]?.[0];
+      expect(Object.prototype.hasOwnProperty.call(callArgs, "previousStaffId")).toBe(false);
+    });
+
+    it("「先讀」失敗(回 error)→ 編輯照常成功、通知照常發,只是不帶 previousStaffId,絕不影響編輯本身", async () => {
+      maybeSingleMock.mockResolvedValue({ data: null, error: { message: "RLS 擋下" } });
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      const result = await updateBooking(UPDATE_INPUT);
+
+      expect(result).toEqual(FAKE_BOOKING);
+      expect(dispatchPushNotificationMock).toHaveBeenCalledTimes(1);
+      const callArgs = dispatchPushNotificationMock.mock.calls[0]?.[0];
+      expect(Object.prototype.hasOwnProperty.call(callArgs, "previousStaffId")).toBe(false);
+    });
+
+    it("「先讀」直接丟例外(例如網路斷線)→ 一樣被吞掉,編輯照常成功", async () => {
+      maybeSingleMock.mockRejectedValue(new Error("network down"));
+      rpcMock.mockResolvedValue({ data: FAKE_BOOKING, error: null });
+      const { updateBooking } = await importBookingApi();
+
+      await expect(updateBooking(UPDATE_INPUT)).resolves.toEqual(FAKE_BOOKING);
+      expect(dispatchPushNotificationMock).toHaveBeenCalledTimes(1);
+    });
   });
 });

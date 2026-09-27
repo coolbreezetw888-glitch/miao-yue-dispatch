@@ -135,3 +135,116 @@ Deno.test(
     assertEquals(res.status, 200);
   },
 );
+
+// =========================================================================
+// SPECS-INDEX #823:request body 的 previous_staff_id 要一路傳到 dispatchPushForBooking。
+//
+// 這裡刻意**不** mock 掉 pushDbAdapter:用一個「會把每一次 rpc 呼叫記下來」的假 adminClient,
+// 讓 index.ts → buildPushDispatchDeps → resolveRecipients → adminClient.rpc('resolve_push_recipients', {...})
+// 這整條真實路徑都走到,然後斷言 rpc 被叫了幾次、第三個參數 p_booking_staff_id 各是誰。
+// 這樣驗到的是 adapter 真的送出的 RPC 名稱與參數名,不是某個被替身蓋掉的中間層(#805 的教訓)。
+// =========================================================================
+function makeRecordingAdminClient() {
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  const insertedTables: string[] = [];
+  const adminClient = {
+    from: (table: string) => ({
+      select: () => {
+        const single = () => {
+          if (table === "merchant_push_event_settings") {
+            return Promise.resolve({
+              data: { enabled: true, message_title: "訂單內容異動", message_body: "{{change_summary}}" },
+              error: null,
+            });
+          }
+          if (table === "bookings") {
+            return Promise.resolve({ data: { staff_id: "staff-new" }, error: null });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        return {
+          eq: () => ({ eq: () => ({ maybeSingle: single }), maybeSingle: single }),
+          in: () => Promise.resolve({ data: [], error: null }),
+        };
+      },
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      insert: () => {
+        insertedTables.push(table);
+        return Promise.resolve({ error: null });
+      },
+    }),
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ fn, args });
+      if (fn === "resolve_push_recipients") return Promise.resolve({ data: [], error: null });
+      if (fn === "is_staff_push_event_disabled") return Promise.resolve({ data: false, error: null });
+      if (fn === "render_booking_notification_variables") return Promise.resolve({ data: {}, error: null });
+      return Promise.resolve({ data: null, error: null });
+    },
+  };
+  return { adminClient, rpcCalls, insertedTables };
+}
+
+function resolveStaffIdsFrom(rpcCalls: { fn: string; args: Record<string, unknown> }[]): unknown[] {
+  return rpcCalls
+    .filter((c) => c.fn === "resolve_push_recipients")
+    .map((c) => c.args["p_booking_staff_id"]);
+}
+
+Deno.test("#823:body 有 previous_staff_id 時,resolve_push_recipients 會被多叫一次,第二次的 p_booking_staff_id 就是舊的那位", async () => {
+  const { adminClient, rpcCalls } = makeRecordingAdminClient();
+  const deps = makeDeps(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+
+  const req = makeRequest(
+    {
+      merchant_id: "m1",
+      booking_id: "b1",
+      event_type: "booking_updated",
+      change_summary: "服務人員改為 王小明",
+      previous_staff_id: "staff-old",
+    },
+    { Authorization: "Bearer fake-jwt" },
+  );
+  const res = await handleRequest(req, deps);
+
+  assertEquals(res.status, 200);
+  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new", "staff-old"]);
+  // 順便釘住 adapter 送出的參數名(PostgREST 靠參數名解析函式,名字錯了就是 PGRST202)。
+  const first = rpcCalls.find((c) => c.fn === "resolve_push_recipients")!;
+  assertEquals(Object.keys(first.args).sort(), ["p_booking_staff_id", "p_event_type", "p_merchant_id"]);
+});
+
+Deno.test("#823 正向對照:同樣的請求但**沒有** previous_staff_id → resolve_push_recipients 只叫一次", async () => {
+  const { adminClient, rpcCalls } = makeRecordingAdminClient();
+  const deps = makeDeps(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+
+  const req = makeRequest(
+    { merchant_id: "m1", booking_id: "b1", event_type: "booking_updated", change_summary: "服務人員改為 王小明" },
+    { Authorization: "Bearer fake-jwt" },
+  );
+  const res = await handleRequest(req, deps);
+
+  assertEquals(res.status, 200);
+  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new"]);
+});
+
+Deno.test("#823:previous_staff_id 是空字串或只有空白 → 視同沒帶,不會拿空字串去查", async () => {
+  for (const previous of ["", "   "]) {
+    const { adminClient, rpcCalls } = makeRecordingAdminClient();
+    const deps = makeDeps(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deps.createAdminClient = () => adminClient as any;
+
+    const req = makeRequest(
+      { merchant_id: "m1", booking_id: "b1", event_type: "booking_updated", previous_staff_id: previous },
+      { Authorization: "Bearer fake-jwt" },
+    );
+    const res = await handleRequest(req, deps);
+
+    assertEquals(res.status, 200);
+    assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new"]);
+  }
+});
