@@ -10,6 +10,7 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import { recipientKey, type RecipientDirectory } from "./pushLogView";
 import type {
   MerchantPushEventSetting,
   PushEventSubscription,
@@ -284,16 +285,26 @@ export async function updatePushEventSetting(
 
 // =========================================================================
 // 2.3 發送記錄查詢(比照模組 11 4.3 發送記錄頁的既有模式,直接開放 RLS,不需要另外的 RPC)。
+// SPECS-INDEX #778:PushLogsPage 是這支 hook 的第一個呼叫端。篩選條件比照 LINE 那頁的
+// 「事件類型」,另外多一個「只看沒發成功的」—— 老闆打開這一頁最常想問的就是這個。
 // =========================================================================
+export interface PushNotificationLogFilter {
+  /** null = 全部事件。 */
+  eventType: string | null;
+  /** true = 只看 status != 'sent' 的(部分成功 / 失敗 / 跳過)。 */
+  problemsOnly: boolean;
+}
+
 export async function fetchPushNotificationLog(
   merchantId: string,
+  filter: PushNotificationLogFilter,
   limit: number,
   offset: number,
 ): Promise<PushNotificationLogRow[]> {
-  const { data, error } = await supabase
-    .from("push_notification_log")
-    .select("*")
-    .eq("merchant_id", merchantId)
+  let query = supabase.from("push_notification_log").select("*").eq("merchant_id", merchantId);
+  if (filter.eventType) query = query.eq("event_type", filter.eventType);
+  if (filter.problemsOnly) query = query.neq("status", "sent");
+  const { data, error } = await query
     .order("attempted_at", { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw error;
@@ -302,12 +313,73 @@ export async function fetchPushNotificationLog(
 
 export function usePushNotificationLog(
   merchantId: string | null | undefined,
+  filter: PushNotificationLogFilter,
   page: number,
   pageSize = 20,
 ): UseQueryResult<PushNotificationLogRow[]> {
   return useQuery({
-    queryKey: ["push-notifications-module", "notification-log", merchantId, page, pageSize],
-    queryFn: () => fetchPushNotificationLog(merchantId as string, pageSize, page * pageSize),
+    queryKey: [
+      "push-notifications-module",
+      "notification-log",
+      merchantId,
+      filter.eventType,
+      filter.problemsOnly,
+      page,
+      pageSize,
+    ],
+    queryFn: () =>
+      fetchPushNotificationLog(merchantId as string, filter, pageSize, page * pageSize),
+    enabled: Boolean(merchantId),
+  });
+}
+
+/**
+ * #778:收件人名冊 —— log 只存 target_type + target_id,畫面要顯示「通知到誰」得自己查姓名。
+ * 三張表各查一次(只取 id / 姓名 / user_id),**任何一張查失敗或 RLS 讀不到都不算錯**:
+ * 客服沒有讀 merchant_admins 的權限是正常的,那就退回只顯示角色,不要讓整頁掛掉。
+ * user_id 一起帶回來,是為了辨認「同一個人的兩個身份」(pushLogView.collectSameUserNotes)。
+ */
+export async function fetchPushLogRecipientDirectory(
+  merchantId: string,
+): Promise<RecipientDirectory> {
+  const directory: RecipientDirectory = new Map();
+  const put = (
+    targetType: PushTargetType,
+    rows: { id: string; name: string | null; user_id: string | null }[] | null,
+  ) => {
+    for (const row of rows ?? []) {
+      const name = (row.name ?? "").trim();
+      if (!name) continue;
+      directory.set(recipientKey(targetType, row.id), { name, userId: row.user_id });
+    }
+  };
+
+  const [staff, agents, admins] = await Promise.all([
+    supabase.from("merchant_staff").select("id, name, user_id").eq("merchant_id", merchantId),
+    supabase.from("merchant_agents").select("id, name, user_id").eq("merchant_id", merchantId),
+    supabase
+      .from("merchant_admins")
+      .select("id, display_name, user_id")
+      .eq("merchant_id", merchantId),
+  ]);
+
+  if (!staff.error) put("staff", staff.data);
+  if (!agents.error) put("agent", agents.data);
+  if (!admins.error) {
+    put(
+      "admin",
+      (admins.data ?? []).map((a) => ({ id: a.id, name: a.display_name, user_id: a.user_id })),
+    );
+  }
+  return directory;
+}
+
+export function usePushLogRecipientDirectory(
+  merchantId: string | null | undefined,
+): UseQueryResult<RecipientDirectory> {
+  return useQuery({
+    queryKey: ["push-notifications-module", "log-recipient-directory", merchantId],
+    queryFn: () => fetchPushLogRecipientDirectory(merchantId as string),
     enabled: Boolean(merchantId),
   });
 }

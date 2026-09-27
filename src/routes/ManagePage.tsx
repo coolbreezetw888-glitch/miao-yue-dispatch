@@ -703,6 +703,16 @@ export default function ManagePage() {
       visible: showPushNotificationCard,
     },
     {
+      // SPECS-INDEX #778:推播發送記錄頁。權限鑰匙跟「推播通知設定」同一把(push_notification),
+      // 完全比照 LINE 那組「LINE 通知設定」「LINE 發送記錄」共用 line_notification 的既有模式。
+      key: "push-logs",
+      to: "/app/push-logs",
+      label: "推播發送記錄",
+      description: "查看每一次手機推播有沒有發成功;沒發成功的會用白話說明原因和該怎麼處理",
+      icon: History,
+      visible: showPushNotificationCard,
+    },
+    {
       key: "data-import",
       to: "/app/data-import",
       label: "資料匯入",
