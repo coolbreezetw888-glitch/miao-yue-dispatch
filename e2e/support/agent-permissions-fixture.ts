@@ -30,43 +30,14 @@
 //      需要有資料庫直接存取權限的人定期清理(SPECS-INDEX #638)。
 //   ③ 商家只能軟停用(規則 2.2:分店只能停用不能真刪除),客服只能軟移除
 //      (status='removed',規則 2.8)。
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
-// 🔴 SPECS-INDEX #714:新 fixture 一律 import 共用的 .env 解析器,**不要再手刻第 14 份**
-//    (既有 13 份區域 readEnvValue 的收斂本批刻意不做,理由見 env-file.ts 檔頭)。
-import { readRequiredEnvValue } from "./env-file";
 
 const FIXTURE_PURPOSE = "agent-permissions 這個 e2e 測試";
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readRequiredEnvValue("VITE_SUPABASE_URL", FIXTURE_PURPOSE);
-  const key = readRequiredEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY", FIXTURE_PURPOSE);
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
 
 export const AGENT_NAME_PREFIX = "E2E測試客服";
 
@@ -96,8 +67,8 @@ export async function setupAgentPermissionsFixture(): Promise<AgentPermissionsFi
   const agentEmail = `e2e-agentperm-agent-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eAgentPerm!${runId}Aa`;
 
-  const adminClient = createFixtureSupabaseClient();
-  const agentClient = createFixtureSupabaseClient();
+  const adminClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
+  const agentClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
 
   const { data: adminSignUp, error: adminSignUpErr } = await adminClient.auth.signUp({
     email: adminEmail,
@@ -215,7 +186,7 @@ export async function injectAgentPermissionsFixtureSession(
 export async function teardownAgentPermissionsFixture(
   fixture: AgentPermissionsFixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.adminSession.access_token,
     refresh_token: fixture.adminSession.refresh_token,

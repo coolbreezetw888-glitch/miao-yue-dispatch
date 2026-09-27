@@ -11,12 +11,10 @@
 // 這個 fixture 額外準備了 SPECS-INDEX 編號 485(品管打回重做的真實 bug)驗證所需的營業時間設定
 // (07 天全開,09:00-18:00,確保「整天排休」一定會產生跨 24:00 的邊界情況可以被觀察到)、
 // 一筆已完成訂單(供 10.2.4 行事曆兩種檢視 + 10.4.6 薪資報表跨視角一致性測試共用)。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 import {
@@ -26,49 +24,7 @@ import {
   toDateKey,
 } from "../../src/modules/booking/dateUtils";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(
-      `找不到 .env 裡的 ${key}——staff-portal-v2 這個 e2e 測試需要它來建立 fixture 資料。`,
-    );
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "staff-portal-v2 這個 e2e 測試";
 
 export const STAFF_NAME_PREFIX = "E2E服務人員v2測試";
 export const BOOKING_SUBTOTAL = 1000; // 自訂總金額,固定方便斷言(final_amount_snapshot/total_amount)。
@@ -135,8 +91,8 @@ export async function setupStaffPortalV2Fixture(): Promise<StaffPortalV2Fixture>
   const staffEmail = `e2e-staffportalv2-staff-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eStaffPortalV2!${runId}Aa`;
 
-  const adminClient = createFixtureSupabaseClient();
-  const staffClient = createFixtureSupabaseClient();
+  const adminClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
+  const staffClient = createFixtureSupabaseClient(FIXTURE_PURPOSE);
 
   const { data: adminSignUp, error: adminSignUpErr } = await adminClient.auth.signUp({
     email: adminEmail,
@@ -372,7 +328,7 @@ export async function injectAdminSession(page: Page, fixture: StaffPortalV2Fixtu
 export async function teardownStaffPortalV2Fixture(
   fixture: StaffPortalV2Fixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.adminSession.access_token,
     refresh_token: fixture.adminSession.refresh_token,

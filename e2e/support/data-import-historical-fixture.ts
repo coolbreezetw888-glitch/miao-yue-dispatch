@@ -3,56 +3,12 @@
 // 含步驟三數值對應:一個既有服務人員 + 一個當場建立的新服務人員)。
 //
 // 做法比照 e2e/support/data-import-members-fixture.ts。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(`找不到 .env 裡的 ${key}——這個 e2e 測試需要它來建立 fixture 資料。`);
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-export function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
 
 export interface DataImportHistoricalFixture {
   runId: string;

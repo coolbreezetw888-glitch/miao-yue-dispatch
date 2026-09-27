@@ -17,57 +17,15 @@
 // booking_commission_records/staff_salary_settings/leave_type_deduction_rules 等關聯資料),
 // 並用 SQL 查詢逐表確認歸零——這件事記錄在這次模組 8 的回報內容裡,不是這個檔案本身能自動做到的
 // (client 端的 anon/publishable key 權限不足以硬刪除 auth.users/merchants)。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { buildTaipeiIso, getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(`找不到 .env 裡的 ${key}——payroll 這個 e2e 測試需要它來建立 fixture 資料。`);
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "payroll 這個 e2e 測試";
 
 // #800(SPECS-INDEX,2026-09-28):測試資料的名稱前綴改成現行用語——「師傅」→「服務人員」、
 // 「按件(計酬)」→「抽成制」(2026-09-24 全站統一,對照 src/modules/payroll/billingReportDisplay.ts
@@ -162,7 +120,7 @@ export interface PayrollFixture {
  * 產生一筆抽成快照紀錄)+ 一位月薪制服務人員(登記一筆整天請假,產生扣款)。任何一步失敗就整個
  * 丟出例外,不留半套資料誤導判斷。 */
 export async function setupPayrollFixture(): Promise<PayrollFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const email = `e2e-payroll-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2ePayroll!${runId}Aa`;
@@ -440,7 +398,7 @@ export async function injectPayrollFixtureSession(
 /** 測試結束後盡量把 fixture 清乾淨(client 端 anon key 只能做到軟停用/軟移除,見檔案開頭說明,
  * 真正的硬刪除由本次交付流程用資料庫直接 SQL 存取權限另外處理並查證,見回報內容)。 */
 export async function teardownPayrollFixture(fixture: PayrollFixture): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,

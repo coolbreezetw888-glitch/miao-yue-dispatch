@@ -5,17 +5,14 @@
 //    不要再自己手刻一份 `.env` 解析,也不要直接寫 `process.env["X"]`。**
 //
 //    為什麼要立這條規則:2026-09-25 查證的結果是全 `e2e/` 有 **13 份逐字相同的區域
-//    `function readEnvValue`**(data-import-historical / data-import-history /
-//    data-import-members / industry-transfer / line-notifications / members /
-//    mobile-overflow / payroll / report-export / scheduling-leave / staff-portal /
-//    staff-portal-v2 這幾支 fixture,加上 supabase-storage-key.ts),解析邏輯一個字都不差,
-//    唯一差異只有 throw 出來的錯誤訊息中間那段描述。那 13 份**本批刻意不動**(每一支都會
-//    對正式資料庫建立資料,「把全部 e2e 跑一遍證明沒改壞」這個驗證方式不能用,風險大於收益,
-//    登記在 SPECS-INDEX #714 備註)。但**新增的檔案不要再變成第 14 份**——這條註解就是防呆。
-//
-//    ⚠️ 附帶未收斂的技術債(SPECS-INDEX #766,本批不做):
-//       `isNewSupabaseApiKey` / `buildFetch` / `createFixtureSupabaseClient` 這組三連發
-//       也各有 13 份逐字複製,收掉的價值比 `.env` 解析器更高,但驗證成本也更高。
+//    `function readEnvValue`**,解析邏輯一個字都不差,唯一差異只有 throw 出來的錯誤訊息中間那段描述。
+//    那 13 份在 #714 當批刻意不動(每一支都會對正式資料庫建立資料,「把全部 e2e 跑一遍證明沒改壞」
+//    這個驗證方式不能用)。
+//    ✅ **2026-09-28(SPECS-INDEX #766)**:其中 12 份 fixture 的區域 `readEnvValue` 已經隨著
+//       `isNewSupabaseApiKey` / `buildFetch` / `createFixtureSupabaseClient` 三連發一起收斂進
+//       e2e/support/fixture-supabase-client.ts(那組三連發本來就是 readEnvValue 唯一的呼叫端),
+//       fixture 現在全部走這裡的 readRequiredEnvValue。**剩下唯一一份區域解析器在
+//       e2e/support/supabase-storage-key.ts**(#714 範圍,本批不動)。
 // =========================================================================
 //
 // 為什麼需要這支:playwright.config.ts **刻意沒有掛 dotenv**,`package.json` 的 `test:e2e`
@@ -82,8 +79,9 @@ export function readOptionalEnvValue(key: string): string | undefined {
  * 🔴 **刻意的行為決定(規格書 §四 4.2 裁決)**:「`.env` 裡有這一行、但值是空字串」也算
  *    讀不到,一律 throw,**不回傳空字串**。理由:呼叫端全部拿它去組 Supabase URL / API key,
  *    空字串一路往下傳只會在更遠的地方爆出看不懂的錯。
- *    ⚠️ 這跟 13 份既有區域 `readEnvValue` 的行為有一處細微差異——那些在「有這一行但值是空的」
- *       時會回傳空字串。本批沒有改那 13 份,所以這個差異目前只影響新寫的呼叫端。 */
+ *    ⚠️ 這跟舊的區域 `readEnvValue` 的行為有一處細微差異——那些在「有這一行但值是空的」
+ *       時會回傳空字串。2026-09-28(#766)起 e2e fixture 全部改走這支,所以那個舊行為只剩
+ *       e2e/support/supabase-storage-key.ts 自己那一份還在。 */
 export function readRequiredEnvValue(key: string, purpose = "這個 e2e 測試"): string {
   const value = parseEnvValue(key);
   if (value === undefined) {

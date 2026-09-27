@@ -13,62 +13,15 @@
 // (規則:分店只能停用不能真刪除),teardown 只能做到軟停用/軟移除,底層資料列的真刪除需要有
 // 資料庫直接存取權限的人另外用 SQL 清除(這次交付驗收時已經用 Supabase 的直接 SQL 存取權限
 // 清乾淨並查證過,見交付報告)。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import { getTaipeiNow, toDateKey } from "../../src/modules/booking/dateUtils";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(
-      `找不到 .env 裡的 ${key}——scheduling-leave 這個 e2e 測試需要它來建立 fixture 資料。`,
-    );
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-// 比照 src/integrations/supabase/client.ts / mobile-overflow-fixture.ts 的做法:新格式
-// publishable key(sb_publishable_...)不是合法的 JWT,supabase-js 預設可能還是塞一個
-// `Authorization: Bearer <publishable key>` 標頭,要在真正送出的 fetch 裡拿掉。
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "scheduling-leave 這個 e2e 測試";
 
 export const STAFF_ON_LEAVE_NAME_PREFIX = "E2E測試請假師傅";
 export const STAFF_NORMAL_NAME_PREFIX = "E2E測試正常師傅";
@@ -96,7 +49,7 @@ export interface SchedulingLeaveFixture {
  * 一筆涵蓋「今天」的整天請假紀錄(月薪制那位)。回傳建立好的各項 id,供 spec 檔案在畫面上定位
  * 元素,也供 teardown 使用。任何一步失敗就整個丟出例外,不留半套資料誤導判斷。 */
 export async function setupSchedulingLeaveFixture(): Promise<SchedulingLeaveFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const email = `e2e-scheduling-leave-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eLeave!${runId}Aa`;
@@ -248,7 +201,7 @@ export async function injectSchedulingLeaveFixtureSession(
 export async function createStaffLeaveForCalendarTest(
   fixture: SchedulingLeaveFixture,
 ): Promise<void> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,
@@ -273,7 +226,7 @@ export async function createStaffLeaveForCalendarTest(
  * 這裡要驗證的是排班一覽頁面「畫面會不會正確反映最新狀態」這件事,呼叫跟前端相同的 RPC 已經
  * 足以驗證這一點)。 */
 export async function cancelFixtureLeave(fixture: SchedulingLeaveFixture): Promise<void> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,
@@ -289,7 +242,7 @@ export async function cancelFixtureLeave(fixture: SchedulingLeaveFixture): Promi
 export async function teardownSchedulingLeaveFixture(
   fixture: SchedulingLeaveFixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,

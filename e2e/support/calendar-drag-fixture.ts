@@ -35,10 +35,10 @@
 // `e2e-calendar-drag-` 開頭清楚標記)。teardown 全部是 **id-based**(`.eq("id", …)` / `.in("id", […])`),
 // 不靠名稱前綴篩選,比照 .claude/skills/automated-testing/SKILL.md 第五節的既有慣例。
 //
-// ⚠️ Supabase client 的建立(publishable key 要拿掉 Authorization 標頭那段)直接 import
-//    industry-transfer-fixture.ts 已經 export 的 createFixtureSupabaseClient,**刻意不再複製第 14 份**
-//    (SPECS-INDEX #766 的技術債:那組 buildFetch/createFixtureSupabaseClient 已經有 13 份逐字複製,
-//    主腦之後會單獨收斂成共用 helper;到時候只要改這一行 import)。
+// ⚠️ Supabase client 的建立(publishable key 要拿掉 Authorization 標頭那段)一律 import 共用的
+//    e2e/support/fixture-supabase-client.ts(SPECS-INDEX #766,2026-09-28 收斂完成)。這支檔案剛寫的時候
+//    是借用 industry-transfer-fixture.ts export 的那一份、刻意不複製第 14 份;收斂後改成跟其他 15 支一樣
+//    走共用 helper。
 import type { Page } from "@playwright/test";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 
@@ -48,7 +48,7 @@ import {
   getTaipeiNow,
   toDateKey,
 } from "../../src/modules/booking/dateUtils";
-import { createFixtureSupabaseClient } from "./industry-transfer-fixture";
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 

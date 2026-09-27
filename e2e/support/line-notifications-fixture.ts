@@ -17,12 +17,10 @@
 //      說明明確允許「mock Edge Function 回應」,這支雖然是 RPC 不是 Edge Function,但一樣是
 //      走 HTTP 呼叫,攔截方式相同,測的是前端收到這個回應之後的畫面邏輯,不是後端判斷邏輯本身
 //      ——後端判斷邏輯已經由 pgTAP/Deno 測試覆蓋,見規格書第七節)。
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import type { Page } from "@playwright/test";
 
+import { createFixtureSupabaseClient } from "./fixture-supabase-client";
 import { getSupabaseAuthStorageKey } from "./supabase-storage-key";
 import {
   addDays,
@@ -32,49 +30,7 @@ import {
 } from "../../src/modules/booking/dateUtils";
 import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function readEnvValue(key: string): string {
-  const envPath = resolve(__dirname, "../../.env");
-  const content = readFileSync(envPath, "utf-8");
-  const line = content
-    .split(/\r?\n/)
-    .find((l) => l.startsWith(`${key}=`) || l.startsWith(`${key} =`));
-  if (!line) {
-    throw new Error(
-      `找不到 .env 裡的 ${key}——line-notifications 這個 e2e 測試需要它來建立 fixture 資料。`,
-    );
-  }
-  const value = line.slice(line.indexOf("=") + 1).trim();
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function isNewSupabaseApiKey(value: string): boolean {
-  return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
-}
-
-function buildFetch(supabaseKey: string): typeof fetch {
-  return (input, init) => {
-    const headers = new Headers(init?.headers);
-    if (
-      isNewSupabaseApiKey(supabaseKey) &&
-      headers.get("Authorization") === `Bearer ${supabaseKey}`
-    ) {
-      headers.delete("Authorization");
-    }
-    headers.set("apikey", supabaseKey);
-    return fetch(input, { ...init, headers });
-  };
-}
-
-function createFixtureSupabaseClient(): SupabaseClient {
-  const url = readEnvValue("VITE_SUPABASE_URL");
-  const key = readEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY");
-  return createClient(url, key, {
-    global: { fetch: buildFetch(key) },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
+const FIXTURE_PURPOSE = "line-notifications 這個 e2e 測試";
 
 export const STAFF_NAME_PREFIX = "E2E測試LINE模組師傅";
 export const MEMBER_NAME_PREFIX = "E2E測試LINE模組會員";
@@ -94,7 +50,7 @@ export interface LineNotificationsFixture {
 /** 建立這次測試需要的全部 fixture 資料:一個新商家(刻意不串接 LINE,見檔案開頭說明)+
  * 一位服務人員 + 一個服務項目 + 一位會員(尚未綁定 LINE)。 */
 export async function setupLineNotificationsFixture(): Promise<LineNotificationsFixture> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const runId = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const email = `e2e-line-notif-please-ignore-${runId}@example-overflow-test-domain.test`;
   const password = `E2eLineNotif!${runId}Aa`;
@@ -206,7 +162,7 @@ export async function injectLineNotificationsFixtureSession(
 export async function getAuthedFixtureClient(
   fixture: LineNotificationsFixture,
 ): Promise<SupabaseClient> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,
@@ -285,7 +241,7 @@ export async function createPendingBooking(
 export async function teardownLineNotificationsFixture(
   fixture: LineNotificationsFixture,
 ): Promise<string[]> {
-  const client = createFixtureSupabaseClient();
+  const client = createFixtureSupabaseClient(FIXTURE_PURPOSE);
   const { error: sessionError } = await client.auth.setSession({
     access_token: fixture.session.access_token,
     refresh_token: fixture.session.refresh_token,
