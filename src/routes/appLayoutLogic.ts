@@ -305,6 +305,7 @@ const APP_HEADER_TITLE_RULES: AppHeaderTitleRule[] = [
   { pattern: "/app/line-marketing", title: "行銷通知" },
   // --- 推播通知(模組 15)---
   { pattern: "/app/push-events", title: "推播通知設定" },
+  { pattern: "/app/push-logs", title: "推播發送記錄" },
   // --- 資料工具(模組 12/13)---
   // ⚠️ /app/data-import/history 是 3 段、/app/data-import 是 2 段,段數不同不會互相吃掉,
   //    但還是把比較長的那條寫在前面,維持「越具體越前面」的閱讀習慣。
