@@ -175,6 +175,15 @@ export interface DispatchPushForBookingParams {
    * ⚠️ 之後如果要開放給管理員/客服,要改的就是呼叫端傳進來的這個旗標,不用動這支函式。
    */
   onlyStaffRecipients?: boolean;
+  /**
+   * SPECS-INDEX #823(2026-09-28):這筆訂單**被換掉的**主服務人員。只有 eventType === 'booking_updated'
+   * 時有意義。有帶、而且跟目前的主服務人員不同 → 原本那位也會收到一則「這筆單已經不是你的了」。
+   *
+   * 為什麼一定要由呼叫端帶進來(不是資料庫自己推導):這個專案的訂單**沒有編輯歷史表**
+   * (booking_status_change_logs 只記狀態變更;update_booking 直接 set staff_id = p_staff_id 覆蓋),
+   * 所以 Edge Function 執行的時候,舊的那位是誰在資料庫裡已經查不到了。
+   */
+  previousStaffId?: string | null;
 }
 
 export interface DispatchPushForBookingResult {
@@ -269,6 +278,41 @@ export function pickPayloadForDevice(recipientsOnThisDevice: PushRecipient[]): P
   return picked;
 }
 
+// =========================================================================
+// SPECS-INDEX #823:訂單被轉派之後,原本那位服務人員要收到「這筆單已經不是你的了」。
+//
+// 文字刻意用白話、寫給服務人員本人看,不是寫給工程師看:
+//   - 有查到接手的人 → 「這筆預約已改由 王小明 負責,已從你的行程移除」
+//   - 查不到(render_booking_notification_variables 的 staff_name 是空字串)→ 不要生出
+//     「已改由  負責」這種中間空一格的怪句子,改用不點名的版本。
+// =========================================================================
+export function buildReassignedAwaySummary(newStaffName: string | null | undefined): string {
+  const name = (newStaffName ?? "").trim();
+  if (!name) return "這筆預約已改派給其他服務人員,已從你的行程移除";
+  return `這筆預約已改由 ${name} 負責,已從你的行程移除`;
+}
+
+/**
+ * #823:把「已從你的行程移除」這句話套進商家自己設定的 booking_updated 文案。
+ *
+ * 正常情況(預設範本 `{{booking_date}} {{customer_name}}:{{change_summary}}`)只要把 change_summary
+ * 換成那句話就好。但商家可以自己改範本,如果他把 {{change_summary}} 拿掉了,套完之後那句話會
+ * 整個消失 —— 對接手的人來說少一句無妨(他還是知道這單是他的),對被換掉的人來說卻是整個重點
+ * 不見了,他會以為這單還是自己的。所以這裡多一道保險:套完之後找不到那句話,就補在最後一行。
+ */
+export function renderReassignedAwayBody(
+  template: string,
+  variables: Record<string, string>,
+  reassignedAwaySummary: string,
+): string {
+  const rendered = renderMessageTemplate(template, {
+    ...variables,
+    change_summary: reassignedAwaySummary,
+  });
+  if (rendered.includes(reassignedAwaySummary)) return rendered;
+  return rendered.trim() ? `${rendered}\n${reassignedAwaySummary}` : reassignedAwaySummary;
+}
+
 /**
  * 核心編排函式:規則 4.2(兩層開關)+ 4.3(endpoint 去重)+ 4.4(收件範圍)+ 4.5(異動摘要)+
  * 4.6(404/410 清除訂閱)+ 4.7/4.8/5.5(payload 依角色組裝)+ 2.4(逐收件人寫入
@@ -278,7 +322,8 @@ export async function dispatchPushForBooking(
   deps: PushDispatchDeps,
   params: DispatchPushForBookingParams,
 ): Promise<DispatchPushForBookingResult> {
-  const { merchantId, bookingId, eventType, changeSummary, onlyStaffRecipients } = params;
+  const { merchantId, bookingId, eventType, changeSummary, onlyStaffRecipients, previousStaffId } =
+    params;
 
   // ---------------------------------------------------------------------
   // §4.2 第 1 層:商家總開關。關 → 整件事跳過(行為跟改寫前完全一樣)。
@@ -309,9 +354,40 @@ export async function dispatchPushForBooking(
   // ---------------------------------------------------------------------
   const allRecipients = await deps.resolveRecipients(merchantId, eventType, bookingStaffId);
   // §5.4:排程提醒只發給服務人員(裁決 Q2)。這一行就是「之後要開放給管理員時要改的那一行」。
+  // 複製一份:下面 #823 可能會往這個清單 push 一個人,不要動到 deps 回傳的那個陣列本身。
   const recipients = onlyStaffRecipients
     ? allRecipients.filter((r) => r.target_type === "staff")
-    : allRecipients;
+    : [...allRecipients];
+
+  // ---------------------------------------------------------------------
+  // SPECS-INDEX #823:訂單被轉派時,原本那位主服務人員也要收到通知。
+  //
+  // 做法:拿 previousStaffId 再問一次 resolve_push_recipients,只取「staff 而且 target_id 就是他」
+  // 的那一列。這樣他要不要收,走的是**跟接手的人一模一樣**的門檻(訂閱了 booking_updated、個人開關
+  // 是開的、在職、可登入、有 user_id),不另外發明一套判斷,也不用改資料庫函式的簽章。
+  //
+  // 只在 booking_updated、而且他真的跟目前的主服務人員不是同一個人的時候做;排程提醒
+  // (onlyStaffRecipients)不會帶 previousStaffId,這裡也不處理。
+  // ---------------------------------------------------------------------
+  const recipientKey = (r: PushRecipient) => `${r.target_type}:${r.target_id}`;
+  let reassignedAwayRecipient: PushRecipient | null = null;
+  if (
+    eventType === "booking_updated" &&
+    previousStaffId &&
+    previousStaffId !== bookingStaffId &&
+    !recipients.some((r) => r.target_type === "staff" && r.target_id === previousStaffId)
+  ) {
+    const previousStaffCandidates = await deps.resolveRecipients(
+      merchantId,
+      eventType,
+      previousStaffId,
+    );
+    reassignedAwayRecipient =
+      previousStaffCandidates.find(
+        (r) => r.target_type === "staff" && r.target_id === previousStaffId,
+      ) ?? null;
+    if (reassignedAwayRecipient) recipients.push(reassignedAwayRecipient);
+  }
 
   // §4.2 第 3 點 / §5.2 第 3 點:被指派的服務人員如果自己關掉了這個事件,要補寫一列
   // personal_disabled。理由:這是商家最可能來問「為什麼阿明沒收到通知」的情境,記錄裡要看得出
@@ -379,6 +455,23 @@ export async function dispatchPushForBooking(
   const renderedBody = renderMessageTemplate(eventSetting.message_body, variables);
   const merchantName = variables["merchant_name"] ?? null;
 
+  // #823:被換掉的那位,內文跟其他人不一樣(其他人看到的是「服務人員改為 X」之類的異動摘要;
+  // 他看到的必須是「這筆單已經不是你的了」)。標題沿用商家設定的標題,不另外硬編一個。
+  // 其他收件人一律拿 renderedBody,所以這裡用「查不到就用預設」的方式,不動既有流程的任何一行。
+  const bodyOverrideByRecipientKey = new Map<string, string>();
+  if (reassignedAwayRecipient) {
+    bodyOverrideByRecipientKey.set(
+      recipientKey(reassignedAwayRecipient),
+      renderReassignedAwayBody(
+        eventSetting.message_body,
+        variables,
+        buildReassignedAwaySummary(variables["staff_name"]),
+      ),
+    );
+  }
+  const bodyFor = (recipient: PushRecipient): string =>
+    bodyOverrideByRecipientKey.get(recipientKey(recipient)) ?? renderedBody;
+
   // ---------------------------------------------------------------------
   // §13.4:站內通知中心(鈴鐺)。**位置是規格明文要求的**——「算出收件人清單、套完文案之後、
   //        實際呼叫 sendPush 之前」就寫入,而且完全不看發送結果:
@@ -402,7 +495,7 @@ export async function dispatchPushForBooking(
         event_type: eventType,
         booking_id: bookingId,
         title: renderedTitle,
-        body: renderedBody,
+        body: bodyFor(recipient),
       });
     } catch (err) {
       console.error("[push-dispatch] writeInAppNotification 失敗(推播照樣繼續)", err);
@@ -426,7 +519,6 @@ export async function dispatchPushForBooking(
   const devicesByEndpoint = new Map<string, DeviceEntry>();
   /** 每個收件人「自己名下」的 endpoint 清單(同一台裝置可能同時屬於兩個身份)。 */
   const endpointsByRecipientKey = new Map<string, string[]>();
-  const recipientKey = (r: PushRecipient) => `${r.target_type}:${r.target_id}`;
 
   for (const recipient of recipients) {
     const subs = subscriptionsByUser.get(recipient.target_user_id) ?? [];
@@ -450,7 +542,7 @@ export async function dispatchPushForBooking(
     const chosen = pickPayloadForDevice(entry.recipients) ?? entry.recipients[0];
     const result = await deps.sendPush(entry.subscription, {
       title: buildRecipientTitle(chosen.target_type, renderedTitle, merchantName),
-      body: renderedBody,
+      body: bodyFor(chosen),
       url: resolvePushUrlForTarget(chosen.target_type),
     });
     resultByEndpoint.set(endpoint, result);
@@ -484,7 +576,7 @@ export async function dispatchPushForBooking(
         success_count: 0,
         error_detail: null,
         rendered_title: renderedTitle,
-        rendered_body: renderedBody,
+        rendered_body: bodyFor(recipient),
       });
       continue;
     }
@@ -513,7 +605,7 @@ export async function dispatchPushForBooking(
       success_count: successCount,
       error_detail: status === "sent" ? null : lastErrorDetail,
       rendered_title: renderedTitle,
-      rendered_body: renderedBody,
+      rendered_body: bodyFor(recipient),
     });
   }
 

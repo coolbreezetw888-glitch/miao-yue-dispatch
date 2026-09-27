@@ -287,9 +287,42 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
    * 傳給 dispatchPushNotification。選填——不帶的話 booking_updated 事件的推播內文就不會替換
    * {{change_summary}} 變數(維持原樣顯示 {{change_summary}} 字面文字,不影響其他功能)。 */
   changeSummary?: string | null;
+  /**
+   * SPECS-INDEX #823:這次編輯**之前**的主服務人員 id,用來讓被換掉的那位也收到通知。
+   *   - 不帶(undefined):updateBooking 會在呼叫 RPC **之前**先讀一次 bookings.staff_id 當作舊值
+   *     (多一次很輕的查詢;讀失敗就當作不知道,絕不影響編輯本身)。
+   *   - 帶 null:明確表示「不要查、也不要通知舊的那位」。
+   *   - 帶字串:呼叫端已經知道舊值(例如編輯表單本來就有 editingDetail.staff_id),直接用,省掉那次查詢。
+   * 為什麼要在前端處理:訂單沒有編輯歷史表,RPC 一跑完舊值就查不到了(見 push-notifications/api.ts)。
+   */
+  previousStaffId?: string | null;
+}
+
+/**
+ * #823:在 update_booking 之前偷看一眼目前的主服務人員是誰。這一步**只是為了通知用**,
+ * 任何錯誤(RLS 擋下、網路失敗、查無此單)都吞掉回 null,絕不能讓編輯本身失敗。
+ */
+async function readCurrentBookingStaffId(bookingId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("staff_id")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (error) return null;
+    return (data as { staff_id?: string | null } | null)?.staff_id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function updateBooking(input: UpdateBookingInput): Promise<Booking> {
+  // #823:一定要在 RPC **之前**讀,RPC 一跑完 staff_id 就已經是新的了。
+  const previousStaffId =
+    input.previousStaffId !== undefined
+      ? input.previousStaffId
+      : await readCurrentBookingStaffId(input.bookingId);
+
   const { data, error } = await supabase.rpc("update_booking", {
     p_booking_id: input.bookingId,
     p_staff_id: input.staffId,
@@ -341,11 +374,14 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
   // 模組 15(服務人員推播通知)§7.8/§9:update_booking 目前完全沒有涵蓋任何通知疊加(模組 11
   // 沒有涵蓋這個事件),這次是第一次在這個 RPC 的前端呼叫點疊加通知。不等待、吞掉錯誤,絕不影響
   // 這裡原本的編輯成功結果。
+  // #823:主服務人員真的換人了,才把舊的那位帶給 Edge Function(沒換人就跟以前一模一樣)。
+  const staffWasReassigned = Boolean(previousStaffId) && previousStaffId !== booking.staff_id;
   dispatchPushNotification({
     merchantId: booking.merchant_id,
     bookingId: booking.id,
     eventType: "booking_updated",
     ...(input.changeSummary ? { changeSummary: input.changeSummary } : {}),
+    ...(staffWasReassigned && previousStaffId ? { previousStaffId } : {}),
   });
   return booking;
 }

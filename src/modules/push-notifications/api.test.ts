@@ -75,6 +75,45 @@ describe("dispatchPushNotification(規則 4.3 第 4 點/§8.1 本模組最重要
     });
   });
 
+  // SPECS-INDEX #823:被換掉的主服務人員 id 要以 previous_staff_id 送給 Edge Function。
+  it("#823:有帶 previousStaffId 時,body 多一個 previous_staff_id", async () => {
+    invokeMock.mockResolvedValue({ data: { dispatched: true }, error: null });
+    const dispatchPushNotification = await importDispatch();
+
+    dispatchPushNotification({
+      merchantId: "merchant-1",
+      bookingId: "booking-1",
+      eventType: "booking_updated",
+      changeSummary: "服務人員改為 王小明",
+      previousStaffId: "staff-old",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("push-notify-dispatch", {
+      body: {
+        merchant_id: "merchant-1",
+        booking_id: "booking-1",
+        event_type: "booking_updated",
+        change_summary: "服務人員改為 王小明",
+        previous_staff_id: "staff-old",
+      },
+    });
+  });
+
+  it("#823 正向對照:沒帶 previousStaffId 時,body 裡**沒有** previous_staff_id 這個 key(不是送 undefined)", async () => {
+    invokeMock.mockResolvedValue({ data: { dispatched: true }, error: null });
+    const dispatchPushNotification = await importDispatch();
+
+    dispatchPushNotification({
+      merchantId: "merchant-1",
+      bookingId: "booking-1",
+      eventType: "booking_updated",
+      changeSummary: "預約時間改為 09/26 15:00",
+    });
+
+    const body = invokeMock.mock.calls[0]?.[1]?.body as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(body, "previous_staff_id")).toBe(false);
+  });
+
   it("回傳值是 undefined(void),不是 Promise——呼叫端不可能 await 到任何東西", async () => {
     invokeMock.mockResolvedValue({ data: { dispatched: true }, error: null });
     const dispatchPushNotification = await importDispatch();
