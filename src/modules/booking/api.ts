@@ -11,6 +11,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { dispatchLineNotification } from "@/modules/line-notifications/api";
 import { dispatchPushNotification } from "@/modules/push-notifications/api";
+import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
+import type { MoveBookingInput, MoveBookingResult } from "./bookingDragMove";
+import { isoToTaipeiDateKey, isoToTaipeiTime } from "./dateUtils";
 import type {
   AmountAdjustmentMode,
   Booking,
@@ -384,6 +387,91 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(staffWasReassigned && previousStaffId ? { previousStaffId } : {}),
   });
   return booking;
+}
+
+// =========================================================================
+// SPECS-INDEX #814 #818:行事曆拖拉專用的「移動預約」(規格書 行事曆拖拉改時間與轉派.md §3.2)。
+// 只碰 staff_id / start_at / end_at / booking_assistants.staff_id,不走 24 參數的 update_booking。
+// 型別直接用 bookingDragMove.ts 的 MoveBookingInput / MoveBookingResult,不在這裡再宣告一份。
+// =========================================================================
+
+/**
+ * ⚠️ 過渡寫法(等 migration 20260928010000_move_booking.sql 套用到正式庫、types.ts 重新產生之後,
+ *    請改回一般的 `supabase.rpc("move_booking", …)`,並刪掉這段——做法跟 #801 當時一模一樣):
+ *    src/integrations/supabase/types.ts 是由正式庫產生的,新函式還沒套用就不會出現在裡面。
+ *    這裡把 rpc 收窄成一個最小的函式型別,只是為了通過型別檢查,執行期跟一般的 supabase.rpc 完全相同。 */
+type PendingMoveBookingRpc = (
+  fn: "move_booking",
+  args: Record<string, unknown>,
+) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>;
+
+export interface MoveBookingNotifyContext {
+  /** 目標服務人員的姓名,只用來組推播的「服務人員改為 OOO」文案;沒帶就用通用文案。 */
+  targetStaffName?: string | null;
+}
+
+/**
+ * 呼叫 `public.move_booking`,成功後比照 updateBooking() fire-and-forget 送 booking_updated 推播。
+ *
+ * 推播文案(§3.2):用既有的 computeBookingChangeSummary(),**不改那支共用函式**:
+ *   - mode=time                      → 只有時間變 → 「預約時間改為 09/28 14:30」
+ *   - mode=reassign_main(同高度)   → 只有主服務人員變 → 「服務人員改為 王大明」
+ *   - mode=reassign_main + 斜拖      → 時間與人都變 → 既有函式的通用文案(它對多項異動本來就不逐一列出)
+ *   - mode=reassign_assistant        → previous/next 的 staff_id 與 start_at 都一樣 → 通用文案
+ *                                      (既有函式沒有「助手改為」這種文案,規格書 §十三 明寫不為此改它)
+ *
+ * 🔴 #823 交接:「轉派後也通知**原本**那位服務人員」的機制是呼叫端把 previousStaffId 帶進推播。
+ *    updateBooking() 會自己在 RPC 之前先讀一次舊值;這裡不走 updateBooking,所以要**自己帶**——
+ *    move_booking 的回傳有 previous.staff_id,直接用它。只有主服務人員真的換人時才帶
+ *    (reassign_assistant 雖然 staff_changed=true,但換的是助手,主服務人員沒變,帶了會讓 Edge Function
+ *    誤發「已從你的行程移除」給還在單上的主服務人員)。
+ *
+ * 復原(再呼叫一次這支函式)也會送推播,理由見規格書 §3.2:服務人員手機上剛收到「改到 15:00」,
+ * 幾秒後改回 14:00,他必須知道。
+ */
+export async function moveBooking(
+  input: MoveBookingInput,
+  ctx: MoveBookingNotifyContext = {},
+): Promise<MoveBookingResult> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as PendingMoveBookingRpc;
+  const { data, error } = await rpc("move_booking", {
+    p_booking_id: input.bookingId,
+    p_dragged_staff_id: input.draggedStaffId,
+    p_target_staff_id: input.targetStaffId,
+    p_target_start_at: input.targetStartAt,
+    p_expected_start_at: input.expectedStartAt,
+    p_expected_staff_id: input.expectedStaffId,
+  });
+  if (error) throw error;
+  const result = data as MoveBookingResult;
+
+  const merchantId = result.booking["merchant_id"];
+  if (typeof merchantId === "string" && merchantId) {
+    const changeSummary = computeBookingChangeSummary({
+      original: {
+        startAt: result.previous.start_at,
+        serviceItemIds: [],
+        staffId: result.previous.staff_id,
+      },
+      next: {
+        startAt: result.next.start_at,
+        serviceItemIds: [],
+        staffId: result.next.staff_id,
+        staffName: ctx.targetStaffName ?? null,
+        formattedStartAt: `${isoToTaipeiDateKey(result.next.start_at)} ${isoToTaipeiTime(result.next.start_at)}`,
+      },
+    });
+    // #823:主服務人員真的換人了才帶舊的那位(見上方說明)。
+    const mainStaffReassigned = result.previous.staff_id !== result.next.staff_id;
+    dispatchPushNotification({
+      merchantId,
+      bookingId: result.booking.id,
+      eventType: "booking_updated",
+      changeSummary,
+      ...(mainStaffReassigned ? { previousStaffId: result.previous.staff_id } : {}),
+    });
+  }
+  return result;
 }
 
 /** 模組 9(支付方式)v2:單獨更新付款方式,不需要傳服務項目/金額等其餘欄位。 */

@@ -109,6 +109,14 @@ import {
 } from "./dateUtils";
 // 2026-09-24 稽核修正(問題 5):時段清單要排除整天請假/單日排休,計算邏輯抽成純函式方便測試。
 import { buildBookingSlotOptions } from "./bookingSlotOptions";
+// SPECS-INDEX #811~#817:行事曆拖拉改時間/轉派的接線層(色塊手勢、殘影、toast/復原、過去時間確認框),
+// 模式判定與落點計算的純邏輯在 bookingDragMove.ts,這個檔案只傳資料、不重複實作任何規則。
+import {
+  BookingDragGhost,
+  DraggableBookingBlock,
+  PastDropConfirmDialog,
+  useCalendarBookingDrag,
+} from "./calendarBookingDrag";
 // 2026-09-24 稽核修正(問題 1):數量欄位清空時三處 fallback 不一致(畫面顯示 $0、實際送出全額),
 // 統一走這支共用解析函式,見該檔案開頭的完整說明。
 import { parseItemQuantity } from "./itemQuantity";
@@ -136,8 +144,10 @@ import {
   type ServiceItemCategoryFilter,
 } from "./types";
 
-const SLOT_MINUTES = 30;
-const SLOT_PX = 30;
+// SPECS-INDEX #811(行事曆拖拉):這兩個格線常數改成 export,拖拉的落點計算(bookingDragMove.ts
+// computeDropTarget)與 Playwright 座標計算都要用同一組數字,不在別處再抄一份。
+export const SLOT_MINUTES = 30;
+export const SLOT_PX = 30;
 
 /** 建單與訂單管理介面優化 §3:付款方式下拉選單的「(未選擇/尚未設定)」sentinel 值。 */
 const PAYMENT_METHOD_UNSET = "__unset__";
@@ -1307,7 +1317,9 @@ export function BookingFormDialog({
 // 邊界情況(拖曳到格子外面才放開):該格子收不到 pointerup,選單不會開啟——這正是想要的行為;
 // 而且下一次重新按下時 onPointerDown 會重設狀態、放開時 onPointerUp 會直接 setOpen(true),
 // 不會被上一次殘留的攔截旗標卡住(見 onPointerUp 的實作)。
-const SLOT_TAP_VS_DRAG_THRESHOLD_PX = 10;
+// SPECS-INDEX #812:拖拉色塊的「點擊 vs 拖曳」閾值沿用這個數字(export 給 useCalendarBookingDrag 傳進
+// useBookingDragState),不另外定義第二個閾值。
+export const SLOT_TAP_VS_DRAG_THRESHOLD_PX = 10;
 
 /** 這裡指的「指標事件」只取用 pointerType/clientX/clientY 三個欄位,故意不寫成
  * `React.PointerEvent`——這樣 Vitest 測試(touchTapVsDragOpen.test.ts)可以直接傳一般物件
@@ -1623,6 +1635,21 @@ function CalendarPageInner() {
   const gridStartMin = slots.length > 0 ? timeToMinutes(slots[0]!.start) : 0;
   const gridTotalPx = slots.length * SLOT_PX;
 
+  // SPECS-INDEX #811~#817:拖拉控制器。格線常數與 #641 的閾值從這裡傳進去(bookingDragMove.ts 不自己定義數字);
+  // 成功/40001 之後用既有的 refetchAll 重抓;點一下(≤ 閾值)開詳情沿用 setDetailBookingId。
+  const dragController = useCalendarBookingDrag({
+    dateKey: selectedDateKey,
+    staffBlocks: schedule?.staff,
+    staffNameById,
+    gridStartMin,
+    slotCount: slots.length,
+    slotMinutes: SLOT_MINUTES,
+    slotPx: SLOT_PX,
+    thresholdPx: SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+    onOpenDetail: setDetailBookingId,
+    onMoved: refetchAll,
+  });
+
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1766,7 +1793,17 @@ function CalendarPageInner() {
             : "商家這天公休,無法建立預約。"}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <div
+          // #811:捲動容器同時是拖拉的格線根節點——原生 touchmove 攔截(只在 dragging 才 preventDefault)
+          // 與靠邊自動橫向捲動都掛在它身上;§5.9 committing 期間整個格線 pointer-events-none。
+          ref={dragController.setGridRoot}
+          data-testid="calendar-day-grid"
+          data-drag-phase={dragController.phase}
+          className={cn(
+            "overflow-x-auto rounded-md border border-border",
+            dragController.isCommitting && "pointer-events-none",
+          )}
+        >
           <div className="flex min-w-[640px]">
             <div className="flex w-[72px] shrink-0 flex-col">
               <div className="flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground">
@@ -1789,7 +1826,17 @@ function CalendarPageInner() {
               <div
                 key={s.staff_id}
                 data-testid={`staff-column-${s.staff_id}`}
-                className="relative flex-1 border-r border-border last:border-r-0"
+                data-drop-target={
+                  dragController.highlightedStaffId === s.staff_id ? "true" : undefined
+                }
+                className={cn(
+                  "relative flex-1 border-r border-border last:border-r-0",
+                  // §5.4:拖拉中游標下方的欄位加 ring;forbidden 時換成警示色。
+                  dragController.highlightedStaffId === s.staff_id &&
+                    (dragController.highlightForbidden
+                      ? "ring-2 ring-inset ring-destructive"
+                      : "ring-2 ring-inset ring-brand"),
+                )}
               >
                 <div className="flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
                   <span className="truncate">{s.staff_name}</span>
@@ -1802,7 +1849,14 @@ function CalendarPageInner() {
                     </span>
                   ) : null}
                 </div>
-                <div className="relative" style={{ height: gridTotalPx }}>
+                <div
+                  className="relative"
+                  style={{ height: gridTotalPx }}
+                  // #811:這一層是「第 0 格頂端」所在的元素,拖拉落點計算(computeDropTarget)用它的
+                  // getBoundingClientRect 當 gridTopClientY 與欄位左右邊界;Playwright 也用這個 testid 算座標。
+                  data-drag-column={s.staff_id}
+                  data-testid={`staff-grid-${s.staff_id}`}
+                >
                   {/* 模組 7 §4.5:請假整天,整欄改成不可點擊建單——不進入下面複雜的背景格線/
                       DropdownMenu 邏輯,直接渲染一個涵蓋全高的區塊。既有的預約(s.bookings)
                       仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己判斷處理
@@ -1963,23 +2017,21 @@ function CalendarPageInner() {
                       SLOT_PX / 2,
                       ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX,
                     );
+                    // #811~#817:色塊改成 DraggableBookingBlock(calendarBookingDrag.tsx)。原本這裡的
+                    // onClick={() => setDetailBookingId(b.id)} 已拿掉——可拖的色塊改由手勢 hook 判定
+                    // 「≤ 閾值就放開 = 點擊」才開詳情,否則拖完放開瀏覽器補發的 click 會把詳情彈出來。
                     return (
-                      <button
+                      <DraggableBookingBlock
                         key={b.id}
-                        type="button"
-                        onClick={() => setDetailBookingId(b.id)}
-                        className="absolute inset-x-0 z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
+                        booking={b}
+                        staffId={s.staff_id}
                         style={{
                           top,
                           height,
                           ...bookingBlockStyle(effectiveStatusColors, b.status),
                         }}
-                      >
-                        <p className="truncate font-medium">
-                          {b.customer_name}
-                          {b.role === "assistant" ? "(協助)" : ""}
-                        </p>
-                      </button>
+                        controller={dragController}
+                      />
                     );
                   })}
                 </div>
@@ -1988,6 +2040,13 @@ function CalendarPageInner() {
           </div>
         </div>
       )}
+
+      {/* #811 殘影(position: fixed,放在捲動容器外面,不被 overflow 裁切);#816 過去時間確認框。 */}
+      <BookingDragGhost ghost={dragController.ghost} />
+      <PastDropConfirmDialog
+        request={dragController.pastConfirm}
+        onResolve={dragController.resolvePastConfirm}
+      />
 
       <BookingFormDialog
         merchantId={merchantId}
