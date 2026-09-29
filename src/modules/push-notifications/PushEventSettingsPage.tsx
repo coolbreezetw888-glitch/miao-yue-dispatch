@@ -3,17 +3,35 @@
 // 勾選——通知對象永遠是這筆訂單指定的服務人員本人)+ §13.1(SPECS-INDEX #586)補上的
 // 「可用變數說明 + 即時預覽」,複用模組 11 §4.2/§385/§10.1 既有的 TemplateVariablePreview
 // 共用元件,標題/內文分開兩段預覽(對應 §13.1 邊界情況,推播內文比 LINE 訊息更寸土寸金)。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill,做法與 LINE 通知事件設定頁
+// (LineEventSettingsPage)刻意一致 —— 兩頁長得一樣、使用者的心智模型才一樣。
+//   - 頁首改 PageHeader;載入中改灰色骨架(二之八)。
+//   - 每張卡的總開關改 SwitchRow(二之七)。
+//   - 標題 / 內文改 FormField + FieldInput / FieldTextarea;「建議 N 字以內」原本混在同一行
+//     小字裡,現在字數改用 FormField 的 counter(右上角 `12 / 40`),建議字數與「超出會被截斷」
+//     的理由收進 `?`(二之七 + 二)。
+//   - 「可用變數」改成三欄說明表 + 「服務人員實際會收到」預覽框(二之七,做在共用元件裡)。
+//   - 儲存按鈕改 ② 次要:一頁 4 張一樣的事件卡,每張放一顆 primary 等於一頁 4 顆主要按鈕,
+//     違反二之三「一個畫面只能有一顆」。
+//
+// **只動外觀,不動行為**:儲存送出的欄位、maxLength(標題 40 / 內文 120)、事件清單、
+// toast 文案、data-testid 全部照舊。
 
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent } from "@/components/ui/card";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -23,7 +41,11 @@ import { TemplateVariablePreview } from "@/modules/line-notifications/TemplateVa
 
 import { updatePushEventSetting, useMerchantPushEventSettings } from "./api";
 import { RequirePushNotificationAccess } from "./RequirePushNotificationAccess";
-import { getPushTemplateVariableDefinitions, previewPushTemplate } from "./templateVariables";
+import {
+  getPushTemplateVariableDefinitions,
+  previewPushTemplate,
+  PUSH_TEMPLATE_PREVIEW_SAMPLE_VALUES,
+} from "./templateVariables";
 import {
   PUSH_NOTIFICATION_EVENT_LABELS,
   PUSH_NOTIFICATION_EVENT_TYPES,
@@ -86,51 +108,75 @@ function EventSettingCard({
     }
   }
 
+  const titleFieldId = `push-event-title-${eventType}`;
+  const bodyFieldId = `push-event-body-${eventType}`;
+
   return (
     <Card data-testid={`push-event-card-${eventType}`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle>{PUSH_NOTIFICATION_EVENT_LABELS[eventType]}</CardTitle>
-          <CardDescription>{form.enabled ? "推播已開啟" : "推播目前關閉"}</CardDescription>
-        </div>
-        <Switch checked={form.enabled} onCheckedChange={(v) => setField("enabled", v)} />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <p className="mb-1 text-sm font-medium text-foreground">通知標題</p>
-          <Input
+      <CardContent className="flex flex-col gap-4 pt-6">
+        {/* skill 二之七:開關做成一整列 —— 左邊標題 + 一行說明,右邊開關。 */}
+        <SwitchRow
+          title={PUSH_NOTIFICATION_EVENT_LABELS[eventType]}
+          description={
+            form.enabled
+              ? "推播已開啟,符合條件時會推播給這筆訂單指定的服務人員。"
+              : "推播目前關閉,這類事件不會發出任何推播。"
+          }
+          checked={form.enabled}
+          onCheckedChange={(v) => setField("enabled", v)}
+        />
+
+        <FormField
+          label="通知標題"
+          htmlFor={titleFieldId}
+          counter={{ value: form.messageTitle.length, max: 40 }}
+          help="建議 20 字以內。手機的通知列顯示空間有限,超出的部分會被系統自己截掉,寫再多對方也看不到。"
+          helpLabel="說明:通知標題建議寫多長"
+        >
+          <FieldInput
+            id={titleFieldId}
             value={form.messageTitle}
             onChange={(e) => setField("messageTitle", e.target.value)}
             maxLength={40}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            建議 20 字以內({form.messageTitle.length}{" "}
-            字)——手機通知顯示空間有限,超出的部分會被系統截斷。
-          </p>
-        </div>
+        </FormField>
 
-        <div>
-          <p className="mb-1 text-sm font-medium text-foreground">通知內文</p>
-          <Textarea
+        <FormField
+          label="通知內文"
+          htmlFor={bodyFieldId}
+          counter={{ value: form.messageBody.length, max: 120 }}
+          help="建議 50 字以內。手機的通知列空間比標題還少,超出的部分會被系統自己截掉。"
+          helpLabel="說明:通知內文建議寫多長"
+        >
+          <FieldTextarea
+            id={bodyFieldId}
             rows={2}
             value={form.messageBody}
             onChange={(e) => setField("messageBody", e.target.value)}
             maxLength={120}
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            建議 50 字以內({form.messageBody.length}{" "}
-            字)——手機通知列空間有限,超出的部分會被系統截斷。
-          </p>
-          <TemplateVariablePreview
-            variables={getPushTemplateVariableDefinitions(eventType)}
-            previews={[
-              { label: "標題", text: previewPushTemplate(form.messageTitle) },
-              { label: "內文", text: previewPushTemplate(form.messageBody) },
-            ]}
-          />
-        </div>
+        </FormField>
 
-        <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+        {/* skill 二之七:變數說明要完整(三欄:變數 / 中文意思 / 範例值)+ 預覽框。
+            標題與內文分開兩段預覽(§13.1 邊界情況)。 */}
+        <TemplateVariablePreview
+          variables={getPushTemplateVariableDefinitions(eventType)}
+          sampleValues={PUSH_TEMPLATE_PREVIEW_SAMPLE_VALUES}
+          recipientLabel="服務人員"
+          previews={[
+            { label: "標題", text: previewPushTemplate(form.messageTitle) },
+            { label: "內文", text: previewPushTemplate(form.messageBody) },
+          ]}
+        />
+
+        <Button
+          type="button"
+          variant="neutral"
+          size="touch"
+          className="self-start"
+          disabled={saving}
+          onClick={handleSave}
+        >
           {saving ? "儲存中⋯" : "儲存"}
         </Button>
       </CardContent>
@@ -153,22 +199,14 @@ function PushEventSettingsPageInner() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">推播通知設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          設定服務人員的手機/瀏覽器推播通知要不要開啟、文案內容。通知對象固定是這筆訂單指定的服務
-          人員本人,不會通知管理員/客服/會員。服務人員需要自己在個人頁面開啟通知(這裡只控制要不要
-          發送)。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="推播通知設定"
+        description="設定服務人員的手機/瀏覽器推播通知要不要開啟、文案內容。通知對象固定是這筆訂單指定的服務人員本人,不會通知管理員/客服/會員。服務人員需要自己在個人頁面開啟通知(這裡只控制要不要發送)。"
+      />
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="cards" rows={3} />
       ) : (
         <div className="space-y-4">
           {PUSH_NOTIFICATION_EVENT_TYPES.map((eventType) => {

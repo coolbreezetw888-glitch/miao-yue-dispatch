@@ -72,14 +72,20 @@ describe("PushLogsPage(#778)", () => {
   afterEach(() => cleanup());
 
   it("載入中 / 空狀態", () => {
+    // ui-v1-full 第 3 批:載入中改成灰色骨架方塊(skill 二之八,不用「載入中⋯」四個字),
+    // 空狀態改成 EmptyState(圖示 + 還沒有什麼 + 有了之後能幹嘛 + 一顆下一步按鈕)。
+    // 要守的事情沒變:載入中不可以先顯示空狀態、空的時候要講清楚現在是空的。
     setLogs(undefined, true);
     render(<PushLogsPage />);
-    expect(screen.getByText("載入中⋯")).toBeInTheDocument();
+    expect(screen.queryByText("載入中⋯")).not.toBeInTheDocument();
+    expect(screen.queryByText("還沒有任何發送記錄")).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId("push-log-group")).toHaveLength(0);
     cleanup();
 
     setLogs([]);
     render(<PushLogsPage />);
-    expect(screen.getByText("目前沒有任何發送記錄。")).toBeInTheDocument();
+    expect(screen.getByText("還沒有任何發送記錄")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "去看推播通知設定" })).toBeInTheDocument();
   });
 
   it("核心:沒發成功的那一列,直接看得到白話原因與「可以怎麼做」,畫面上沒有英文代碼", () => {
