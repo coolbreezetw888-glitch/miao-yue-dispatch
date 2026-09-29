@@ -11,28 +11,51 @@
 // §10.4(SPECS-INDEX #616)黑名單警告:客服點選一位 is_blacklisted=true 的既有客戶「當下」立即跳
 // 警告 toast,純警告不擋單——這裡是唯一需要判斷黑名單的地方,因為 get_members_by_phone 的查詢
 // 結果本來就附帶 is_blacklisted/blacklist_reason。
+//
+// ui-v1-full 第 3 批(2026-09-30,盤點 #32「建立正式會員」小卡窗):套用 ui-overlay-patterns skill。
+//   - 🔴 QuickCreateMemberDialog 改用小卡窗殼 CardDialog(三、兩種窗 → 小卡窗:3 欄短表單)。
+//     這是 skill 三「兩層重疊」點名的那一個畫面 —— **全頁層(建單表單)上面再疊一個小卡窗**,
+//     兩層遮罩會相加。CardDialog 用的遮罩是 foreground/40(不是 shadcn 預設的 bg-black/80),
+//     疊兩層約 64%,所以不會整個畫面變全黑;寬度 / 圓角 / 白邊全部由殼決定,
+//     頁面**不再自己寫 max-w-sm**(盤點報告指出「每個彈窗寬度各自手寫」就是大小不一的根因)。
+//   - 三個欄位改 FormField + FieldInput / FieldDate,姓名必填用紅色 `*`;
+//     「電話是選填」這種「怎麼填」的說明收進 `?`(二 + 二之七)。
+//   - 「建立並連結」是這顆小卡窗唯一的 ① 主要按鈕,旁邊補一顆「取消」(原本只有一顆送出鈕,
+//     手機上沒有明顯的退出點;小卡窗按鈕列手機左右各半、電腦靠右,由殼統一)。
+//   - 候選客戶列表:每一列做成 44px 的可點列(一、核心原則的觸控目標),
+//     黑名單標記由 Badge variant="destructive" 改成 StatusTag tone="danger"(二之四)。
+//   - 「清除連結」是可逆動作 ⇒ 不標紅,用 ② 次要(第 1 / 2 批已定案的裁決)。
+//
+// **只動外觀,不動行為**:電話查詢時機、選中黑名單客戶當下跳警告 toast(純警告不擋單)、
+// 建立會員的驗證(姓名必填、電話選填但填了要合格式)、建立後自動選中並收起面板全部照舊。
+// e2e/members.spec.ts 依賴的「已連結會員:」文字與「清除連結」按鈕名稱維持不變。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  FieldDate,
+  FieldInput,
+  FormField,
+  StatusTag,
+} from "@/components/patterns";
+import { Button } from "@/components/ui/button";
 
 import { isValidTaiwanPhone, TW_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { createMemberQuick, useMembersByPhone } from "./api";
 import type { MemberPhoneMatchCandidate } from "./types";
+
+/** 小卡窗的按鈕列在 <form> 外面(位置由殼決定),所以送出鈕要用 form= 指回這個 id。 */
+const QUICK_CREATE_FORM_ID = "quick-create-member-form";
 
 export interface SelectedMember {
   id: string;
@@ -106,51 +129,65 @@ function QuickCreateMemberDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>建立正式會員</DialogTitle>
-          <DialogDescription>
+    <CardDialog open={open} onOpenChange={onOpenChange}>
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>建立正式會員</CardDialogTitle>
+          <CardDialogDescription>
             電話已經帶入,確認或修改姓名後送出,會直接建立正式會員並連結到這筆訂單。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="quick-member-name">姓名 *</Label>
-            <Input
+          </CardDialogDescription>
+        </CardDialogHeader>
+        <form onSubmit={handleSubmit} id={QUICK_CREATE_FORM_ID} className="flex flex-col gap-3.5">
+          <FormField label="姓名" htmlFor="quick-member-name" required>
+            <FieldInput
               id="quick-member-name"
-              className="mt-2"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </div>
-          <div>
-            <Label htmlFor="quick-member-phone">電話</Label>
-            <Input
+          </FormField>
+          <FormField
+            label="電話"
+            htmlFor="quick-member-phone"
+            help="電話是選填,留空也可以建立會員。要填的話手機或市話都可以(例如 0912345678 或 02-12345678)。"
+            helpLabel="說明:會員電話要不要填、格式是什麼"
+          >
+            <FieldInput
               id="quick-member-phone"
-              className="mt-2"
+              type="tel"
+              inputMode="tel"
+              className="tabular-nums"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
             />
-          </div>
-          <div>
-            <Label htmlFor="quick-member-birthday">生日</Label>
-            <Input
+          </FormField>
+          <FormField label="生日" htmlFor="quick-member-birthday">
+            <FieldDate
               id="quick-member-birthday"
-              type="date"
-              className="mt-2"
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
             />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "建立中⋯" : "建立並連結"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        {/* 按鈕列在 form 外面、用 form= 屬性送出:小卡窗的按鈕列位置由殼決定(手機左右各半、
+            電腦靠右),不能塞在 form 裡自己排。 */}
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={QUICK_CREATE_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={saving}
+          >
+            {saving ? "建立中⋯" : "建立並連結"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -195,11 +232,18 @@ export function MemberPhoneMatchPanel({
 
   if (selectedMember) {
     return (
-      <div className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm">
-        <span className="text-foreground">
+      <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+        <span className="min-w-0 break-words text-foreground">
           <span className="text-muted-foreground">已連結會員:</span> {selectedMember.name}
         </span>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onSelectMember(null)}>
+        {/* 可逆動作(清掉之後可以再選一次)⇒ 不標紅,用 ② 次要。 */}
+        <Button
+          type="button"
+          variant="neutral"
+          size="card"
+          className="shrink-0"
+          onClick={() => onSelectMember(null)}
+        >
           清除連結
         </Button>
       </div>
@@ -213,38 +257,42 @@ export function MemberPhoneMatchPanel({
   const list = candidates ?? [];
 
   return (
-    <div className="rounded-md border border-border p-2">
-      <p className="mb-1.5 text-xs text-muted-foreground">
+    <div className="rounded-md border border-border bg-muted/20 p-2">
+      <p className="mb-1.5 px-1 text-xs leading-relaxed text-muted-foreground">
         {list.length > 0
           ? "這支電話有既有客戶紀錄,選擇要連結的客戶,或視為新客戶:"
           : "這支電話目前沒有既有客戶紀錄:"}
       </p>
-      <ul className="space-y-1">
+      <ul className="flex flex-col gap-1">
         {list.map((c) => (
           <li key={c.memberId}>
+            {/* 每一列是 44px 的可點列(觸控目標,skill 一);兩側都是動態文字,都要能折行。 */}
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted"
+              className="flex min-h-11 w-full cursor-pointer flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md bg-background px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => handleSelectCandidate(c)}
             >
-              <span className="flex items-center gap-1.5">
-                {c.name}
-                {c.isBlacklisted ? <Badge variant="destructive">黑名單</Badge> : null}
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="break-words">{c.name}</span>
+                {c.isBlacklisted ? <StatusTag tone="danger">黑名單</StatusTag> : null}
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                 {formatLastBookingDate(c.lastBookingDate)}
               </span>
             </button>
           </li>
         ))}
-        <li className="px-2 py-1.5">
-          <button
+        <li>
+          {/* ④ 純文字:很次要的動作,不搶版面(skill 二之三)。 */}
+          <Button
             type="button"
-            className="text-sm text-brand hover:underline"
+            variant="text"
+            size="card"
+            className="w-full justify-start"
             onClick={() => setQuickCreateOpen(true)}
           >
             + 這支電話的新客戶
-          </button>
+          </Button>
         </li>
       </ul>
 

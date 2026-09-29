@@ -60,24 +60,44 @@
 //     代價是只有 members、沒有 member_points 的客服打開這頁會看到一個沒有卡片的畫面,所以補了
 //     一段說明文字告訴他規則設定需要什麼權限、交易功能現在在哪裡。要不要連守衛/功能卡片一起改,
 //     屬於權限調整,留給主腦/使用者另外裁決。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;載入中改灰色骨架(二之八)。
+//   - 🔴「目前紅利點數功能已關閉…」改成 🟡 常駐 `!`(AlertNote)。skill 二的表格裡,
+//     「功能已關閉,資料不會被清空」就是「現在的狀態跟使用者以為的不一樣」這一類的原始例子。
+//   - 🔴「電話已驗證只是人工標記,不是真的簡訊驗證」也改成常駐 `!`:商家會以為這個選項能擋掉
+//     用假電話註冊的人,那正是「現在的狀態跟使用者以為的不一樣」。原本只是 CardDescription 裡
+//     一段黃色粗體字,混在說明裡很容易被跳過。
+//   - 「啟用紅利點數功能」改 SwitchRow(二之七),長說明拆成一行摘要 + 一條常駐 `!`
+//     (「關閉後系統不再自動給點數」是 skill 二點名的第二類:按下去會發生什麼不可逆的事)。
+//   - 三個數字欄位改 FormField + FieldInput;🔴 拿掉 `type="number"`(手機滑動與桌機滾輪經過
+//     都會誤改數字,比照 skill 二之七金額欄位的同一個理由),改成文字輸入 + inputMode + tabular-nums。
+//     驗證完全沒變(仍然是原本那套 Number.isNaN / Number.isInteger 判斷)。
+//   - 欄位的說明文字(每消費 N 元累積 1 點、被推薦人完成第一筆才發、生日以月為單位容錯)收進 `?`,
+//     範例試算維持常駐的預覽框(那是即時回饋,不是可以收起來的補充)。
+//   - 核發獎勵資格條件的下拉改 FieldSelect,guardPhantomEmptyChange 白名單版**原樣保留**。
+//   - 「儲存」是這一頁唯一的 ① 主要按鈕;沒有規則權限時的說明改 EmptyState(二之八)。
+//
+// **只動外觀,不動行為**:兩段權限的判斷(canManagePointsRules)、整列 upsert 的 saveSettingsRow、
+// 選了就直接存的核發資格條件、三個數字欄位的驗證與儲存、所有文案的意思全部照舊。
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  AlertNote,
+  EmptyState,
+  FieldInput,
+  FieldSelect,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -242,27 +262,25 @@ function MemberPointsPageInner() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">紅利點數管理</h1>
-        {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流。
-            SPECS-INDEX #830 之後「交易」那一半已搬到會員管理的會員詳情頁,這頁只剩規則,描述照實改寫:
-            有規則權限的人看到的是規則說明;沒有的人要被明確告知這頁沒有他能操作的東西、以及點數
-            交易現在去哪裡做,不要讓他在頁面上找一個看不到的東西。 */}
-        <p className="mt-1 text-sm text-muted-foreground">
-          {canManagePointsRules
+      {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流。
+          SPECS-INDEX #830 之後「交易」那一半已搬到會員管理的會員詳情頁,這頁只剩規則,描述照實改寫:
+          有規則權限的人看到的是規則說明;沒有的人要被明確告知這頁沒有他能操作的東西、以及點數
+          交易現在去哪裡做,不要讓他在頁面上找一個看不到的東西。 */}
+      <PageHeader
+        backTo="/app/manage"
+        title="紅利點數管理"
+        description={
+          canManagePointsRules
             ? `「${merchant!.name}」的紅利點數核發規則:核發獎勵資格條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點)。個別會員的點數餘額、手動調整、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
-            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`}
-        </p>
-      </div>
+            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
+        }
+      />
 
       {settings && settings.points_feature_enabled === false ? (
-        <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
-          目前紅利點數功能已關閉,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
+        // 🟡 常駐 `!`:skill 二的表格裡「功能已關閉,資料不會被清空」就是這一類的原始例子。
+        <AlertNote>
+          <strong>目前紅利點數功能已關閉</strong>
+          ,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
           建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空,
           重新開啟後會完整還原顯示。
           {/* 2026-09-29 第三輪使用者裁決(#830 修正):功能關閉時會員詳情頁的「點數」卡片整張隱藏,
@@ -275,7 +293,7 @@ function MemberPointsPageInner() {
           {canManagePointsRules
             ? "要重新開啟,請到下方「點數設定」切換開關。"
             : "要重新開啟這個功能需要「紅利點數管理」權限,請找商家管理員處理。"}
-        </div>
+        </AlertNote>
       ) : null}
 
       {/* 2026-09-24 使用者裁決(交易/規則權限分離):下面這兩張卡片就是「規則」那一半,整組需要
@@ -295,40 +313,42 @@ function MemberPointsPageInner() {
             <CardHeader>
               <CardTitle>核發獎勵資格條件</CardTitle>
               <CardDescription>
-                消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。
-                <strong className="text-warn">
-                  提醒:「電話已驗證」只是客服人工標記,不是真的簡訊驗證,無法擋住用假電話註冊的人。
-                </strong>
+                消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。選了就直接存,沒有另外的儲存按鈕。
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-3">
               {settingsLoading ? (
-                <p className="text-sm text-muted-foreground">載入中⋯</p>
+                <LoadingSkeleton variant="lines" rows={1} />
               ) : (
-                /* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings 灌進來的,
-               不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉(見 src/lib/radixSelectGuard.ts)。
-               合法值是 REWARD_CONDITION_MODE_LABELS 這份固定列舉,所以判斷條件用白名單。 */
-                <Select
-                  value={rewardConditionMode}
-                  disabled={savingRewardCondition}
-                  onValueChange={guardPhantomEmptyChange<RewardConditionMode>(
-                    (v) => void handleSaveRewardCondition(v),
-                    (v) => v in REWARD_CONDITION_MODE_LABELS,
-                  )}
-                >
-                  <SelectTrigger className="w-full sm:w-80">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]).map(
-                      (mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {REWARD_CONDITION_MODE_LABELS[mode]}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
+                <>
+                  <FormField label="資格條件" htmlFor="reward-condition-mode">
+                    {/* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings
+                    灌進來的,不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉
+                    (見 src/lib/radixSelectGuard.ts)。合法值是 REWARD_CONDITION_MODE_LABELS
+                    這份固定列舉,所以判斷條件用白名單。 */}
+                    <FieldSelect<RewardConditionMode>
+                      id="reward-condition-mode"
+                      value={rewardConditionMode}
+                      disabled={savingRewardCondition}
+                      onValueChange={guardPhantomEmptyChange<RewardConditionMode>(
+                        (v) => void handleSaveRewardCondition(v),
+                        (v) => v in REWARD_CONDITION_MODE_LABELS,
+                      )}
+                      options={(
+                        Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]
+                      ).map((mode) => ({
+                        value: mode,
+                        label: REWARD_CONDITION_MODE_LABELS[mode],
+                      }))}
+                    />
+                  </FormField>
+                  {/* 🟡 常駐 `!`:現在的狀態跟使用者以為的不一樣 —— 商家會以為這個選項能擋掉
+                      用假電話註冊的人(skill 二,第三類)。 */}
+                  <AlertNote>
+                    「電話已驗證」只是<strong>客服人工標記</strong>
+                    ,不是真的簡訊驗證,無法擋住用假電話註冊的人。
+                  </AlertNote>
+                </>
               )}
             </CardContent>
           </Card>
@@ -343,88 +363,93 @@ function MemberPointsPageInner() {
                 啟用/停用紅利點數功能,以及消費點數比例、推薦獎勵、生日贈點,都在這裡一次設定。
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="flex flex-col gap-5">
               {settingsLoading ? (
-                <p className="text-sm text-muted-foreground">載入中⋯</p>
+                <LoadingSkeleton variant="lines" rows={4} />
               ) : (
                 <>
-                  <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
-                      <p className="text-xs text-muted-foreground">
-                        關閉後系統就不再自動給點數了:客人消費不再累點、推薦朋友不發獎勵、生日也不
-                        送點。建單表單與會員詳情頁也不再顯示任何點數相關的數字與入口
-                        (要結清某位會員剩下的點數,請先重新開啟功能、結清後再關閉);
-                        既有的點數餘額與異動歷史不會被清空,重新開啟後會完整還原顯示。
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings ? settings.points_feature_enabled : true}
-                      disabled={savingFeatureToggle}
-                      onCheckedChange={handleToggleFeatureEnabled}
-                    />
-                  </div>
+                  {/* skill 二之七:開關做成一整列;長說明拆成一行摘要 + 一條常駐 `!`
+                      (「關閉後系統不再自動給點數」是 skill 二點名的第二類)。 */}
+                  <SwitchRow
+                    id="points-feature-enabled"
+                    title="啟用紅利點數功能"
+                    description="控制整間店要不要跑紅利點數。"
+                    checked={settings ? settings.points_feature_enabled : true}
+                    disabled={savingFeatureToggle}
+                    onCheckedChange={handleToggleFeatureEnabled}
+                  >
+                    <AlertNote>
+                      關閉後<strong>系統就不再自動給點數了</strong>
+                      :客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
+                      顯示任何點數相關的數字與入口(要結清某位會員剩下的點數,請先重新開啟功能、
+                      結清後再關閉);既有的點數餘額與異動歷史不會被清空,重新開啟後會完整還原顯示。
+                    </AlertNote>
+                  </SwitchRow>
 
-                  <div>
-                    <Label htmlFor="points-earn-rate">消費點數比例(元/點)</Label>
-                    <Input
+                  <FormField
+                    label="消費點數比例(元/點)"
+                    htmlFor="points-earn-rate"
+                    help="每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你套用任何數字。"
+                    helpLabel="說明:消費點數比例怎麼設定"
+                  >
+                    <FieldInput
                       id="points-earn-rate"
-                      className="mt-2 w-40"
-                      type="number"
-                      min={0}
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
+                      className="tabular-nums sm:w-40"
                       value={pointsEarnRate}
                       onChange={(e) => setPointsEarnRate(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你
-                      套用任何數字。
+                  </FormField>
+                  {!Number.isNaN(numericRate) ? (
+                    // 即時回饋(不是可以收起來的補充)⇒ 常駐的預覽框,不收進 `?`。
+                    <p className="-mt-3 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                      範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
+                      <strong className="tabular-nums">
+                        {previewLoyaltyPoints(1000, numericRate)}
+                      </strong>{" "}
+                      點(僅供參考,實際點數以訂單完成時系統計算為準,計算基準是含稅總額)。
                     </p>
-                    {!Number.isNaN(numericRate) ? (
-                      <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
-                        <strong>{previewLoyaltyPoints(1000, numericRate)}</strong> 點(僅供參考,實際
-                        點數以訂單完成時系統計算為準,計算基準是含稅總額)。
-                      </p>
-                    ) : null}
-                  </div>
+                  ) : null}
 
-                  <div>
-                    <Label htmlFor="referral-bonus-points">推薦獎勵點數</Label>
-                    <Input
+                  <FormField
+                    label="推薦獎勵點數"
+                    htmlFor="referral-bonus-points"
+                    help="被推薦人完成第一筆訂單時,推薦人可以拿到的點數。填 0 就是不發推薦獎勵。"
+                    helpLabel="說明:推薦獎勵什麼時候發"
+                  >
+                    <FieldInput
                       id="referral-bonus-points"
-                      className="mt-2 w-40"
-                      type="number"
-                      min={0}
-                      step="1"
+                      type="text"
+                      inputMode="numeric"
+                      className="tabular-nums sm:w-40"
                       value={referralBonusPoints}
                       onChange={(e) => setReferralBonusPoints(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      被推薦人完成第一筆訂單時,推薦人可以拿到的點數。
-                    </p>
-                  </div>
+                  </FormField>
 
-                  <div>
-                    <Label htmlFor="birthday-bonus-points">生日贈點</Label>
-                    <Input
+                  <FormField
+                    label="生日贈點"
+                    htmlFor="birthday-bonus-points"
+                    help="生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員管理列表頁時系統才會補發)。填 0 就是不發生日贈點。"
+                    helpLabel="說明:生日贈點什麼時候發"
+                  >
+                    <FieldInput
                       id="birthday-bonus-points"
-                      className="mt-2 w-40"
-                      type="number"
-                      min={0}
-                      step="1"
+                      type="text"
+                      inputMode="numeric"
+                      className="tabular-nums sm:w-40"
                       value={birthdayBonusPoints}
                       onChange={(e) => setBirthdayBonusPoints(e.target.value)}
                     />
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員
-                      管理列表頁時系統才會補發)。
-                    </p>
-                  </div>
+                  </FormField>
 
+                  {/* 這一頁唯一的 ① 主要按鈕(核發資格條件是選了就直接存,沒有按鈕)。 */}
                   <Button
                     type="button"
-                    size="sm"
+                    variant="primary"
+                    size="touch"
+                    className="self-start"
                     disabled={savingPoints}
                     onClick={handleSavePoints}
                   >
@@ -440,13 +465,15 @@ function MemberPointsPageInner() {
            會什麼卡片都看不到(守衛刻意不改,見檔案開頭)。這裡補一段說明,避免看起來像壞掉。 */
         <Card>
           <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              你目前的權限看不到這頁的規則設定。個別會員的點數餘額、登記兌換與異動歷史,請到
-              <Link to="/app/members" className="text-brand hover:underline">
-                「會員管理」
-              </Link>
-              點進該位會員操作;要調整點數核發規則,請找商家管理員開放「紅利點數管理」權限。
-            </p>
+            <EmptyState
+              title="你目前的權限看不到這頁的規則設定"
+              description="個別會員的點數餘額、登記兌換與異動歷史,在「會員管理」點進該位會員就能操作;要調整點數核發規則,請找商家管理員開放「紅利點數管理」權限。"
+              action={
+                <Button asChild variant="primary" size="touch">
+                  <Link to="/app/members">去會員管理</Link>
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       )}
