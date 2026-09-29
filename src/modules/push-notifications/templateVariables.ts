@@ -51,7 +51,10 @@ export function getPushTemplateVariableDefinitions(
 /** 即時預覽用的範例假資料。booking_date/customer_name/service_names 採用跟模組 11
  * templateVariables.ts 相同的示範值(方便同時檢視兩邊測試/預覽時前後一致),change_summary
  * 是推播模組獨有的變數(規則 4.5:訂單異動時前端算好的一句話摘要,LINE 通知沒有這個變數)。 */
-const PUSH_TEMPLATE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
+/** ui-v1-full 第 3 批:改成 export —— 推播事件設定頁的「可用變數」三欄說明表(skill 二之七)
+ *  的「範例值」那一欄要跟預覽框用同一份假資料,兩邊各給一份值是之後最容易走鐘的地方。
+ *  值本身完全沒變。 */
+export const PUSH_TEMPLATE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
   booking_date: "2026-10-01 14:30",
   customer_name: "王小姐",
   service_names: "手部保養、單色凝膠",

@@ -11,6 +11,28 @@
 // 專案既有的「前端/Edge Function 之間各自維護一份小型渲染邏輯」慣例延伸出的「呈現邏輯共用、
 // 資料定義各自獨立」原則——推播事件設定頁複用這個元件是模組 15 依賴模組 11 對外介面的一部分
 // (見 `.project/specs/服務人員推播通知.md` §8.3/§13.1)。
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill 二之七「🔴 變數說明要完整
+// (不能只列變數名)」。
+//
+// 使用者 2026-09-29 原話:「變數的部分有點太簡短,需要做成一個說明,變數的中文意思代表什麼?
+// 範例,還有預覽結果」。所以原本那一行「可用變數:{{merchant_name}}(商家名稱)、…」擠成一段
+// 灰色小字的做法不合格,改成 skill 指定的三欄說明表:
+//
+//     | 變數 | 中文意思 | 範例值 |
+//
+// 底下再接一個「○○○實際會收到」的預覽框(把變數代入範例值後的完整結果)。
+// 三欄的「範例值」跟預覽框用的是**同一份範例假資料**(呼叫端傳 sampleValues),所以商家在表格裡
+// 看到的值,跟預覽框裡實際被代進去的值一定一致 —— 兩邊各給一份假資料是之後最容易走鐘的地方。
+//
+// 📌 為什麼這個說明區塊維持常駐、不收進 `?`:skill 二之七是**點名要求**做出這個區塊
+//    (「可用變數要做成一個說明區塊,三欄 … 底下再加一個預覽框」),把規格指定的區塊藏進 `?`
+//    等於沒做。`?` 的用途是「看過一次就懂、可以收起來的補充」,不是用來藏規格要求的內容。
+// 📌 320px 下的做法:table-fixed + 三欄各自 break-all / break-words,變數欄的
+//    `{{merchant_name}}` 會折成兩行而不是把後面兩欄擠成 0 寬(比照 skill 二之六明細列踩過的坑:
+//    兩側都可能是長文字,不能只讓其中一側 shrink-0)。
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface TemplateVariableDefinition {
   key: string;
@@ -33,34 +55,95 @@ interface TemplateVariablePreviewProps {
   previews: TemplateVariablePreviewSection[];
   /** 範本是空字串時顯示的提示文字。 */
   emptyText?: string;
+  /**
+   * skill 二之七:三欄說明表「範例值」那一欄要顯示的值。傳的**必須是呼叫端自己模組用來渲染
+   * `previews` 的那一份範例假資料**,表格跟預覽框才會一致。沒有對應 key 的變數顯示 `—`。
+   */
+  sampleValues?: Record<string, string>;
+  /**
+   * skill 二之七:預覽框上方那句「○○○實際會收到」的主體。例:`"會員"`(行銷通知)、
+   * `"服務人員"`(推播)、`"收到通知的人"`(LINE 事件通知,對象依設定可能是客戶或服務人員)。
+   */
+  recipientLabel?: string;
 }
 
 export function TemplateVariablePreview({
   variables,
   previews,
   emptyText = "(尚未填寫文案)",
+  sampleValues,
+  recipientLabel = "收到通知的人",
 }: TemplateVariablePreviewProps) {
   return (
-    <>
-      <p className="mt-1 text-xs text-muted-foreground">
-        可用變數:
-        {variables.length === 0
-          ? "這個事件目前沒有可用變數"
-          : variables.map((v, i) => `${i > 0 ? "、" : ""}{{${v.key}}}(${v.label})`)}
-      </p>
-      <div className="mt-2 space-y-2 rounded-md border border-dashed border-border px-3 py-2">
-        <p className="text-xs text-muted-foreground">即時預覽(套用範例假資料)</p>
-        {previews.map((preview, index) => (
-          <div key={preview.label ?? index}>
-            {preview.label ? (
-              <p className="text-xs font-medium text-muted-foreground">{preview.label}</p>
-            ) : null}
-            <p className="whitespace-pre-wrap text-sm text-foreground">
-              {preview.text || emptyText}
-            </p>
-          </div>
-        ))}
+    <div className="mt-2 flex flex-col gap-2">
+      {/* skill 二之七:三欄說明表 —— 變數 / 中文意思 / 範例值。 */}
+      <div className="rounded-md border border-info/30 bg-info-soft px-3 py-2.5">
+        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-info-strong">
+          可用變數
+        </p>
+        {variables.length === 0 ? (
+          <p className="text-[13px] leading-relaxed text-info-strong">
+            這個事件目前沒有可用變數,文案裡打什麼就會原封不動送出去。
+          </p>
+        ) : (
+          <table className="w-full table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-[40%]" />
+              <col className="w-[26%]" />
+              <col className="w-[34%]" />
+            </colgroup>
+            <thead>
+              <tr className="text-[11px] font-semibold text-info-strong/70">
+                <th scope="col" className="pb-1 pr-1.5 font-semibold">
+                  變數
+                </th>
+                <th scope="col" className="pb-1 pr-1.5 font-semibold">
+                  中文意思
+                </th>
+                <th scope="col" className="pb-1 font-semibold">
+                  範例值
+                </th>
+              </tr>
+            </thead>
+            <tbody className="align-top">
+              {variables.map((variable) => (
+                <tr key={variable.key} className="border-t border-info/20">
+                  <td className="py-1 pr-1.5">
+                    <code className="break-all font-mono text-[11px] font-semibold text-info-strong">
+                      {`{{${variable.key}}}`}
+                    </code>
+                  </td>
+                  <td className="break-words py-1 pr-1.5 text-[11px] text-info-strong">
+                    {variable.label}
+                  </td>
+                  <td className="break-words py-1 text-[11px] text-info-strong/80">
+                    {sampleValues?.[variable.key] ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
-    </>
+
+      {/* skill 二之七:把變數代入範例值後的完整結果 —— 「○○○實際會收到」。 */}
+      <div className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5">
+        <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+          {recipientLabel}實際會收到
+        </p>
+        <div className="flex flex-col gap-2">
+          {previews.map((preview, index) => (
+            <div key={preview.label ?? index}>
+              {preview.label ? (
+                <p className="text-[11px] font-semibold text-muted-foreground">{preview.label}</p>
+              ) : null}
+              <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-foreground">
+                {preview.text || emptyText}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

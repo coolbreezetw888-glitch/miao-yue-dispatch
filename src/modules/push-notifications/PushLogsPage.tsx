@@ -6,21 +6,42 @@
 //   2. 原始記錄是「一個身份一列」(同一個人同時是客服又是服務人員時,一件事會有兩列),畫面上
 //      群組成「一件事一組、底下列出通知到誰」,並明講「這兩列是同一個人,手機只會收到一次」。
 //      群組邏輯在 pushLogView.ts,這裡只負責渲染。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill,做法與 LINE 發送記錄頁
+// (LineLogsPage)刻意一致 —— 兩頁本來就是同一個結構,長得不一樣只會讓人以為是兩種東西。
+//   - 頁首改 PageHeader;載入中改灰色骨架;沒有記錄改 EmptyState(二之八)。
+//   - 狀態徽章改 StatusTag(二之四):全部送達 = success、部分送達 = warning、
+//     失敗 = danger、沒有發送 = neutral。🔴「部分送達」刻意跟「全部送達」不同色調,
+//     這是這一頁存在的理由(老闆要一眼看出「有人沒收到」)。
+//   - 「結果」篩選只有兩個選項 ⇒ 改成底線式**篩選列**(variant="filter",一眼全部看到,
+//     不捲不換行);事件類型有五個選項且會再增加 ⇒ 維持下拉,改用 FieldSelect 的統一樣式。
+//     📌 下拉那一個套上 guardPhantomEmptyChange + 白名單判斷(src/lib/radixSelectGuard.ts
+//     自己就寫「新加 Select 時建議直接套,一律套上沒有副作用」);萬一被幽靈空值洗掉,篩選會
+//     變成空字串、查詢直接查不到東西。底線式篩選列是 Radix Tabs、不是 Select,沒有這個問題。
+//   - 展開 / 收合、上一頁 / 下一頁改 ② 次要按鈕;時間與頁碼加 tabular-nums。
+//
+// **只動外觀,不動行為**:查詢參數、群組邏輯(pushLogView.ts)、白話原因不收進「查看詳情」、
+// 同一個人兩列的提示、所有 data-testid 與 data-outcome / data-summary 屬性全部照舊。
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { BellRing } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  EmptyState,
+  FieldSelect,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+  UnderlineTabsList,
+  UnderlineTabsTrigger,
+  type StatusTone,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs } from "@/components/ui/tabs";
 
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
 import { usePushLogRecipientDirectory, usePushNotificationLog } from "./api";
@@ -38,31 +59,31 @@ import { PUSH_NOTIFICATION_EVENT_LABELS } from "./types";
 const PAGE_SIZE = 20;
 const EMPTY_DIRECTORY: RecipientDirectory = new Map();
 
-type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
-
-function summaryBadgeVariant(kind: PushLogGroupSummaryKind): BadgeVariant {
+/** skill 二之四 狀態配色:正常 = 綠系 / 要注意 = 黃系 / 出事 = 紅系 / 結束或沒做事 = 灰系。
+ *  🔴「部分送達」必須跟「全部送達」不同色調 —— 這一頁存在的理由就是讓老闆一眼看出「有人沒收到」。 */
+function summaryTone(kind: PushLogGroupSummaryKind): StatusTone {
   switch (kind) {
     case "all_sent":
-      return "default";
+      return "success";
     case "failed":
-      return "destructive";
+      return "danger";
     case "partial":
-      return "outline";
+      return "warning";
     default:
-      return "secondary";
+      return "neutral";
   }
 }
 
-function recipientBadgeVariant(recipient: PushLogRecipientView): BadgeVariant {
+function recipientTone(recipient: PushLogRecipientView): StatusTone {
   switch (recipient.outcome) {
     case "sent":
-      return "default";
+      return "success";
     case "failed":
-      return "destructive";
+      return "danger";
     case "partially_sent":
-      return "outline";
+      return "warning";
     default:
-      return "secondary";
+      return "neutral";
   }
 }
 
@@ -88,12 +109,15 @@ function RecipientLine({ recipient }: { recipient: PushLogRecipientView }) {
           <span className="text-muted-foreground"> — </span>
           <span data-testid="push-log-recipient-detail">{recipient.detail}</span>
         </p>
-        <Badge variant={recipientBadgeVariant(recipient)} className="shrink-0">
+        <StatusTag tone={recipientTone(recipient)} className="shrink-0">
           {recipient.statusLabel}
-        </Badge>
+        </StatusTag>
       </div>
       {recipient.hint ? (
-        <p data-testid="push-log-recipient-hint" className="mt-1 text-xs text-muted-foreground">
+        <p
+          data-testid="push-log-recipient-hint"
+          className="mt-1 text-xs leading-relaxed text-muted-foreground"
+        >
           可以怎麼做:{recipient.hint}
         </p>
       ) : null}
@@ -114,24 +138,24 @@ function EventGroupItem({
     <li
       data-testid="push-log-group"
       data-summary={group.summary.kind}
-      className="rounded-md border border-border px-3 py-2 text-sm"
+      className="rounded-xl border border-border bg-card px-3.5 py-3 text-sm"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-foreground">{formatDateTime(group.attempted_at)}</p>
-          <p className="text-xs text-muted-foreground">
+          <p className="tabular-nums text-foreground">{formatDateTime(group.attempted_at)}</p>
+          <p className="break-words text-xs text-muted-foreground">
             {PUSH_NOTIFICATION_EVENT_LABELS[
               group.event_type as keyof typeof PUSH_NOTIFICATION_EVENT_LABELS
             ] ?? group.event_type}
             {group.rendered_title ? ` ・ ${group.rendered_title}` : null}
           </p>
         </div>
-        <Badge variant={summaryBadgeVariant(group.summary.kind)} className="shrink-0">
+        <StatusTag tone={summaryTone(group.summary.kind)} className="shrink-0">
           {group.summary.label}
-        </Badge>
+        </StatusTag>
       </div>
 
-      <ul className="mt-2 space-y-1">
+      <ul className="mt-2.5 flex flex-col gap-1.5">
         {group.recipients.map((recipient) => (
           <RecipientLine key={recipient.row.id} recipient={recipient} />
         ))}
@@ -141,7 +165,7 @@ function EventGroupItem({
         <p
           key={note.userId}
           data-testid="push-log-same-user-note"
-          className="mt-2 text-xs text-muted-foreground"
+          className="mt-2 text-xs leading-relaxed text-muted-foreground"
         >
           {formatSameUserNote(note)}
         </p>
@@ -151,17 +175,20 @@ function EventGroupItem({
         <>
           <Button
             type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-1 h-auto px-0 text-xs"
+            variant="neutral"
+            size="card"
+            className="mt-2.5"
+            aria-expanded={expanded}
             onClick={onToggle}
           >
             {expanded ? "收合通知內容" : "查看通知內容"}
           </Button>
           {expanded ? (
-            <div className="mt-2 space-y-1 border-t border-border pt-2 text-xs text-muted-foreground">
-              {group.rendered_title ? <p>標題:{group.rendered_title}</p> : null}
-              <p className="whitespace-pre-wrap">內容:{group.rendered_body}</p>
+            <div className="mt-2.5 flex flex-col gap-1 border-t border-border pt-2.5 text-xs leading-relaxed text-muted-foreground">
+              {group.rendered_title ? (
+                <p className="break-words">標題:{group.rendered_title}</p>
+              ) : null}
+              <p className="whitespace-pre-wrap break-words">內容:{group.rendered_body}</p>
             </div>
           ) : null}
         </>
@@ -208,57 +235,62 @@ function PushLogsPageInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">推播發送記錄</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          每一次嘗試發送手機推播的記錄。沒發成功的會直接寫出原因,以及可以怎麼處理。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="推播發送記錄"
+        description="每一次嘗試發送手機推播的記錄。沒發成功的會直接寫出原因,以及可以怎麼處理。"
+      />
 
       <Card>
-        <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="gap-3">
           <CardTitle>記錄</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Select value={outcomeFilter} onValueChange={handleOutcomeFilterChange}>
-              <SelectTrigger className="w-40" aria-label="篩選結果">
-                <SelectValue placeholder="篩選結果" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部結果</SelectItem>
-                <SelectItem value="problems">只看沒發成功的</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={eventFilter} onValueChange={handleEventFilterChange}>
-              <SelectTrigger className="w-48" aria-label="篩選事件類型">
-                <SelectValue placeholder="篩選事件類型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部事件</SelectItem>
-                {Object.entries(PUSH_NOTIFICATION_EVENT_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* 只有兩個選項的「結果」⇒ 底線式篩選列:必須一眼全部看到,不捲不換行(二之四末段)。 */}
+          <Tabs value={outcomeFilter} onValueChange={handleOutcomeFilterChange}>
+            <UnderlineTabsList variant="filter">
+              <UnderlineTabsTrigger value="all">全部結果</UnderlineTabsTrigger>
+              <UnderlineTabsTrigger value="problems">只看沒發成功的</UnderlineTabsTrigger>
+            </UnderlineTabsList>
+          </Tabs>
+          {/* 事件類型有五個且會再增加 ⇒ 維持下拉。選項是寫死白名單 ⇒ 最嚴格的那一種 guard 用法。 */}
+          <FieldSelect
+            aria-label="篩選事件類型"
+            value={eventFilter}
+            onValueChange={guardPhantomEmptyChange(
+              handleEventFilterChange,
+              (v) => v === "all" || v in PUSH_NOTIFICATION_EVENT_LABELS,
+            )}
+            placeholder="篩選事件類型"
+            options={[
+              { value: "all", label: "全部事件" },
+              ...Object.entries(PUSH_NOTIFICATION_EVENT_LABELS).map(([value, label]) => ({
+                value,
+                label,
+              })),
+            ]}
+          />
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="cards" rows={4} />
           ) : !logs || logs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {outcomeFilter === "problems"
-                ? "這個範圍內沒有沒發成功的記錄。"
-                : "目前沒有任何發送記錄。"}
-            </p>
+            <EmptyState
+              icon={<BellRing className="h-6 w-6" aria-hidden="true" />}
+              title={
+                outcomeFilter === "problems" ? "這個範圍內沒有沒發成功的記錄" : "還沒有任何發送記錄"
+              }
+              description={
+                outcomeFilter === "problems"
+                  ? "全部都發出去了,或是這個範圍內還沒有任何推播。切回「全部結果」可以看完整記錄。"
+                  : "每次系統嘗試發推播都會記在這裡,沒發成功的會直接寫出原因與可以怎麼處理。"
+              }
+              action={
+                <Button asChild variant="primary" size="touch">
+                  <Link to="/app/push-events">去看推播通知設定</Link>
+                </Button>
+              }
+            />
           ) : (
-            <ul className="space-y-2">
+            <ul className="flex flex-col gap-2.5">
               {groups.map((group) => (
                 <EventGroupItem
                   key={group.key}
@@ -270,21 +302,21 @@ function PushLogsPageInner() {
             </ul>
           )}
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              variant="neutral"
+              size="card"
               disabled={page === 0}
               onClick={() => setPage((p) => Math.max(0, p - 1))}
             >
               上一頁
             </Button>
-            <span className="text-xs text-muted-foreground">第 {page + 1} 頁</span>
+            <span className="text-xs tabular-nums text-muted-foreground">第 {page + 1} 頁</span>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              variant="neutral"
+              size="card"
               disabled={!logs || logs.length < PAGE_SIZE}
               onClick={() => setPage((p) => p + 1)}
             >

@@ -398,6 +398,32 @@ export const FieldMonth = React.forwardRef<
 ));
 FieldMonth.displayName = "FieldMonth";
 
+/** 原生色彩選擇器 `<input type="color">`(商家主題色、訂單狀態顏色、行事曆排程狀態顏色用)。
+ *  ui-v1-full 第 3 批補上:全站有三處在各自手寫 `h-8 w-10 rounded border border-input …`,
+ *  高度 / 圓角 / 邊框都不一樣,而且只有 32px 高(skill 二之三的觸控目標是 44px,卡片內 36px)。
+ *  這裡統一成 44px 見方、跟其他欄位同一組圓角與邊框色。
+ *  ⚠️ 色塊本體要貼齊外框才好看,所以內距壓到 2px 並把原生的色塊 border 去掉
+ *    (Chrome 的 ::-webkit-color-swatch 預設有一圈自己的邊框)。 */
+export const FieldColor = React.forwardRef<
+  HTMLInputElement,
+  Omit<React.ComponentProps<"input">, "type">
+>(({ className, ...props }, ref) => (
+  <input
+    ref={ref}
+    type="color"
+    className={cn(
+      "size-11 shrink-0 cursor-pointer rounded-md border border-input bg-background p-[2px]",
+      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+      "disabled:cursor-not-allowed disabled:opacity-50",
+      "[&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-0",
+      "[&::-webkit-color-swatch-wrapper]:p-0",
+      className,
+    )}
+    {...props}
+  />
+));
+FieldColor.displayName = "FieldColor";
+
 // ---------------------------------------------------------------------------
 // 可點的方塊:多選(ChoiceChip)/ 單選群組(ChoiceChipGroup)
 // ---------------------------------------------------------------------------

@@ -12,28 +12,54 @@
 //      取消排除的機制——這是待確認事項,見 memberSelection.ts 檔案開頭說明,不要自行假設答案);
 //      商家也可以額外手動排除任何其他已綁定 LINE 的會員。
 // 三種模式的實際選取/排除計算邏輯抽成 memberSelection.ts 的純函式,方便 Vitest 直接測試。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;載入中改灰色骨架;沒有任何已綁定會員改 EmptyState(二之八)。
+//   - 「單獨選擇 / 依會員分類批量選擇」改底線式切換列,variant="pages"(這是**內容分頁列**:
+//     進去看另一塊內容,放不下可以橫向捲;不是篩選列。二之四末段的兩種列規則)。
+//   - 會員 / 等級的打勾方框改成整條寬的可點方塊 ChoiceChip(二之七:手機好按),
+//     每條至少 44px 觸控目標(一、核心原則)。
+//   - 搜尋框改 FieldInput;訊息內容改 FormField + FieldTextarea,字數改用 FormField 的
+//     counter(右上角 `34 / 5000`,二之七),不再自己在右下角放一行小字。
+//   - 「可用變數」改成三欄說明表 + 「會員實際會收到」預覽框(二之七,做在共用元件裡)。
+//   - 發送二次確認改小卡窗殼 CardAlertDialog(三、兩種窗)。🔴 發送**不標紅**:紅色只留給
+//     「會刪東西」的不可逆動作,發送訊息不刪任何東西(第 1 / 2 批已定案的裁決)。
+//     「送出後無法收回」這句改用 🟡 常駐 `!`,因為它正是「按下去會發生什麼不可逆的事」(二)。
+//   - 「發送」是這一頁唯一的 ① 主要按鈕(二之三)。
+//
+// **只動外觀,不動行為**:選取 / 排除的計算(memberSelection.ts)、黑名單自動排除、送出的
+// 名單與訊息、送出後導向發送記錄頁、字數上限 5000 全部照舊。
 
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Users } from "lucide-react";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  AlertNote,
+  AttributeTag,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+  ChoiceChip,
+  EmptyState,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  UnderlineTabsList,
+  UnderlineTabsTrigger,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useMerchantMemberTiers } from "@/modules/members/api";
@@ -48,6 +74,7 @@ import {
 } from "./memberSelection";
 import { TemplateVariablePreview } from "./TemplateVariablePreview";
 import {
+  LINE_MARKETING_TEMPLATE_PREVIEW_SAMPLE_VALUES,
   LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS,
   previewLineMarketingTemplate,
 } from "./templateVariables";
@@ -55,6 +82,10 @@ import {
 // LINE 文字訊息上限 5000 字(規格書「本模組明確不做的事」一節,engineer 動工前已查證,2026-09-20
 // 官方文件仍列 5000 字上限)。
 const MESSAGE_MAX_LENGTH = 5000;
+
+/** 可點的整條寬方塊(skill 二之七「多選用可點的方塊」)。清單型的多選一條一條堆,所以撐滿寬度、
+ *  內容靠左、至少 44px 高(一、核心原則的觸控目標)。 */
+const LIST_CHIP_CLASS = "min-h-11 w-full justify-start text-left";
 
 function LineMarketingPageInner() {
   const { merchant } = useCurrentMerchant();
@@ -138,37 +169,37 @@ function LineMarketingPageInner() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">行銷通知</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          手動挑選已綁定 LINE 的會員名單,發送一次性的自訂文字訊息(不是自動化排程)。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="行銷通知"
+        description="手動挑選已綁定 LINE 的會員名單,發送一次性的自訂文字訊息(不是自動化排程)。"
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>選擇會員</CardTitle>
           <CardDescription>只列出已綁定 LINE 的會員,還沒綁定的會員不會出現在這裡。</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="flex flex-col gap-3">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="cards" rows={3} />
           ) : memberList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">目前沒有任何會員完成 LINE 綁定。</p>
+            <EmptyState
+              icon={<Users className="h-6 w-6" aria-hidden="true" />}
+              title="還沒有任何會員完成 LINE 綁定"
+              description="會員在 LINE 加商家官方帳號好友、傳送綁定碼之後就會出現在這裡,才能收到行銷訊息。綁定碼在「會員管理 > 會員詳情頁」產生。"
+            />
           ) : (
             <Tabs defaultValue="individual">
-              <TabsList>
-                <TabsTrigger value="individual">單獨選擇</TabsTrigger>
-                <TabsTrigger value="by-tier">依會員分類批量選擇</TabsTrigger>
-              </TabsList>
+              {/* 內容分頁列(進去看另一塊內容)⇒ variant="pages",放不下可以橫向捲。 */}
+              <UnderlineTabsList variant="pages">
+                <UnderlineTabsTrigger value="individual">單獨選擇</UnderlineTabsTrigger>
+                <UnderlineTabsTrigger value="by-tier">依會員分類批量選擇</UnderlineTabsTrigger>
+              </UnderlineTabsList>
 
-              <TabsContent value="individual" className="space-y-3">
-                <Input
+              <TabsContent value="individual" className="mt-3 flex flex-col gap-3">
+                <FieldInput
+                  aria-label="輸入姓名或電話搜尋會員"
                   placeholder="輸入姓名/電話搜尋"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -177,66 +208,67 @@ function LineMarketingPageInner() {
                   <p className="text-sm text-muted-foreground">找不到符合搜尋條件的會員。</p>
                 ) : (
                   <ul
-                    className="max-h-72 space-y-1 overflow-y-auto"
+                    className="flex max-h-72 flex-col gap-1.5 overflow-y-auto"
                     data-testid="line-marketing-individual-list"
                   >
                     {filteredMembers.map((m) => (
                       <li key={m.id}>
-                        <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                          <Checkbox
-                            checked={selectedIds.includes(m.id)}
-                            onCheckedChange={(v) => toggleSelected(m.id, v === true)}
-                          />
-                          <span className="text-foreground">{m.name}</span>
+                        <ChoiceChip
+                          className={LIST_CHIP_CLASS}
+                          selected={selectedIds.includes(m.id)}
+                          onClick={() => toggleSelected(m.id, !selectedIds.includes(m.id))}
+                        >
+                          <span className="min-w-0 break-words">{m.name}</span>
                           {m.phone ? (
-                            <span className="text-xs text-muted-foreground">{m.phone}</span>
-                          ) : null}
-                          {m.isBlacklisted ? (
-                            <span className="text-xs text-destructive">
-                              (黑名單,將自動從送出名單排除)
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                              {m.phone}
                             </span>
                           ) : null}
-                        </label>
+                          {m.isBlacklisted ? (
+                            <AttributeTag wrap>黑名單・會自動從送出名單排除</AttributeTag>
+                          ) : null}
+                        </ChoiceChip>
                       </li>
                     ))}
                   </ul>
                 )}
               </TabsContent>
 
-              <TabsContent value="by-tier" className="space-y-3">
+              <TabsContent value="by-tier" className="mt-3 flex flex-col gap-3">
                 {!tiers || tiers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     這個商家目前還沒有設定任何會員等級,請先到會員系統設定頁新增等級。
                   </p>
                 ) : (
-                  <ul className="space-y-1" data-testid="line-marketing-tier-list">
+                  <ul className="flex flex-col gap-1.5" data-testid="line-marketing-tier-list">
                     {tiers.map((tier) => {
                       const tierMemberCount = memberList.filter((m) => m.tierId === tier.id).length;
+                      const tierSelected = isTierFullySelected(memberList, tier.id, selectedIds);
                       return (
                         <li key={tier.id}>
-                          <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                            <Checkbox
-                              checked={isTierFullySelected(memberList, tier.id, selectedIds)}
-                              onCheckedChange={(v) => toggleTier(tier.id, v === true)}
-                            />
-                            <span className="text-foreground">{tier.name}</span>
-                            <span className="text-xs text-muted-foreground">
+                          <ChoiceChip
+                            className={LIST_CHIP_CLASS}
+                            selected={tierSelected}
+                            onClick={() => toggleTier(tier.id, !tierSelected)}
+                          >
+                            <span className="min-w-0 break-words">{tier.name}</span>
+                            <span className="text-xs tabular-nums text-muted-foreground">
                               ({tierMemberCount} 位已綁定 LINE 的會員)
                             </span>
-                          </label>
+                          </ChoiceChip>
                         </li>
                       );
                     })}
                   </ul>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  勾選等級會把該等級底下所有已綁定 LINE 的會員一次整批選入名單,也可以跟「單獨選擇」
-                  分頁的選取結果並存。
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  勾選等級會把該等級底下所有已綁定 LINE
+                  的會員一次整批選入名單,也可以跟「單獨選擇」分頁的選取結果並存。
                 </p>
               </TabsContent>
             </Tabs>
           )}
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs leading-relaxed tabular-nums text-muted-foreground">
             目前選取 {selectedIds.length} 位會員(單獨選擇 + 依分類批量選擇合計,尚未扣除下方排除清單)
           </p>
         </CardContent>
@@ -249,35 +281,36 @@ function LineMarketingPageInner() {
             這裡排除的會員,即使符合上面「單獨選擇」或「依分類批量選擇」的條件,最終送出名單裡也不會包含。
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">系統自動排除(黑名單客戶)</p>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <p className="text-[13px] font-semibold text-foreground">系統自動排除(黑名單客戶)</p>
             {blacklistedMembers.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 目前已綁定 LINE 的會員裡沒有黑名單客戶。
               </p>
             ) : (
               <ul
-                className="max-h-40 space-y-1 overflow-y-auto"
+                className="flex max-h-40 flex-col gap-1.5 overflow-y-auto"
                 data-testid="line-marketing-blacklist-list"
               >
                 {blacklistedMembers.map((m) => (
                   <li
                     key={m.id}
-                    className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground"
+                    className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
                   >
-                    <span>{m.name}</span>
-                    {m.phone ? <span className="text-xs">{m.phone}</span> : null}
-                    <span className="text-xs">(黑名單客戶,不需要手動勾選,已自動排除)</span>
+                    <span className="min-w-0 break-words">{m.name}</span>
+                    {m.phone ? <span className="text-xs tabular-nums">{m.phone}</span> : null}
+                    <AttributeTag wrap>黑名單客戶・已自動排除,不需要手動勾選</AttributeTag>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">手動排除</p>
-            <Input
+          <div className="flex flex-col gap-2">
+            <p className="text-[13px] font-semibold text-foreground">手動排除</p>
+            <FieldInput
+              aria-label="輸入姓名或電話搜尋要排除的會員"
               placeholder="輸入姓名/電話搜尋要排除的會員"
               value={excludeSearch}
               onChange={(e) => setExcludeSearch(e.target.value)}
@@ -288,21 +321,23 @@ function LineMarketingPageInner() {
               <p className="text-xs text-muted-foreground">找不到符合搜尋條件的會員。</p>
             ) : (
               <ul
-                className="max-h-40 space-y-1 overflow-y-auto"
+                className="flex max-h-40 flex-col gap-1.5 overflow-y-auto"
                 data-testid="line-marketing-manual-exclude-list"
               >
                 {filteredExcludableMembers.map((m) => (
                   <li key={m.id}>
-                    <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                      <Checkbox
-                        checked={excludedIds.includes(m.id)}
-                        onCheckedChange={(v) => toggleExcluded(m.id, v === true)}
-                      />
-                      <span className="text-foreground">{m.name}</span>
+                    <ChoiceChip
+                      className={LIST_CHIP_CLASS}
+                      selected={excludedIds.includes(m.id)}
+                      onClick={() => toggleExcluded(m.id, !excludedIds.includes(m.id))}
+                    >
+                      <span className="min-w-0 break-words">{m.name}</span>
                       {m.phone ? (
-                        <span className="text-xs text-muted-foreground">{m.phone}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {m.phone}
+                        </span>
                       ) : null}
-                    </label>
+                    </ChoiceChip>
                   </li>
                 ))}
               </ul>
@@ -315,45 +350,61 @@ function LineMarketingPageInner() {
         <CardHeader>
           <CardTitle>訊息內容</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <Textarea
-            rows={5}
-            maxLength={MESSAGE_MAX_LENGTH}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="輸入要發送的訊息內容,可搭配下方的可用變數"
-          />
-          <p className="text-right text-xs text-muted-foreground">
-            {message.length} / {MESSAGE_MAX_LENGTH}
-          </p>
+        <CardContent className="flex flex-col gap-3">
+          <FormField
+            label="要發送的訊息"
+            htmlFor="line-marketing-message"
+            counter={{ value: message.length, max: MESSAGE_MAX_LENGTH }}
+          >
+            <FieldTextarea
+              id="line-marketing-message"
+              rows={5}
+              maxLength={MESSAGE_MAX_LENGTH}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="輸入要發送的訊息內容,可搭配下方的可用變數"
+            />
+          </FormField>
+          {/* skill 二之七:變數說明要完整(三欄:變數 / 中文意思 / 範例值)+ 預覽框。 */}
           <TemplateVariablePreview
             variables={LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS}
+            sampleValues={LINE_MARKETING_TEMPLATE_PREVIEW_SAMPLE_VALUES}
+            recipientLabel="會員"
             previews={[{ text: previewLineMarketingTemplate(message) }]}
           />
 
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm tabular-nums text-muted-foreground">
             實際會送出 {finalRecipientIds.length} 位會員(已扣除排除清單與黑名單客戶)
           </p>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button type="button" disabled={!canSend || sending}>
+          <CardAlertDialog>
+            <CardAlertDialogTrigger asChild>
+              {/* 這一頁唯一的 ① 主要按鈕(skill 二之三)。 */}
+              <Button
+                type="button"
+                variant="primary"
+                size="touch"
+                className="self-start"
+                disabled={!canSend || sending}
+              >
                 {sending ? "發送中⋯" : "發送"}
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>確定要發送嗎?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  即將發送給 {finalRecipientIds.length} 位會員,確定要送出嗎?送出後無法收回。
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>再想想</AlertDialogCancel>
-                <AlertDialogAction onClick={handleSend}>確定發送</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+            </CardAlertDialogTrigger>
+            <CardAlertDialogContent>
+              <CardAlertDialogHeader>
+                <CardAlertDialogTitle>確定要發送嗎?</CardAlertDialogTitle>
+                <CardAlertDialogDescription>
+                  即將發送給 {finalRecipientIds.length} 位會員。
+                </CardAlertDialogDescription>
+              </CardAlertDialogHeader>
+              {/* 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。 */}
+              <AlertNote>訊息一旦送到會員的 LINE 就無法收回,也不能編輯。</AlertNote>
+              <CardAlertDialogFooter>
+                <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
+                <CardAlertDialogAction onClick={handleSend}>確定發送</CardAlertDialogAction>
+              </CardAlertDialogFooter>
+            </CardAlertDialogContent>
+          </CardAlertDialog>
         </CardContent>
       </Card>
     </main>

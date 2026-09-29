@@ -9,13 +9,29 @@
 //
 // ⚠️ 2026-09-24 深夜巡檢修正(死按鈕 + 假成功訊息)的成果**一個字都沒有退回**:
 //    一律依 subscribe() 的實際回傳值判斷要不要報喜,不看 Notification.permission。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 「這台裝置已開啟通知」改 StatusTag(二之四)。
+//   - 🔴 三段「為什麼你開不了 / 為什麼你收不到」(瀏覽器不支援 / iOS 要先加到主畫面 /
+//     權限被封鎖)從灰色小字改成 🟡 常駐 `!`(AlertNote):skill 二明寫這三類絕對不能只用
+//     一行灰字帶過 —— 使用者看不到「開啟通知」按鈕時,只會以為系統壞了。
+//   - 「開啟通知」是這張卡片最主要的動作 ⇒ ① 主要;「關閉此裝置通知」「再發一次測試通知」
+//     「我已經傳送完成」是 ② 次要。🔴「移除這台裝置」原本是紅字,改成不標紅:它是可逆的
+//     (那台裝置重新開啟通知就會再出現),紅色只留給真正不可逆的刪除(第 1 / 2 批已定案的裁決)。
+//   - 測試結果:warning 那一態改用 AlertNote 常駐(它就是「為什麼你沒收到」);success /
+//     info 維持一行字,好消息不需要警示框搶版面。
+//   - 每一段的小標改用 skill 二之六的組小標樣式(11px 大寫字距);載入中改灰色骨架(二之八)。
+//
+// **只動外觀,不動行為**:subscribe / unsubscribe / removeDevice / 測試推播的流程與判斷、
+// 三種不可用情境的判斷順序、data-testid 全部照舊。
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import { AlertNote, StatusTag } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
@@ -30,6 +46,10 @@ import {
 } from "./pushTestStatus";
 import { usePushSubscription } from "./usePushSubscription";
 import { simplifyUserAgent, type PushSubscription, type PushTargetType } from "./types";
+
+/** 卡片內各段的小標:skill 二之六第 1 點「每組上面一行 11px 大寫字距的小標」。 */
+const SECTION_LABEL_CLASS =
+  "text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground";
 
 export function PushSubscriptionCard({
   merchantId,
@@ -200,35 +220,37 @@ export function PushSubscriptionCard({
           開啟後,即使沒有打開秒約網頁,這間店有新訂單/訂單異動時,你的手機也會跳出通知。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+      <CardContent className="flex flex-col gap-4 text-sm">
         {/* §4.8 第 3 點:同時服務多間店的人要知道這頁設定的範圍。 */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           這裡的設定只影響「{merchantName?.trim() || "目前這間店"}
           」這間店,其他商家要分別設定。
         </p>
 
+        {/* 🔴 下面三種情況都是「為什麼你連按都按不了」⇒ 一律用常駐 `!`(skill 二)。 */}
         {!isSupported ? (
-          <p className="text-xs text-muted-foreground">
+          <AlertNote>
             這個瀏覽器不支援推播通知,請改用 Chrome、Edge 或 Safari(16.4 以上,且已加入主畫面)。
-          </p>
+          </AlertNote>
         ) : isIosBlocked ? (
           // §7.6:iOS 的限制對管理員/客服影響更大(他們常在電腦/iPad 的瀏覽器分頁裡用後台)。
-          <p className="text-xs text-muted-foreground">
+          <AlertNote>
             {targetType === "staff"
               ? "請先依照畫面下方提示把秒約加入主畫面,才能開啟推播通知(iPhone 的系統限制:Safari 分頁狀態下,即使按了「允許通知」也無法真的收到推播)。"
               : "你用的是 iPhone/iPad 的 Safari。Apple 的限制是:一定要先把秒約加到手機主畫面,才能開啟推播通知。加好之後,請從主畫面的圖示打開秒約,再回到這一頁開啟。"}
-          </p>
+          </AlertNote>
         ) : permission === "denied" ? (
-          <p className="text-xs text-muted-foreground">
+          <AlertNote>
             通知權限已被封鎖,請到瀏覽器/系統設定裡手動開啟這個網站的通知權限後再回來。
-          </p>
+          </AlertNote>
         ) : isThisDeviceSubscribed ? (
-          <div className="flex items-center justify-between">
-            <Badge variant="default">這台裝置已開啟通知</Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <StatusTag tone="success">這台裝置已開啟通知</StatusTag>
+            {/* 可逆動作(隨時可以再開)⇒ 不標紅,用 ② 次要。 */}
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              variant="neutral"
+              size="card"
               disabled={isUnsubscribing}
               onClick={handleUnsubscribeThisDevice}
             >
@@ -236,20 +258,31 @@ export function PushSubscriptionCard({
             </Button>
           </div>
         ) : (
-          <Button type="button" size="sm" disabled={isSubscribing} onClick={handleSubscribe}>
+          // 這張卡片最主要的動作 ⇒ ① 主要(skill 二之三)。
+          <Button
+            type="button"
+            variant="primary"
+            size="touch"
+            className="self-start"
+            disabled={isSubscribing}
+            onClick={handleSubscribe}
+          >
             {isSubscribing ? "開啟中⋯" : "開啟通知"}
           </Button>
         )}
 
         {/* §7.5:測試通知區塊。§6.5 的誠實界線由 pushTestStatus.ts 統一管。 */}
         {isThisDeviceSubscribed ? (
-          <div className="space-y-2 border-t border-border pt-3" data-testid="push-test-section">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-foreground">測試通知</p>
+          <div
+            className="flex flex-col gap-2 border-t border-border pt-3"
+            data-testid="push-test-section"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className={SECTION_LABEL_CLASS}>測試通知</p>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="neutral"
+                size="card"
                 disabled={isTesting}
                 onClick={() => void runTestPush(currentEndpoint)}
               >
@@ -257,22 +290,26 @@ export function PushSubscriptionCard({
               </Button>
             </div>
             {testMessage ? (
-              <p
-                data-testid="push-test-status"
-                className={`text-xs ${
-                  testMessage.tone === "success"
-                    ? "text-brand"
-                    : testMessage.tone === "warning"
-                      ? "text-destructive"
-                      : "text-muted-foreground"
-                }`}
-              >
-                {testMessage.text}
-                {testMessage.hint ? <span className="block">{testMessage.hint}</span> : null}
-              </p>
+              // 🟡 warning 那一態就是「為什麼你沒收到」⇒ 常駐 `!`;好消息不需要警示框搶版面。
+              testMessage.tone === "warning" ? (
+                <AlertNote data-testid="push-test-status">
+                  {testMessage.text}
+                  {testMessage.hint ? <span className="block">{testMessage.hint}</span> : null}
+                </AlertNote>
+              ) : (
+                <p
+                  data-testid="push-test-status"
+                  className={`text-xs leading-relaxed ${
+                    testMessage.tone === "success" ? "text-success-strong" : "text-muted-foreground"
+                  }`}
+                >
+                  {testMessage.text}
+                  {testMessage.hint ? <span className="block">{testMessage.hint}</span> : null}
+                </p>
+              )
             ) : null}
             {testState === "no_ack" ? (
-              <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+              <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-muted-foreground">
                 {PUSH_TEST_TROUBLESHOOTING.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
@@ -282,8 +319,8 @@ export function PushSubscriptionCard({
         ) : null}
 
         {/* §7.4:事件開關清單。還沒開通任何裝置時不顯示清單,只給一句說明。 */}
-        <div className="space-y-2 border-t border-border pt-3">
-          <p className="text-xs font-medium text-foreground">要收哪幾種通知</p>
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <p className={SECTION_LABEL_CLASS}>要收哪幾種通知</p>
           {subscriptions.length === 0 ? (
             <p className="text-xs text-muted-foreground">先開啟通知,才能選擇要收哪幾種。</p>
           ) : (
@@ -296,28 +333,40 @@ export function PushSubscriptionCard({
           )}
         </div>
 
-        <div className="space-y-2 border-t border-border pt-3">
-          <p className="text-xs font-medium text-foreground">已開通裝置</p>
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <p className={SECTION_LABEL_CLASS}>已開通裝置</p>
           {isLoadingSubscriptions ? (
-            <p className="text-xs text-muted-foreground">載入中⋯</p>
+            <Skeleton className="h-10 w-full rounded-md bg-muted" />
           ) : subscriptions.length === 0 ? (
             <p className="text-xs text-muted-foreground">目前沒有任何裝置開通推播通知。</p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="flex flex-col gap-1.5">
               {subscriptions.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">
+                <li
+                  key={s.id}
+                  className="flex min-h-11 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs"
+                >
+                  <span className="min-w-0 break-words text-muted-foreground">
                     {simplifyUserAgent(s.user_agent)} ‧{" "}
-                    {new Date(s.created_at).toLocaleDateString("zh-TW")}
+                    <span className="tabular-nums">
+                      {new Date(s.created_at).toLocaleDateString("zh-TW")}
+                    </span>
                     {s.last_seen_at ? (
-                      <> ‧ 最後收到通知 {new Date(s.last_seen_at).toLocaleDateString("zh-TW")}</>
+                      <>
+                        {" "}
+                        ‧ 最後收到通知{" "}
+                        <span className="tabular-nums">
+                          {new Date(s.last_seen_at).toLocaleDateString("zh-TW")}
+                        </span>
+                      </>
                     ) : null}
                   </span>
+                  {/* 🔴 可逆動作(那台裝置重新開啟通知就會再出現)⇒ 不標紅,用 ④ 純文字。 */}
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto p-0 text-xs text-destructive hover:text-destructive"
+                    variant="text"
+                    size="card"
+                    className="shrink-0"
                     onClick={() => handleRemoveDevice(s)}
                   >
                     移除這台裝置
@@ -328,7 +377,7 @@ export function PushSubscriptionCard({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           提醒:iPhone 需要 iOS 16.4 以上版本且已加入主畫面才能使用推播通知,體驗會跟 Android
           有落差,這是蘋果的系統限制,不是這個功能做得不完整。
         </p>

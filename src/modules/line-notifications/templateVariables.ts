@@ -82,11 +82,18 @@ export const LINE_MARKETING_TEMPLATE_VARIABLE_DEFINITIONS: { key: string; label:
   { key: "member_name", label: "會員姓名" },
 ];
 
-/** §10.1 即時預覽:行銷通知只套用 member_name 這一個範例值,不套用完整的
+/** §10.1 行銷通知的範例假資料:只有 member_name 這一個,不沿用完整的
  * LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES——避免商家在預覽區看到 {{merchant_name}} 這類變數被
- * 替換成範例值,誤以為實際發送時也會生效(實際上 line-send-marketing 不會替換)。 */
+ * 替換成範例值,誤以為實際發送時也會生效(實際上 line-send-marketing 不會替換)。
+ *
+ * ui-v1-full 第 3 批:抽成具名常數並匯出,是為了讓行銷通知頁的「可用變數」三欄說明表
+ * (skill 二之七)的「範例值」那一欄,跟預覽框用的是**同一份**假資料 —— 表格跟預覽框各給
+ * 一份值是之後最容易走鐘的地方。值本身完全沒變。 */
+export const LINE_MARKETING_TEMPLATE_PREVIEW_SAMPLE_VALUES: Record<string, string> = {
+  member_name: LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES["member_name"] ?? "王小姐",
+};
+
+/** §10.1 即時預覽:套用行銷通知自己那一份範例假資料。 */
 export function previewLineMarketingTemplate(template: string): string {
-  return renderLineMessageTemplate(template, {
-    member_name: LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES["member_name"] ?? "王小姐",
-  });
+  return renderLineMessageTemplate(template, LINE_MARKETING_TEMPLATE_PREVIEW_SAMPLE_VALUES);
 }

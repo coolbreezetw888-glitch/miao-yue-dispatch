@@ -1,10 +1,19 @@
 // 使用者決策(2026-09-23):「首頁」分頁籤拔掉,原本掛在那裡的個人資料相關 UI 分散到不同地方
 // (詳見 HomePage.tsx/ManagePage.tsx 開頭的說明)。這幾個小元件同時被兩邊用到,抽出來共用,
 // 不要各自複製一份。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 「更改登入信箱」改 ② 次要(這兩個小區塊都不是頁面的主要動作)。
+//   - 🔴「已寄出驗證信到 …,尚未完成驗證」改成 🟡 常駐 `!`(AlertNote):這是「現在的狀態跟
+//     使用者以為的不一樣」—— 他以為信箱已經改好了,其實還沒生效(skill 二,第三類)。
+//   - 商家管理員建議新信箱那張卡:「套用並寄出驗證信」是那張卡片最主要的動作 ⇒ ① 主要,
+//     「忽略」⇒ ② 次要;卡片圓角/間距對齊 skill 的一套規格。
+// **只動外觀,不動行為**:套用 / 忽略的 API 呼叫與 toast 文案全部照舊。
 
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { AlertNote } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { ChangeLoginEmailDialog } from "@/components/ChangeLoginEmailDialog";
 
@@ -28,23 +37,29 @@ export function LoginEmailSection({
   newEmail: string | null;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-      <div className="text-sm">
-        <span className="text-muted-foreground">登入信箱:</span>
-        <span className="font-medium text-foreground">{email ?? "-"}</span>
-        {newEmail ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            ・已寄出驗證信到 {newEmail},尚未完成驗證
-          </p>
-        ) : null}
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0 text-sm">
+          <span className="text-muted-foreground">登入信箱:</span>
+          <span className="break-all font-semibold text-foreground">{email ?? "-"}</span>
+        </div>
+        <ChangeLoginEmailDialog
+          trigger={
+            // ② 次要:這不是頁面的主要動作(skill 二之三)。
+            <Button type="button" variant="neutral" size="card" className="shrink-0">
+              更改登入信箱
+            </Button>
+          }
+        />
       </div>
-      <ChangeLoginEmailDialog
-        trigger={
-          <Button variant="outline" size="sm">
-            更改登入信箱
-          </Button>
-        }
-      />
+      {newEmail ? (
+        // 🟡 常駐 `!`:他以為信箱已經改好了,其實還沒生效(skill 二,第三類)。
+        <AlertNote>
+          已寄出驗證信到 <span className="break-all font-semibold">{newEmail}</span>,
+          <strong>還沒完成驗證</strong>
+          ,所以目前登入還是要用上面那個舊信箱。請到新信箱收信並點連結完成確認。
+        </AlertNote>
+      ) : null}
     </div>
   );
 }
@@ -92,17 +107,31 @@ export function PendingAdminLoginEmailSuggestionCard({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand/40 bg-brand-soft/40 p-5">
-      <p className="text-sm text-foreground">
-        商家管理員建議把你的登入信箱改成「<span className="font-semibold">{pendingEmail}</span>
+    <div className="flex flex-col gap-3 rounded-xl border border-brand/40 bg-brand-soft/40 p-4">
+      <p className="text-sm leading-relaxed text-foreground">
+        商家管理員建議把你的登入信箱改成「
+        <span className="break-all font-semibold">{pendingEmail}</span>
         」,要套用嗎？套用後系統會寄一封驗證信到這個新信箱,你點連結確認後才會真正生效。
       </p>
-      <div className="flex shrink-0 gap-2">
-        <Button variant="outline" size="sm" disabled={ignoring || applying} onClick={handleIgnore}>
-          {ignoring ? "處理中⋯" : "忽略"}
-        </Button>
-        <Button size="sm" disabled={applying || ignoring} onClick={handleApply}>
+      <div className="flex flex-wrap gap-2">
+        {/* 這張卡片最主要的動作 ⇒ ① 主要;「忽略」⇒ ② 次要(skill 二之三)。 */}
+        <Button
+          type="button"
+          variant="primary"
+          size="touch"
+          disabled={applying || ignoring}
+          onClick={handleApply}
+        >
           {applying ? "送出中⋯" : "套用並寄出驗證信"}
+        </Button>
+        <Button
+          type="button"
+          variant="neutral"
+          size="touch"
+          disabled={ignoring || applying}
+          onClick={handleIgnore}
+        >
+          {ignoring ? "處理中⋯" : "忽略"}
         </Button>
       </div>
     </div>

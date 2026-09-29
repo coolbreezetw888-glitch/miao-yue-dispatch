@@ -1,25 +1,41 @@
 // 模組 12 §4.3:報表匯出中心(新路由 /app/reports)。
 // 統一畫面選擇訂單/會員/抽成/請假四種報表類型跟篩選期間，一次操作完成 CSV 下載。這裡完全呼叫
 // 各自來源模組已經暴露的對外介面，不新建任何查詢函式(模組獨立性，見規格書第一節判斷 13)。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader(`‹ 返回功能` 一行小字)。
+//   - 四種報表的切換改底線式切換列,variant="pages"(這是**內容分頁列**:每個分頁是一塊不同的
+//     內容、有自己的篩選欄位,不是「同一份名單的不同批」。二之四末段的兩種列規則)。
+//   - 所有欄位改 FormField + 共用欄位元件:日期用 FieldDate、服務人員下拉用 FieldSelect。
+//   - 🔴「年 / 月」兩個 type=number 輸入框合併成一個 FieldMonth(`<input type="month">`)——
+//     第 2 批補這個元件就是給「報表的指定月份」用的(見 FormField.tsx 的 FieldMonth 說明)。
+//     手機上原生月份選擇器比兩個小數字框好按太多,也不會出現「月份打成 13」這種輸入。
+//     送進 API 的仍然是原本的 year / month 兩個數字,行為沒變。
+//   - 🔴 服務人員下拉的選項來自資料庫(動態清單)⇒ 一律套 guardPhantomEmptyChange
+//     (src/lib/radixSelectGuard.ts 自己就寫「新加 Select 時建議直接套,一律套上沒有副作用」)。
+//     訂單狀態是固定白名單,套的時候一併給白名單判斷函式(最嚴格的那一種用法)。
+//   - 「匯出 CSV」是每個分頁唯一的 ① 主要按鈕(一次只會顯示一張卡,畫面上只有一顆,二之三)。
+//
+// **只動外觀,不動行為**:四份 CSV 的欄位、篩選條件怎麼組、檔名、toast 文案、抽成匯出逐位
+// 服務人員容錯跳過的做法全部照舊。
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { toast } from "sonner";
-
+import {
+  FieldDate,
+  FieldMonth,
+  FieldSelect,
+  FormField,
+  PageHeader,
+  UnderlineTabsList,
+  UnderlineTabsTrigger,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs } from "@/components/ui/tabs";
+import { toast } from "sonner";
 
 import { buildCsvContent, downloadCsv } from "@/lib/csv";
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { fetchMerchantBookings } from "@/modules/booking/api";
@@ -40,8 +56,21 @@ const REPORT_TABS: Array<{ key: ReportType; label: string }> = [
   { key: "leave", label: "請假" },
 ];
 
+/** 訂單狀態篩選的固定白名單(給 guardPhantomEmptyChange 的最嚴格用法用)。 */
+const ORDER_STATUS_OPTIONS = [
+  { value: "__all__", label: "全部狀態" },
+  { value: "accepted", label: "已接受" },
+  { value: "completed", label: "已完成" },
+  { value: "cancelled", label: "已取消" },
+] as const;
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** 年 + 月兩個數字 → `<input type="month">` 吃的 `YYYY-MM`。 */
+function toMonthValue(year: number, month: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}`;
 }
 
 function ReportExportCenterPageInner() {
@@ -67,6 +96,19 @@ function ReportExportCenterPageInner() {
   const [leaveStartDate, setLeaveStartDate] = useState("");
   const [leaveEndDate, setLeaveEndDate] = useState("");
   const [leaveStaffId, setLeaveStaffId] = useState<string>("__all__");
+
+  /** FieldMonth 的 `YYYY-MM` 拆回原本的 year / month 兩個 state(送進 API 的值完全沒變)。
+   *  清空欄位或打到一半解析不出來時**不動 state** —— 寧可留著上一個有效月份,也不要讓匯出
+   *  拿到 NaN(原本兩個 type=number 欄位清空時就會送出 NaN,這裡順手不再發生)。 */
+  function handleCommissionMonthChange(value: string) {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    if (!match) return;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (!Number.isFinite(year) || month < 1 || month > 12) return;
+    setCommissionYear(year);
+    setCommissionMonth(month);
+  }
 
   async function handleExportOrders() {
     setExporting(true);
@@ -203,31 +245,31 @@ function ReportExportCenterPageInner() {
     }
   }
 
+  /** 服務人員下拉的選項(全部 + 資料庫裡的每一位)。 */
+  const staffOptions = [
+    { value: "__all__", label: "全部服務人員" },
+    ...(staffList ?? []).map((s) => ({ value: s.id, label: s.name })),
+  ];
+
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
-      <div>
-        {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟資料匯入精靈/產業轉移精靈的
-            「← 返回功能」行為一致。這個頁面不是多步驟精靈，沒有「上一步」按鈕需要區分。 */}
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">報表匯出中心</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          這裡是彙整入口，模組本身(帳務報表、會員管理)頁面上原有的匯出按鈕依然可以使用，兩者資料
-          來源相同。
-        </p>
-      </div>
+      {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟資料匯入精靈/產業轉移精靈的
+          「← 返回功能」行為一致。這個頁面不是多步驟精靈，沒有「上一步」按鈕需要區分。 */}
+      <PageHeader
+        backTo="/app/manage"
+        title="報表匯出中心"
+        description="這裡是彙整入口，模組本身(帳務報表、會員管理)頁面上原有的匯出按鈕依然可以使用，兩者資料來源相同。"
+      />
 
+      {/* 內容分頁列(每個分頁是一塊不同的內容、有自己的篩選欄位)⇒ variant="pages"。 */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportType)}>
-        <TabsList>
+        <UnderlineTabsList variant="pages">
           {REPORT_TABS.map((t) => (
-            <TabsTrigger key={t.key} value={t.key}>
+            <UnderlineTabsTrigger key={t.key} value={t.key}>
               {t.label}
-            </TabsTrigger>
+            </UnderlineTabsTrigger>
           ))}
-        </TabsList>
+        </UnderlineTabsList>
       </Tabs>
 
       {activeTab === "orders" && (
@@ -236,42 +278,43 @@ function ReportExportCenterPageInner() {
             <CardTitle>訂單報表</CardTitle>
             <CardDescription>依日期區間+狀態篩選，匯出訂單清單。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <div>
-                <Label className="text-xs">開始日期</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField label="開始日期" htmlFor="report-order-start">
+                <FieldDate
+                  id="report-order-start"
                   value={orderStartDate}
                   onChange={(e) => setOrderStartDate(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">結束日期</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
+              </FormField>
+              <FormField label="結束日期" htmlFor="report-order-end">
+                <FieldDate
+                  id="report-order-end"
                   value={orderEndDate}
                   onChange={(e) => setOrderEndDate(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">狀態</Label>
-                <Select value={orderStatus} onValueChange={setOrderStatus}>
-                  <SelectTrigger className="mt-1 w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">全部狀態</SelectItem>
-                    <SelectItem value="accepted">已接受</SelectItem>
-                    <SelectItem value="completed">已完成</SelectItem>
-                    <SelectItem value="cancelled">已取消</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              </FormField>
+              <FormField label="狀態" htmlFor="report-order-status">
+                <FieldSelect
+                  id="report-order-status"
+                  value={orderStatus}
+                  // 固定白名單 ⇒ 用最嚴格的那一種 guard 用法。
+                  onValueChange={guardPhantomEmptyChange(setOrderStatus, (v) =>
+                    ORDER_STATUS_OPTIONS.some((o) => o.value === v),
+                  )}
+                  options={ORDER_STATUS_OPTIONS}
+                />
+              </FormField>
             </div>
-            <Button disabled={exporting} onClick={() => void handleExportOrders()}>
+            {/* 這個分頁唯一的 ① 主要按鈕。 */}
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="self-start"
+              disabled={exporting}
+              onClick={() => void handleExportOrders()}
+            >
               匯出 CSV
             </Button>
           </CardContent>
@@ -285,7 +328,13 @@ function ReportExportCenterPageInner() {
             <CardDescription>無篩選，匯出全部會員。</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button disabled={exporting} onClick={() => void handleExportMembers()}>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              disabled={exporting}
+              onClick={() => void handleExportMembers()}
+            >
               匯出 CSV
             </Button>
           </CardContent>
@@ -298,46 +347,38 @@ function ReportExportCenterPageInner() {
             <CardTitle>抽成報表</CardTitle>
             <CardDescription>依年月+服務人員(可選全部)篩選。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <div>
-                <Label className="text-xs">年</Label>
-                <Input
-                  type="number"
-                  className="mt-1 w-24"
-                  value={commissionYear}
-                  onChange={(e) => setCommissionYear(Number(e.target.value))}
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField
+                label="月份"
+                htmlFor="report-commission-month"
+                help="選一個月份,匯出那一個月所有已完成訂單的抽成明細。原本要分開填「年」跟「月」兩格,現在直接選一次就好。"
+                helpLabel="說明:抽成報表的月份怎麼選"
+              >
+                <FieldMonth
+                  id="report-commission-month"
+                  value={toMonthValue(commissionYear, commissionMonth)}
+                  onChange={(e) => handleCommissionMonthChange(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">月</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={12}
-                  className="mt-1 w-20"
-                  value={commissionMonth}
-                  onChange={(e) => setCommissionMonth(Number(e.target.value))}
+              </FormField>
+              <FormField label="服務人員" htmlFor="report-commission-staff">
+                <FieldSelect
+                  id="report-commission-staff"
+                  value={commissionStaffId}
+                  // 選項來自資料庫(動態清單)⇒ 只擋空字串的那一種 guard 用法。
+                  onValueChange={guardPhantomEmptyChange(setCommissionStaffId)}
+                  options={staffOptions}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">服務人員</Label>
-                <Select value={commissionStaffId} onValueChange={setCommissionStaffId}>
-                  <SelectTrigger className="mt-1 w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">全部服務人員</SelectItem>
-                    {(staffList ?? []).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              </FormField>
             </div>
-            <Button disabled={exporting} onClick={() => void handleExportCommission()}>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="self-start"
+              disabled={exporting}
+              onClick={() => void handleExportCommission()}
+            >
               匯出 CSV
             </Button>
           </CardContent>
@@ -350,44 +391,39 @@ function ReportExportCenterPageInner() {
             <CardTitle>請假報表</CardTitle>
             <CardDescription>依日期區間+服務人員(可選全部)篩選。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <div>
-                <Label className="text-xs">開始日期</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <FormField label="開始日期" htmlFor="report-leave-start">
+                <FieldDate
+                  id="report-leave-start"
                   value={leaveStartDate}
                   onChange={(e) => setLeaveStartDate(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">結束日期</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
+              </FormField>
+              <FormField label="結束日期" htmlFor="report-leave-end">
+                <FieldDate
+                  id="report-leave-end"
                   value={leaveEndDate}
                   onChange={(e) => setLeaveEndDate(e.target.value)}
                 />
-              </div>
-              <div>
-                <Label className="text-xs">服務人員</Label>
-                <Select value={leaveStaffId} onValueChange={setLeaveStaffId}>
-                  <SelectTrigger className="mt-1 w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">全部服務人員</SelectItem>
-                    {(staffList ?? []).map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              </FormField>
+              <FormField label="服務人員" htmlFor="report-leave-staff">
+                <FieldSelect
+                  id="report-leave-staff"
+                  value={leaveStaffId}
+                  onValueChange={guardPhantomEmptyChange(setLeaveStaffId)}
+                  options={staffOptions}
+                />
+              </FormField>
             </div>
-            <Button disabled={exporting} onClick={() => void handleExportLeave()}>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="self-start"
+              disabled={exporting}
+              onClick={() => void handleExportLeave()}
+            >
               匯出 CSV
             </Button>
           </CardContent>

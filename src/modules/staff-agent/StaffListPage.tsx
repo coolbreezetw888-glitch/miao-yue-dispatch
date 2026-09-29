@@ -11,6 +11,12 @@
 //   - 服務人員列改成 ListCard:右側只放「一顆主要動作 + 一個 ⋯」,其餘動作收進 ⋯。
 //     尚未開通登入的整張變黃 + 待辦標籤,已移除整張變灰。因為觸發點變成選單項目,五個對話框改成
 //     受控開關、整頁各只有一顆實例。
+// 🔴 2026-09-30 使用者裁決(SPECS-INDEX #846):黃卡改成「只在這家商家已經有至少一位在職服務人員
+//    開通登入時,其他尚未開通的人才標黃」。服務人員登入是選配功能,不用它的商家名單本來會永遠整頁黃,
+//    黃色就失去「這張要你處理」的意義。判斷基準是整份名單(切分頁不會讓結果跟著變)、已移除的不算;
+//    不標黃時「尚未開通登入」標籤仍然顯示,只是從 TodoTag 降級成 AttributeTag(中性、無警示感)。
+//    邏輯在 staffListLogic.ts 的 merchantUsesStaffLogin / shouldMarkPendingLoginAsTodo(附單元測試),
+//    規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段。
 //   - 篩選分頁籤改底線式、頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕(skill 二之八)。
 // ui-v1-full 第二階段回填(2026-09-29 主腦裁決):
 //   - 主要動作:「編輯」永遠是主要動作(已移除的人才換成「恢復」);「邀請登入」放 ⋯ 第一項。
@@ -113,6 +119,8 @@ import { StaffAvatarUploader } from "./StaffAvatarUploader";
 import {
   countStaffByFilter,
   matchesStaffListFilter,
+  merchantUsesStaffLogin,
+  shouldMarkPendingLoginAsTodo,
   STAFF_LIST_FILTER_TABS,
   validateStaffBookingDays,
   type StaffListFilter,
@@ -934,6 +942,13 @@ function StaffListInner() {
     [staffList, listFilter],
   );
 
+  // 🔴 #846(2026-09-30 使用者裁決):這家商家「有沒有真的在用服務人員登入功能」。
+  // 只有 true 時,其他「尚未開通登入」的人才標黃卡(理由與規則寫在 staffListLogic.ts 的說明區塊,
+  // 規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段)。
+  // 🔴 相依陣列刻意是 `staffList`(整份未篩選的名單)**不是** `filteredStaffList` ——
+  //    切分頁不可以讓黃不黃的結果跟著變。
+  const usesStaffLogin = useMemo(() => merchantUsesStaffLogin(staffList ?? []), [staffList]);
+
   // ui-v1-full:五個對話框的受控開關(觸發點在 ListCard 的按鈕 / ⋯ 選單裡)。編輯 / 邀請用
   // 「記住是哪一位 + 開關」兩個 state,關閉時只關開關、不清掉人,避免關閉動畫期間內容閃動。
   const [createOpen, setCreateOpen] = useState(false);
@@ -1047,6 +1062,9 @@ function StaffListInner() {
               {filteredStaffList.map((staff) => {
                 const loginStatus = staff.login_status as StaffLoginStatus;
                 const isRemoved = staff.status !== "active";
+                // 🔴 #846:「尚未開通登入」要不要當成待辦(整張卡變黃 + 待辦標籤)。
+                // false 時標籤照樣顯示,只是降級成中性的屬性標籤、卡片不變黃。
+                const pendingLoginIsTodo = shouldMarkPendingLoginAsTodo(staff, usesStaffLogin);
                 // 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請入口(只給管理員)。
                 const canInvite = isAdmin && !isRemoved && loginStatus === "not_invited";
                 // 2026-09-29 主腦裁決(skill 二之三「位置固定」的精神是不要讓人每次都得重新找):
@@ -1089,16 +1107,11 @@ function StaffListInner() {
                 return (
                   <li key={staff.id}>
                     {/* skill 二之五 列表卡片:頭像 → 姓名 + 狀態標籤 + 屬性標籤 + 待辦標籤 → 次要資訊
-                        (登入信箱狀態)→ 右側「一顆主要動作 + ⋯」。🔴 尚未開通登入的整張變黃(要處理),
-                        已移除整張變灰、名稱變淡。 */}
+                        (登入信箱狀態)→ 右側「一顆主要動作 + ⋯」。已移除整張變灰、名稱變淡。
+                        🔴 #846:「尚未開通登入」只在這家已經有人開通登入時才整張變黃(見上方
+                        pendingLoginIsTodo),否則維持一般白卡 —— 不用登入功能的商家名單不該整頁黃。 */}
                     <ListCard
-                      state={
-                        isRemoved
-                          ? "inactive"
-                          : loginStatus === "not_invited"
-                            ? "attention"
-                            : "default"
-                      }
+                      state={isRemoved ? "inactive" : pendingLoginIsTodo ? "attention" : "default"}
                       leading={
                         <Avatar className="h-10 w-10">
                           {staff.avatar_url ? (
@@ -1133,11 +1146,24 @@ function StaffListInner() {
                               ]
                             }
                           </AttributeTag>
-                          {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態。尚未開通 = 待辦標籤;
+                          {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態。
                               邀請信已寄出 = 等對方動作的黃色狀態;已開通則由下方「登入信箱:…」那行
-                              表達,不再多一顆標籤。已移除的人不顯示登入標籤(沒有動作可做)。 */}
+                              表達,不再多一顆標籤。已移除的人不顯示登入標籤(沒有動作可做)。
+
+                              🔴 #846(2026-09-30 使用者裁決):「尚未開通登入」這個標籤**一定要顯示**
+                              (它是事實資訊,而且「邀請登入」就在 ⋯ 選單裡,使用者需要知道現在是什麼狀態),
+                              但樣式分兩種:
+                                - 這家已經有人開通登入 ⇒ 真的是待辦 ⇒ TodoTag(黃底 + `!`)
+                                - 這家一位都沒開通 ⇒ 這是「永久狀態」不是待辦 ⇒ 降級成 AttributeTag
+                                  (方角灰底、安靜、沒有警示感),卡片也不變黃。
+                              skill 二之八末段的通則:「標成待辦之前先問一句,這個狀態對某些使用者
+                              是不是永久狀態?」是的話它就是屬性,屬性不給警示色。 */}
                           {!isRemoved && loginStatus === "not_invited" ? (
-                            <TodoTag>尚未開通登入</TodoTag>
+                            pendingLoginIsTodo ? (
+                              <TodoTag>尚未開通登入</TodoTag>
+                            ) : (
+                              <AttributeTag>尚未開通登入</AttributeTag>
+                            )
                           ) : null}
                           {!isRemoved && loginStatus === "invited" ? (
                             <StatusTag tone="warning">

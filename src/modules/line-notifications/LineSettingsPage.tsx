@@ -1,28 +1,47 @@
 // 模組 11(LINE 通知)§4.1:LINE 串接設定頁(新路由 /app/line-settings,僅商家管理員可見)。
 // 目前連線狀態卡片 + 憑證表單(儲存並測試連線)+ 加好友連結 + 解除串接。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;載入中改灰色骨架(二之八)。
+//   - 「已連線 / 尚未串接」由 Badge 改成 StatusTag(二之四)。
+//   - 「解除串接」確認窗改小卡窗殼 CardAlertDialog(三、兩種窗);🔴 解除串接是**可逆**的
+//     (視窗裡自己就寫「重新填入正確憑證就能立刻恢復」,通知設定 / 文案 / 記錄 / 綁定都不會刪),
+//     所以按鈕與確認鈕都**不標紅**,用 ② 次要 / ① 主要 —— 紅色只留給真正不可逆的刪除
+//     (第 1 / 2 批已定案的裁決)。
+//   - 三個憑證欄位改 FormField + FieldInput,必填用紅色 `*`(不寫「(必填)」);眼睛切換鈕做成
+//     跟欄位同高的 44px 觸控目標(二之七)。
+//   - 「儲存並測試連線」是這一頁唯一的 ① 主要按鈕(二之三)。
+//   - 測試連線的結果:失敗改用 🟡 常駐 `!`(AlertNote tone="danger")而不是一行紅字 ——
+//     「為什麼不能用」屬於絕對不能收起來的那一類(二)。成功維持一行綠字(那是好消息,
+//     不需要警示框搶版面)。
+//
+// **只動外觀,不動行為**:儲存 → 自動測試連線的流程、成功後清空 secret/token、解除串接的
+// API 呼叫、加好友連結的組法(buildLineAddFriendUrl)、複製按鈕的 1.5 秒回饋全部照舊。
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+  AlertNote,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+  FieldInput,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -38,6 +57,31 @@ import { buildLineAddFriendUrl } from "./lineBindingViewLogic";
 
 const configStatusQueryKey = (merchantId: string) =>
   ["line-notifications-module", "config-status", merchantId] as const;
+
+/** 密碼欄位右側的眼睛切換鈕:跟欄位同高(44px)才符合 skill 二之三的觸控目標。 */
+function RevealToggle({
+  shown,
+  label,
+  onToggle,
+}: {
+  shown: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="neutral"
+      size="icon"
+      aria-label={label}
+      aria-pressed={shown}
+      className="h-11 w-11 shrink-0 rounded-md"
+      onClick={onToggle}
+    >
+      {shown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 function LineSettingsPageInner() {
   const { merchant } = useCurrentMerchant();
@@ -141,49 +185,44 @@ function LineSettingsPageInner() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">LINE 串接設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          串接你自己申請的 LINE 官方帳號,之後訂單/請假等通知才能真正送出。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="LINE 串接設定"
+        description="串接你自己申請的 LINE 官方帳號,之後訂單/請假等通知才能真正送出。"
+      />
 
       <Card>
         <CardHeader>
           <CardTitle>目前連線狀態</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="flex flex-col gap-2.5 text-sm">
           {isLoading ? (
-            <p className="text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="lines" rows={2} />
           ) : status?.isConnected ? (
             <>
-              <div className="flex items-center gap-2">
-                <Badge variant="default">已連線</Badge>
-                <span className="text-foreground">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusTag tone="success">已連線</StatusTag>
+                <span className="min-w-0 break-words text-foreground">
                   {status.displayName}
                   {status.lineBotBasicId ? `(@${status.lineBotBasicId})` : ""}
                 </span>
               </div>
               {addFriendUrl ? (
-                <div className="flex items-center gap-2 text-xs">
+                // 網址很長,320px 下必須能折行 ⇒ 不並排、標籤自成一行(比照 skill 二之六地址那條)。
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                   <span className="text-muted-foreground">加好友連結:</span>
                   <a
                     href={addFriendUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-brand hover:underline"
+                    className="min-w-0 break-all text-brand hover:underline"
                   >
                     {addFriendUrl}
                   </a>
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
+                    variant="text"
+                    size="card"
                     onClick={() => handleCopyAddFriendUrl(addFriendUrl)}
                   >
                     {copyLabel}
@@ -192,10 +231,12 @@ function LineSettingsPageInner() {
               ) : null}
             </>
           ) : (
-            <Badge variant="secondary">尚未串接</Badge>
+            <StatusTag tone="neutral" className="self-start">
+              尚未串接
+            </StatusTag>
           )}
           {status?.lastTestedAt ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs tabular-nums text-muted-foreground">
               最後測試時間:
               {new Date(status.lastTestedAt).toLocaleString("zh-TW", { hour12: false })}
               {status.lastTestResult ? `・${status.lastTestResult}` : ""}
@@ -203,26 +244,33 @@ function LineSettingsPageInner() {
           ) : null}
 
           {status?.isConnected ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button type="button" variant="outline" size="sm" disabled={disconnecting}>
+            <CardAlertDialog>
+              <CardAlertDialogTrigger asChild>
+                {/* 🔴 可逆動作 ⇒ 不標紅(② 次要)。 */}
+                <Button
+                  type="button"
+                  variant="neutral"
+                  size="card"
+                  className="self-start"
+                  disabled={disconnecting}
+                >
                   解除串接
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>確定要解除 LINE 串接嗎?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    解除後不會刪除通知設定/文案範本/發送記錄/已綁定的 LINE 帳號,重新填入正確憑證就能
-                    立刻恢復運作。
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>再想想</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDisconnect}>確定解除</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              </CardAlertDialogTrigger>
+              <CardAlertDialogContent>
+                <CardAlertDialogHeader>
+                  <CardAlertDialogTitle>確定要解除 LINE 串接嗎?</CardAlertDialogTitle>
+                  <CardAlertDialogDescription>
+                    解除後不會刪除通知設定/文案範本/發送記錄/已綁定的 LINE
+                    帳號,重新填入正確憑證就能立刻恢復運作。
+                  </CardAlertDialogDescription>
+                </CardAlertDialogHeader>
+                <CardAlertDialogFooter>
+                  <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
+                  <CardAlertDialogAction onClick={handleDisconnect}>確定解除</CardAlertDialogAction>
+                </CardAlertDialogFooter>
+              </CardAlertDialogContent>
+            </CardAlertDialog>
           ) : null}
         </CardContent>
       </Card>
@@ -245,42 +293,39 @@ function LineSettingsPageInner() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="line-channel-id">Channel ID *</Label>
-              <Input
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <FormField label="Channel ID" htmlFor="line-channel-id" required>
+              <FieldInput
                 id="line-channel-id"
-                className="mt-2"
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
               />
-            </div>
-            <div>
-              <Label htmlFor="line-channel-secret">Channel Secret *</Label>
-              <div className="mt-2 flex gap-2">
-                <Input
+            </FormField>
+
+            <FormField label="Channel Secret" htmlFor="line-channel-secret" required>
+              <div className="flex gap-2">
+                <FieldInput
                   id="line-channel-secret"
                   type={showSecret ? "text" : "password"}
+                  className="min-w-0 flex-1"
                   value={channelSecret}
                   onChange={(e) => setChannelSecret(e.target.value)}
                   placeholder={status?.isConnected ? "(已設定,重新輸入以更換)" : undefined}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowSecret((v) => !v)}
-                >
-                  {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
+                <RevealToggle
+                  shown={showSecret}
+                  label={showSecret ? "隱藏 Channel Secret" : "顯示 Channel Secret"}
+                  onToggle={() => setShowSecret((v) => !v)}
+                />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="line-channel-token">Channel Access Token *</Label>
-              <div className="mt-2 flex gap-2">
-                <Input
+            </FormField>
+
+            <FormField label="Channel Access Token" htmlFor="line-channel-token" required>
+              <div className="flex gap-2">
+                <FieldInput
                   id="line-channel-token"
                   type={showToken ? "text" : "password"}
+                  className="min-w-0 flex-1"
                   value={channelAccessToken}
                   onChange={(e) => setChannelAccessToken(e.target.value)}
                   placeholder={
@@ -289,24 +334,33 @@ function LineSettingsPageInner() {
                       : undefined
                   }
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowToken((v) => !v)}
-                >
-                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
+                <RevealToggle
+                  shown={showToken}
+                  label={showToken ? "隱藏 Channel Access Token" : "顯示 Channel Access Token"}
+                  onToggle={() => setShowToken((v) => !v)}
+                />
               </div>
-            </div>
+            </FormField>
 
             {testResult ? (
-              <p className={testResult.success ? "text-sm text-cta" : "text-sm text-destructive"}>
-                {testResult.message}
-              </p>
+              testResult.success ? (
+                <p className="text-[13px] font-semibold text-success-strong">
+                  {testResult.message}
+                </p>
+              ) : (
+                // 🟡 常駐 `!`:「為什麼不能用」絕對不能收起來(skill 二)。
+                <AlertNote tone="danger">{testResult.message}</AlertNote>
+              )
             ) : null}
 
-            <Button type="submit" disabled={saving}>
+            {/* 這一頁唯一的 ① 主要按鈕(skill 二之三)。 */}
+            <Button
+              type="submit"
+              variant="primary"
+              size="touch"
+              className="self-start"
+              disabled={saving}
+            >
               {saving ? "處理中⋯" : "儲存並測試連線"}
             </Button>
           </form>

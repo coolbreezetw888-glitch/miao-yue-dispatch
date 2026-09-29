@@ -4,6 +4,13 @@
 //    「他會收到這間店的通知」。三種互斥狀態必須用三種不同的 Badge 樣式 ——
 //    如果「已開通但全關」沿用主色 Badge,視覺上跟「會收到通知」一模一樣,老闆掃過去只會看到
 //    「已開通」三個字,那正是 Q6 要修掉的誤導。
+//
+// ui-v1-full 第 3 批(2026-09-30):畫面改用 ui-overlay-patterns skill 二之四的 StatusTag,
+// 所以這支測試的樣式判斷也跟著從 shadcn Badge 的 variant 換成 skill 的四種狀態色調。
+// 🔴 **這支測試要守的東西一個字都沒變**:三種互斥狀態仍然必須是三種看得出差別的樣式,
+//    而且「已開通但全關」不可以跟「會收到通知」長一樣。只有「怎麼判斷樣式」這件事換了寫法。
+// 載入中那一條也跟著改:skill 二之八規定載入中要用灰色骨架方塊,不用「載入中⋯」四個字
+//    (原本註解寫的「這一段刻意不改」是指 Q6 那一次不要順手動它,不是永遠不能改)。
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,12 +27,19 @@ function renderSummary() {
   render(<StaffPushSubscriptionSummary staffId="staff-1" />);
 }
 
-/** 從 Badge 元素的 class 判斷它用的是哪一種 variant(shadcn Badge 沒有 data-variant 屬性)。 */
-function badgeVariantOf(element: HTMLElement): "default" | "secondary" | "outline" | "unknown" {
+/** 從 StatusTag 元素的 class 判斷它用的是哪一種狀態色調(skill 二之四:正常 = 綠系 /
+ *  要注意 = 黃系 / 結束或尚未啟用 = 灰系 / 出事 = 紅系)。StatusTag 沒有 data-tone 屬性,
+ *  所以跟改版前一樣靠 class 判斷。
+ *  ⚠️ 判斷順序不可以調換:statusNeutral 的 class 是 `bg-muted text-muted-foreground`,
+ *     先比對其他三種才不會誤判。 */
+function badgeToneOf(
+  element: HTMLElement,
+): "success" | "warning" | "danger" | "neutral" | "unknown" {
   const cls = element.className;
-  if (cls.includes("border-transparent") && cls.includes("bg-primary")) return "default";
-  if (cls.includes("border-transparent") && cls.includes("bg-secondary")) return "secondary";
-  if (!cls.includes("border-transparent")) return "outline";
+  if (cls.includes("bg-success-soft")) return "success";
+  if (cls.includes("bg-warn-soft")) return "warning";
+  if (cls.includes("bg-destructive-soft")) return "danger";
+  if (cls.includes("bg-muted")) return "neutral";
   return "unknown";
 }
 
@@ -35,10 +49,14 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
   });
   afterEach(() => cleanup());
 
-  it("載入中維持原本的「載入中⋯」灰字(這一段刻意不改)", () => {
+  it("載入中顯示灰色骨架方塊,不顯示任何一種狀態標籤(skill 二之八)", () => {
     useStaffPushStatusMock.mockReturnValue({ data: undefined, isLoading: true });
     renderSummary();
-    expect(screen.getByText("載入中⋯")).toBeInTheDocument();
+    // 骨架是純視覺的方塊,沒有文字 —— 重點是「三種狀態都還沒出現」,不會先閃一個錯的狀態。
+    expect(screen.queryByText("載入中⋯")).not.toBeInTheDocument();
+    expect(screen.queryByText("尚未開通")).not.toBeInTheDocument();
+    expect(screen.queryByText(/會收到通知/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/關閉了全部通知/)).not.toBeInTheDocument();
   });
 
   it("0 台:顯示「尚未開通」+ 補充小字", () => {
@@ -48,7 +66,9 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
     });
     renderSummary();
     const badge = screen.getByText("尚未開通");
-    expect(badgeVariantOf(badge)).toBe("secondary");
+    // 🔴 中性(灰系),不是待辦的黃色:推播是選配功能,沒打算用的人永遠是「尚未開通」,
+    // 那是永久狀態 = 屬性,屬性不給警示色(skill 二之八末段,跟 #846 黃卡同一條通則)。
+    expect(badgeToneOf(badge)).toBe("neutral");
     expect(screen.getByText("他還沒在任何手機上開啟推播通知。")).toBeInTheDocument();
   });
 
@@ -59,7 +79,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
     });
     renderSummary();
     const badge = screen.getByText("已開通 2 台,會收到通知");
-    expect(badgeVariantOf(badge)).toBe("default");
+    expect(badgeToneOf(badge)).toBe("success");
     expect(screen.queryByText(/他還沒在任何手機/)).not.toBeInTheDocument();
     expect(screen.queryByText(/全部關掉/)).not.toBeInTheDocument();
   });
@@ -86,7 +106,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    const willReceiveVariant = badgeVariantOf(screen.getByText("已開通 2 台,會收到通知"));
+    const willReceiveTone = badgeToneOf(screen.getByText("已開通 2 台,會收到通知"));
     cleanup();
 
     useStaffPushStatusMock.mockReturnValue({
@@ -94,10 +114,12 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    const allDisabledVariant = badgeVariantOf(screen.getByText("已開通 2 台,但他關閉了全部通知"));
+    const allDisabledTone = badgeToneOf(screen.getByText("已開通 2 台,但他關閉了全部通知"));
 
-    expect(allDisabledVariant).toBe("outline");
-    expect(allDisabledVariant).not.toBe(willReceiveVariant);
+    expect(willReceiveTone).toBe("success");
+    expect(allDisabledTone).toBe("warning");
+    // 這一行才是 Q6 真正要守的東西:兩者絕對不可以長一樣。
+    expect(allDisabledTone).not.toBe(willReceiveTone);
   });
 
   it("三種狀態互斥:同一時間只會渲染出其中一個 Badge", () => {

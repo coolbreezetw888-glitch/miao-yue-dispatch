@@ -25,28 +25,53 @@
 //   這個欄位控制的是「什麼樣的會員才拿得到點數」,只跟點數有關,#617 把紅利點數獨立成一頁時漏掉了。
 //   這頁因此只剩「會員政策」「會員等級」兩個區塊,頁面描述文字一併照實改寫。rewardConditionMode
 //   在這頁降級成跟上述三個欄位一樣的「只讀回填用」state,確保儲存會員政策時不會把它覆蓋掉。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;載入中改灰色骨架(二之八)。
+//   - 🔴「預覽效果」改成**全頁層**:skill 三「使用者已裁決的個案」表格裡點名
+//     「會員系統設定 > 會員政策 > 預覽效果 = 全頁層」,不要有人照「內容很短」把它改回小卡窗。
+//   - 🔴「新增 / 編輯會員等級」只有 2 個欄位 ⇒ **小卡窗**(三「📐 分類原則」第 3 點)。
+//   - 兩個開關改 SwitchRow(二之七);欄位改 FormField + FieldInput / FieldTextarea。
+//   - 顯示順序的 `type="number"` 改成文字輸入 + inputMode(手機滑動 / 桌機滾輪經過都會誤改數字,
+//     比照 skill 二之七金額欄位的同一個理由)。驗證沒變(仍然是 `Number(sortOrder) || 0`)。
+//   - 會員等級清單改 ListCard(二之五)+ StatusTag(二之四);右側只放「一顆主要動作 + 一個 ⋯」:
+//     「編輯」永遠是主要動作,已下架的換成「重新上架」;「下架」收進 ⋯ 且**不標紅**(可逆)。
+//   - 「新增等級」「儲存」分別是各自卡片的 ① 主要按鈕,「預覽效果」是 ② 次要(二之三)。
+//   - 沒有任何等級時改 EmptyState,附一顆「新增等級」下一步按鈕(二之八)。
+//
+// **只動外觀,不動行為**:整列 upsert 的 saveSettings(把這頁沒有 UI 的欄位原樣回填)、
+// 等級的新增 / 編輯 / 下架 / 重新上架 API、政策內容的自動長高、toast 文案全部照舊。
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  CardDialogTrigger,
+  EmptyState,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  FullPageLayer,
+  FullPageLayerContent,
+  FullPageLayerTrigger,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+  SwitchRow,
+  type ListCardMenuItem,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -68,6 +93,9 @@ const memberSettingsQueryKey = (merchantId: string) =>
   ["members-module", "merchant-member-settings", merchantId] as const;
 const memberTiersQueryKey = (merchantId: string) =>
   ["members-module", "member-tiers", merchantId, false] as const;
+
+/** 小卡窗的按鈕列在 <form> 外面(位置由殼決定),送出鈕用 form= 指回來。 */
+const TIER_FORM_ID = "member-tier-form";
 
 // ---------------------------------------------------------------------------
 // 「會員政策」自動依內容調整高度的文字區域(#618 §10.6 第 3 點)。不需要複雜的富文本編輯器,
@@ -93,9 +121,10 @@ function AutoHeightTextarea({
   }, [value]);
 
   return (
-    <Textarea
+    <FieldTextarea
       ref={ref}
-      className="mt-2 min-h-24 resize-none overflow-hidden"
+      id="policy-content"
+      className="min-h-24 resize-none overflow-hidden"
       value={value}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
@@ -116,27 +145,29 @@ function PolicyPreviewDialog({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+    <FullPageLayer open={open} onOpenChange={setOpen}>
+      <FullPageLayerTrigger asChild>
+        {/* ② 次要:同一列的主要動作是「儲存」(skill 二之三,一個畫面只能有一顆主要)。 */}
+        <Button type="button" variant="neutral" size="touch">
           預覽效果
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>會員政策(客戶端預覽)</DialogTitle>
-          <DialogDescription>
-            這是模擬客戶未來在客戶端看到的排版樣子,不是真的串接客戶端頁面(客戶端尚未開發)。
-          </DialogDescription>
-        </DialogHeader>
-        <div className="rounded-md border border-border bg-muted/30 p-4">
-          <p className="text-sm font-semibold text-foreground">{merchantName}・會員政策</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+      </FullPageLayerTrigger>
+      {/* 🔴 全頁層:skill 三「使用者已裁決的個案」點名這個畫面歸全頁層,不要因為內容短就改回小卡窗。
+          政策內容可以很長(點數規則 + 退換貨 + 個資聲明),一定要能捲。 */}
+      <FullPageLayerContent
+        title="會員政策(客戶端預覽)"
+        subtitle="這是模擬客戶未來在客戶端看到的排版樣子,不是真的串接客戶端頁面(客戶端尚未開發)。"
+      >
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <p className="break-words text-sm font-semibold text-foreground">
+            {merchantName}・會員政策
+          </p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-muted-foreground">
             {policyContent.trim() ? policyContent : "(尚未填寫政策內容)"}
           </p>
         </div>
-      </DialogContent>
-    </Dialog>
+      </FullPageLayerContent>
+    </FullPageLayer>
   );
 }
 
@@ -196,45 +227,59 @@ function TierFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "編輯會員等級" : "新增會員等級"}</DialogTitle>
-          <DialogDescription>純分類標籤用途,不跟紅利點數倍率或其他權益掛勾。</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="tier-name">等級名稱 *</Label>
-            <Input
+    <CardDialog open={open} onOpenChange={setOpen}>
+      <CardDialogTrigger asChild>{trigger}</CardDialogTrigger>
+      {/* 2 個欄位 ⇒ 小卡窗(skill 三「📐 分類原則」第 3 點)。 */}
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>{isEdit ? "編輯會員等級" : "新增會員等級"}</CardDialogTitle>
+          <CardDialogDescription>
+            純分類標籤用途,不跟紅利點數倍率或其他權益掛勾。
+          </CardDialogDescription>
+        </CardDialogHeader>
+        <form onSubmit={handleSubmit} id={TIER_FORM_ID} className="flex flex-col gap-3.5">
+          <FormField label="等級名稱" htmlFor="tier-name" required>
+            <FieldInput
               id="tier-name"
-              className="mt-2"
               placeholder="例如:一般會員、VIP 會員"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-          </div>
-          <div>
-            <Label htmlFor="tier-sort-order">顯示順序</Label>
-            <Input
+          </FormField>
+          <FormField
+            label="顯示順序"
+            htmlFor="tier-sort-order"
+            help="數字小的排前面,例如一般會員 0、VIP 1。留空或填不是數字的東西會當成 0。"
+            helpLabel="說明:顯示順序的數字怎麼填"
+          >
+            <FieldInput
               id="tier-sort-order"
-              type="number"
-              className="mt-2 w-32"
+              type="text"
+              inputMode="numeric"
+              className="tabular-nums sm:w-32"
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value)}
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              數字小的排前面,例如一般會員 0、VIP 1。
-            </p>
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={TIER_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={saving}
+          >
+            {saving ? "儲存中⋯" : "儲存"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -269,68 +314,92 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
     }
   }
 
+  /** 新增等級的按鈕(只放在卡片右上角一處)。
+   *  📌 空狀態刻意**不再放一顆**:EmptyState.action 的例外條款 —— 下一步就在空狀態正上方的
+   *     卡片標題列、一眼看得到,再放一顆會變成同一張卡片上兩顆 primary(違反 skill 二之三),
+   *     而且是同一個動作的兩個實例。改在空狀態文案裡指路。 */
+  const createTrigger = (
+    <TierFormDialog
+      merchantId={merchantId}
+      tier={null}
+      trigger={
+        // 這張卡片的 ① 主要動作。
+        <Button type="button" variant="primary" size="touch">
+          新增等級
+        </Button>
+      }
+      onSaved={refetch}
+    />
+  );
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <div>
+      <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <CardTitle>會員等級</CardTitle>
           <CardDescription>
             商家自訂等級名稱(例如一般/VIP/超級VIP),純分類標籤用途,不跟紅利點數倍率或其他權益掛勾。
           </CardDescription>
         </div>
-        <TierFormDialog
-          merchantId={merchantId}
-          tier={null}
-          trigger={<Button variant="cta">新增等級</Button>}
-          onSaved={refetch}
-        />
+        <div className="shrink-0 [&>*]:w-full sm:[&>*]:w-auto">{createTrigger}</div>
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="cards" rows={2} />
         ) : !tiers || tiers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前還沒有任何會員等級,點右上角新增一項。</p>
+          <EmptyState
+            title="還沒有任何會員等級"
+            description="按上方的「新增等級」建立第一個。建立之後,會員卡片上會顯示等級標籤,LINE 行銷通知也可以依等級整批挑人。"
+          />
         ) : (
-          <ul className="space-y-2">
-            {tiers.map((tier) => (
-              <li
-                key={tier.id}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{tier.name}</p>
-                  <Badge
-                    variant={tier.status === "active" ? "default" : "secondary"}
-                    className="mt-1"
-                  >
-                    {tier.status === "active" ? "上架中" : "已下架"}
-                  </Badge>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  {tier.status === "active" ? (
-                    <>
-                      <TierFormDialog
-                        merchantId={merchantId}
-                        tier={tier}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            編輯
-                          </Button>
-                        }
-                        onSaved={refetch}
-                      />
-                      <Button variant="outline" size="sm" onClick={() => handleRemove(tier.id)}>
-                        下架
-                      </Button>
-                    </>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={() => handleReactivate(tier.id)}>
-                      重新上架
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
+          <ul className="flex flex-col gap-2.5">
+            {tiers.map((tier) => {
+              const isRemoved = tier.status !== "active";
+              // 🔴 二之三:「編輯」永遠是主要動作(已下架的換成「重新上架」),其餘收進 ⋯;
+              //    「下架」是可逆的 ⇒ 一般項目、不標紅。
+              const menuItems: ListCardMenuItem[] | undefined = isRemoved
+                ? undefined
+                : [{ label: "下架", onSelect: () => void handleRemove(tier.id) }];
+              return (
+                <li key={tier.id}>
+                  <ListCard
+                    state={isRemoved ? "inactive" : "default"}
+                    title={tier.name}
+                    tags={
+                      isRemoved ? (
+                        <StatusTag tone="neutral">已下架</StatusTag>
+                      ) : (
+                        <StatusTag tone="success">上架中</StatusTag>
+                      )
+                    }
+                    primaryAction={
+                      isRemoved ? (
+                        <Button
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          onClick={() => void handleReactivate(tier.id)}
+                        >
+                          重新上架
+                        </Button>
+                      ) : (
+                        <TierFormDialog
+                          merchantId={merchantId}
+                          tier={tier}
+                          trigger={
+                            <Button type="button" variant="neutral" size="card">
+                              編輯
+                            </Button>
+                          }
+                          onSaved={refetch}
+                        />
+                      )
+                    }
+                    menuItems={menuItems}
+                  />
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardContent>
@@ -398,18 +467,11 @@ function MemberSettingsPageInner() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">會員系統設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、
-          消費點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="會員系統設定"
+        description={`「${merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、消費點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。`}
+      />
 
       {/* #618 §10.6 第 3 點:「基本政策」改名「會員政策」,啟用開關 + 政策內容欄位(自動調整高度)
           + 儲存按鈕 + 按鈕下方「預覽效果」。 */}
@@ -420,32 +482,37 @@ function MemberSettingsPageInner() {
             啟用後,這段內容之後會顯示給客戶端(模組 13 之後串接)看到,例如點數使用規則、隱私聲明等。
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-col gap-4">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="lines" rows={3} />
           ) : (
             <>
-              <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <div>
-                  <p className="text-sm font-medium text-foreground">啟用會員政策</p>
-                  <p className="text-xs text-muted-foreground">
-                    關閉時,即使填了內容,客戶端也不會顯示。
-                  </p>
-                </div>
-                <Switch checked={policyEnabled} onCheckedChange={setPolicyEnabled} />
-              </div>
+              {/* skill 二之七:開關做成一整列。 */}
+              <SwitchRow
+                id="policy-enabled"
+                title="啟用會員政策"
+                description="關閉時,即使填了內容,客戶端也不會顯示。"
+                checked={policyEnabled}
+                onCheckedChange={setPolicyEnabled}
+              />
 
-              <div>
-                <Label htmlFor="policy-content">政策內容</Label>
+              <FormField label="政策內容" htmlFor="policy-content">
                 <AutoHeightTextarea
                   value={policyContent}
                   onChange={setPolicyContent}
                   placeholder="例如:會員點數不可折抵現金、退換貨規則、個資使用聲明⋯"
                 />
-              </div>
+              </FormField>
 
-              <div className="flex items-center gap-2">
-                <Button type="button" size="sm" disabled={savingPolicy} onClick={handleSavePolicy}>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* 這張卡片的 ① 主要動作。 */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="touch"
+                  disabled={savingPolicy}
+                  onClick={handleSavePolicy}
+                >
                   {savingPolicy ? "儲存中⋯" : "儲存"}
                 </Button>
                 <PolicyPreviewDialog merchantName={merchant!.name} policyContent={policyContent} />

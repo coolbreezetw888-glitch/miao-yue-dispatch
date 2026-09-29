@@ -14,24 +14,48 @@
 // (整頁重新載入),handleAdd 完全沒被呼叫。改成不用 <form> 包,「新增」按鈕改用
 // type="button" + onClick 直接呼叫 handleAdd 本體,不依賴表單送出事件;email 輸入框額外補上
 // Enter 鍵手動觸發,保留原本按 Enter 送出的操作習慣。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 每一位管理員改 ListCard(二之五);右側只放「一顆主要動作 + 一個 ⋯」——這一列唯一的動作
+//     是「移除」,而且它是**不可逆**的(沒有「恢復」,要重新邀請一次),所以留在卡片上並用
+//     ③ 危險(白底紅字淡紅框)。🔴 不做實心紅(二之三)。
+//     📌 這是全批第二個標紅的地方:第 1 / 2 批「可逆動作不標紅」的裁決講的是下架 / 停用 /
+//        解除綁定那一類有路回頭的動作,移除管理員沒有那條路。
+//   - 加入日期改成屬性標籤 AttributeTag(二之四:靜態分類、方角灰底安靜)。
+//   - 「新增管理員(Email)」改 FormField + FieldInput;沒有管理員時改 EmptyState,
+//     依 EmptyState 的例外條款不另外放按鈕 —— 下一步(新增管理員的欄位)就在空狀態正下方、
+//     一眼看得到,改在 description 用一句話指路。
+//   - 載入中改灰色骨架;載入失敗改 ErrorState(什麼壞了 / 可能原因 / 下一步 + 資料沒有遺失)。
+//
+// ⚠️ 這個元件被 MerchantSettingsPage 的外層 <form> 包在裡面(見上面 2026-09-17 那段),
+//    所以這裡**依然不能自己包 <form>** —— FormField 只是一個 div + Label,沒有這個問題;
+//    「新增」按鈕維持 type="button" + onClick,不依賴表單送出事件。
+//
+// **只動外觀,不動行為**:邀請 / 移除的 RPC 呼叫、Enter 鍵送出、錯誤訊息來源、顯示 fallback
+// (adminDisplay.ts)全部照舊。
 
 import { useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  AttributeTag,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+  EmptyState,
+  ErrorState,
+  FieldInput,
+  FormField,
+  ListCard,
+  LoadingSkeleton,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
@@ -94,21 +118,26 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
   }
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">載入管理員名單中⋯</p>;
+    // skill 二之八:載入中用灰色骨架,不要用文字。
+    return <LoadingSkeleton variant="cards" rows={2} />;
   }
 
   if (error) {
-    return <p className="text-sm text-destructive">管理員名單載入失敗:{error.message}</p>;
+    // skill 二之八:出錯要講三件事 +「你的資料沒有遺失」(那句由 ErrorState 固定加上)。
+    return (
+      <ErrorState
+        title="讀不到管理員名單"
+        reason={`可能是網路斷了,或是這間店的權限剛剛被調整過(原始訊息:${error.message})`}
+        onRetry={() => void refetch()}
+      />
+    );
   }
 
   return (
-    <div className="space-y-4">
-      <ul className="space-y-2">
+    <div className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-2.5">
         {(admins ?? []).map((admin) => (
-          <li
-            key={admin.id}
-            className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
-          >
+          <li key={admin.id}>
             {/* 對應規格書「首頁外殼與主題色優化」三 + QA #183 打回:email 長度不固定(真實帳號
                 可能 25 字元以上),窄螢幕下不能跟右側日期/按鈕擠在同一個 nowrap 列,否則會把
                 整個 <li> 撐寬到超出卡片,連帶讓整個頁面 body 出現橫向捲軸。這裡改成手機寬度垂直
@@ -123,65 +152,101 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
                 資訊多了之後手機版更容易溢出,所以每一行都各自 break-words / break-all
                 (email 跟手機沒有空白可以斷行,要用 break-all),沿用 StaffListPage.tsx /
                 AgentListPage.tsx 剛修過的同一組模式。 */}
-            <div className="min-w-0 space-y-0.5">
-              {/* 暱稱是這一列最重要的辨識資訊,放第一行、字體最明顯;職位跟在後面當小字。
-                  null 的 fallback 一律走 ./adminDisplay.ts,不在畫面裡自己寫 ?? 或 || 判斷。 */}
-              <p className="break-words font-medium text-foreground">
-                {adminDisplayName(admin)}
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {adminJobTitle(admin)}
-                </span>
-              </p>
-              <p className="break-all text-xs text-muted-foreground">手機:{adminPhone(admin)}</p>
-              {/* 2026-09-24 使用者裁決:一位管理員只有**一個** Email,就是登入 Email
-                  (原話:「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」)。
-                  原本這裡下面還有一行「聯絡信箱」(merchant_admins.contact_email),連同那個欄位
-                  跟 adminContactEmailToShow() 判斷式一起移除了,不要加回來。 */}
-              <p className="break-all text-xs text-muted-foreground">Email:{admin.email}</p>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 sm:shrink-0 sm:justify-end">
-              <span className="text-xs text-muted-foreground">
-                {new Date(admin.created_at).toLocaleDateString("zh-TW")} 加入
-              </span>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={removingUserId === admin.user_id}>
-                    移除
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>確定要移除這位管理員嗎?</AlertDialogTitle>
-                    {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在顯示暱稱,確認視窗只講 email
-                        會讓人要自己對照是哪一位,移除是不可逆的操作,要讓對象一眼確認。 */}
-                    <AlertDialogDescription>
-                      {adminDisplayName(admin)}({admin.email})將無法再登入管理這間店。如果這是
-                      最後一位管理員(且集團也沒有設定集團管理者),系統會擋下這個操作並提示。
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleRemove(admin.user_id)}>
-                      確定移除
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
+            {/* 2026-09-24:這一列從「只有一個 email」擴充成「暱稱 / 職位 / 手機 / Email」。
+                使用者原話:「目前我這邊看到的只有 Email(新增管理員也是 Email),新增用 Email 沒
+                問題,但名單要顯示暱稱 / 手機 / Email,這樣才好判斷是誰。」
+                那個 Email 就是登入 Email(auth.users)——同日使用者又裁決一個人只有一個 Email
+                (「登入和聯絡信箱應該要是一致的」),所以這裡不會有第二個 Email 欄位。
+                資訊多了之後手機版更容易溢出,所以每一行都各自 break-words / break-all
+                (email 跟手機沒有空白可以斷行,要用 break-all)。ListCard 的 title / meta 本身
+                已經是 break-words,email 與手機那兩行額外再加 break-all。 */}
+            <ListCard
+              title={
+                <>
+                  {/* null 的 fallback 一律走 ./adminDisplay.ts,不在畫面裡自己寫 ?? 或 || 判斷。 */}
+                  {adminDisplayName(admin)}
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    {adminJobTitle(admin)}
+                  </span>
+                </>
+              }
+              tags={
+                <AttributeTag className="tabular-nums">
+                  {new Date(admin.created_at).toLocaleDateString("zh-TW")} 加入
+                </AttributeTag>
+              }
+              meta={
+                <>
+                  <span className="block break-all">手機:{adminPhone(admin)}</span>
+                  {/* 2026-09-24 使用者裁決:一位管理員只有**一個** Email,就是登入 Email
+                      (原話:「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」)。
+                      原本這裡下面還有一行「聯絡信箱」(merchant_admins.contact_email),連同那個
+                      欄位跟 adminContactEmailToShow() 判斷式一起移除了,不要加回來。 */}
+                  <span className="block break-all">Email:{admin.email}</span>
+                </>
+              }
+              primaryAction={
+                <CardAlertDialog>
+                  <CardAlertDialogTrigger asChild>
+                    {/* 🔴 ③ 危險(白底紅字淡紅框):移除管理員沒有「恢復」,要重新邀請一次。
+                        不做實心紅(skill 二之三)。 */}
+                    <Button
+                      type="button"
+                      variant="danger"
+                      size="card"
+                      disabled={removingUserId === admin.user_id}
+                    >
+                      移除
+                    </Button>
+                  </CardAlertDialogTrigger>
+                  <CardAlertDialogContent>
+                    <CardAlertDialogHeader>
+                      <CardAlertDialogTitle>確定要移除這位管理員嗎?</CardAlertDialogTitle>
+                      {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在顯示暱稱,確認視窗只講 email
+                          會讓人要自己對照是哪一位,移除是不可逆的操作,要讓對象一眼確認。 */}
+                      <CardAlertDialogDescription>
+                        {adminDisplayName(admin)}({admin.email})將無法再登入管理這間店。如果這是
+                        最後一位管理員(且集團也沒有設定集團管理者),系統會擋下這個操作並提示。
+                      </CardAlertDialogDescription>
+                    </CardAlertDialogHeader>
+                    <CardAlertDialogFooter>
+                      <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                      <CardAlertDialogAction
+                        tone="danger"
+                        onClick={() => handleRemove(admin.user_id)}
+                      >
+                        確定移除
+                      </CardAlertDialogAction>
+                    </CardAlertDialogFooter>
+                  </CardAlertDialogContent>
+                </CardAlertDialog>
+              }
+            />
           </li>
         ))}
-        {(admins ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前沒有管理員紀錄</p>
-        ) : null}
       </ul>
+      {(admins ?? []).length === 0 ? (
+        // EmptyState 的例外條款:下一步(下面那個 Email 欄位)就在空狀態正下方、一眼看得到,
+        // 所以不硬做一顆「聚焦上方欄位」的按鈕,改在 description 用一句話指路。
+        <EmptyState
+          title="目前沒有管理員紀錄"
+          description="用下面的「新增管理員(Email)」把人加進來,對方就能登入管理這間店。"
+        />
+      ) : null}
 
-      <div className="flex items-end gap-3">
-        <div className="flex-1">
-          <Label htmlFor="new-merchant-admin-email">新增管理員(Email)</Label>
-          <Input
+      {/* ⚠️ 這裡刻意**不包 <form>**:這個元件被外層的商家設定表單包著,巢狀 <form> 會被瀏覽器
+          忽略,「新增」會變成觸發外層表單的原生送出(整頁重新載入)——見檔頭 2026-09-17 那段。 */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-3">
+        <FormField
+          label="新增管理員(Email)"
+          htmlFor="new-merchant-admin-email"
+          className="min-w-0 flex-1"
+          help="對方必須先自己註冊過秒約帳號,你才加得進來。加進來的人跟你一樣是商家管理員,看得到也改得動這間店的所有設定。"
+          helpLabel="說明:新增管理員要注意什麼"
+        >
+          <FieldInput
             id="new-merchant-admin-email"
             type="email"
-            className="mt-2"
             value={newAdminEmail}
             onChange={(e) => setNewAdminEmail(e.target.value)}
             onKeyDown={(e) => {
@@ -192,9 +257,13 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
             }}
             placeholder="對方需已註冊過秒約帳號"
           />
-        </div>
+        </FormField>
+        {/* ② 次要:這一頁的 ① 主要按鈕是最下方的「儲存變更」(skill 二之三)。 */}
         <Button
           type="button"
+          variant="neutral"
+          size="touch"
+          className="shrink-0"
           onClick={() => void handleAdd()}
           disabled={adding || !newAdminEmail.trim()}
         >

@@ -88,9 +88,13 @@ describe("PushEventToggleList(§7.4)", () => {
     renderList("staff");
 
     const row = screen.getByTestId("push-event-toggle-booking_created");
-    expect(row.className).toContain("opacity-60");
     expect(row.querySelector("button[role='switch']")).toBeDisabled();
-    expect(screen.getByText(/商家尚未開啟這個事件的推播通知/)).toBeInTheDocument();
+    // ui-v1-full 第 3 批:原本這裡檢查整列 opacity-60。改用 SwitchRow 之後不再整列調淡
+    // (整列調淡會讓那句「為什麼不能開」的原因說明也跟著看不清楚,而那句才是重點),
+    // 改成檢查 skill 二之三要求的那條常駐 `!` 真的在**這一列裡面**、而且是 role="note"。
+    const reason = screen.getByText(/商家尚未開啟這個事件的推播通知/);
+    expect(row).toContainElement(reason);
+    expect(reason.closest('[role="note"]')).not.toBeNull();
 
     // 其他三項不受影響。
     const other = screen.getByTestId("push-event-toggle-booking_cancelled");
