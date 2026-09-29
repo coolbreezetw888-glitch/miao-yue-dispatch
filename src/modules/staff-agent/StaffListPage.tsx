@@ -16,7 +16,7 @@
 //    黃色就失去「這張要你處理」的意義。判斷基準是整份名單(切分頁不會讓結果跟著變)、已移除的不算;
 //    不標黃時「尚未開通登入」標籤仍然顯示,只是從 TodoTag 降級成 AttributeTag(中性、無警示感)。
 //    邏輯在 staffListLogic.ts 的 merchantUsesStaffLogin / shouldMarkPendingLoginAsTodo(附單元測試),
-//    規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段。
+//    規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之五末段。
 //   - 篩選分頁籤改底線式、頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕(skill 二之八)。
 // ui-v1-full 第二階段回填(2026-09-29 主腦裁決):
 //   - 主要動作:「編輯」永遠是主要動作(已移除的人才換成「恢復」);「邀請登入」放 ⋯ 第一項。
@@ -954,7 +954,7 @@ function StaffListInner() {
 
   // 🔴 #846(2026-09-30 使用者裁決):這家商家「有沒有真的在用服務人員登入功能」。
   // 只有 true 時,其他「尚未開通登入」的人才標黃卡(理由與規則寫在 staffListLogic.ts 的說明區塊,
-  // 規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段)。
+  // 規範在 .claude/skills/ui-overlay-patterns/SKILL.md 二之五末段)。
   // 🔴 相依陣列刻意是 `staffList`(整份未篩選的名單)**不是** `filteredStaffList` ——
   //    切分頁不可以讓黃不黃的結果跟著變。
   const usesStaffLogin = useMemo(() => merchantUsesStaffLogin(staffList ?? []), [staffList]);
@@ -1174,7 +1174,7 @@ function StaffListInner() {
                                 - 這家已經有人開通登入 ⇒ 真的是待辦 ⇒ TodoTag(黃底 + `!`)
                                 - 這家一位都沒開通 ⇒ 這是「永久狀態」不是待辦 ⇒ 降級成 AttributeTag
                                   (方角灰底、安靜、沒有警示感),卡片也不變黃。
-                              skill 二之八末段的通則:「標成待辦之前先問一句,這個狀態對某些使用者
+                              skill 二之五末段的通則:「標成待辦之前先問一句,這個狀態對某些使用者
                               是不是永久狀態?」是的話它就是屬性,屬性不給警示色。 */}
                           {!isRemoved && loginStatus === "not_invited" ? (
                             pendingLoginIsTodo ? (

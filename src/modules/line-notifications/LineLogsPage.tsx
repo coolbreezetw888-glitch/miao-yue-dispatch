@@ -25,6 +25,7 @@ import { MessageSquare } from "lucide-react";
 import {
   DetailRow,
   EmptyState,
+  ErrorState,
   FieldSelect,
   ListCard,
   LoadingSkeleton,
@@ -68,7 +69,15 @@ function LineLogsPageInner() {
   const [page, setPage] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const { data: logs, isLoading } = useLineNotificationLog(
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 logs 是
+  // undefined ⇒ 畫成「還沒有任何發送記錄」,商家以為通知從來沒發過(查問題時最需要這頁的時候
+  // 反而被誤導)。一律要有 isError 分支,排在空狀態之前。
+  const {
+    data: logs,
+    isLoading,
+    isError,
+    refetch: refetchLogs,
+  } = useLineNotificationLog(
     merchantId,
     eventFilter === "all" ? null : eventFilter,
     page,
@@ -112,6 +121,12 @@ function LineLogsPageInner() {
         <CardContent className="flex flex-col gap-4">
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={4} />
+          ) : isError ? (
+            <ErrorState
+              title="讀不到發送記錄"
+              reason="可能是網路斷了;現在先不顯示記錄,避免你把空白當成「通知從來沒發過」"
+              onRetry={() => void refetchLogs()}
+            />
           ) : !logs || logs.length === 0 ? (
             <EmptyState
               icon={<MessageSquare className="h-6 w-6" aria-hidden="true" />}

@@ -49,6 +49,7 @@ import {
   CardAlertDialogTrigger,
   ChoiceChip,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldTextarea,
   FormField,
@@ -92,7 +93,15 @@ function LineMarketingPageInner() {
   const merchantId = merchant!.id;
   const navigate = useNavigate();
 
-  const { data: members, isLoading } = useMarketableMembers(merchantId);
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 members 是
+  // undefined ⇒ 畫成「還沒有任何會員完成 LINE 綁定」,商家以為綁定資料全沒了。
+  // isError 分支排在空狀態之前。
+  const {
+    data: members,
+    isLoading,
+    isError,
+    refetch: refetchMarketableMembers,
+  } = useMarketableMembers(merchantId);
   // §10.2:「依會員分類批量選擇」依賴 #615 會員分級,只需要目前還在使用中的等級(下架的等級
   // 不該再出現在批量選擇的清單裡)。
   const { data: tiers } = useMerchantMemberTiers(merchantId, true);
@@ -183,6 +192,12 @@ function LineMarketingPageInner() {
         <CardContent className="flex flex-col gap-3">
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            <ErrorState
+              title="讀不到已綁定 LINE 的會員名單"
+              reason="可能是網路斷了;現在先不顯示名單,避免你把空白當成「會員的 LINE 綁定都不見了」"
+              onRetry={() => void refetchMarketableMembers()}
+            />
           ) : memberList.length === 0 ? (
             <EmptyState
               icon={<Users className="h-6 w-6" aria-hidden="true" />}

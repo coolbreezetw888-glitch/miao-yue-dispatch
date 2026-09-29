@@ -47,6 +47,7 @@ import {
   DetailRow,
   DetailSection,
   EmptyState,
+  ErrorState,
   FieldAmountInput,
   FieldInput,
   FieldSelect,
@@ -1848,10 +1849,15 @@ function CalendarPageInner() {
     return set;
   }, [rangeBookings]);
 
-  const { data: schedule, isLoading: scheduleLoading } = useMerchantDaySchedule(
-    merchantId,
-    selectedDateKey,
-  );
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 schedule 是
+  // undefined ⇒ 整天的時間軸畫成「目前沒有在職的服務人員」+ 一顆「前往服務人員管理」,
+  // 商家以為人員都不見了(行事曆是最常用的一頁,誤導成本最高)。isError 分支排在空狀態之前。
+  const {
+    data: schedule,
+    isLoading: scheduleLoading,
+    isError: scheduleError,
+    refetch: refetchSchedule,
+  } = useMerchantDaySchedule(merchantId, selectedDateKey);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formPrefill, setFormPrefill] = useState<BookingFormPrefill>({});
@@ -2086,6 +2092,12 @@ function CalendarPageInner() {
       {/* 4.3 第 2 點/1.3:服務人員分欄時間軸格線,同一筆預約合併成連續色塊。 */}
       {scheduleLoading ? (
         <LoadingSkeleton variant="lines" rows={6} />
+      ) : scheduleError ? (
+        <ErrorState
+          title="讀不到這天的排班與預約"
+          reason="可能是網路斷了;現在先不顯示時間軸,避免你把空白當成「服務人員都不見了」或「這天沒有任何預約」"
+          onRetry={() => void refetchSchedule()}
+        />
       ) : !schedule || schedule.staff.length === 0 ? (
         <EmptyState
           title="目前沒有在職的服務人員"
@@ -2138,10 +2150,13 @@ function CalendarPageInner() {
                 以上、390px 8 位、1280px 14 位就會壞(2026-09-30 QA 實測)。
                 w-max = width: max-content(跟著內容成長),min-w-full 保證螢幕夠寬時仍然鋪滿容器。
                 ⚠️ jsdom 測不出這一條(它不做版面計算),改這裡一定要回 320px 真瀏覽器用 8 位以上重測。
-                真瀏覽器實測(2026-09-30,headless chromium,捲到最右端時時間欄應停在 x=21):
-                  320px:  7 人 舊 x=-45 / 8 人 舊 x=-165 / 12 人 舊 x=-645  →  新全部 x=21(掉出 0px)
-                  390px:  8 人 舊 x=-95 / 14 人 舊 x=-815              →  新全部 x=21(掉出 0px)
-                  1280px:14 人 舊父層寬仍卡在 1110                     →  新父層寬 1752、x=85 不動
+                真瀏覽器實測(2026-09-30,headless chromium)。判斷標準是**「捲到最右端時,時間欄有沒有
+                被推出容器左緣」**,不是某一個絕對 x 座標——座標會隨容器位置、頁面邊距、瀏覽器捲軸寬度
+                而變,寫死數字會讓下一個人量到別的數字就以為壞了。以「掉出容器左緣幾 px」記錄:
+                  320px: 7 人 / 8 人 / 12 人  舊:掉出 66 / 186 / 666px  →  新:全部掉出 0px ✅
+                  390px: 8 人 / 14 人         舊:掉出 116 / 836px       →  新:全部掉出 0px ✅
+                  1280px:14 人               舊:父層寬卡在 1110(內容 1752) → 新:父層寬 1752、時間欄不動 ✅
+                  ⇒ 人數門檻(舊寫法開始壞掉的位置):**320px 7 位、390px 8 位、1280px 14 位**。
                   欄寬:320px 12 人 = 120px(下限),1280px 6 人 = 173px(有空間就均分,行為不變) */}
             <div className="flex w-max min-w-full">
               {/* 時間欄:sticky 固定在左邊,橫向捲時不跟著跑(skill 六)。 */}

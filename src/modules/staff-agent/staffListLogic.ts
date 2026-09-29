@@ -63,7 +63,7 @@ export function countStaffByFilter(
 
 // =========================================================================
 // 🔴 2026-09-30 使用者裁決(SPECS-INDEX #846,規範寫在
-//    .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段的紅字段落):
+//    .claude/skills/ui-overlay-patterns/SKILL.md 二之五末段的紅字段落):
 //    「尚未開通登入」什麼時候才算「要你去處理的待辦」(= 整張卡片變黃)。
 //
 // 【原本的做法與它的問題】

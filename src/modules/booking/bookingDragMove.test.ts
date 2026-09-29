@@ -378,14 +378,17 @@ describe("computeDropTarget(以色塊頂端為準、round 到最近格、上下 
   });
 
   // -------------------------------------------------------------------------
-  // #846:sticky 時間欄蓋住的那一段 x(2026-09-30 QA 抓到的 32px 誤判帶)
+  // #846:sticky 時間欄蓋住的那一段 x(2026-09-30 QA 抓到的 0~72px 誤判帶)
   // -------------------------------------------------------------------------
   describe("occludedLeftClientX —— 被 sticky 時間欄蓋住的那一段 x 不算落點", () => {
     // 情境重現:捲動之後,A 欄的 rect 仍然是 100–200,但視覺上最左 72px(視窗 x 0–72)被
     // sticky 時間欄蓋住;時間欄的右邊界 = 172(= 容器左緣 100 + 時間欄寬 72 …這裡直接用
     // 「A 欄被蓋掉一半」的數字,方便一眼看出邊界兩側的差別)。
-    // AUTO_SCROLL_EDGE_PX = 40 會先吃掉最左 40px(那段是自動捲動),真正的誤判帶是
-    // 「40px 之後、時間欄右邊界之前」那一段 —— 就是這裡要擋掉的東西。
+    // 🔴 誤判帶是**完整的 0~72px**(整段被蓋住的區域),不是只有 40~72px 那 32px。
+    // (2026-09-30 修正:這裡原本寫成「AUTO_SCROLL_EDGE_PX = 40 會先吃掉最左 40px,真正的
+    //  誤判帶是 40px 之後」——那是錯的。AUTO_SCROLL_EDGE_PX 只動 scrollLeft,**不抑制落點
+    //  計算**:手指停在最左 20px 時畫面會自動捲動,同時照樣每一幀重算落點。所以那 40px 的
+    //  落點也得靠 occludedLeftClientX 擋,實作也確實是整段都擋。)
     const occluded = { ...base, occludedLeftClientX: 172 };
 
     it("🔴 x 在時間欄底下(140:看起來按在時間欄上)→ null,不可以算進被蓋住的 A 欄", () => {
@@ -404,6 +407,19 @@ describe("computeDropTarget(以色塊頂端為準、round 到最近格、上下 
         computeDropTarget({
           ...occluded,
           pointerClientX: 171,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toBeNull();
+    });
+
+    it("🔴 誤判帶的左半段(自動捲動那 40px 裡面,x=110)也是 null —— 整段 0~72px 都擋", () => {
+      // 這一條就是「32px」寫法會漏掉的情況:x=110 距離容器左緣 100 只有 10px,
+      // 落在 AUTO_SCROLL_EDGE_PX 的自動捲動區裡,但它一樣被時間欄蓋住,一樣不能算落點。
+      expect(
+        computeDropTarget({
+          ...occluded,
+          pointerClientX: 110,
           pointerClientY: 150,
           grabOffsetY: 0,
         }),

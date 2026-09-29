@@ -63,6 +63,7 @@ import {
   CardDialogTitle,
   CardDialogTrigger,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldTextarea,
   FormField,
@@ -291,7 +292,14 @@ function TierFormDialog({
 
 function MemberTiersCard({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
-  const { data: tiers, isLoading } = useQuery({
+  // 🔴 2026-09-30(🟡 第 3 項):查詢失敗時 tiers 是 undefined ⇒ 畫成「還沒有任何會員等級」,
+  // 商家以為自己設過的等級不見了,可能重新建一份重複的。isError 分支排在空狀態之前。
+  const {
+    data: tiers,
+    isLoading,
+    isError,
+    refetch: refetchTiers,
+  } = useQuery({
     queryKey: memberTiersQueryKey(merchantId),
     queryFn: () => fetchMerchantMemberTiers(merchantId, false),
   });
@@ -362,6 +370,12 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
       <CardContent>
         {isLoading ? (
           <LoadingSkeleton variant="cards" rows={2} />
+        ) : isError ? (
+          <ErrorState
+            title="讀不到會員等級"
+            reason="可能是網路斷了;現在先不顯示等級清單,避免你把空白當成「等級都不見了」而重新建一份"
+            onRetry={() => void refetchTiers()}
+          />
         ) : !tiers || tiers.length === 0 ? (
           <EmptyState
             title="還沒有任何會員等級"
@@ -427,7 +441,15 @@ function MemberSettingsPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useMerchantMemberSettings(merchantId);
+  // 🔴 2026-09-30(🟡 第 3 項):讀不到設定時,表單會顯示元件的預設值(開關關閉 + 內容空白),
+  // 商家以為那就是自己存過的設定,一按儲存就把真實設定覆寫掉。出錯就不給表單
+  // (跟 PaymentMethodsPage 稅金設定卡、BusinessHoursPage 同一個處理方式)。
+  const {
+    data: settings,
+    isLoading,
+    isError: isSettingsError,
+    refetch: refetchSettings,
+  } = useMerchantMemberSettings(merchantId);
 
   // #642 + 2026-09-24 使用者裁決:這幾個欄位這頁已經沒有任何 UI 可以編輯(點數三個數字欄位、
   // 啟用開關、核發獎勵資格條件都在 MemberPointsPage.tsx 維護),只保留「讀出來原樣回填」的
@@ -501,6 +523,12 @@ function MemberSettingsPageInner() {
         <CardContent className="flex flex-col gap-4">
           {isLoading ? (
             <LoadingSkeleton variant="lines" rows={3} />
+          ) : isSettingsError ? (
+            <ErrorState
+              title="讀不到會員政策設定"
+              reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值當成自己的設定存回去"
+              onRetry={() => void refetchSettings()}
+            />
           ) : (
             <>
               {/* skill 二之七:開關做成一整列。 */}

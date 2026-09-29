@@ -67,7 +67,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
     renderSummary();
     const badge = screen.getByText("尚未開通");
     // 🔴 中性(灰系),不是待辦的黃色:推播是選配功能,沒打算用的人永遠是「尚未開通」,
-    // 那是永久狀態 = 屬性,屬性不給警示色(skill 二之八末段,跟 #846 黃卡同一條通則)。
+    // 那是永久狀態 = 屬性,屬性不給警示色(skill 二之五末段,跟 #846 黃卡同一條通則)。
     expect(badgeToneOf(badge)).toBe("neutral");
     expect(screen.getByText("他還沒在任何手機上開啟推播通知。")).toBeInTheDocument();
   });

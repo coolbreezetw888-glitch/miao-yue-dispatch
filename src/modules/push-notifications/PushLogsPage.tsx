@@ -29,6 +29,7 @@ import { BellRing } from "lucide-react";
 
 import {
   EmptyState,
+  ErrorState,
   FieldSelect,
   LoadingSkeleton,
   PageHeader,
@@ -206,7 +207,14 @@ function PushLogsPageInner() {
   const [page, setPage] = useState(0);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
-  const { data: logs, isLoading } = usePushNotificationLog(
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 logs 是
+  // undefined ⇒ 畫成「還沒有任何發送記錄」,商家以為推播從來沒發過。isError 分支排在空狀態之前。
+  const {
+    data: logs,
+    isLoading,
+    isError,
+    refetch: refetchLogs,
+  } = usePushNotificationLog(
     merchantId,
     {
       eventType: eventFilter === "all" ? null : eventFilter,
@@ -272,6 +280,12 @@ function PushLogsPageInner() {
         <CardContent className="flex flex-col gap-4">
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={4} />
+          ) : isError ? (
+            <ErrorState
+              title="讀不到發送記錄"
+              reason="可能是網路斷了;現在先不顯示記錄,避免你把空白當成「推播從來沒發過」"
+              onRetry={() => void refetchLogs()}
+            />
           ) : !logs || logs.length === 0 ? (
             <EmptyState
               icon={<BellRing className="h-6 w-6" aria-hidden="true" />}

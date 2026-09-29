@@ -33,6 +33,7 @@ import {
   CardAlertDialogTrigger,
   ChoiceChip,
   EmptyState,
+  ErrorState,
   LoadingSkeleton,
   PageHeader,
 } from "@/components/patterns";
@@ -65,10 +66,15 @@ function IndustryTransferWizardPageInner() {
   const [submitting, setSubmitting] = useState(false);
   const [resultCount, setResultCount] = useState<number | null>(null);
 
-  const { data: members, isLoading: membersLoading } = useMerchantMembersList(
-    step === "select-members" ? sourceMerchantId : null,
-    "",
-  );
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 members 是
+  // undefined ⇒ 畫成「這間商家目前沒有上架中的會員可以搬遷」,商家以為來源商家是空的、
+  // 於是直接跳過這一步(搬遷精靈裡跳過等於資料沒搬過去)。isError 分支排在空狀態之前。
+  const {
+    data: members,
+    isLoading: membersLoading,
+    isError: membersError,
+    refetch: refetchSourceMembers,
+  } = useMerchantMembersList(step === "select-members" ? sourceMerchantId : null, "");
   const activeMembers = (members ?? []).filter((m) => m.status === "active");
 
   async function handleCreateMerchant(values: MerchantIntakeFormValues) {
@@ -160,7 +166,14 @@ function IndustryTransferWizardPageInner() {
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {membersLoading ? <LoadingSkeleton variant="cards" rows={3} /> : null}
-            {!membersLoading && activeMembers.length === 0 ? (
+            {!membersLoading && membersError ? (
+              <ErrorState
+                title="讀不到來源商家的會員名單"
+                reason="可能是網路斷了;現在先不顯示名單,避免你把空白當成「這間商家沒有會員」而直接跳過這一步"
+                onRetry={() => void refetchSourceMembers()}
+              />
+            ) : null}
+            {!membersLoading && !membersError && activeMembers.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的會員可以搬遷"
                 description="只有「上架中」的會員可以搬到新商家。要先在會員管理把會員上架,或是先用資料匯入把客戶匯進來。"

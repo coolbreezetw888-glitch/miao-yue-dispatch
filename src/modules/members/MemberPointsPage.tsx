@@ -72,7 +72,14 @@
 //     (「關閉後系統不再自動給點數」是 skill 二點名的第二類:按下去會發生什麼不可逆的事)。
 //   - 三個數字欄位改 FormField + FieldInput;🔴 拿掉 `type="number"`(手機滑動與桌機滾輪經過
 //     都會誤改數字,比照 skill 二之七金額欄位的同一個理由),改成文字輸入 + inputMode + tabular-nums。
-//     驗證完全沒變(仍然是原本那套 Number.isNaN / Number.isInteger 判斷)。
+//   - 🔴 2026-09-30 修正:上面這條當初寫的是「驗證完全沒變(仍然是原本那套 Number.isNaN /
+//     Number.isInteger 判斷)」—— **那句話本身就是這個 bug 的自白**。拿掉 `type="number"` 就等於
+//     拿掉原生的 min / step 約束,驗證「沒變」的意思其實是「沒有補上」。實測後果:消費點數比例
+//     填 `Infinity` 可以存進資料庫(`Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false),
+//     三欄的 `1e3` 都靜默變 1000、`0x10` 變 16、清空欄位靜默存成 0。
+//     現在三欄一律走 parseAmountInput(點數傳 integerOnly),錯誤即時顯示在欄位下面 +
+//     儲存鈕 disabled + 一條常駐 `!` 說明原因。
+//     📌 教訓:**換掉輸入元件的 type 就是改行為**,不是純外觀改動。
 //   - 欄位的說明文字(每消費 N 元累積 1 點、被推薦人完成第一筆才發、生日以月為單位容錯)收進 `?`,
 //     範例試算維持常駐的預覽框(那是即時回饋,不是可以收起來的補充)。
 //   - 核發獎勵資格條件的下拉改 FieldSelect,guardPhantomEmptyChange 白名單版**原樣保留**。
@@ -94,6 +101,7 @@ import {
   FormField,
   LoadingSkeleton,
   PageHeader,
+  parseAmountInput,
   SwitchRow,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
@@ -173,9 +181,20 @@ function MemberPointsPageInner() {
     setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
   }, [settings]);
 
-  const numericRate = Number(pointsEarnRate);
-  const numericReferral = Number(referralBonusPoints);
-  const numericBirthday = Number(birthdayBonusPoints);
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 1 項):這三欄原本是 `Number(x)` + `Number.isNaN` /
+  // `Number.isInteger`,實測放行了:
+  //   ・消費點數比例填 `Infinity` ⇒ `Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false
+  //     ⇒ **比例被存成 Infinity**
+  //   ・`1e3` ⇒ 靜默變 1000、`0x10` ⇒ 靜默變 16(三欄都會)
+  //   ・清空欄位 ⇒ `Number("")` = 0 ⇒ 靜默存成 0
+  // 改走全站共用的 parseAmountInput(規則與白話錯誤訊息都在那支函式裡)。
+  // 推薦獎勵 / 生日贈點是**點數**,一定是整數 ⇒ 傳 integerOnly;消費點數比例是「幾元換 1 點」,
+  // 本來就允許小數(原本用的是 Number.isNaN 而不是 Number.isInteger),所以不傳。
+  // 錯誤訊息從目前輸入內容即時算出來 ⇒ 改成正確的數字就會自己消失。
+  const parsedRate = parseAmountInput(pointsEarnRate);
+  const parsedReferral = parseAmountInput(referralBonusPoints, { integerOnly: true });
+  const parsedBirthday = parseAmountInput(birthdayBonusPoints, { integerOnly: true });
+  const hasPointsFieldError = !parsedRate.ok || !parsedReferral.ok || !parsedBirthday.ok;
 
   // #639/#642(.project/specs/會員與紅利.md §10.5):「點數設定」卡片現在一次管理 4 個欄位(啟用
   // 開關+消費點數比例+推薦獎勵+生日贈點),但 upsertMerchantMemberSettings 是整列 upsert,不是
@@ -233,24 +252,17 @@ function MemberPointsPageInner() {
   // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的驗證+儲存邏輯,從 MemberSettingsPage.tsx 的
   // handleSavePoints() 原樣搬過來。
   async function handleSavePoints() {
-    if (Number.isNaN(numericRate) || numericRate < 0) {
-      toast.error("消費點數比例不可為負數");
-      return;
-    }
-    if (!Number.isInteger(numericReferral) || numericReferral < 0) {
-      toast.error("推薦獎勵點數必須是不小於 0 的整數");
-      return;
-    }
-    if (!Number.isInteger(numericBirthday) || numericBirthday < 0) {
-      toast.error("生日贈點必須是不小於 0 的整數");
+    // 🔴 2026-09-30:三欄的錯誤已經即時顯示在各自欄位下面、儲存鈕也 disabled,這裡是防呆。
+    if (!parsedRate.ok || !parsedReferral.ok || !parsedBirthday.ok) {
+      toast.error("有欄位填錯了", { description: "請看標紅的欄位,只能填數字。" });
       return;
     }
     setSavingPoints(true);
     try {
       await saveSettingsRow({
-        pointsEarnRate: numericRate,
-        referralBonusPoints: numericReferral,
-        birthdayBonusPoints: numericBirthday,
+        pointsEarnRate: parsedRate.value,
+        referralBonusPoints: parsedReferral.value,
+        birthdayBonusPoints: parsedBirthday.value,
       });
       toast.success("已更新紅利點數設定");
     } catch (err) {
@@ -389,7 +401,8 @@ function MemberPointsPageInner() {
                   <FormField
                     label="消費點數比例(元/點)"
                     htmlFor="points-earn-rate"
-                    help="每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你套用任何數字。"
+                    error={parsedRate.ok ? null : parsedRate.error}
+                    help="每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你套用任何數字。只能填數字和小數點。"
                     helpLabel="說明:消費點數比例怎麼設定"
                   >
                     <FieldInput
@@ -401,12 +414,14 @@ function MemberPointsPageInner() {
                       onChange={(e) => setPointsEarnRate(e.target.value)}
                     />
                   </FormField>
-                  {!Number.isNaN(numericRate) ? (
+                  {parsedRate.ok ? (
                     // 即時回饋(不是可以收起來的補充)⇒ 常駐的預覽框,不收進 `?`。
+                    // 🔴 2026-09-30:守門從 `!Number.isNaN(numericRate)` 換成 parsedRate.ok ——
+                    // 舊條件在填 `Infinity` 時是 true,試算框會照著算出一個沒有意義的數字。
                     <p className="-mt-3 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
                       範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
                       <strong className="tabular-nums">
-                        {previewLoyaltyPoints(1000, numericRate)}
+                        {previewLoyaltyPoints(1000, parsedRate.value)}
                       </strong>{" "}
                       點(僅供參考,實際點數以訂單完成時系統計算為準,計算基準是含稅總額)。
                     </p>
@@ -415,7 +430,8 @@ function MemberPointsPageInner() {
                   <FormField
                     label="推薦獎勵點數"
                     htmlFor="referral-bonus-points"
-                    help="被推薦人完成第一筆訂單時,推薦人可以拿到的點數。填 0 就是不發推薦獎勵。"
+                    error={parsedReferral.ok ? null : parsedReferral.error}
+                    help="被推薦人完成第一筆訂單時,推薦人可以拿到的點數。填 0 就是不發推薦獎勵。點數只能填整數。"
                     helpLabel="說明:推薦獎勵什麼時候發"
                   >
                     <FieldInput
@@ -431,7 +447,8 @@ function MemberPointsPageInner() {
                   <FormField
                     label="生日贈點"
                     htmlFor="birthday-bonus-points"
-                    help="生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員管理列表頁時系統才會補發)。填 0 就是不發生日贈點。"
+                    error={parsedBirthday.ok ? null : parsedBirthday.error}
+                    help="生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員管理列表頁時系統才會補發)。填 0 就是不發生日贈點。點數只能填整數。"
                     helpLabel="說明:生日贈點什麼時候發"
                   >
                     <FieldInput
@@ -444,13 +461,20 @@ function MemberPointsPageInner() {
                     />
                   </FormField>
 
+                  {/* 🔴 2026-09-30:有欄位填錯時擋住儲存,不能只顯示紅字。按鈕變灰就要說明原因
+                      (skill 二之三),所以配一條常駐 `!`。 */}
+                  {hasPointsFieldError ? (
+                    <AlertNote>
+                      上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。點數只能填整數,比例可以有小數點。
+                    </AlertNote>
+                  ) : null}
                   {/* 這一頁唯一的 ① 主要按鈕(核發資格條件是選了就直接存,沒有按鈕)。 */}
                   <Button
                     type="button"
                     variant="primary"
                     size="touch"
                     className="self-start"
-                    disabled={savingPoints}
+                    disabled={savingPoints || hasPointsFieldError}
                     onClick={handleSavePoints}
                   >
                     {savingPoints ? "儲存中⋯" : "儲存"}

@@ -38,6 +38,7 @@ import {
   CardAlertDialogTitle,
   CardAlertDialogTrigger,
   EmptyState,
+  ErrorState,
   ListCard,
   LoadingSkeleton,
   PageHeader,
@@ -60,7 +61,16 @@ function ImportHistoryPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
-  const { data: operations, isLoading } = useMerchantBulkOperations(merchantId);
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 operations 是
+  // undefined ⇒ 畫成「還沒有任何批次操作紀錄」。這頁特別危險:商家來這頁通常就是為了**復原一批
+  // 匯錯的資料**,看到「沒有紀錄」會以為那批匯入沒成功、於是再匯一次(重複匯入)。
+  // isError 分支排在空狀態之前。
+  const {
+    data: operations,
+    isLoading,
+    isError,
+    refetch: refetchOperations,
+  } = useMerchantBulkOperations(merchantId);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rollbackResults, setRollbackResults] = useState<Record<string, RollbackResult>>({});
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
@@ -94,7 +104,15 @@ function ImportHistoryPageInner() {
 
       {isLoading ? <LoadingSkeleton variant="cards" rows={3} /> : null}
 
-      {!isLoading && operationList.length === 0 ? (
+      {!isLoading && isError ? (
+        <ErrorState
+          title="讀不到匯入紀錄"
+          reason="可能是網路斷了;現在先不顯示紀錄,避免你把空白當成「那批匯入沒成功」而重複匯一次"
+          onRetry={() => void refetchOperations()}
+        />
+      ) : null}
+
+      {!isLoading && !isError && operationList.length === 0 ? (
         <EmptyState
           icon={<History className="h-6 w-6" aria-hidden="true" />}
           title="還沒有任何批次操作紀錄"

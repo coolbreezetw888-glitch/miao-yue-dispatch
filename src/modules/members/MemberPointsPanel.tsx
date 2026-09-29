@@ -55,9 +55,11 @@ import {
   CardDialogTitle,
   CardDialogTrigger,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldTextarea,
   FormField,
+  parseAmountInput,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 
@@ -79,16 +81,23 @@ function formatDateTime(iso: string | null): string {
 function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [points, setPoints] = useState("");
+  const [pointsError, setPointsError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const numericPoints = Number(points);
-    if (!Number.isInteger(numericPoints) || numericPoints <= 0) {
-      toast.error("兌換點數必須是大於 0 的整數");
+    // 🔴 2026-09-30(品管第二次打回,🟡 第 2 項):原本是 `Number(points)` + `Number.isInteger`。
+    // `Number.isInteger` 確實擋掉了 Infinity 跟小數,但 `1e3` → 1000 點、`0x10` → 16 點仍然過關
+    // ——商家打 `1e3` 是打錯字,系統卻當成他真的要兌換 1000 點。改走 parseAmountInput
+    // (integerOnly,最小 1 點)。
+    const parsed = parseAmountInput(points, { integerOnly: true, min: 1 });
+    if (!parsed.ok) {
+      setPointsError(parsed.error);
       return;
     }
+    setPointsError(null);
+    const numericPoints = parsed.value;
     if (!note.trim()) {
       toast.error("請說明這次兌換的用途");
       return;
@@ -109,7 +118,14 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
   }
 
   return (
-    <CardDialog open={open} onOpenChange={setOpen}>
+    <CardDialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        // 關窗再打開時不要留著上一次的紅字。
+        if (!next) setPointsError(null);
+      }}
+    >
       <CardDialogTrigger asChild>
         <Button type="button" variant="neutral" size="card">
           登記兌換
@@ -129,16 +145,22 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
             label="兌換點數"
             htmlFor="redeem-points"
             required
+            error={pointsError}
             help="這裡只登記點數的異動紀錄,不會自動反映在任何訂單金額上 —— 折抵多少錢要自己在那張訂單裡改。只能填大於 0 的整數。"
             helpLabel="說明:登記兌換會不會影響訂單金額"
           >
+            {/* 🔴 2026-09-30:錯誤改成顯示在欄位下面(skill 二之七),不是只丟 toast;
+                一改內容就消失。inputMode 維持 numeric(這一格不需要負號)。 */}
             <FieldInput
               id="redeem-points"
               type="text"
               inputMode="numeric"
               className="tabular-nums"
               value={points}
-              onChange={(e) => setPoints(e.target.value)}
+              onChange={(e) => {
+                setPoints(e.target.value);
+                if (pointsError) setPointsError(null);
+              }}
             />
           </FormField>
           <FormField label="用途說明" htmlFor="redeem-note" required>
@@ -176,16 +198,31 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
 function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [delta, setDelta] = useState("");
+  const [deltaError, setDeltaError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const numericDelta = Number(delta);
-    if (!Number.isInteger(numericDelta) || numericDelta === 0) {
-      toast.error("調整點數必須是不為 0 的整數(正數增加、負數扣除)");
+    // 🔴 2026-09-30(品管第二次打回,🟡 第 2 項):原本是 `Number(delta)` + `Number.isInteger`,
+    // Infinity 擋掉了,但 `1e3` → 1000 點、`0x10` → 16 點仍然過關。改走 parseAmountInput。
+    // ⚠️ 這一格**可以是負數**(扣點),所以 min 要放到負無限 —— parseAmountInput 的 min 預設是 0
+    //    (它本來是給金額用的),不覆寫的話 `-5` 會被當成「金額不能是負數」擋掉。
+    //    「不為 0」這條是這一格特有的規則,parseAmountInput 沒有這個選項,留在下面自己判。
+    const parsed = parseAmountInput(delta, {
+      integerOnly: true,
+      min: Number.NEGATIVE_INFINITY,
+    });
+    if (!parsed.ok) {
+      setDeltaError(parsed.error);
       return;
     }
+    if (parsed.value === 0) {
+      setDeltaError("要填不為 0 的整數(正數增加、負數扣除)");
+      return;
+    }
+    setDeltaError(null);
+    const numericDelta = parsed.value;
     if (!note.trim()) {
       toast.error("請填寫調整原因");
       return;
@@ -206,7 +243,13 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
   }
 
   return (
-    <CardDialog open={open} onOpenChange={setOpen}>
+    <CardDialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setDeltaError(null);
+      }}
+    >
       <CardDialogTrigger asChild>
         <Button type="button" variant="neutral" size="card">
           手動調整
@@ -226,17 +269,22 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
             label="調整點數"
             htmlFor="adjust-delta"
             required
+            error={deltaError}
             help="填正數是幫他加點(例:5),填負數是扣點(例:-5)。只能填不為 0 的整數,而且扣完之後的餘額不能變成負數。"
             helpLabel="說明:調整點數怎麼填正負"
           >
             {/* ⚠️ 這一格要能輸入負號,所以刻意不給 inputMode="numeric"
-                (iOS 的數字鍵盤沒有負號,給了商家就打不出 -5)。 */}
+                (iOS 的數字鍵盤沒有負號,給了商家就打不出 -5)。**2026-09-30 再次確認保留現狀**,
+                不要為了「跟其他數字欄位一致」順手加上去。 */}
             <FieldInput
               id="adjust-delta"
               type="text"
               className="tabular-nums"
               value={delta}
-              onChange={(e) => setDelta(e.target.value)}
+              onChange={(e) => {
+                setDelta(e.target.value);
+                if (deltaError) setDeltaError(null);
+              }}
               placeholder="正數增加、負數扣除"
             />
           </FormField>
@@ -278,7 +326,14 @@ export function MemberPointsPanel({ member }: { member: Member }) {
   const queryClient = useQueryClient();
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
-  const { data: pointHistory } = useMemberPointHistory(member.id);
+  // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 data,查詢失敗時 pointHistory 是
+  // undefined ⇒ 畫成「目前沒有任何點數異動紀錄」,商家以為這位會員的點數歷史不見了。
+  // 一律要有 isError 分支,而且排在空狀態之前。
+  const {
+    data: pointHistory,
+    isError: isHistoryError,
+    refetch: refetchHistory,
+  } = useMemberPointHistory(member.id);
 
   function refetch() {
     void queryClient.invalidateQueries({
@@ -304,7 +359,13 @@ export function MemberPointsPanel({ member }: { member: Member }) {
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           異動歷史
         </p>
-        {!pointHistory || pointHistory.length === 0 ? (
+        {isHistoryError ? (
+          <ErrorState
+            title="讀不到點數異動紀錄"
+            reason="可能是網路斷了;現在先不顯示紀錄,避免你把空白當成「這位會員沒有任何點數異動」"
+            onRetry={() => void refetchHistory()}
+          />
+        ) : !pointHistory || pointHistory.length === 0 ? (
           <EmptyState
             title="目前沒有任何點數異動紀錄"
             description="訂單完成核發點數、生日獎勵、推薦獎勵,以及上面的登記兌換 / 手動調整,都會逐筆記在這裡。"

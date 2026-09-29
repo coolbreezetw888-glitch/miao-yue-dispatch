@@ -18,7 +18,7 @@
 //     有裝置且有開事件 → success(綠系,正常)
 //     有裝置但全關    → warning(黃系,要注意)——跟前兩種都不同,老闆一眼看得出「他收不到」
 // 🔴「0 台」刻意用 neutral 而**不是**待辦標籤:推播是選配功能,不打算用的服務人員永遠是
-//    「尚未開通」,那是永久狀態 = 屬性,屬性不給警示色(skill 二之八末段,跟 #846 黃卡同一條通則)。
+//    「尚未開通」,那是永久狀態 = 屬性,屬性不給警示色(skill 二之五末段,跟 #846 黃卡同一條通則)。
 // 「全關」那段補充說明改成 🟡 常駐 `!`(AlertNote):它是「為什麼他收不到」,絕對不能收起來。
 // 載入中改灰色骨架(二之八)。
 
@@ -41,7 +41,7 @@ export function StaffPushSubscriptionSummary({ staffId }: { staffId: string }) {
           <Skeleton className="h-5 w-24 rounded-full bg-muted" />
         ) : deviceCount === 0 ? (
           // 🔴 中性,不是待辦:推播是選配功能,不打算用的人永遠是「尚未開通」——
-          // 永久狀態就是屬性,屬性不給警示色(skill 二之八末段,#846 同一條通則)。
+          // 永久狀態就是屬性,屬性不給警示色(skill 二之五末段,#846 同一條通則)。
           <StatusTag tone="neutral">尚未開通</StatusTag>
         ) : anyEventEnabled ? (
           <StatusTag tone="success">已開通 {deviceCount} 台,會收到通知</StatusTag>
