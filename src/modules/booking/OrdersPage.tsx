@@ -28,27 +28,40 @@
 // useMerchantBookingStatusColors 查詢 + effectiveStatusColors fallback,供下面 OrderCard
 // 左側色條顯示用,資料表/RLS/RPC 完全不動,寫入邏輯(updateMerchantBookingStatusColors)一併
 // 搬去 MerchantSettingsPage.tsx,不在這個檔案裡重複一份。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29):這一頁本身沒有彈窗(預約詳情 / 建單表單是共用元件),套用頁面層級規範。
+//   - 狀態分頁籤改底線式 UnderlineTabs variant="filter"(skill 二之四:篩選列必須一眼全部看到,不換行、不橫捲)。
+//   - 篩選列:「依建單時間 / 依預約時間」改 ChoiceChipGroup、日期改 FieldDate、服務人員改 FieldSelect、
+//     關鍵字改 FieldInput,全部包 FormField。
+//   - 訂單卡片改 ListCard:服務項目名稱 + 狀態標籤 → 預約 / 建單 / 人員 / 客戶 → 金額;左側色條仍讀商家自訂
+//     顏色表(#621,透過 ListCard 新增的 style 插槽);待確認整張變黃(skill 二之五 需要處理的卡片)、已取消變灰。
+//   - 分頁控制項按鈕改次要樣式、每頁筆數改 FieldNativeSelect;載入中改骨架、空狀態改 EmptyState;
+//     頁首改 PageHeader;無權限提示改 EmptyState。
+// **只動外觀與版面,不動任何行為**:查詢參數、分頁、每頁筆數記憶、統計數字全部照舊。
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  ChoiceChipGroup,
+  EmptyState,
+  FieldDate,
+  FieldInput,
+  FieldNativeSelect,
+  FieldSelect,
+  FormField,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+  UnderlineTabsList,
+  UnderlineTabsTrigger,
+} from "@/components/patterns";
+import { Button } from "@/components/ui/button";
+import { Tabs } from "@/components/ui/tabs";
 
 import { getVerifiedUser } from "@/lib/auth-guard";
-import { cn } from "@/lib/utils";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import {
@@ -88,17 +101,12 @@ import {
   BOOKING_STATUS_LABELS,
   bookingCardAccentBorderStyle,
   bookingCardHoverBorderColor,
+  bookingStatusTone,
   DEFAULT_BOOKING_STATUS_COLORS,
   type Booking,
   type BookingStatus,
   type BookingStatusColorMap,
 } from "./types";
-
-function bookingStatusBadgeVariant(status: BookingStatus): "default" | "secondary" | "outline" {
-  if (status === "completed") return "secondary";
-  if (status === "cancelled") return "outline";
-  return "default";
-}
 
 interface OrderFilters {
   keyword: string;
@@ -117,6 +125,11 @@ const EMPTY_FILTERS: OrderFilters = {
   dateTo: "",
   staffId: "",
 };
+
+const DATE_FIELD_MODE_OPTIONS: ReadonlyArray<{ value: OrderDateFieldMode; label: string }> = [
+  { value: "created_at", label: "依建單時間" },
+  { value: "start_at", label: "依預約時間" },
+];
 
 function OrdersPageInner() {
   const { merchant } = useCurrentMerchant();
@@ -292,30 +305,28 @@ function OrdersPageInner() {
       {/* 建單與訂單管理介面優化 §九 9.1(SPECS-INDEX #599):固定導回 /app/manage(「功能」分頁籤
           主頁),不是瀏覽器上一頁(navigate(-1))——服務「從別處深層連結進到這裡」的情境,行為
           比照資料匯入(#600)、既有的 BusinessHoursPage.tsx/PaymentMethodsPage.tsx 同一顆按鈕。 */}
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">訂單管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的訂單列表與篩選</p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="訂單管理"
+        description={`「${merchant!.name}」的訂單列表與篩選`}
+      />
 
-      {/* §7.1:狀態分頁籤。h-auto + flex-wrap:手機寬度(375px)放不下五個分頁籤時自動換行,
-          不用水平捲動,避免捲動容器超出畫面寬度。 */}
+      {/* §7.1:狀態分頁籤。skill 二之四:這是篩選列(切換要看哪一批訂單),用 variant="filter" ——
+          320px 也必須一眼看到五顆,不換行、不橫向捲動(五顆兩字標籤、沒有數量,寬度綽綽有餘)。 */}
       <Tabs value={activeTab} onValueChange={(v) => changeTab(v as OrderStatusTab)}>
-        <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
+        <UnderlineTabsList variant="filter">
           {ORDER_STATUS_TABS.map((tab) => (
-            <TabsTrigger key={tab.key} value={tab.key}>
+            <UnderlineTabsTrigger key={tab.key} value={tab.key}>
               {tab.label}
-            </TabsTrigger>
+            </UnderlineTabsTrigger>
           ))}
-        </TabsList>
+        </UnderlineTabsList>
       </Tabs>
 
       {/* §7.2:關鍵字搜尋框,比對範圍見 ordersPageLogic.ts bookingMatchesKeyword。 */}
-      <Input
+      <FieldInput
+        type="search"
+        aria-label="搜尋訂單"
         placeholder="搜尋姓名/手機/地址/單號/建單內容..."
         value={filters.keyword}
         onChange={(e) => updateFilters((prev) => ({ ...prev, keyword: e.target.value }))}
@@ -323,73 +334,42 @@ function OrdersPageInner() {
 
       {/* §7.3:篩選列——依建單時間/依預約時間切換 + 日期區間 + 全部服務人員下拉。 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <Label>日期篩選依據</Label>
-          <div className="mt-2 flex rounded-md border border-border p-0.5">
-            <button
-              type="button"
-              onClick={() => updateFilters((prev) => ({ ...prev, dateFieldMode: "created_at" }))}
-              className={cn(
-                "flex-1 rounded px-2 py-1.5 text-sm transition-colors",
-                filters.dateFieldMode === "created_at"
-                  ? "bg-background font-medium text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              依建單時間
-            </button>
-            <button
-              type="button"
-              onClick={() => updateFilters((prev) => ({ ...prev, dateFieldMode: "start_at" }))}
-              className={cn(
-                "flex-1 rounded px-2 py-1.5 text-sm transition-colors",
-                filters.dateFieldMode === "start_at"
-                  ? "bg-background font-medium text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              依預約時間
-            </button>
-          </div>
-        </div>
-        <div>
-          <Label>日期範圍</Label>
-          <div className="mt-2 space-y-2">
-            <input
-              type="date"
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+        <FormField label="日期篩選依據">
+          {/* skill 二之七:二選一用 ChoiceChipGroup(radiogroup 語意),取代原本手刻的分段按鈕。 */}
+          <ChoiceChipGroup
+            aria-label="日期篩選依據"
+            value={filters.dateFieldMode}
+            onValueChange={(mode) => updateFilters((prev) => ({ ...prev, dateFieldMode: mode }))}
+            options={DATE_FIELD_MODE_OPTIONS}
+          />
+        </FormField>
+        <FormField label="日期範圍">
+          <div className="grid grid-cols-2 gap-2">
+            <FieldDate
+              aria-label="日期範圍(起)"
               value={filters.dateFrom}
               onChange={(e) => updateFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
             />
-            <input
-              type="date"
-              className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            <FieldDate
+              aria-label="日期範圍(訖)"
               value={filters.dateTo}
               onChange={(e) => updateFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
             />
           </div>
-        </div>
-        <div className="sm:col-span-2 lg:col-span-2">
-          <Label>服務人員</Label>
-          <Select
+        </FormField>
+        <FormField label="服務人員" htmlFor="orders-filter-staff" className="sm:col-span-2">
+          <FieldSelect
+            id="orders-filter-staff"
             value={filters.staffId || "__all__"}
             onValueChange={(v) =>
               updateFilters((prev) => ({ ...prev, staffId: v === "__all__" ? "" : v }))
             }
-          >
-            <SelectTrigger className="mt-2">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">全部服務人員</SelectItem>
-              {(staffList ?? []).map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            options={[
+              { value: "__all__", label: "全部服務人員" },
+              ...(staffList ?? []).map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+        </FormField>
       </div>
 
       {/* §7.4:統計列。金額加總不含已取消訂單。
@@ -397,7 +377,7 @@ function OrdersPageInner() {
           深夜巡檢問題 1 修好的重點,金額不能少報);「本頁業績」只算目前這一頁畫出來的那些訂單,
           所以刻意把「第幾筆到第幾筆」寫在同一行,避免使用者把它誤讀成全部訂單的業績。
           用半形斜線+括號,避免全形符號跟金額數字(formatAmount 產出的是半形字元)混排時不對齊。 */}
-      <div className="space-y-0.5 text-sm text-muted-foreground">
+      <div className="space-y-0.5 text-sm tabular-nums text-muted-foreground">
         <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
           <span>共 {totalCount} 筆訂單</span>
           <span>
@@ -435,19 +415,21 @@ function OrdersPageInner() {
 
       {/* §7.5:依日期分組的訂單卡片列表。 */}
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="cards" rows={4} />
       ) : dateGroups.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          目前沒有符合篩選條件的訂單。
-        </p>
+        // 下一步(調整篩選)就在同一個畫面上、一眼看得到,用一句話指路即可(PageScaffold EmptyState 的唯一例外)。
+        <EmptyState
+          title="沒有符合篩選條件的訂單"
+          description="可以換一個狀態分頁籤、清掉關鍵字,或放寬上方的日期範圍與服務人員條件。"
+        />
       ) : (
         <div className="space-y-6">
           {dateGroups.map((group) => (
-            <div key={group.dateKey} className="space-y-2">
+            <div key={group.dateKey} className="space-y-2.5">
               <h2 className="text-sm font-semibold text-foreground">
                 {formatGroupDateHeading(group.dateKey)}
               </h2>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {group.bookings.map((b) => (
                   <OrderCard
                     key={b.id}
@@ -508,12 +490,12 @@ function OrdersPageInner() {
 // 為什麼不用 src/components/ui/pagination.tsx:那份 shadcn 元件是「頁碼連結」式的(內部是
 // <a>,PaginationPrevious/Next 的文字寫死英文 Previous/Next,要改文案就得改那支共用元件),
 // 而且逐頁列出頁碼在 375px 寬度下很容易溢出(訂單上萬筆時會有幾十頁)。這裡改用專案既有的
-// Button + Select 組出「上一頁/下一頁 + 目前頁碼」的精簡版,不新增樣式語言,也不改動那支
+// Button + 原生 select 組出「上一頁/下一頁 + 目前頁碼」的精簡版,不新增樣式語言,也不改動那支
 // 共用元件(它還有別的頁面可能會用到)。
 //
-// 手機(375px)不溢出的做法:整組用 flex-wrap,放不下時自動換行,不用水平捲動(比照本頁狀態
-// 分頁籤既有的 h-auto + flex-wrap 做法);每頁筆數下拉固定一個小寬度;數字文字加 whitespace-nowrap
-// 避免在數字中間斷行。刻意不用 position: fixed 貼在底部,見上面呼叫處的說明。
+// 手機(375px)不溢出的做法:整組用 flex-wrap,放不下時自動換行,不用水平捲動;每頁筆數下拉
+// 固定一個小寬度;數字文字加 whitespace-nowrap 避免在數字中間斷行。刻意不用 position: fixed
+// 貼在底部,見上面呼叫處的說明。
 // ---------------------------------------------------------------------------
 function OrdersPager({
   page,
@@ -532,46 +514,42 @@ function OrdersPager({
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
         <span className="whitespace-nowrap">每頁</span>
-        <Select
+        {/* skill 二之七:短固定清單 + 排在同一列 ⇒ 原生下拉(FieldNativeSelect),className 只給寬度。 */}
+        <FieldNativeSelect
+          aria-label="每頁顯示筆數"
+          className="w-24"
           value={String(pageSize)}
-          onValueChange={(v) => {
-            const next = Number(v);
+          onChange={(e) => {
+            const next = Number(e.target.value);
             // 下拉的選項就是 ORDERS_PAGE_SIZE_OPTIONS,理論上不可能出現別的值;這裡仍然守一層,
-            // 型別上也才不用硬轉(Radix 的 onValueChange 回傳的是 string)。
+            // 型別上也才不用硬轉(原生 select 的 onChange 回傳的是 string)。
             if (isOrdersPageSize(next)) onPageSizeChange(next);
           }}
-        >
-          <SelectTrigger className="h-9 w-[5rem]" aria-label="每頁顯示筆數">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ORDERS_PAGE_SIZE_OPTIONS.map((size) => (
-              <SelectItem key={size} value={String(size)}>
-                {size}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={ORDERS_PAGE_SIZE_OPTIONS.map((size) => ({
+            value: String(size),
+            label: String(size),
+          }))}
+        />
         <span className="whitespace-nowrap">筆</span>
       </div>
       <div className="flex min-w-0 items-center gap-1">
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="neutral"
+          size="card"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
           <ChevronLeft className="mr-0.5 h-4 w-4" />
           上一頁
         </Button>
-        <span className="whitespace-nowrap px-1 text-sm text-muted-foreground">
+        <span className="whitespace-nowrap px-1 text-sm tabular-nums text-muted-foreground">
           {page} / {totalPages}
         </span>
         <Button
           type="button"
-          variant="outline"
-          size="sm"
+          variant="neutral"
+          size="card"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
@@ -585,10 +563,11 @@ function OrdersPager({
 
 // ---------------------------------------------------------------------------
 // §7.5:訂單卡片。左側色條建單與訂單管理介面優化 §10.5(SPECS-INDEX #621)改讀商家自訂顏色表
-// (bookingCardAccentBorderStyle,types.ts export),內容由上到下:①服務項目+狀態徽章
+// (bookingCardAccentBorderStyle,types.ts export),內容由上到下:①服務項目+狀態標籤
 // ②預約時間+建單時間+建單客服 ③服務人員+客戶姓名/電話/地址 ④商家名稱 ⑤訂單金額。
-// 用 className 的 border-y/border-r(灰階)+ border-l-4(寬度)+ inline style 的
-// borderLeftColor(狀態動態色)分開設定,確保色條顏色不會被灰階邊框蓋掉(§10.5 第 3 點)。
+// ui-v1-full:外殼改 ListCard(skill 二之五)。色條用 className 的 border-l-4(寬度)+ style 的
+// borderLeftColor(狀態動態色)分開設定,確保色條顏色不會被灰階邊框蓋掉(§10.5 第 3 點);
+// 待確認的訂單整張變黃(需要處理)、已取消整張變灰。
 // ---------------------------------------------------------------------------
 function OrderCard({
   booking,
@@ -612,42 +591,47 @@ function OrderCard({
 }) {
   const status = booking.status as BookingStatus;
   return (
-    <button type="button" onClick={onClick} className="block w-full text-left">
-      <div
-        className="min-w-0 rounded-md border-y border-r border-border border-l-4 bg-background p-3 shadow-sm transition-colors hover:border-[color:var(--order-card-hover-border)]"
-        style={
-          {
-            ...bookingCardAccentBorderStyle(statusColors, status),
-            "--order-card-hover-border": bookingCardHoverBorderColor(statusColors, status),
-          } as CSSProperties
-        }
-      >
-        <div className="flex items-start justify-between gap-2">
-          <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-            {serviceItemNames.length > 0 ? serviceItemNames.join("、") : "(無服務項目資料)"}
-          </p>
-          <Badge variant={bookingStatusBadgeVariant(status)} className="shrink-0">
-            {BOOKING_STATUS_LABELS[status]}
-          </Badge>
+    <ListCard
+      onClick={onClick}
+      state={
+        status === "pending_confirmation"
+          ? "attention"
+          : status === "cancelled"
+            ? "inactive"
+            : "default"
+      }
+      className="border-l-4 hover:border-[color:var(--order-card-hover-border)]"
+      style={
+        {
+          ...bookingCardAccentBorderStyle(statusColors, status),
+          "--order-card-hover-border": bookingCardHoverBorderColor(statusColors, status),
+        } as CSSProperties
+      }
+      title={serviceItemNames.length > 0 ? serviceItemNames.join("、") : "(無服務項目資料)"}
+      tags={<StatusTag tone={bookingStatusTone(status)}>{BOOKING_STATUS_LABELS[status]}</StatusTag>}
+      meta={
+        <div className="flex flex-col gap-0.5">
+          <span>
+            預約 {formatCardDateTime(booking.start_at)}・建單{" "}
+            {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
+            {createdByName ? `・${createdByName}` : ""}
+          </span>
+          <span className="text-foreground">
+            {staffName} ・ {booking.customer_name} ・ {booking.customer_phone}
+            {/* 任務 2:商家切成「到店服務」後,既有訂單的客戶地址要隱藏——所以判斷條件是
+                「商家目前的產業需要地址」且「這筆訂單真的有地址值」,不是只看有沒有值。
+                資料庫裡的地址值沒有被刪除,切回「到府派工」會重新顯示(預期行為)。 */}
+            {showCustomerAddress && booking.customer_address
+              ? ` ・ ${booking.customer_address}`
+              : ""}
+          </span>
+          <span>{merchantName}</span>
+          <span className="mt-1 text-base font-bold text-brand">
+            {formatAmount(booking.final_amount_snapshot)}
+          </span>
         </div>
-        <p className="mt-1 min-w-0 break-words text-xs text-muted-foreground">
-          預約 {formatCardDateTime(booking.start_at)}・建單{" "}
-          {isoToTaipeiDateTimeWithSeconds(booking.created_at)}
-          {createdByName ? `・${createdByName}` : ""}
-        </p>
-        <p className="mt-1 min-w-0 break-words text-xs text-foreground">
-          {staffName} ・ {booking.customer_name} ・ {booking.customer_phone}
-          {/* 任務 2:商家切成「到店服務」後,既有訂單的客戶地址要隱藏——所以判斷條件是
-              「商家目前的產業需要地址」且「這筆訂單真的有地址值」,不是只看有沒有值。
-              資料庫裡的地址值沒有被刪除,切回「到府派工」會重新顯示(預期行為)。 */}
-          {showCustomerAddress && booking.customer_address ? ` ・ ${booking.customer_address}` : ""}
-        </p>
-        <p className="mt-1 min-w-0 break-words text-xs text-muted-foreground">{merchantName}</p>
-        <p className="mt-2 text-right text-base font-bold text-cta">
-          {formatAmount(booking.final_amount_snapshot)}
-        </p>
-      </div>
-    </button>
+      }
+    />
   );
 }
 
@@ -669,8 +653,8 @@ function OrdersTabAccessGate({ children }: { children: ReactNode }) {
 
   if (loading || !merchant) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      <div className="mx-auto max-w-6xl px-5 py-10">
+        <LoadingSkeleton variant="cards" rows={4} />
       </div>
     );
   }
@@ -678,9 +662,11 @@ function OrdersTabAccessGate({ children }: { children: ReactNode }) {
   if (!allowed) {
     return (
       <div className="mx-auto max-w-3xl px-5 py-12">
-        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          尚未開放此功能,請洽商家管理員開通「訂單管理」權限。
-        </p>
+        {/* 下一步不在這個畫面上(要找管理員開權限),但也不是點一顆按鈕能解決的事,所以用說明指路。 */}
+        <EmptyState
+          title="尚未開放「訂單管理」"
+          description="請洽商家管理員開通「訂單管理」權限,開通後這裡會列出所有訂單。"
+        />
       </div>
     );
   }

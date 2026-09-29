@@ -5,34 +5,55 @@
 // 时区說明:系統目前假設所有商家都在 Asia/Taipei(規格書「本模組明確不做的事」),這裡的日期/時間
 // 一律以 Asia/Taipei 的日曆日/時鐘時間為準,送往後端的 start_at 一律明確帶 +08:00 偏移量,
 // 不依賴瀏覽器本機時區(避免使用者瀏覽器時區設定不是台灣時導致算錯)。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29,盤點 A10):
+//   - 新增 / 編輯預約表單(全系統最大的表單)從 Sheet(底部 92vh)換成 ui-overlay-patterns 的全頁層
+//     FullPageLayer(手機滿版 / 電腦置中面板、標題列與按鈕列固定、只有中間捲動),底部「取消 / 建立預約
+//     或儲存變更」等寬(skill 二之三)。
+//   - 依 skill 二之九 分成七組:客戶 → 人員 → 時間 → 服務項目 → 金額 → 料錢成本 → 備註。
+//     ⚠️ skill 原文的順序是「客戶 → 時間 → 人員」,這裡把「人員」排在「時間」前面,因為日期時間選擇器要先知道
+//     是哪位服務人員才列得出可預約時段(選單裡會顯示「請先選擇服務人員」)——照原文順序會讓人填到一半得往下
+//     跳。這是 engineer 的判斷,已在交付回報中列出請主腦裁決。
+//   - 服務項目:選中的展開成一張卡(定價 + 數量 + 單價輸入框),沒選的縮成可點的小方塊排在下面
+//     (skill 二之九);分類篩選只影響下面沒選的方塊,已選的卡永遠看得到。
+//   - 金額整組用色塊包起來,三個開關改 SwitchRow、#829 的鎖定說明改 `!` 常駐放在開關列底下;折扣模式與
+//     付款方式改 ChoiceChipGroup(skill 二之七 單選);即時預覽改明細列(小計 / 折扣 / 稅金 / 最終金額 26px)。
+//   - 助手、料錢成本的多選改可點方塊(ChoiceChip);欄位改 FormField / FieldInput / FieldAmountInput /
+//     FieldSelect / FieldTextarea。
+//   - 行事曆主頁:頁首改 PageHeader、週 / 月檢視切換改 ChoiceChipGroup、切換按鈕改次要樣式、載入中改骨架、
+//     空狀態改 EmptyState(+ 下一步);時間軸格線套 skill 六:時間欄固定在左邊(sticky)、服務人員欄有最小
+//     寬度、右緣漸層陰影暗示還有內容。手勢(#641 點擊 vs 拖曳、#811 長按拖拉)完全不動。
+// **只動外觀與版面,不動任何行為**:所有驗證、送出、金額 / 工時計算、#829 的鎖定判斷、幽靈空值防護照舊。
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  ActionBar,
+  AlertNote,
+  ChoiceChip,
+  ChoiceChipGroup,
+  DetailDivider,
+  DetailRow,
+  DetailSection,
+  EmptyState,
+  FieldAmountInput,
+  FieldInput,
+  FieldSelect,
+  FieldTextarea,
+  FormField,
+  FullPageLayer,
+  FullPageLayerClose,
+  FullPageLayerContent,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Calendar } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -154,6 +175,16 @@ const PAYMENT_METHOD_UNSET = "__unset__";
 
 type CalendarViewMode = "week" | "month";
 
+const CALENDAR_VIEW_OPTIONS: ReadonlyArray<{ value: CalendarViewMode; label: string }> = [
+  { value: "week", label: "週檢視" },
+  { value: "month", label: "月檢視" },
+];
+
+/** 折扣 / 稅金的「固定金額 / 百分比」二選一,白名單直接取 AMOUNT_ADJUSTMENT_MODE_LABELS 的 key。 */
+const AMOUNT_ADJUSTMENT_MODE_OPTIONS = (
+  Object.keys(AMOUNT_ADJUSTMENT_MODE_LABELS) as AmountAdjustmentMode[]
+).map((mode) => ({ value: mode, label: AMOUNT_ADJUSTMENT_MODE_LABELS[mode] }));
+
 /** 建單表單細節修正第三節第 5 點:合併日期時間選擇器的觸發按鈕文字,例如「9月20日(六) 14:00」,
  * 沒選之前顯示「請選擇日期時間」(由呼叫端自行處理沒選的情況,這支只負責已選定時的格式)。
  * 用跟 dateUtils.ts 一致的「本機 Date getter 讀出來就是台北當地日期」慣例解析 dateKey,
@@ -172,6 +203,7 @@ function formatDisplayDateTime(dateKey: string, time: string): string {
 // (第 7 點)——真正擋住不合法時段的還是 create_booking/update_booking 資料庫層的驗證。
 // ---------------------------------------------------------------------------
 function BookingDateTimeField({
+  id,
   merchantId,
   staffId,
   totalDurationMinutes,
@@ -180,6 +212,7 @@ function BookingDateTimeField({
   closedWeekdays,
   onChange,
 }: {
+  id?: string | undefined;
   merchantId: string;
   staffId: string;
   totalDurationMinutes: number;
@@ -219,7 +252,13 @@ function BookingDateTimeField({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" className="w-full justify-start font-normal">
+        <Button
+          id={id}
+          type="button"
+          variant="neutral"
+          size="touch"
+          className="w-full justify-start font-normal tabular-nums"
+        >
           {label}
         </Button>
       </PopoverTrigger>
@@ -243,9 +282,7 @@ function BookingDateTimeField({
             /* 2026-09-24 稽核修正(問題 5):整天請假時明確說明原因(含假別名稱快照),
                不要只顯示「這天沒有可預約的時段」讓客服猜是哪裡設錯。
                這是體驗層引導,真正擋下建單的仍然是後端 create_booking 的驗證。 */
-            <p className="text-center text-sm text-warn">
-              這位服務人員這天休假({onLeave.leave_type_name}),無法建立預約。
-            </p>
+            <AlertNote>這位服務人員這天休假({onLeave.leave_type_name}),無法建立預約。</AlertNote>
           ) : slotOptions.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground">這天沒有可預約的時段</p>
           ) : (
@@ -254,8 +291,9 @@ function BookingDateTimeField({
                 <Button
                   key={t}
                   type="button"
-                  size="sm"
-                  variant={time === t ? "default" : "outline"}
+                  size="card"
+                  variant={time === t ? "primary" : "neutral"}
+                  className="tabular-nums"
                   onClick={() => {
                     onChange(dateKey, t);
                     setOpen(false);
@@ -272,7 +310,7 @@ function BookingDateTimeField({
   );
 }
 
-/** 建單功能擴充規格書 2.3:料錢成本功能開關(查無資料視為關閉)。跟 BusinessHoursPage.tsx
+/** 建單功能擴充規格書 2.3:料錢成本功能開關(查無資料視為關閉)。跟 MaterialCostsPage.tsx
  * 的 MaterialCostEnabledToggle 共用同一個 feature key,這裡只需要唯讀查詢決定表單要不要顯示。 */
 function useMaterialCostEnabled(merchantId: string) {
   return useQuery({
@@ -396,12 +434,12 @@ export function BookingFormDialog({
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
   const [taxValue, setTaxValue] = useState("");
-  // 模組 9(支付方式)v2 §5.2:付款方式下拉選單,存的是 payment_methods.id(uuid 字串),留空
-  // 代表「尚未設定」。用 PAYMENT_METHOD_UNSET 這個 sentinel 值代表「(未選擇/尚未設定)」,
-  // Radix Select 不支援空字串當作選項值(沿用建單與訂單管理介面優化 §3 既有的 sentinel 寫法)。
+  // 模組 9(支付方式)v2 §5.2:付款方式,存的是 payment_methods.id(uuid 字串),留空
+  // 代表「尚未設定」。用 PAYMENT_METHOD_UNSET 這個 sentinel 值代表「(未選擇/尚未設定)」
+  // (沿用建單與訂單管理介面優化 §3 既有的 sentinel 寫法)。
   const [paymentMethodValue, setPaymentMethodValue] = useState<string>(PAYMENT_METHOD_UNSET);
 
-  // 模組 9 v2 §5.2:下拉選單選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的
+  // 模組 9 v2 §5.2:選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的
   // 那一筆」(即使它現在已經下架),詳見 types.ts buildPaymentMethodOptions 的說明。
   const paymentMethodOptions = useMemo(
     () =>
@@ -813,136 +851,242 @@ export function BookingFormDialog({
 
   const assistantCandidates = (staffList ?? []).filter((s) => s.id !== staffId);
 
-  // 建單與訂單管理介面優化 §5:改用 Sheet(側邊為 bottom)取代 Dialog,呈現成從底部滑出、
-  // 佔滿寬度跟大部分高度的樣式,不要有明顯的四周留白。SheetContent 預設是
-  // "gap-4 ... p-6"(見 sheet.tsx),這裡整個覆寫成 flex 直欄:標題列(shrink-0)/
-  // 可捲動內容區(flex-1 overflow-y-auto)/固定在底部的送出按鈕列(shrink-0),
-  // 讓「建立預約」「儲存變更」這個送出按鈕永遠固定顯示在畫面最下方,不用捲到最底才看得到。
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="bottom"
-        className="flex h-[92vh] max-h-[92vh] flex-col gap-0 overflow-hidden rounded-t-xl p-0"
-      >
-        <SheetHeader className="shrink-0 border-b border-border px-5 py-4 pr-12 text-left">
-          <SheetTitle>{isEdit ? "編輯預約" : "新增預約"}</SheetTitle>
-          {!isEdit ? (
-            <SheetDescription>建立後狀態是「待確認」,需要再次確認才會正式成立。</SheetDescription>
-          ) : null}
-        </SheetHeader>
+  // skill 二之九:選中的服務項目展開成卡片(永遠顯示,不受分類篩選影響),沒選的縮成小方塊排在下面
+  // (受分類篩選影響)。已勾選但目前不在上架清單裡的項目(編輯舊訂單時遇到已下架項目)維持改版前的
+  // 行為:表單上看不到、但送出時仍原封不動帶回去。
+  const selectedServiceItems = serviceItemIds.flatMap((id) => {
+    const item = (serviceItems ?? []).find((s) => s.id === id);
+    return item ? [item] : [];
+  });
+  const filteredServiceItems = filterServiceItemsByCategory(serviceItems ?? [], categoryFilter);
+  const unselectedServiceItems = filteredServiceItems.filter(
+    (item) => !serviceItemIds.includes(item.id),
+  );
 
-        {/* min-w-0:同樣的原因,這個可捲動內容區是 flex 容器的子項,預設 min-width:auto 會被
-            裡面過長的文字(例如服務人員下拉選單目前選中的長姓名)撐寬,進而撐寬整個彈窗超出
-            手機螢幕,見 BookingDetailDialog 那邊同一個修法的說明。 */}
-        <div className="min-w-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <Label>服務人員 *</Label>
+  // ui-v1-full:外殼從 Sheet(底部 92vh)換成全頁層(skill 三):手機滿版、電腦置中面板,標題列與
+  // 底部按鈕列固定、只有中間會捲動;「取消 / 建立預約(儲存變更)」兩顆等寬(skill 二之三)。
+  return (
+    <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      <FullPageLayerContent
+        title={isEdit ? "編輯預約" : "新增預約"}
+        subtitle={!isEdit ? "建立後狀態是「待確認」,需要再次確認才會正式成立。" : undefined}
+        footer={
+          <ActionBar>
+            <FullPageLayerClose asChild>
+              <Button type="button" variant="neutral" size="touch">
+                取消
+              </Button>
+            </FullPageLayerClose>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              disabled={saving}
+              onClick={handleSubmit}
+            >
+              {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
+            </Button>
+          </ActionBar>
+        }
+      >
+        {/* min-w-0:內容區是 flex 容器的子項,預設 min-width:auto 會被裡面過長的文字(例如服務人員
+            下拉選單目前選中的長姓名)撐寬,進而撐寬整個面板超出手機螢幕。 */}
+        <div className="flex min-w-0 flex-col gap-7">
+          {/* ───────── 客戶 ───────── */}
+          <DetailSection label="客戶" className="gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField label="客戶姓名" htmlFor="booking-customer-name" required>
+                <FieldInput
+                  id="booking-customer-name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                />
+              </FormField>
+              <FormField label="客戶電話" htmlFor="booking-customer-phone" required>
+                <FieldInput
+                  id="booking-customer-phone"
+                  type="tel"
+                  inputMode="tel"
+                  className="tabular-nums"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                />
+              </FormField>
+            </div>
+            {/* SPECS-INDEX #614(會員與紅利.md §10.2,取代舊版 §4.4 獨立的「會員(選填)」欄位):
+                電話當查詢索引,不當唯一鍵。輸入客戶電話後,這裡列出這支電話底下這個商家既有的所有
+                客戶,可以連結既有客戶或視為新客戶,歸在既有的 orders 權限底下(規則 2.10),不選
+                就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
+            <MemberPhoneMatchPanel
+              merchantId={merchantId}
+              phone={customerPhone}
+              customerName={customerName}
+              selectedMember={member}
+              onSelectMember={setMember}
+            />
+            <FormField label="客戶 Email" htmlFor="booking-customer-email">
+              <FieldInput
+                id="booking-customer-email"
+                type="email"
+                inputMode="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+              />
+            </FormField>
+            {/* 建單表單細節修正第二節:只有 industry_type 需要地址的產業(見
+                INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才顯示這個欄位並標記必填,不需要地址的產業
+                整個欄位不顯示。真正擋住不合法的空地址還是 create_booking/update_booking 資料庫層。 */}
+            {requiresCustomerAddress ? (
+              <FormField label="客戶地址" htmlFor="booking-customer-address" required>
+                <FieldInput
+                  id="booking-customer-address"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                />
+              </FormField>
+            ) : null}
+          </DetailSection>
+
+          {/* ───────── 人員 ───────── */}
+          <DetailSection label="人員" className="gap-4">
+            <FormField label="服務人員" htmlFor="booking-staff" required>
               {/* 2026-09-24 稽核修正(問題 3):這個欄位是最容易踩到「幽靈空值事件」的地方——
                   在行事曆點某位服務人員的空格建單時,prefill.staffId 是在掛載當下的 useEffect
                   才灌進 staffId 的,那一刻隱藏原生 select 的選項可能還沒註冊完,會補發一次
                   空字串把剛選好的服務人員洗掉,客服按送出才被擋下卻不知道哪裡沒選。
                   合法值是資料庫來的動態清單(服務人員 id),所以判斷條件是「不是空字串」。 */}
-              <Select
+              <FieldSelect
+                id="booking-staff"
                 value={staffId}
                 onValueChange={guardPhantomEmptyChange((v) => {
                   setStaffId(v);
                   setAssistantStaffIds((prev) => prev.filter((id) => id !== v));
                 })}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="請選擇" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(staffList ?? []).map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="sm:col-span-2">
-              <Label>預約日期時間 *</Label>
-              <div className="mt-2">
-                <BookingDateTimeField
-                  merchantId={merchantId}
-                  staffId={staffId}
-                  totalDurationMinutes={totalDurationMinutes}
-                  dateKey={dateKey}
-                  time={time}
-                  closedWeekdays={closedWeekdays}
-                  onChange={(d, t) => {
-                    setDateKey(d);
-                    setTime(t);
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+                placeholder="請選擇"
+                options={(staffList ?? []).map((s) => ({ value: s.id, label: s.name }))}
+              />
+            </FormField>
 
+            {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
+                的那一位,可留空;未選定主要服務人員前整個區塊停用(方塊 disabled + `!` 說明原因),
+                因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。
+                skill 二之七:多選用可點的方塊(ChoiceChip),不用打勾方框。 */}
+            <FormField label="助手(可留空,可多選)">
+              <div className="flex flex-col gap-2.5">
+                {!staffId ? <AlertNote>請先選擇服務人員,才能指派助手。</AlertNote> : null}
+                {assistantCandidates.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">沒有其他可指派的服務人員。</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {assistantCandidates.map((s) => (
+                      <ChoiceChip
+                        key={s.id}
+                        selected={assistantStaffIds.includes(s.id)}
+                        disabled={!staffId}
+                        onClick={() => setAssistantStaffIds((prev) => toggleInArray(prev, s.id))}
+                      >
+                        {s.name}
+                      </ChoiceChip>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </FormField>
+          </DetailSection>
+
+          {/* ───────── 時間 ───────── */}
+          <DetailSection label="時間" className="gap-4">
+            <FormField label="預約日期時間" htmlFor="booking-datetime" required>
+              <BookingDateTimeField
+                id="booking-datetime"
+                merchantId={merchantId}
+                staffId={staffId}
+                totalDurationMinutes={totalDurationMinutes}
+                dateKey={dateKey}
+                time={time}
+                closedWeekdays={closedWeekdays}
+                onChange={(d, t) => {
+                  setDateKey(d);
+                  setTime(t);
+                }}
+              />
+            </FormField>
+
+            {/* 模組 6(訂單管理)§4.3(裁決 Q3 方向一):自訂工時開關。關閉時沿用服務項目逐項加總的工時
+                計算 end_at;開啟後改用這裡輸入的總服務時長,會真的影響排程佔用與衝突檢查邊界
+                (含單日例外第三層),不是只影響畫面顯示。 */}
+            <SwitchRow
+              title="自訂工時"
+              description="開啟後用輸入的總服務時長取代逐項加總,實際佔用的時段跟衝突檢查都會依這個值計算。"
+              checked={customDurationEnabled}
+              onCheckedChange={setCustomDurationEnabled}
+            >
+              {customDurationEnabled ? (
+                <FormField label="總服務時長(分鐘)" htmlFor="booking-custom-duration" required>
+                  <FieldInput
+                    id="booking-custom-duration"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    className="tabular-nums"
+                    placeholder="輸入這筆訂單的總服務時長(分鐘)"
+                    value={customDurationMinutes}
+                    onChange={(e) => setCustomDurationMinutes(e.target.value)}
+                  />
+                </FormField>
+              ) : null}
+            </SwitchRow>
+          </DetailSection>
+
+          {/* ───────── 服務項目 ───────── */}
           {/* 建單功能擴充 2.1/5.1 第 1 點,模組 6 §4.1/4.2:服務項目改多選,每項可調整數量
               (預設 1,最小 1,整數)跟單價(預設帶入 service_items.price,可手動修改),
               即時顯示工時加總(§2.2:duration_minutes × quantity)。 */}
-          <div>
-            <Label>服務項目(可多選) *</Label>
-            {/* SPECS-INDEX #598(訂單管理.md §9.2):分類篩選下拉選單,「全部」為預設值(等同既有
-                行為)。只影響下面清單顯示哪些選項讓你勾,不影響已經勾選的項目(切換篩選不會弄丟
-                已勾選的項目,見 handleSubmit 附近的 serviceItemIds 獨立狀態)。商家沒有使用分類
-                功能時,下拉只會有「全部」跟「未分類」兩個選項,不影響既有操作流程。 */}
-            {(serviceCategories ?? []).length > 0 ? (
-              /* 2026-09-24 稽核修正(問題 3):合法值是 "all"/"uncategorized" 兩個 sentinel
-                 加上資料庫來的動態分類 id,沒有固定白名單可以比對,判斷條件是「不是空字串」。
-                 (categoryFilter 會在每次開啟表單的 useEffect 裡被重設,一樣有時序風險。) */
-              <Select
-                value={categoryFilter}
-                onValueChange={guardPhantomEmptyChange<ServiceItemCategoryFilter>(
-                  setCategoryFilter,
-                )}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部分類</SelectItem>
-                  <SelectItem value="uncategorized">{UNCATEGORIZED_LABEL}</SelectItem>
-                  {(serviceCategories ?? []).map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-            <div className="mt-2 max-h-64 space-y-2 overflow-y-auto rounded-md border border-border p-2">
-              {(serviceItems ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground">目前沒有上架中的服務項目。</p>
-              ) : filterServiceItemsByCategory(serviceItems ?? [], categoryFilter).length === 0 ? (
-                <p className="text-xs text-muted-foreground">這個分類目前沒有服務項目。</p>
-              ) : (
-                filterServiceItemsByCategory(serviceItems ?? [], categoryFilter).map((item) => {
-                  const checked = serviceItemIds.includes(item.id);
-                  return (
-                    <div key={item.id} className="rounded px-1 py-1 hover:bg-muted/50">
-                      <label className="flex items-center gap-2 text-sm">
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleServiceItem(item.id, Number(item.price))}
-                        />
-                        <span>
-                          {item.name}({item.duration_minutes} 分鐘・預設{" "}
-                          {formatAmount(Number(item.price))})
-                        </span>
-                      </label>
-                      {checked ? (
-                        <div className="ml-6 mt-1.5 flex flex-wrap items-center gap-3 text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-muted-foreground">數量</span>
-                            <Input
+          <DetailSection label="服務項目" className="gap-4">
+            <FormField
+              label="服務項目(可多選)"
+              required
+              helpLabel="說明:服務項目怎麼選"
+              help="點下方的方塊加入項目,加入後會展開成一張卡,可以調整數量與單價;按卡片上的「移除」取消。"
+            >
+              <div className="flex flex-col gap-3">
+                {/* 已選的項目:一張卡(定價 + 數量 + 單價)。 */}
+                {selectedServiceItems.length > 0 ? (
+                  <ul className="flex flex-col gap-2.5">
+                    {selectedServiceItems.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex flex-col gap-3 rounded-lg border border-brand/40 bg-brand-soft/30 p-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-sm font-semibold text-foreground">
+                              {item.name}
+                            </p>
+                            <p className="text-xs tabular-nums text-muted-foreground">
+                              定價 {formatAmount(Number(item.price))}・{item.duration_minutes} 分鐘
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="text"
+                            size="card"
+                            className="-mr-2 -mt-1 shrink-0"
+                            onClick={() => toggleServiceItem(item.id, Number(item.price))}
+                          >
+                            移除
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField label="數量" htmlFor={`booking-item-qty-${item.id}`}>
+                            <FieldInput
+                              id={`booking-item-qty-${item.id}`}
                               type="number"
+                              inputMode="numeric"
                               min={1}
                               step={1}
-                              className="h-8 w-16"
+                              className="tabular-nums"
                               value={itemQuantities[item.id] ?? "1"}
                               onChange={(e) =>
                                 setItemQuantities((prev) => ({
@@ -959,14 +1103,10 @@ export function BookingFormDialog({
                                 setItemQuantities((prev) => ({ ...prev, [item.id]: "1" }));
                               }}
                             />
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-muted-foreground">單價</span>
-                            <Input
-                              type="number"
-                              min={0}
-                              step="0.01"
-                              className="h-8 w-24"
+                          </FormField>
+                          <FormField label="單價" htmlFor={`booking-item-price-${item.id}`}>
+                            <FieldAmountInput
+                              id={`booking-item-price-${item.id}`}
                               value={itemUnitPrices[item.id] ?? String(item.price)}
                               onChange={(e) =>
                                 setItemUnitPrices((prev) => ({
@@ -975,389 +1115,345 @@ export function BookingFormDialog({
                                 }))
                               }
                             />
-                          </div>
+                          </FormField>
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              已選 {serviceItemIds.length} 項,逐項加總工時 {itemsTotalDurationMinutes} 分鐘
-              {customDurationEnabled ? "(已套用自訂工時,實際採用下方輸入的總服務時長)" : ""}。
-            </p>
-          </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
 
-          {/* 模組 6(訂單管理)§4.3(裁決 Q3 方向一):自訂工時開關。關閉時沿用上方逐項加總的工時
-              計算 end_at;開啟後改用這裡輸入的總服務時長,會真的影響排程佔用與衝突檢查邊界
-              (含單日例外第三層),不是只影響畫面顯示。 */}
-          <div className="space-y-2 rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <Label>自訂工時</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  開啟後用輸入的總服務時長取代逐項加總,實際佔用的時段跟衝突檢查都會依這個值計算。
-                </p>
-              </div>
-              <Switch checked={customDurationEnabled} onCheckedChange={setCustomDurationEnabled} />
-            </div>
-            {customDurationEnabled ? (
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                placeholder="輸入這筆訂單的總服務時長(分鐘)"
-                value={customDurationMinutes}
-                onChange={(e) => setCustomDurationMinutes(e.target.value)}
-              />
-            ) : null}
-          </div>
+                {/* SPECS-INDEX #598(訂單管理.md §9.2):分類篩選下拉選單,「全部」為預設值(等同既有
+                    行為)。只影響下面沒選的方塊顯示哪些,不影響已經選的項目(切換篩選不會弄丟
+                    已選的項目,見 handleSubmit 附近的 serviceItemIds 獨立狀態)。商家沒有使用分類
+                    功能時,不顯示這個下拉,不影響既有操作流程。 */}
+                {(serviceCategories ?? []).length > 0 ? (
+                  /* 2026-09-24 稽核修正(問題 3):合法值是 "all"/"uncategorized" 兩個 sentinel
+                     加上資料庫來的動態分類 id,沒有固定白名單可以比對,判斷條件是「不是空字串」。
+                     (categoryFilter 會在每次開啟表單的 useEffect 裡被重設,一樣有時序風險。) */
+                  <FieldSelect
+                    aria-label="服務項目分類篩選"
+                    value={categoryFilter}
+                    onValueChange={guardPhantomEmptyChange<ServiceItemCategoryFilter>(
+                      setCategoryFilter,
+                    )}
+                    options={[
+                      { value: "all", label: "全部分類" },
+                      { value: "uncategorized", label: UNCATEGORIZED_LABEL },
+                      ...(serviceCategories ?? []).map((category) => ({
+                        value: category.id,
+                        label: category.name,
+                      })),
+                    ]}
+                  />
+                ) : null}
 
-          {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
-              的那一位,可留空;未選定主要服務人員前整個區塊停用(checkbox disabled + 提示文字),
-              因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。 */}
-          <div>
-            <Label>助手(可留空,可多選)</Label>
-            {!staffId ? (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                請先選擇服務人員,才能指派助手。
-              </p>
-            ) : null}
-            <div
-              className={cn(
-                "mt-2 max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border p-2",
-                !staffId && "pointer-events-none opacity-50",
-              )}
-            >
-              {assistantCandidates.length === 0 ? (
-                <p className="text-xs text-muted-foreground">沒有其他可指派的服務人員。</p>
-              ) : (
-                assistantCandidates.map((s) => (
-                  <label
-                    key={s.id}
-                    className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={assistantStaffIds.includes(s.id)}
-                      disabled={!staffId}
-                      onCheckedChange={() =>
-                        setAssistantStaffIds((prev) => toggleInArray(prev, s.id))
-                      }
-                    />
-                    <span>{s.name}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* 建單功能擴充 2.3/5.1 第 3 點:料錢成本區塊,只有商家開啟功能時才顯示。 */}
-          {materialCostEnabled ? (
-            <div>
-              <Label>料錢成本(可留空,可多選)</Label>
-              <div className="mt-2 max-h-32 space-y-1.5 overflow-y-auto rounded-md border border-border p-2">
-                {(materialCostItems ?? []).length === 0 ? (
-                  <p className="text-xs text-muted-foreground">目前沒有上架中的料錢成本品項。</p>
+                {/* 沒選的項目:縮成可點的小方塊(skill 二之九),商家有 30 個項目時畫面也不會爆掉。 */}
+                {(serviceItems ?? []).length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">目前沒有上架中的服務項目。</p>
+                ) : filteredServiceItems.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">這個分類目前沒有服務項目。</p>
+                ) : unselectedServiceItems.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">這個分類的項目都已加入。</p>
                 ) : (
-                  (materialCostItems ?? []).map((item) => (
-                    <label
-                      key={item.id}
-                      className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50"
-                    >
-                      <Checkbox
-                        checked={materialCostItemIds.includes(item.id)}
-                        onCheckedChange={() =>
-                          setMaterialCostItemIds((prev) => toggleInArray(prev, item.id))
-                        }
-                      />
-                      <span>
-                        {item.name}(${Number(item.amount).toFixed(0)})
-                      </span>
-                    </label>
-                  ))
+                  <div className="flex flex-wrap gap-2">
+                    {unselectedServiceItems.map((item) => (
+                      <ChoiceChip
+                        key={item.id}
+                        selected={false}
+                        onClick={() => toggleServiceItem(item.id, Number(item.price))}
+                      >
+                        <span className="break-words text-left">
+                          {item.name}
+                          <span className="ml-1 tabular-nums text-muted-foreground">
+                            {formatAmount(Number(item.price))}
+                          </span>
+                        </span>
+                      </ChoiceChip>
+                    ))}
+                  </div>
                 )}
-              </div>
-              {materialCostItemIds.length > 0 ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  已選 {materialCostItemIds.length} 項,金額加總 ${materialCostTotal.toFixed(0)}
-                  (僅供操作者參考,不代表訂單金額)。
-                </p>
-              ) : null}
-            </div>
-          ) : null}
 
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  已選 {serviceItemIds.length} 項,逐項加總工時 {itemsTotalDurationMinutes} 分鐘
+                  {customDurationEnabled ? "(已套用自訂工時,實際採用上方輸入的總服務時長)" : ""}。
+                </p>
+              </div>
+            </FormField>
+          </DetailSection>
+
+          {/* ───────── 金額 ───────── */}
           {/* 模組 6(訂單管理)§4.4~4.8:金額彈性三個開關(自訂總金額/折扣/稅金)+ 付款方式 +
-              即時金額預覽。不含 §4.3 自訂工時開關(留給下一批獨立處理)。 */}
-          <div className="space-y-3 rounded-md border border-border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <Label>自訂總金額</Label>
-                {/* SPECS-INDEX #829:三種狀態的說明文字——(a) 已改單價且目前關閉:開關變灰,寫清楚
-                    原因跟怎麼解;(b) 已改單價但開關本來就開著:不偷關,寫清楚目前以哪個為準;
-                    (c) 一般情況:原本的說明。 */}
-                {customTotalAmountLocked ? (
-                  <p className="text-[11px] text-warn">
-                    {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,無法再套用自訂總金額。要改用自訂總金額,請先把單價改回預設值。`}
-                  </p>
-                ) : hasAdjustedUnitPrice ? (
-                  <p className="text-[11px] text-warn">
-                    {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,但自訂總金額仍在開啟中,金額會以下方輸入的總金額為準;關閉後,在單價改回預設值之前無法再開啟。`}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-muted-foreground">
-                    開啟後用輸入的總金額取代逐項小計。
-                  </p>
-                )}
-              </div>
-              <Switch
-                checked={customTotalAmountEnabled}
-                disabled={customTotalAmountLocked}
-                onCheckedChange={setCustomTotalAmountEnabled}
-              />
-            </div>
-            {customTotalAmountEnabled ? (
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="輸入這筆訂單的總金額"
-                value={customTotalAmount}
-                onChange={(e) => setCustomTotalAmount(e.target.value)}
-              />
-            ) : null}
+              即時金額預覽。skill 二之九:金額整組用色塊包起來,三個開關 + 付款方式都在裡面。 */}
+          <DetailSection label="金額" tone="amount" className="gap-3">
+            <SwitchRow
+              title="自訂總金額"
+              description="開啟後用輸入的總金額取代逐項小計。"
+              checked={customTotalAmountEnabled}
+              disabled={customTotalAmountLocked}
+              onCheckedChange={setCustomTotalAmountEnabled}
+              className="bg-background"
+            >
+              {/* SPECS-INDEX #829:兩種狀態的 `!` 常駐說明(skill 二:「為什麼這顆按鈕按不了」絕對不能
+                  收進 `?`)——(a) 已改單價且目前關閉:開關變灰,寫清楚原因跟怎麼解;(b) 已改單價但開關
+                  本來就開著:不偷關,寫清楚目前以哪個為準。 */}
+              {customTotalAmountLocked || hasAdjustedUnitPrice || customTotalAmountEnabled ? (
+                <div className="flex flex-col gap-2.5">
+                  {customTotalAmountLocked ? (
+                    <AlertNote>
+                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,無法再套用自訂總金額。要改用自訂總金額,請先把單價改回預設值。`}
+                    </AlertNote>
+                  ) : hasAdjustedUnitPrice ? (
+                    <AlertNote>
+                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,但自訂總金額仍在開啟中,金額會以下方輸入的總金額為準;關閉後,在單價改回預設值之前無法再開啟。`}
+                    </AlertNote>
+                  ) : null}
+                  {customTotalAmountEnabled ? (
+                    <FormField label="總金額" htmlFor="booking-custom-total" required>
+                      <FieldAmountInput
+                        id="booking-custom-total"
+                        placeholder="輸入這筆訂單的總金額"
+                        value={customTotalAmount}
+                        onChange={(e) => setCustomTotalAmount(e.target.value)}
+                      />
+                    </FormField>
+                  ) : null}
+                </div>
+              ) : null}
+            </SwitchRow>
 
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-              <div>
-                <Label>折扣優惠</Label>
-                <p className="text-[11px] text-muted-foreground">固定金額或百分比二選一。</p>
-              </div>
-              <Switch checked={discountEnabled} onCheckedChange={setDiscountEnabled} />
-            </div>
-            {discountEnabled ? (
-              <div className="flex gap-2">
-                {/* 2026-09-24 稽核修正(問題 3):合法值是固定常數清單(fixed/percentage),
-                    用白名單判斷。白名單直接取 AMOUNT_ADJUSTMENT_MODE_LABELS 的 key,
-                    之後常數增減會自動跟著變,不用記得回來改這裡。
-                    編輯既有訂單時 discountMode 是 useEffect 從 editingDetail 灌進來的,
-                    正是會觸發幽靈空值事件的時序。 */}
-                <Select
-                  value={discountMode}
-                  onValueChange={guardPhantomEmptyChange<AmountAdjustmentMode>(
-                    setDiscountMode,
-                    (v) => v in AMOUNT_ADJUSTMENT_MODE_LABELS,
-                  )}
+            <SwitchRow
+              title="折扣優惠"
+              description="固定金額或百分比二選一。"
+              checked={discountEnabled}
+              onCheckedChange={setDiscountEnabled}
+              className="bg-background"
+            >
+              {discountEnabled ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField label="折扣方式">
+                    {/* 2026-09-24 稽核修正(問題 3)當時是 Select + 白名單 guard;現在改 ChoiceChipGroup
+                        (只有真的點擊 / 鍵盤切換才會觸發),沒有幽靈空值事件,不再需要 guard。 */}
+                    <ChoiceChipGroup
+                      aria-label="折扣方式"
+                      value={discountMode}
+                      onValueChange={setDiscountMode}
+                      options={AMOUNT_ADJUSTMENT_MODE_OPTIONS}
+                    />
+                  </FormField>
+                  <FormField
+                    label={discountMode === "percentage" ? "折扣比例(%)" : "折扣金額"}
+                    htmlFor="booking-discount-value"
+                  >
+                    {discountMode === "percentage" ? (
+                      <FieldInput
+                        id="booking-discount-value"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        className="tabular-nums"
+                        placeholder="0~100 的數字"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                      />
+                    ) : (
+                      <FieldAmountInput
+                        id="booking-discount-value"
+                        placeholder="折扣金額"
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                      />
+                    )}
+                  </FormField>
+                </div>
+              ) : null}
+            </SwitchRow>
+
+            <SwitchRow
+              title="稅金"
+              // 建單與訂單管理介面優化 §2:文字依商家目前稅金模式(比例/固定金額)切換,
+              // 不能寫死成只有百分比的版本;純顯示文字調整,tax_mode 判斷邏輯不變。
+              description={getTaxModeHelperText(taxMode)}
+              checked={taxEnabled}
+              onCheckedChange={setTaxEnabled}
+              className="bg-background"
+            >
+              {taxEnabled ? (
+                <FormField
+                  label={taxMode === "percentage" ? "稅率(%)" : "稅額"}
+                  htmlFor="booking-tax-value"
                 >
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
-                    <SelectItem value="percentage">
-                      {AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min={0}
-                  max={discountMode === "percentage" ? 100 : undefined}
-                  step="0.01"
-                  placeholder={discountMode === "percentage" ? "0~100 的數字" : "折扣金額"}
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(e.target.value)}
-                />
-              </div>
-            ) : null}
-
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-              <div>
-                <Label>稅金</Label>
-                {/* 建單與訂單管理介面優化 §2:文字依商家目前稅金模式(比例/固定金額)切換,
-                    不能寫死成只有百分比的版本;純顯示文字調整,tax_mode 判斷邏輯不變。 */}
-                <p className="text-[11px] text-muted-foreground">{getTaxModeHelperText(taxMode)}</p>
-              </div>
-              <Switch checked={taxEnabled} onCheckedChange={setTaxEnabled} />
-            </div>
-            {taxEnabled ? (
-              <div className="relative">
-                {taxMode === "fixed" ? (
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    $
-                  </span>
-                ) : null}
-                <Input
-                  type="number"
-                  min={0}
-                  max={taxMode === "percentage" ? 100 : undefined}
-                  step="0.01"
-                  placeholder={taxMode === "percentage" ? "稅率(0~100 的數字)" : "稅額"}
-                  value={taxValue}
-                  onChange={(e) => setTaxValue(e.target.value)}
-                  className={cn(taxMode === "fixed" ? "pl-7" : "pr-8")}
-                />
-                {/* §2 第 1 點:比例模式時在輸入框旁明確標示「%」,避免使用者誤以為是輸入金額。 */}
-                {taxMode === "percentage" ? (
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                    %
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+                  {taxMode === "percentage" ? (
+                    /* §2 第 1 點:比例模式時在輸入框旁明確標示「%」,避免使用者誤以為是輸入金額。 */
+                    <div className="relative">
+                      <FieldInput
+                        id="booking-tax-value"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={100}
+                        step="0.01"
+                        className="pr-8 tabular-nums"
+                        placeholder="稅率(0~100 的數字)"
+                        value={taxValue}
+                        onChange={(e) => setTaxValue(e.target.value)}
+                      />
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[15px] text-muted-foreground"
+                      >
+                        %
+                      </span>
+                    </div>
+                  ) : (
+                    <FieldAmountInput
+                      id="booking-tax-value"
+                      placeholder="稅額"
+                      value={taxValue}
+                      onChange={(e) => setTaxValue(e.target.value)}
+                    />
+                  )}
+                </FormField>
+              ) : null}
+            </SwitchRow>
 
             {/* 建單與訂單管理介面優化 §3/模組 9(支付方式)v2 §5.2/SPECS-INDEX #604(付款方式改為
-                必填):付款方式下拉選單,比照「服務人員」欄位樣式(Label + mt-2 間距的 Select)。
-                選項是商家自訂清單裡目前上架中的項目(paymentMethodOptions,含編輯模式下維持原值
+                必填):選項是商家自訂清單裡目前上架中的項目(paymentMethodOptions,含編輯模式下維持原值
                 即使已下架的附加項)。#604:新建模式下不再提供「(未選擇/尚未設定)」這個選項(拿掉
                 之後客服在新建流程一定會選到一個實際的付款方式);編輯模式維持顯示這個選項——
                 對應後端「維持原值放行,只有主動改成空值才擋」的規則,選了它會在送出時被擋下
-                (見 handleSubmit 的驗證),不是完全禁止選取。 */}
-            <div className="border-t border-border pt-3">
-              <Label>付款方式 *</Label>
-              {/* 2026-09-24 稽核修正(問題 3):合法值是 PAYMENT_METHOD_UNSET 這個 sentinel
-                  加上資料庫來的動態付款方式 id,判斷條件是「不是空字串」。
-                  注意 PAYMENT_METHOD_UNSET("__unset__")本身不是空字串,會正常放行——
-                  編輯模式下客服要主動選回「(未選擇/尚未設定)」仍然做得到,
-                  是否放行由 handleSubmit 的必填驗證決定,不是在這裡擋。 */}
-              <Select
+                (見 handleSubmit 的驗證),不是完全禁止選取。
+                skill 二之七:付款方式是單選 ⇒ ChoiceChipGroup;不是 Radix Select,沒有幽靈空值事件。 */}
+            <FormField label="付款方式" required>
+              <ChoiceChipGroup
+                aria-label="付款方式"
                 value={paymentMethodValue}
-                onValueChange={guardPhantomEmptyChange(setPaymentMethodValue)}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {isEdit ? (
-                    <SelectItem value={PAYMENT_METHOD_UNSET}>(未選擇/尚未設定)</SelectItem>
-                  ) : null}
-                  {paymentMethodOptions.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                onValueChange={setPaymentMethodValue}
+                options={[
+                  ...(isEdit ? [{ value: PAYMENT_METHOD_UNSET, label: "(未選擇/尚未設定)" }] : []),
+                  ...paymentMethodOptions.map((option) => ({
+                    value: option.id,
+                    label: option.name,
+                  })),
+                ]}
+              />
+            </FormField>
 
-            {/* §4.8 金額即時預覽,體驗層,真正落地金額由後端重算(規則 2.2)。 */}
-            <div className="space-y-1 rounded-md bg-muted/40 p-2.5 text-xs">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">小計</span>
-                <span>{formatAmount(amountPreview.subtotalAmount)}</span>
-              </div>
+            {/* §4.8 金額即時預覽,體驗層,真正落地金額由後端重算(規則 2.2)。
+                skill 二之六 明細列:標籤淡、值粗、最終金額 26px、tabular-nums。 */}
+            <div className="flex flex-col gap-1.5 rounded-md bg-background/80 px-3.5 py-3">
+              <DetailRow label="小計" size="sm">
+                {formatAmount(amountPreview.subtotalAmount)}
+              </DetailRow>
               {discountEnabled ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">折扣</span>
-                  <span>-{formatAmount(amountPreview.discountAmount)}</span>
-                </div>
+                <DetailRow label="折扣" size="sm">
+                  -{formatAmount(amountPreview.discountAmount)}
+                </DetailRow>
               ) : null}
               {taxEnabled ? (
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">稅金</span>
-                  <span>+{formatAmount(amountPreview.taxAmount)}</span>
-                </div>
+                <DetailRow label="稅金" size="sm">
+                  +{formatAmount(amountPreview.taxAmount)}
+                </DetailRow>
               ) : null}
-              <div className="flex items-center justify-between border-t border-border pt-1 font-semibold text-foreground">
-                <span>最終金額</span>
-                <span>{formatAmount(amountPreview.finalAmount)}</span>
-              </div>
-              {amountPreview.error ? <p className="text-warn">{amountPreview.error}</p> : null}
+              <DetailDivider className="my-1 bg-brand/20" />
+              <DetailRow label="最終金額" size="xl">
+                {formatAmount(amountPreview.finalAmount)}
+              </DetailRow>
             </div>
-          </div>
+            {amountPreview.error ? <AlertNote>{amountPreview.error}</AlertNote> : null}
+          </DetailSection>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="booking-customer-name">客戶姓名 *</Label>
-              <Input
-                id="booking-customer-name"
-                className="mt-2"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="booking-customer-phone">客戶電話 *</Label>
-              <Input
-                id="booking-customer-phone"
-                className="mt-2"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-              />
-            </div>
-            {/* SPECS-INDEX #614(會員與紅利.md §10.2,取代舊版 §4.4 獨立的「會員(選填)」欄位):
-                電話當查詢索引,不當唯一鍵。輸入客戶電話後,這裡列出這支電話底下這個商家既有的所有
-                客戶,可以連結既有客戶或視為新客戶,歸在既有的 orders 權限底下(規則 2.10),不選
-                就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
-            <div className="sm:col-span-2">
-              <MemberPhoneMatchPanel
-                merchantId={merchantId}
-                phone={customerPhone}
-                customerName={customerName}
-                selectedMember={member}
-                onSelectMember={setMember}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="booking-customer-email">客戶 Email</Label>
-              <Input
-                id="booking-customer-email"
-                type="email"
-                className="mt-2"
-                value={customerEmail}
-                onChange={(e) => setCustomerEmail(e.target.value)}
-              />
-            </div>
-            {/* 建單表單細節修正第二節:只有 industry_type 需要地址的產業(見
-                INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才顯示這個欄位並標記必填,不需要地址的產業
-                整個欄位不顯示。真正擋住不合法的空地址還是 create_booking/update_booking 資料庫層。 */}
-            {requiresCustomerAddress ? (
-              <div className="sm:col-span-2">
-                <Label htmlFor="booking-customer-address">客戶地址 *</Label>
-                <Input
-                  id="booking-customer-address"
-                  className="mt-2"
-                  value={customerAddress}
-                  onChange={(e) => setCustomerAddress(e.target.value)}
+          {/* ───────── 料錢成本 ───────── */}
+          {/* 建單功能擴充 2.3/5.1 第 3 點:料錢成本區塊,只有商家開啟功能時才顯示。 */}
+          {materialCostEnabled ? (
+            <DetailSection label="料錢成本" className="gap-4">
+              <FormField
+                label="料錢成本(可留空,可多選)"
+                helpLabel="說明:料錢成本是什麼"
+                help="記錄這次服務預期會用掉的材料成本,僅供操作者參考與之後算抽成基準用,不代表訂單金額。"
+              >
+                <div className="flex flex-col gap-2.5">
+                  {(materialCostItems ?? []).length === 0 ? (
+                    <p className="text-[13px] text-muted-foreground">
+                      目前沒有上架中的料錢成本品項。
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {(materialCostItems ?? []).map((item) => (
+                        <ChoiceChip
+                          key={item.id}
+                          selected={materialCostItemIds.includes(item.id)}
+                          onClick={() =>
+                            setMaterialCostItemIds((prev) => toggleInArray(prev, item.id))
+                          }
+                        >
+                          <span className="break-words text-left">
+                            {item.name}
+                            <span className="ml-1 tabular-nums text-muted-foreground">
+                              ${Number(item.amount).toFixed(0)}
+                            </span>
+                          </span>
+                        </ChoiceChip>
+                      ))}
+                    </div>
+                  )}
+                  {materialCostItemIds.length > 0 ? (
+                    <p className="text-xs tabular-nums text-muted-foreground">
+                      已選 {materialCostItemIds.length} 項,金額加總 ${materialCostTotal.toFixed(0)}
+                      (僅供操作者參考,不代表訂單金額)。
+                    </p>
+                  ) : null}
+                </div>
+              </FormField>
+            </DetailSection>
+          ) : null}
+
+          {/* ───────── 備註 ───────── */}
+          {/* 預約詳情資訊擴充與建單備註分類第一節:備註分成「內部備註」(既有 notes 欄位,
+              商家內部看、客戶看不到,欄位本身不改名)跟「客戶備註」(customer_notes,客戶看得到),
+              兩個欄位並排顯示。建單與訂單管理介面優化 §4:兩個備註欄位的高度都是 5 列。
+              skill 二之六:誰看得到要寫清楚(服務人員端看得到內部備註,2026-09-29 使用者確認)。 */}
+          <DetailSection label="備註" className="gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                label={
+                  <>
+                    內部備註{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (客戶看不到,服務人員看得到)
+                    </span>
+                  </>
+                }
+                htmlFor="booking-notes"
+              >
+                <FieldTextarea
+                  id="booking-notes"
+                  rows={5}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                 />
-              </div>
-            ) : null}
-            {/* 預約詳情資訊擴充與建單備註分類第一節:備註分成「內部備註」(既有 notes 欄位,
-                商家內部看、客戶看不到,這次只改標籤文字,欄位本身不改名)跟「客戶備註」
-                (新欄位 customer_notes,客戶看得到),兩個欄位並排顯示。 */}
-            {/* 建單與訂單管理介面優化 §4:兩個備註欄位的高度從 2 列加高到 5 列,方便編輯較長的文字,
-                兩個欄位比照辦理。 */}
-            <div>
-              <Label htmlFor="booking-notes">內部備註</Label>
-              <Textarea
-                id="booking-notes"
-                className="mt-2"
-                rows={5}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
+              </FormField>
+              <FormField
+                label={
+                  <>
+                    客戶備註 <span className="font-normal text-muted-foreground">(客戶看得到)</span>
+                  </>
+                }
+                htmlFor="booking-customer-notes"
+              >
+                <FieldTextarea
+                  id="booking-customer-notes"
+                  rows={5}
+                  value={customerNotes}
+                  onChange={(e) => setCustomerNotes(e.target.value)}
+                />
+              </FormField>
             </div>
-            <div>
-              <Label htmlFor="booking-customer-notes">客戶備註</Label>
-              <Textarea
-                id="booking-customer-notes"
-                className="mt-2"
-                rows={5}
-                value={customerNotes}
-                onChange={(e) => setCustomerNotes(e.target.value)}
-              />
-            </div>
-          </div>
+          </DetailSection>
         </div>
-
-        {/* §5 第 2 點:送出按鈕固定顯示在畫面最下方(這個 div 是 flex 直欄的第三個 shrink-0
-            子項,不在上面 flex-1 overflow-y-auto 的可捲動內容區裡),不用捲到最底才看得到。 */}
-        <div className="shrink-0 border-t border-border bg-background px-5 py-3">
-          <Button type="button" className="w-full" disabled={saving} onClick={handleSubmit}>
-            {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
-          </Button>
-        </div>
-      </SheetContent>
-    </Sheet>
+      </FullPageLayerContent>
+    </FullPageLayer>
   );
 }
 
@@ -1541,10 +1637,14 @@ function DaySlotCell({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {showCreateOption ? (
-          <DropdownMenuItem onClick={onCreateBooking}>新增預約</DropdownMenuItem>
+          <DropdownMenuItem className="h-10 cursor-pointer" onClick={onCreateBooking}>
+            新增預約
+          </DropdownMenuItem>
         ) : null}
         {showOverrideOption ? (
-          <DropdownMenuItem onClick={onToggleOverride}>{overrideOptionLabel}</DropdownMenuItem>
+          <DropdownMenuItem className="h-10 cursor-pointer" onClick={onToggleOverride}>
+            {overrideOptionLabel}
+          </DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1728,46 +1828,40 @@ function CalendarPageInner() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-5 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">行事曆</h1>
-          <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的預約總覽</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-md border border-border p-0.5">
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "week" ? "default" : "ghost"}
-              onClick={() => setViewMode("week")}
-            >
-              週檢視
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={viewMode === "month" ? "default" : "ghost"}
-              onClick={() => setViewMode("month")}
-            >
-              月檢視
-            </Button>
-          </div>
-          <Button variant="cta" onClick={() => openCreateForm({ dateKey: selectedDateKey })}>
+      <PageHeader
+        title="行事曆"
+        description={`「${merchant!.name}」的預約總覽`}
+        action={
+          <Button
+            type="button"
+            variant="primary"
+            size="touch"
+            onClick={() => openCreateForm({ dateKey: selectedDateKey })}
+          >
             新增預約
           </Button>
-        </div>
-      </div>
+        }
+      />
+
+      {/* 1.1:週 / 月檢視切換(skill 二之七 單選方塊)。 */}
+      <ChoiceChipGroup
+        aria-label="檢視模式"
+        value={viewMode}
+        onValueChange={setViewMode}
+        options={CALENDAR_VIEW_OPTIONS}
+      />
 
       {viewMode === "week" ? (
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
-            size="sm"
+            type="button"
+            variant="neutral"
+            size="card"
             onClick={() => setSelectedDate((d) => addDays(d, -7))}
           >
             上一週
           </Button>
-          <div className="grid flex-1 grid-cols-7 gap-1.5">
+          <div className="grid min-w-0 flex-1 grid-cols-7 gap-1.5">
             {weekDays.map((d) => {
               const key = toDateKey(d);
               const isSelected = key === selectedDateKey;
@@ -1778,16 +1872,16 @@ function CalendarPageInner() {
                   aria-label={`切換到 ${key}`}
                   onClick={() => setSelectedDate(d)}
                   className={cn(
-                    "flex flex-col items-center gap-1 rounded-md border px-2 py-2 text-xs transition-colors",
+                    "flex min-h-11 flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs transition-colors",
                     isSelected
                       ? "border-brand bg-brand-soft font-semibold text-brand"
                       : "border-border text-muted-foreground hover:border-brand/50",
                   )}
                 >
                   <span>週{"日一二三四五六"[d.getDay()]}</span>
-                  <span className="text-sm">{d.getDate()}</span>
+                  <span className="text-sm tabular-nums">{d.getDate()}</span>
                   {datesWithBookings.has(key) ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-cta" aria-hidden />
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
                   ) : (
                     <span className="h-1.5 w-1.5" aria-hidden />
                   )}
@@ -1795,7 +1889,12 @@ function CalendarPageInner() {
               );
             })}
           </div>
-          <Button variant="outline" size="sm" onClick={() => setSelectedDate((d) => addDays(d, 7))}>
+          <Button
+            type="button"
+            variant="neutral"
+            size="card"
+            onClick={() => setSelectedDate((d) => addDays(d, 7))}
+          >
             下一週
           </Button>
         </div>
@@ -1803,18 +1902,20 @@ function CalendarPageInner() {
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <Button
-              variant="outline"
-              size="sm"
+              type="button"
+              variant="neutral"
+              size="card"
               onClick={() => setMonthAnchor((d) => addMonths(d, -1))}
             >
               上一月
             </Button>
-            <span className="text-sm font-medium text-foreground">
+            <span className="text-sm font-semibold tabular-nums text-foreground">
               {monthAnchor.getFullYear()} 年 {monthAnchor.getMonth() + 1} 月
             </span>
             <Button
-              variant="outline"
-              size="sm"
+              type="button"
+              variant="neutral"
+              size="card"
               onClick={() => setMonthAnchor((d) => addMonths(d, 1))}
             >
               下一月
@@ -1835,7 +1936,7 @@ function CalendarPageInner() {
                   type="button"
                   onClick={() => setSelectedDate(date)}
                   className={cn(
-                    "flex flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs transition-colors",
+                    "flex min-h-11 flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs tabular-nums transition-colors",
                     isSelected
                       ? "border-brand bg-brand-soft font-semibold text-brand"
                       : "border-border hover:border-brand/50",
@@ -1844,7 +1945,7 @@ function CalendarPageInner() {
                 >
                   <span>{date.getDate()}</span>
                   {datesWithBookings.has(key) ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-cta" aria-hidden />
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
                   ) : (
                     <span className="h-1.5 w-1.5" aria-hidden />
                   )}
@@ -1857,263 +1958,294 @@ function CalendarPageInner() {
 
       {/* 4.3 第 2 點/1.3:服務人員分欄時間軸格線,同一筆預約合併成連續色塊。 */}
       {scheduleLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="lines" rows={6} />
       ) : !schedule || schedule.staff.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          目前沒有在職的服務人員,請先到服務人員管理新增。
-        </p>
-      ) : !businessHours?.has_setting || businessHours.is_closed ? (
-        <p className="rounded-md border border-dashed border-warn/50 bg-warn/10 px-3 py-8 text-center text-sm text-warn">
-          {!businessHours?.has_setting
-            ? "尚未設定這天的營業時間,目前無法被預約,請先到營業時間設定完成設定。"
-            : "商家這天公休,無法建立預約。"}
-        </p>
+        <EmptyState
+          title="目前沒有在職的服務人員"
+          description="新增服務人員並設定可預約時段後,這裡會出現每個人的時間軸,就能開始排預約。"
+          action={
+            <Button asChild variant="primary" size="touch">
+              <Link to="/app/staff">前往服務人員管理</Link>
+            </Button>
+          }
+        />
+      ) : !businessHours?.has_setting ? (
+        <EmptyState
+          title="尚未設定這天的營業時間"
+          description="目前無法被預約,請先到營業時間設定完成設定。"
+          action={
+            <Button asChild variant="primary" size="touch">
+              <Link to="/app/business-hours">前往營業時間設定</Link>
+            </Button>
+          }
+        />
+      ) : businessHours.is_closed ? (
+        <EmptyState
+          title="商家這天公休"
+          description="公休日無法建立預約,可以切換到其他日期,或到營業時間設定調整。"
+        />
       ) : (
-        <div
-          // #811:捲動容器同時是拖拉的格線根節點——原生 touchmove 攔截(只在 dragging 才 preventDefault)
-          // 與靠邊自動橫向捲動都掛在它身上;§5.9 committing 期間整個格線 pointer-events-none。
-          ref={dragController.setGridRoot}
-          data-testid="calendar-day-grid"
-          data-drag-phase={dragController.phase}
-          className={cn(
-            "overflow-x-auto rounded-md border border-border",
-            dragController.isCommitting && "pointer-events-none",
-          )}
-        >
-          <div className="flex min-w-[640px]">
-            <div className="flex w-[72px] shrink-0 flex-col">
-              <div className="flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground">
-                時間
-              </div>
-              <div className="relative" style={{ height: gridTotalPx }}>
-                {slots.map((slot, i) => (
-                  <div
-                    key={slot.start}
-                    className="absolute inset-x-0 border-b border-r border-border p-1 text-right text-[11px] text-muted-foreground"
-                    style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                  >
-                    {slot.start}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {schedule.staff.map((s) => (
-              <div
-                key={s.staff_id}
-                data-testid={`staff-column-${s.staff_id}`}
-                data-drop-target={
-                  dragController.highlightedStaffId === s.staff_id ? "true" : undefined
-                }
-                className={cn(
-                  "relative flex-1 border-r border-border last:border-r-0",
-                  // §5.4:拖拉中游標下方的欄位加 ring;forbidden 時換成警示色。
-                  dragController.highlightedStaffId === s.staff_id &&
-                    (dragController.highlightForbidden
-                      ? "ring-2 ring-inset ring-destructive"
-                      : "ring-2 ring-inset ring-brand"),
-                )}
-              >
-                <div className="flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
-                  <span className="truncate">{s.staff_name}</span>
-                  {/* 模組 7(排班與休假管理)§4.5:請假整欄灰底顯示假別名稱。主腦裁示:請假一律擋下
-                      建單,不論 unlimited_backend_edit 是否開啟都沒有覆寫例外,所以這裡不需要規格書
-                      原文提到的「可透過無限制編輯覆寫」特殊標示。 */}
-                  {s.on_leave ? (
-                    <span className="truncate text-[10px] font-normal text-muted-foreground">
-                      休假:{s.on_leave.leave_type_name}
-                    </span>
-                  ) : null}
+        // skill 六:放不下橫向捲、時間欄固定在左邊、服務人員欄有固定最小寬度、右緣漸層陰影暗示還有內容。
+        // 外面多包一層 relative 只是為了放右緣漸層,捲動容器本身(dragController.setGridRoot)不變。
+        <div className="relative">
+          <div
+            // #811:捲動容器同時是拖拉的格線根節點——原生 touchmove 攔截(只在 dragging 才 preventDefault)
+            // 與靠邊自動橫向捲動都掛在它身上;§5.9 committing 期間整個格線 pointer-events-none。
+            ref={dragController.setGridRoot}
+            data-testid="calendar-day-grid"
+            data-drag-phase={dragController.phase}
+            className={cn(
+              "overflow-x-auto rounded-md border border-border",
+              dragController.isCommitting && "pointer-events-none",
+            )}
+          >
+            <div className="flex min-w-[640px]">
+              {/* 時間欄:sticky 固定在左邊,橫向捲時不跟著跑(skill 六)。 */}
+              <div className="sticky left-0 z-20 flex w-[72px] shrink-0 flex-col bg-background">
+                <div className="flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground">
+                  時間
                 </div>
-                <div
-                  className="relative"
-                  style={{ height: gridTotalPx }}
-                  // #811:這一層是「第 0 格頂端」所在的元素,拖拉落點計算(computeDropTarget)用它的
-                  // getBoundingClientRect 當 gridTopClientY 與欄位左右邊界;Playwright 也用這個 testid 算座標。
-                  data-drag-column={s.staff_id}
-                  data-testid={`staff-grid-${s.staff_id}`}
-                >
-                  {/* 模組 7 §4.5:請假整天,整欄改成不可點擊建單——不進入下面複雜的背景格線/
-                      DropdownMenu 邏輯,直接渲染一個涵蓋全高的區塊。既有的預約(s.bookings)
-                      仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己判斷處理
-                      (規則 2.6:系統只警示不代為處理),但不能再新增新的預約。
-                      SPECS-INDEX #644:底色/圖樣改讀商家自訂的「全天休假」設定(密集 45 度斜線),
-                      不再是寫死的 bg-muted/60。 */}
-                  {s.on_leave ? (
+                <div className="relative" style={{ height: gridTotalPx }}>
+                  {slots.map((slot, i) => (
                     <div
-                      className="absolute inset-0"
-                      style={calendarStateBlockStyle(
-                        effectiveCalendarStateStyles,
-                        "full_day_leave",
-                      )}
-                      aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
-                    />
-                  ) : null}
-                  {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:
-                      每格先看有沒有落在某個 availability_overrides 區間內,有則採用該區間的
-                      is_available 值決定顯示狀態,沒有則沿用既有的商家營業時間∩服務人員時段判斷
-                      (available_windows,第一層∩第二層,後端算好的結果)。 */}
-                  {s.on_leave
-                    ? null
-                    : slots.map((slot, i) => {
-                        const slotStartMin = timeToMinutes(slot.start);
-                        const slotEndMin = timeToMinutes(slot.end);
+                      key={slot.start}
+                      className="absolute inset-x-0 border-b border-r border-border p-1 text-right text-[11px] tabular-nums text-muted-foreground"
+                      style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                    >
+                      {slot.start}
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-                        const inWindow = s.available_windows.some(
-                          (w) =>
-                            timeToMinutes(w.start_time) <= slotStartMin &&
-                            timeToMinutes(w.end_time) >= slotEndMin,
-                        );
+              {schedule.staff.map((s) => (
+                <div
+                  key={s.staff_id}
+                  data-testid={`staff-column-${s.staff_id}`}
+                  data-drop-target={
+                    dragController.highlightedStaffId === s.staff_id ? "true" : undefined
+                  }
+                  className={cn(
+                    "relative min-w-[120px] flex-1 border-r border-border last:border-r-0",
+                    // §5.4:拖拉中游標下方的欄位加 ring;forbidden 時換成警示色。
+                    dragController.highlightedStaffId === s.staff_id &&
+                      (dragController.highlightForbidden
+                        ? "ring-2 ring-inset ring-destructive"
+                        : "ring-2 ring-inset ring-brand"),
+                  )}
+                >
+                  <div className="flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
+                    <span className="max-w-full truncate">{s.staff_name}</span>
+                    {/* 模組 7(排班與休假管理)§4.5:請假整欄灰底顯示假別名稱。主腦裁示:請假一律擋下
+                        建單,不論 unlimited_backend_edit 是否開啟都沒有覆寫例外,所以這裡不需要規格書
+                        原文提到的「可透過無限制編輯覆寫」特殊標示。 */}
+                    {s.on_leave ? (
+                      <span className="max-w-full truncate text-[10px] font-normal text-muted-foreground">
+                        休假:{s.on_leave.leave_type_name}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div
+                    className="relative"
+                    style={{ height: gridTotalPx }}
+                    // #811:這一層是「第 0 格頂端」所在的元素,拖拉落點計算(computeDropTarget)用它的
+                    // getBoundingClientRect 當 gridTopClientY 與欄位左右邊界;Playwright 也用這個 testid 算座標。
+                    data-drag-column={s.staff_id}
+                    data-testid={`staff-grid-${s.staff_id}`}
+                  >
+                    {/* 模組 7 §4.5:請假整天,整欄改成不可點擊建單——不進入下面複雜的背景格線/
+                        DropdownMenu 邏輯,直接渲染一個涵蓋全高的區塊。既有的預約(s.bookings)
+                        仍然疊在上面顯示,方便管理員看到這天已經有哪些預約需要自己判斷處理
+                        (規則 2.6:系統只警示不代為處理),但不能再新增新的預約。
+                        SPECS-INDEX #644:底色/圖樣改讀商家自訂的「全天休假」設定(密集 45 度斜線),
+                        不再是寫死的 bg-muted/60。 */}
+                    {s.on_leave ? (
+                      <div
+                        className="absolute inset-0"
+                        style={calendarStateBlockStyle(
+                          effectiveCalendarStateStyles,
+                          "full_day_leave",
+                        )}
+                        aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
+                      />
+                    ) : null}
+                    {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:
+                        每格先看有沒有落在某個 availability_overrides 區間內,有則採用該區間的
+                        is_available 值決定顯示狀態,沒有則沿用既有的商家營業時間∩服務人員時段判斷
+                        (available_windows,第一層∩第二層,後端算好的結果)。 */}
+                    {s.on_leave
+                      ? null
+                      : slots.map((slot, i) => {
+                          const slotStartMin = timeToMinutes(slot.start);
+                          const slotEndMin = timeToMinutes(slot.end);
 
-                        const matchedOverride = s.availability_overrides.find(
-                          (o) =>
-                            timeToMinutes(o.start_time) <= slotStartMin &&
-                            timeToMinutes(o.end_time) >= slotEndMin,
-                        );
-                        const isOverride = Boolean(matchedOverride);
-                        // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
-                        const finalAvailable = matchedOverride
-                          ? matchedOverride.is_available
-                          : inWindow;
-
-                        const foreignBusy = s.foreign_bookings.some((b) => {
-                          const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
-                          const bEnd = timeToMinutes(isoToTaipeiTime(b.end_at));
-                          return bStart < slotEndMin && bEnd > slotStartMin;
-                        });
-
-                        if (foreignBusy) {
-                          // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
-                          // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
-                          return (
-                            <div
-                              key={slot.start}
-                              className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
-                              style={{
-                                top: i * SLOT_PX,
-                                height: SLOT_PX,
-                                ...calendarStateBlockStyle(
-                                  effectiveCalendarStateStyles,
-                                  "cross_store_occupied",
-                                ),
-                              }}
-                              data-slot-state="cross-store-occupied"
-                            >
-                              外店預約中
-                            </div>
+                          const inWindow = s.available_windows.some(
+                            (w) =>
+                              timeToMinutes(w.start_time) <= slotStartMin &&
+                              timeToMinutes(w.end_time) >= slotEndMin,
                           );
-                        }
 
-                        // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
-                        // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
-                        if (!finalAvailable && !canManageDayOverride) {
+                          const matchedOverride = s.availability_overrides.find(
+                            (o) =>
+                              timeToMinutes(o.start_time) <= slotStartMin &&
+                              timeToMinutes(o.end_time) >= slotEndMin,
+                          );
+                          const isOverride = Boolean(matchedOverride);
+                          // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
+                          const finalAvailable = matchedOverride
+                            ? matchedOverride.is_available
+                            : inWindow;
+
+                          const foreignBusy = s.foreign_bookings.some((b) => {
+                            const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
+                            const bEnd = timeToMinutes(isoToTaipeiTime(b.end_at));
+                            return bStart < slotEndMin && bEnd > slotStartMin;
+                          });
+
+                          if (foreignBusy) {
+                            // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
+                            // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
+                            return (
+                              <div
+                                key={slot.start}
+                                className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
+                                style={{
+                                  top: i * SLOT_PX,
+                                  height: SLOT_PX,
+                                  ...calendarStateBlockStyle(
+                                    effectiveCalendarStateStyles,
+                                    "cross_store_occupied",
+                                  ),
+                                }}
+                                data-slot-state="cross-store-occupied"
+                              >
+                                外店預約中
+                              </div>
+                            );
+                          }
+
+                          // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
+                          // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
+                          if (!finalAvailable && !canManageDayOverride) {
+                            return (
+                              <div
+                                key={slot.start}
+                                className="absolute inset-x-0 border-b border-border bg-muted/40"
+                                style={{ top: i * SLOT_PX, height: SLOT_PX }}
+                                aria-label="不可預約"
+                                // 沒有 business_hours 權限的人走這個純視覺分支,一樣標出狀態,
+                                // 讓「不同權限視角看到的同一格是不是同一個狀態」也能被測試比對。
+                                data-slot-state={daySlotState(isOverride, finalAvailable)}
+                              />
+                            );
+                          }
+
+                          // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
+                          // 管理員一眼看出這是臨時調整過的,不是預設狀態。
+                          // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
+                          // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
+                          // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
+                          const cellClassName = finalAvailable
+                            ? isOverride
+                              ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
+                              : "bg-background hover:bg-brand-soft/40"
+                            : isOverride
+                              ? "hover:opacity-80"
+                              : "bg-muted/40 hover:bg-muted/60";
+                          const cellStyle =
+                            isOverride && !finalAvailable
+                              ? calendarStateBlockStyle(
+                                  effectiveCalendarStateStyles,
+                                  "partial_leave",
+                                )
+                              : undefined;
+
+                          // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
+                          // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
                           return (
-                            <div
+                            <DaySlotCell
                               key={slot.start}
-                              className="absolute inset-x-0 border-b border-border bg-muted/40"
-                              style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                              aria-label="不可預約"
-                              // 沒有 business_hours 權限的人走這個純視覺分支,一樣標出狀態,
-                              // 讓「不同權限視角看到的同一格是不是同一個狀態」也能被測試比對。
-                              data-slot-state={daySlotState(isOverride, finalAvailable)}
+                              top={i * SLOT_PX}
+                              height={SLOT_PX}
+                              cellClassName={cellClassName}
+                              cellStyle={cellStyle}
+                              ariaLabel={finalAvailable ? "可預約" : "不可預約"}
+                              // 見 DaySlotState 的說明:斜線圖樣不帶文字之後,這是唯一能穩定
+                              // 分辨「例外關閉」跟「預設關閉」的標記。
+                              slotState={daySlotState(isOverride, finalAvailable)}
+                              // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
+                              // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
+                              // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
+                              // 「這是被別家佔用,不是本店自己的例外設定」這件事。
+                              badgeText=""
+                              // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
+                              // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
+                              // 實際可預約時才提供。
+                              showCreateOption={finalAvailable}
+                              onCreateBooking={() =>
+                                openCreateForm({
+                                  staffId: s.staff_id,
+                                  dateKey: selectedDateKey,
+                                  time: slot.start,
+                                })
+                              }
+                              // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
+                              // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
+                              // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
+                              // 不再跳對話框選時間範圍。
+                              showOverrideOption={canManageDayOverride}
+                              overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
+                              onToggleOverride={() =>
+                                handleToggleDayOverride(
+                                  s.staff_id,
+                                  slot.start,
+                                  slot.end,
+                                  finalAvailable,
+                                )
+                              }
                             />
                           );
-                        }
+                        })}
 
-                        // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
-                        // 管理員一眼看出這是臨時調整過的,不是預設狀態。
-                        // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
-                        // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
-                        // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
-                        const cellClassName = finalAvailable
-                          ? isOverride
-                            ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
-                            : "bg-background hover:bg-brand-soft/40"
-                          : isOverride
-                            ? "hover:opacity-80"
-                            : "bg-muted/40 hover:bg-muted/60";
-                        const cellStyle =
-                          isOverride && !finalAvailable
-                            ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
-                            : undefined;
-
-                        // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
-                        // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
-                        return (
-                          <DaySlotCell
-                            key={slot.start}
-                            top={i * SLOT_PX}
-                            height={SLOT_PX}
-                            cellClassName={cellClassName}
-                            cellStyle={cellStyle}
-                            ariaLabel={finalAvailable ? "可預約" : "不可預約"}
-                            // 見 DaySlotState 的說明:斜線圖樣不帶文字之後,這是唯一能穩定
-                            // 分辨「例外關閉」跟「預設關閉」的標記。
-                            slotState={daySlotState(isOverride, finalAvailable)}
-                            // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
-                            // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
-                            // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
-                            // 「這是被別家佔用,不是本店自己的例外設定」這件事。
-                            badgeText=""
-                            // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
-                            // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
-                            // 實際可預約時才提供。
-                            showCreateOption={finalAvailable}
-                            onCreateBooking={() =>
-                              openCreateForm({
-                                staffId: s.staff_id,
-                                dateKey: selectedDateKey,
-                                time: slot.start,
-                              })
-                            }
-                            // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
-                            // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
-                            // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
-                            // 不再跳對話框選時間範圍。
-                            showOverrideOption={canManageDayOverride}
-                            overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
-                            onToggleOverride={() =>
-                              handleToggleDayOverride(
-                                s.staff_id,
-                                slot.start,
-                                slot.end,
-                                finalAvailable,
-                              )
-                            }
-                          />
-                        );
-                      })}
-
-                  {/* 1.3:同一筆預約合併顯示成一個跨越多格高度的連續色塊,疊在背景格線上方。 */}
-                  {s.bookings.map((b: DayScheduleOwnBooking) => {
-                    const bStartMin = timeToMinutes(isoToTaipeiTime(b.start_at));
-                    const bEndMin = timeToMinutes(isoToTaipeiTime(b.end_at));
-                    const top = Math.max(0, ((bStartMin - gridStartMin) / SLOT_MINUTES) * SLOT_PX);
-                    const height = Math.max(
-                      SLOT_PX / 2,
-                      ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX,
-                    );
-                    // #811~#817:色塊改成 DraggableBookingBlock(calendarBookingDrag.tsx)。原本這裡的
-                    // onClick={() => setDetailBookingId(b.id)} 已拿掉——可拖的色塊改由手勢 hook 判定
-                    // 「≤ 閾值就放開 = 點擊」才開詳情,否則拖完放開瀏覽器補發的 click 會把詳情彈出來。
-                    return (
-                      <DraggableBookingBlock
-                        key={b.id}
-                        booking={b}
-                        staffId={s.staff_id}
-                        style={{
-                          top,
-                          height,
-                          ...bookingBlockStyle(effectiveStatusColors, b.status),
-                        }}
-                        controller={dragController}
-                      />
-                    );
-                  })}
+                    {/* 1.3:同一筆預約合併顯示成一個跨越多格高度的連續色塊,疊在背景格線上方。 */}
+                    {s.bookings.map((b: DayScheduleOwnBooking) => {
+                      const bStartMin = timeToMinutes(isoToTaipeiTime(b.start_at));
+                      const bEndMin = timeToMinutes(isoToTaipeiTime(b.end_at));
+                      const top = Math.max(
+                        0,
+                        ((bStartMin - gridStartMin) / SLOT_MINUTES) * SLOT_PX,
+                      );
+                      const height = Math.max(
+                        SLOT_PX / 2,
+                        ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX,
+                      );
+                      // #811~#817:色塊改成 DraggableBookingBlock(calendarBookingDrag.tsx)。原本這裡的
+                      // onClick={() => setDetailBookingId(b.id)} 已拿掉——可拖的色塊改由手勢 hook 判定
+                      // 「≤ 閾值就放開 = 點擊」才開詳情,否則拖完放開瀏覽器補發的 click 會把詳情彈出來。
+                      return (
+                        <DraggableBookingBlock
+                          key={b.id}
+                          booking={b}
+                          staffId={s.staff_id}
+                          style={{
+                            top,
+                            height,
+                            ...bookingBlockStyle(effectiveStatusColors, b.status),
+                          }}
+                          controller={dragController}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+          {/* skill 六:右緣漸層陰影,暗示右邊還有服務人員欄可以捲。pointer-events-none,不影響拖拉與捲動。 */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-md bg-gradient-to-l from-background/90 to-transparent"
+          />
         </div>
       )}
 
@@ -2166,8 +2298,8 @@ function CalendarPageRoleGate() {
   // 少了這一關,雙重身分的人會先閃一下商家版行事曆(甚至閃一下被擋掉的空白畫面)才切回來。
   if (!isViewResolved) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      <div className="mx-auto max-w-6xl px-5 py-10">
+        <LoadingSkeleton variant="lines" rows={6} />
       </div>
     );
   }

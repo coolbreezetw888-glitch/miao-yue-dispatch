@@ -27,7 +27,8 @@
  *   - 用的是容器查詢(`@container`),不是 viewport 斷點——同一條列放進側欄、對話框也會自己判斷
  *   - 🔴 沒有 `truncate`(切掉的字跟看不到一樣糟)、沒有 `flex-wrap`、沒有 `overflow-x-auto`
  *   實測(2026-09-29,320px iframe):四顆三字標籤 + 兩位數數量在 13px 下總寬 226px,放得進 230px;
- *   一位數 204px。三個分類都破百人(三位數)才會多出 15px 溢進卡片內距——仍看得到,只是底線比較長。
+ *   一位數 204px。三個分類都破百人(三位數)才會多出約 8.4px 溢進卡片內距(QA 2026-09-29 於 320px 實測值)
+ *   ——仍看得到,只是底線比較長。
  *
  * 底層是 Radix Tabs,所以本來就用 <Tabs>/<TabsContent> 的頁面只要把 TabsList / TabsTrigger 換成
  * UnderlineTabsList / UnderlineTabsTrigger;純篩選(沒有 TabsContent)的頁面一樣用 <Tabs value onValueChange>

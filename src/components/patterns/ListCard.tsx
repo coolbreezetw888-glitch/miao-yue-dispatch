@@ -113,6 +113,9 @@ interface ListCardProps {
   /** 整張卡可點(例如點進詳情)。有 onClick 時整張是 button,右側動作區會擋掉冒泡。 */
   onClick?: (() => void) | undefined;
   className?: string | undefined;
+  /** 只給「顏色是商家自訂、build 時不知道」的情境用(例:訂單卡片左側依訂單狀態顏色表著色的色條,
+   *  SPECS-INDEX #621)。其他一律用 state / className,不要拿 style 寫死顏色。 */
+  style?: React.CSSProperties | undefined;
   children?: React.ReactNode | undefined;
 }
 
@@ -132,6 +135,7 @@ export function ListCard({
   state = "default",
   onClick,
   className,
+  style,
   children,
 }: ListCardProps) {
   const normalItems = (menuItems ?? []).filter((item) => !item.danger);
@@ -172,6 +176,7 @@ export function ListCard({
         onClick && "cursor-pointer hover:border-brand",
         className,
       )}
+      style={style}
       onClick={onClick}
       role={onClick ? "button" : undefined}
       tabIndex={onClick ? 0 : undefined}

@@ -39,16 +39,17 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+// ui-v1-full 第 2 批(2026-09-29,盤點 #31):確認框改用 ui-overlay-patterns 的小卡窗純確認殼。
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+} from "@/components/patterns";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
@@ -677,25 +678,26 @@ export function PastDropConfirmDialog({
   onResolve: (ok: boolean) => void;
 }) {
   return (
-    <AlertDialog
+    // 小卡窗純確認(skill 三):移到過去的時間是可以再拖回來的可逆動作 ⇒ 確認鈕用主要樣式、不標紅。
+    <CardAlertDialog
       open={request !== null}
       onOpenChange={(open) => {
         if (!open) onResolve(false);
       }}
     >
-      <AlertDialogContent data-testid="booking-drag-past-confirm">
-        <AlertDialogHeader>
-          <AlertDialogTitle>要移到已經過去的時間嗎?</AlertDialogTitle>
-          <AlertDialogDescription>
+      <CardAlertDialogContent data-testid="booking-drag-past-confirm">
+        <CardAlertDialogHeader>
+          <CardAlertDialogTitle>要移到已經過去的時間嗎?</CardAlertDialogTitle>
+          <CardAlertDialogDescription>
             你正在把 {request?.customerName ?? ""} 的預約移到已經過去的 {request?.time ?? ""}
             ,確定嗎?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => onResolve(false)}>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={() => onResolve(true)}>確定移動</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </CardAlertDialogDescription>
+        </CardAlertDialogHeader>
+        <CardAlertDialogFooter>
+          <CardAlertDialogCancel onClick={() => onResolve(false)}>取消</CardAlertDialogCancel>
+          <CardAlertDialogAction onClick={() => onResolve(true)}>確定移動</CardAlertDialogAction>
+        </CardAlertDialogFooter>
+      </CardAlertDialogContent>
+    </CardAlertDialog>
   );
 }
