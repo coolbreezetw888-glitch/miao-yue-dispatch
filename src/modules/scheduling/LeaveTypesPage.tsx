@@ -25,6 +25,7 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldTextarea,
   FormField,
@@ -199,7 +200,12 @@ function LeaveTypesPageInner() {
   const { data: canManageCommissionSettings } = useAgentPermission("commission_settings");
   const showDeductionRuleButton = merchantRole === "admin" || canManageCommissionSettings === true;
 
-  const { data: leaveTypes, isLoading } = useQuery({
+  const {
+    data: leaveTypes,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: leaveTypesQueryKey(merchantId),
     queryFn: () => fetchMerchantLeaveTypesAll(merchantId),
   });
@@ -294,20 +300,18 @@ function LeaveTypesPageInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「還沒有任何假別」,商家會以為假別被刪掉了。
+            <ErrorState
+              title="讀不到假別清單"
+              reason="可能是網路斷了,或你沒有管理假別的權限"
+              onRetry={() => void refetch()}
+            />
           ) : !leaveTypes || leaveTypes.length === 0 ? (
+            // 下一步(頁首的「新增假別」)就在同一個畫面上 ⇒ 不放第二顆主要按鈕,改用一句話指路。
             <EmptyState
               title="還沒有任何假別"
-              description="建立假別後,在「請假紀錄」幫月薪制服務人員登記請假時就能選用。"
-              action={
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="touch"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  新增第一個假別
-                </Button>
-              }
+              description="建立假別後,在「請假紀錄」幫月薪制服務人員登記請假時就能選用。請用右上角的「新增假別」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

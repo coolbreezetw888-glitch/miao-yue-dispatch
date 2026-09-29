@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import {
   AlertNote,
+  ErrorState,
   FieldTime,
   LoadingSkeleton,
   PageHeader,
@@ -133,7 +134,12 @@ function DayRow({
 function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
   const featureFlagQueryKey = ["booking-module", "strict-conflict-check", merchantId] as const;
   const queryClient = useQueryClient();
-  const { data: enabled, isLoading } = useQuery({
+  const {
+    data: enabled,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: featureFlagQueryKey,
     queryFn: async () => {
       const value = await getFeatureFlag(merchantId, STRICT_CONFLICT_CHECK_FEATURE_KEY);
@@ -163,6 +169,14 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
       <CardContent>
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={1} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:讀不到時原本會顯示成「已開啟」(那是查無資料時的預設值),
+          // 把「不知道」講成「確定開著」。出錯就不顯示開關狀態。
+          <ErrorState
+            title="讀不到嚴格工時衝突檢查的開關狀態"
+            reason="可能是網路斷了;現在畫面上不會顯示開或關,避免給你錯誤的訊息"
+            onRetry={() => void refetch()}
+          />
         ) : (
           <SwitchRow
             title="啟用嚴格工時衝突檢查"
@@ -183,7 +197,14 @@ function BusinessHoursPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
 
-  const { data: rows, isLoading } = useMerchantBusinessHours(merchantId);
+  // refetchRows 是 react-query 自己的重抓(ErrorState 的「重試」用);下面那個 refetch() 是
+  // 「存完之後讓清單失效」的既有函式,兩個不一樣,名字要分開。
+  const {
+    data: rows,
+    isLoading,
+    isError,
+    refetch: refetchRows,
+  } = useMerchantBusinessHours(merchantId);
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: businessHoursQueryKey(merchantId) });
@@ -200,8 +221,12 @@ function BusinessHoursPageInner() {
         description={`「${merchant!.name}」的每週營業時間,是預約系統的最外層邊界。`}
       />
 
-      {/* skill 二:「現在的狀態跟使用者以為的不一樣」(以為能預約其實整個關著)⇒ `!` 常駐,不可收合。 */}
-      {!isLoading && !hasAnySetting ? (
+      {/* skill 二:「現在的狀態跟使用者以為的不一樣」(以為能預約其實整個關著)⇒ `!` 常駐,不可收合。
+          🔴 2026-09-30 QA:這一條原本只看 `!isLoading && !hasAnySetting`,但查詢失敗時 rows 是
+          undefined ⇒ hasAnySetting 也是 false ⇒ 會跳出「尚未設定營業時間,目前所有日期都無法被
+          預約」這個**假警報**,商家明明設好了卻被告知全部關著。所以要多一個 `!isError`——
+          讀不到資料的時候我們根本不知道有沒有設定,不能亂講。 */}
+      {!isLoading && !isError && !hasAnySetting ? (
         <AlertNote>尚未設定營業時間,目前所有日期都無法被預約,請先完成以下設定。</AlertNote>
       ) : null}
 
@@ -213,6 +238,14 @@ function BusinessHoursPageInner() {
         <CardContent className="flex flex-col gap-2.5">
           {isLoading ? (
             <LoadingSkeleton variant="lines" rows={7} />
+          ) : isError ? (
+            // 🔴 2026-09-30 QA:讀不到時原本會把七天全部畫成「公休」(rows 是 undefined),
+            // 商家會以為自己的營業時間被清空,而且一動開關就真的寫進去了。出錯就不給表單。
+            <ErrorState
+              title="讀不到營業時間設定"
+              reason="可能是網路斷了,或你沒有管理營業時間的權限;現在先不顯示每一天的設定,避免你把空白當成真的沒設定"
+              onRetry={() => void refetchRows()}
+            />
           ) : (
             [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => (
               <DayRow

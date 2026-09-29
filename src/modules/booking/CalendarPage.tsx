@@ -25,7 +25,7 @@
 //     寬度、右緣漸層陰影暗示還有內容。手勢(#641 點擊 vs 拖曳、#811 長按拖拉)完全不動。
 // **只動外觀與版面,不動任何行為**:所有驗證、送出、金額 / 工時計算、#829 的鎖定判斷、幽靈空值防護照舊。
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -50,6 +50,7 @@ import {
   LoadingSkeleton,
   PageHeader,
   SwitchRow,
+  useHorizontalScrollHint,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -1826,6 +1827,21 @@ function CalendarPageInner() {
     onMoved: refetchAll,
   });
 
+  // 右緣漸層要不要顯示(skill 六;2026-09-30 QA:原本永遠顯示)。捲動容器已經被 dragController
+  // 的 setGridRoot 佔著,所以用一個組合 ref 把兩邊都掛上去,不要二選一。
+  const gridScrollHint = useHorizontalScrollHint();
+  // ⚠️ 這個組合 ref 必須**永遠是同一個函式**:ref 換身分 React 就會先用 null 呼叫舊的、再呼叫新的,
+  // 等於每次 render 都把捲動監聽與 touchmove 監聽拆掉重掛。所以兩個目標函式放進 ref 讀,
+  // useCallback 的依賴陣列是空的(把 dragController / gridScrollHint 放進依賴會讓它每次 render 都變)。
+  const setGridRootFnRef = useRef(dragController.setGridRoot);
+  setGridRootFnRef.current = dragController.setGridRoot;
+  const attachScrollHintRef = useRef(gridScrollHint.attach);
+  attachScrollHintRef.current = gridScrollHint.attach;
+  const setGridScrollRoot = useCallback((node: HTMLDivElement | null) => {
+    setGridRootFnRef.current(node);
+    attachScrollHintRef.current(node);
+  }, []);
+
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-5 py-10">
       <PageHeader
@@ -1985,24 +2001,48 @@ function CalendarPageInner() {
           description="公休日無法建立預約,可以切換到其他日期,或到營業時間設定調整。"
         />
       ) : (
-        // skill 六:放不下橫向捲、時間欄固定在左邊、服務人員欄有固定最小寬度、右緣漸層陰影暗示還有內容。
+        // skill 六:放不下橫向捲、時間欄固定在左邊、服務人員名字列固定在上面、右緣漸層陰影暗示還有內容。
         // 外面多包一層 relative 只是為了放右緣漸層,捲動容器本身(dragController.setGridRoot)不變。
         <div className="relative">
           <div
             // #811:捲動容器同時是拖拉的格線根節點——原生 touchmove 攔截(只在 dragging 才 preventDefault)
             // 與靠邊自動橫向捲動都掛在它身上;§5.9 committing 期間整個格線 pointer-events-none。
-            ref={dragController.setGridRoot}
+            // 2026-09-30:再串一個 scrollHint.attach(右緣漸層要不要顯示),兩個 ref 都要掛,不是二選一。
+            ref={setGridScrollRoot}
             data-testid="calendar-day-grid"
             data-drag-phase={dragController.phase}
             className={cn(
-              "overflow-x-auto rounded-md border border-border",
+              // 🔴 max-h + overflow-y-auto 是「服務人員名字列固定在上面」的前提(skill 六):
+              // position: sticky 是相對**最近的捲動容器**算的,這一層有 overflow-x-auto 就已經是
+              // y 軸的捲動容器(CSS:另一軸是 auto 時,visible 會被計算成 auto),所以名字列的
+              // sticky top-0 只有在「這一層自己能直向捲」的時候才有效果——不給高度上限的話,
+              // 直向捲的是整個頁面,名字列會跟著跑掉(= 2026-09-30 QA 抓到的「沒做 sticky」)。
+              "max-h-[70vh] overflow-x-auto overflow-y-auto rounded-md border border-border",
               dragController.isCommitting && "pointer-events-none",
             )}
           >
-            <div className="flex min-w-[640px]">
+            {/* 🔴 這一層是時間欄 sticky 的 containing block,所以**必須真的長到內容寬**。
+                原本寫 min-w-[640px]:flex 子項溢出時不會把 flex 容器撐大,父層永遠只有 640px(或容器寬),
+                時間欄最多跟著捲 640−72=568px,超過就被丟在後面整條捲出畫面——320px 螢幕 7 位服務人員
+                以上、390px 8 位、1280px 14 位就會壞(2026-09-30 QA 實測)。
+                w-max = width: max-content(跟著內容成長),min-w-full 保證螢幕夠寬時仍然鋪滿容器。
+                ⚠️ jsdom 測不出這一條(它不做版面計算),改這裡一定要回 320px 真瀏覽器用 8 位以上重測。
+                真瀏覽器實測(2026-09-30,headless chromium,捲到最右端時時間欄應停在 x=21):
+                  320px:  7 人 舊 x=-45 / 8 人 舊 x=-165 / 12 人 舊 x=-645  →  新全部 x=21(掉出 0px)
+                  390px:  8 人 舊 x=-95 / 14 人 舊 x=-815              →  新全部 x=21(掉出 0px)
+                  1280px:14 人 舊父層寬仍卡在 1110                     →  新父層寬 1752、x=85 不動
+                  欄寬:320px 12 人 = 120px(下限),1280px 6 人 = 173px(有空間就均分,行為不變) */}
+            <div className="flex w-max min-w-full">
               {/* 時間欄:sticky 固定在左邊,橫向捲時不跟著跑(skill 六)。 */}
               <div className="sticky left-0 z-20 flex w-[72px] shrink-0 flex-col bg-background">
-                <div className="flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground">
+                <div
+                  // 左上角那一格:同時 sticky left(跟著時間欄)與 sticky top(跟著名字列),
+                  // z 要比名字列高,不然橫捲時名字會蓋過「時間」兩個字。
+                  // data-drag-time-gutter:#846 拖拉落點要知道「被固定欄視覺蓋住的那一段 x」是哪裡,
+                  // 讀的就是這個元素的右邊界(見 calendarBookingDrag 的 readColumnGeometry)。
+                  data-drag-time-gutter="true"
+                  className="sticky top-0 z-30 flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground"
+                >
                   時間
                 </div>
                 <div className="relative" style={{ height: gridTotalPx }}>
@@ -2026,7 +2066,11 @@ function CalendarPageInner() {
                     dragController.highlightedStaffId === s.staff_id ? "true" : undefined
                   }
                   className={cn(
-                    "relative min-w-[120px] flex-1 border-r border-border last:border-r-0",
+                    // w-[120px] shrink-0 grow 取代原本的 min-w-[120px] flex-1:兩者在畫面上等效
+                    // (最小 120px、有多餘空間就均分),但 flex-basis 是確定值,父層的 w-max
+                    // 才算得出「內容到底多寬」(flex-1 = basis 0%,max-content 會被 flex 分數規則
+                    // 拉成「所有欄都跟最寬那一欄的內容一樣寬」,不是我們要的 72+120×N)。
+                    "relative w-[120px] shrink-0 grow border-r border-border last:border-r-0",
                     // §5.4:拖拉中游標下方的欄位加 ring;forbidden 時換成警示色。
                     dragController.highlightedStaffId === s.staff_id &&
                       (dragController.highlightForbidden
@@ -2034,7 +2078,9 @@ function CalendarPageInner() {
                         : "ring-2 ring-inset ring-brand"),
                   )}
                 >
-                  <div className="flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
+                  {/* skill 六:服務人員名字列固定在上面,直向捲時不跟著跑。bg-surface 不能省
+                      (透明的話色塊會從底下透出來);z 比色塊高、比左上角那一格低。 */}
+                  <div className="sticky top-0 z-10 flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
                     <span className="max-w-full truncate">{s.staff_name}</span>
                     {/* 模組 7(排班與休假管理)§4.5:請假整欄灰底顯示假別名稱。主腦裁示:請假一律擋下
                         建單,不論 unlimited_backend_edit 是否開啟都沒有覆寫例外,所以這裡不需要規格書
@@ -2241,11 +2287,15 @@ function CalendarPageInner() {
               ))}
             </div>
           </div>
-          {/* skill 六:右緣漸層陰影,暗示右邊還有服務人員欄可以捲。pointer-events-none,不影響拖拉與捲動。 */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-md bg-gradient-to-l from-background/90 to-transparent"
-          />
+          {/* skill 六:右緣漸層陰影,暗示右邊還有服務人員欄可以捲。pointer-events-none,不影響拖拉與捲動。
+              🔴 2026-09-30 QA:原本永遠顯示,沒東西可捲時也把最右 24px 蓋住,而且捲到最右端之後還在
+              暗示「右邊還有」。漸層的語意就是「這個方向還有內容」⇒ 只有真的還能往右捲才顯示。 */}
+          {gridScrollHint.canScrollRight ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-md bg-gradient-to-l from-background/90 to-transparent"
+            />
+          ) : null}
         </div>
       )}
 

@@ -12,11 +12,10 @@
 // **只動外觀與版面,不動任何行為**:查詢、CSV 匯出內容、金額格式化(formatAmount)照舊。
 
 import { Fragment, useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   AlertNote,
-  AttributeTag,
   DetailDivider,
   DetailRow,
   DetailSection,
@@ -27,13 +26,13 @@ import {
   ListCard,
   LoadingSkeleton,
   PageHeader,
+  StatusTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 // 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
-import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
 // 模組 14(服務人員端)v2 §10.4.4:摘要卡片的金額顯示格式,沿用既有的跨模組共用格式化函式
@@ -145,9 +144,12 @@ export function PieceRateStaffReport({
   if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
     return (
+      // 🔴 2026-09-30 QA:reason 原本是 getErrorMessage(error),會把 Postgrest / 資料庫原文吐給
+      // 使用者(非工程師,看到「JWT expired」「permission denied for table …」只會更慌)。
+      // 改成白話,寫法照同模組 BillingReportPage 的 ErrorState。
       <ErrorState
         title="讀不到這份報表"
-        reason={getErrorMessage(error)}
+        reason="可能是網路斷了,或你沒有查看這位服務人員報表的權限"
         onRetry={() => void refetch()}
       />
     );
@@ -217,7 +219,14 @@ export function PieceRateStaffReport({
                         #781:「完成日期」跟 CSV 標題一致。 */}
                     <ListCard
                       title={d.customer_name}
-                      tags={d.recalculated ? <AttributeTag>已人工重算</AttributeTag> : undefined}
+                      // 🔴 2026-09-30 QA:「已人工重算」是這筆訂單的**狀態**(有人動過,而且動過
+                      // 之後才有這個標籤),不是「抽成制 / 月薪制」那種靜態分類 ⇒ 依 skill 二之四
+                      // 用 StatusTag(膠囊 + 左邊小圓點),不是方角灰底的 AttributeTag。
+                      tags={
+                        d.recalculated ? (
+                          <StatusTag tone="warning">已人工重算</StatusTag>
+                        ) : undefined
+                      }
                       meta={<>完成日期 {new Date(d.completion_date).toLocaleDateString("zh-TW")}</>}
                       primaryAction={
                         <Button
@@ -231,7 +240,9 @@ export function PieceRateStaffReport({
                         </Button>
                       }
                     >
-                      <div className="mt-2 flex flex-col gap-1">
+                      {/* 🔴 2026-09-30 QA:這一組全是金額 ⇒ skill 二之六 #2「金額整組用色塊包起來
+                          (淺色底 + 細框),一眼看到錢在哪」,改用 DetailSection tone="amount"。 */}
+                      <DetailSection tone="amount" className="mt-2 gap-1">
                         {/* 2026-09-24 稽核修正(問題 4):明細一律走同一支 formatAmount,格式統一。 */}
                         <DetailRow label="抽成基準" size="sm">
                           {formatAmount(d.commission_base_amount)}
@@ -265,7 +276,7 @@ export function PieceRateStaffReport({
                             )}
                           </Fragment>
                         ) : null}
-                      </div>
+                      </DetailSection>
                     </ListCard>
                   </li>
                 );
@@ -329,9 +340,10 @@ export function MonthlySalaryStaffReport({
   if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
     return (
+      // 🔴 2026-09-30 QA:同上,不要把資料庫原文吐給使用者。
       <ErrorState
         title="讀不到這份報表"
-        reason={getErrorMessage(error)}
+        reason="可能是網路斷了,或你沒有查看這位服務人員報表的權限"
         onRetry={() => void refetch()}
       />
     );
@@ -390,7 +402,8 @@ export function MonthlySalaryStaffReport({
           ) : (
             // skill 二之六 明細列:標籤 = 假別(天數)、值 = 扣款金額;假別名稱是商家自填的動態文字,
             // DetailRow 兩側都能折行。
-            <DetailSection>
+            // 🔴 2026-09-30 QA:值全是扣款金額 ⇒ skill 二之六 #2 金額組用色塊包起來。
+            <DetailSection tone="amount">
               {summary.details.map((d) => (
                 <DetailRow key={d.leave_type_id} label={`${d.leave_type_name}(${d.days} 天)`}>
                   {d.deduction_amount} 元
@@ -472,9 +485,17 @@ function StaffReportPageInner() {
       </div>
 
       {!staffList || staffList.length === 0 ? (
+        // 🔴 2026-09-30 QA:下一步(新增服務人員)在**別頁** ⇒ 依 PageScaffold 的 EmptyState.action
+        // 說明「下一步不在這個畫面上的一律要給按鈕」,補上。寫法照同模組 BillingReportPage 同型
+        // 空狀態(asChild + react-router <Link>,不是 navigate)。
         <EmptyState
           title="目前沒有在職的服務人員"
           description="新增服務人員並完成訂單之後,這裡才會有報表可以看。"
+          action={
+            <Button asChild variant="neutral" size="touch">
+              <Link to="/app/staff">前往服務人員管理</Link>
+            </Button>
+          }
         />
       ) : !selectedStaff ? (
         <EmptyState title="請選擇服務人員" description="從上方的下拉選單挑一位服務人員。" />

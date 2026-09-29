@@ -139,9 +139,12 @@ function blockKey(staffId: string, bookingId: string): string {
 }
 
 /** 從格線根節點讀出每一欄(data-drag-column)的視窗座標;格線頂端 = 第一欄的 top。 */
-function readColumnGeometry(
-  root: HTMLElement | null,
-): { rects: (DropColumnRect & { width: number })[]; gridTop: number } | null {
+function readColumnGeometry(root: HTMLElement | null): {
+  rects: (DropColumnRect & { width: number })[];
+  gridTop: number;
+  /** sticky 時間欄視覺上蓋住的區域右邊界(見 computeDropTarget 的 occludedLeftClientX)。 */
+  occludedLeft: number | undefined;
+} | null {
   if (!root) return null;
   const nodes = root.querySelectorAll<HTMLElement>("[data-drag-column]");
   const rects: (DropColumnRect & { width: number })[] = [];
@@ -154,7 +157,12 @@ function readColumnGeometry(
     if (gridTop === null) gridTop = r.top;
   });
   if (rects.length === 0 || gridTop === null) return null;
-  return { rects, gridTop };
+  // #846:左邊的 sticky 時間欄橫向捲動後會蓋在欄位上面,那一段 x 不可以算成底下那一欄的落點。
+  // 讀的是 CalendarPage 標在左上角那一格上的 data-drag-time-gutter(時間欄與名字列的交叉格,
+  // 它跟時間欄本體同寬、同一個 sticky left)。找不到就不傳,行為跟改版前一樣。
+  const gutter = root.querySelector<HTMLElement>("[data-drag-time-gutter]");
+  const occludedLeft = gutter ? gutter.getBoundingClientRect().right : undefined;
+  return { rects, gridTop, occludedLeft };
 }
 
 function readErrorCode(err: unknown): string | null {
@@ -277,6 +285,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
             slotCount,
             durationMin,
             columnRects: geometry.rects,
+            occludedLeftClientX: geometry.occludedLeft,
           })
         : null;
 

@@ -211,6 +211,19 @@ export interface DropColumnRect {
 export interface ComputeDropTargetInput {
   pointerClientX: number;
   pointerClientY: number;
+  /**
+   * 🔴 被左邊固定欄(sticky 時間欄)**視覺上蓋住**的區域右邊界,視窗座標。沒有固定欄就不傳。
+   *
+   * 為什麼需要它(2026-09-30 QA 抓到的 sticky 副作用):時間欄是 `position: sticky`,橫向捲動之後
+   * 它**蓋在**最左邊 72px 上面,但被蓋住那一欄的 `getBoundingClientRect()` 仍然涵蓋那段 x ——
+   * 落點判定只看「x 在不在欄位 rect 內」,於是「手指看起來按在時間欄上,落點卻算進被蓋住的那一欄」。
+   * `AUTO_SCROLL_EDGE_PX = 40` 吃掉最左 40px(那段會先觸發自動捲動),**剩下 40~72px 這 32px**
+   * 就是誤判帶。x 落在這個邊界左邊一律視為「格線外」⇒ 回 null ⇒ 放開 = 取消,跟按在時間欄上
+   * 看起來的意思一致。
+   *
+   * 📌 沒有捲動時這個值剛好等於第一欄的 left,行為跟改版前完全一樣(#641/#811 的手勢分工不受影響)。
+   */
+  occludedLeftClientX?: number | undefined;
   /** 按下當時「游標 Y − 色塊頂端 Y」。落點以色塊頂端所在格為準,不是游標所在格。 */
   grabOffsetY: number;
   /** 格線最上緣(第 0 格頂端)在視窗座標的 Y。 */
@@ -250,6 +263,9 @@ export function computeDropTarget(input: ComputeDropTargetInput): DropTarget | n
   const minLeft = Math.min(...columnRects.map((c) => c.left));
   const maxRight = Math.max(...columnRects.map((c) => c.right));
   if (x < minLeft || x > maxRight) return null;
+  // 🔴 被固定欄蓋住的那一段 x:視覺上手指是按在時間欄上,不可以算進底下那一欄(見
+  // occludedLeftClientX 的說明)。這條要放在「找最近欄位」之前,否則會被 fallback 救回來。
+  if (input.occludedLeftClientX != null && x < input.occludedLeftClientX) return null;
 
   let column: DropColumnRect | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;

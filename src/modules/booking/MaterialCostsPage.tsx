@@ -23,12 +23,14 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   EmptyState,
+  ErrorState,
   FieldAmountInput,
   FieldInput,
   FormField,
   ListCard,
   LoadingSkeleton,
   PageHeader,
+  parseAmountInput,
   StatusTag,
   SwitchRow,
 } from "@/components/patterns";
@@ -61,7 +63,12 @@ const itemsQueryKey = (merchantId: string) =>
 function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
   const featureFlagQueryKey = ["booking-module", "material-cost-enabled", merchantId] as const;
   const queryClient = useQueryClient();
-  const { data: enabled, isLoading } = useQuery({
+  const {
+    data: enabled,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: featureFlagQueryKey,
     queryFn: async () => {
       const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
@@ -92,6 +99,14 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
       <CardContent>
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={1} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:讀不到設定時不可以直接顯示成「已關閉」——那是把「不知道」講成
+          // 「確定是關的」,商家會以為自己的設定被清掉。
+          <ErrorState
+            title="讀不到料錢成本功能的開關狀態"
+            reason="可能是網路斷了;現在畫面上不會顯示開或關,避免給你錯誤的訊息"
+            onRetry={() => void refetch()}
+          />
         ) : (
           // skill 二之七:開關做成一整列(左邊標題 + 一行說明,右邊開關)。
           // 原本的「已開啟 / 已關閉」狀態文字保留在說明列,不讓人只看開關猜狀態。
@@ -144,10 +159,13 @@ function MaterialCostItemFormDialog({
   const isEdit = Boolean(item);
   const [form, setForm] = useState<ItemFormState>(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
   const [saving, setSaving] = useState(false);
+  // 金額的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明,不只變紅、也不只跳 toast)。
+  const [amountError, setAmountError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setForm(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
+      setAmountError(null);
     }
   }, [open, item]);
 
@@ -161,11 +179,17 @@ function MaterialCostItemFormDialog({
       toast.error("請填寫品項名稱");
       return;
     }
-    const amount = Number(form.amount);
-    if (form.amount.trim() === "" || Number.isNaN(amount) || amount < 0) {
-      toast.error("金額必須是不小於 0 的數字");
+    // 🔴 2026-09-30:這裡原本是 `Number(form.amount)` + `Number.isNaN`,但 FieldAmountInput 是
+    // type="text"(沒有原生 min / step),所以 `1e3`、`0x10`、`Infinity` 都會被 Number() 放行。
+    // 改用共用的 parseAmountInput(規則與白話錯誤訊息都在那支函式裡)。這一欄原本沒有 step,
+    // 允許小數(料錢成本可能是 12.5 元),所以不傳 integerOnly。
+    const parsed = parseAmountInput(form.amount);
+    if (!parsed.ok) {
+      setAmountError(parsed.error);
       return;
     }
+    setAmountError(null);
+    const amount = parsed.value;
 
     const input: UpsertMaterialCostItemInput = { name: form.name, amount };
 
@@ -207,12 +231,22 @@ function MaterialCostItemFormDialog({
             />
           </FormField>
 
-          <FormField label="金額" htmlFor="material-cost-amount" required>
-            {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證仍在 handleSubmit(不小於 0 的數字)。 */}
+          <FormField
+            label="金額"
+            htmlFor="material-cost-amount"
+            required
+            error={amountError}
+            help="只能填數字和小數點,例如 120 或 12.5。"
+            helpLabel="說明:金額要怎麼填"
+          >
+            {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證走 parseAmountInput(handleSubmit)。 */}
             <FieldAmountInput
               id="material-cost-amount"
               value={form.amount}
-              onChange={(e) => setField("amount", e.target.value)}
+              onChange={(e) => {
+                setField("amount", e.target.value);
+                if (amountError) setAmountError(null);
+              }}
               required
             />
           </FormField>
@@ -247,7 +281,12 @@ function MaterialCostsPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
 
-  const { data: items, isLoading } = useQuery({
+  const {
+    data: items,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: itemsQueryKey(merchantId),
     queryFn: () => fetchMerchantMaterialCostItemsAll(merchantId),
   });
@@ -305,20 +344,20 @@ function MaterialCostsPageInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            // 🔴 2026-09-30 QA:原本只判斷 isLoading 和「空」,查詢失敗會偽裝成「還沒有任何品項」,
+            // 商家會以為自己的品項不見了。skill 二之八 出錯:什麼壞了 / 可能原因 / 下一步。
+            <ErrorState
+              title="讀不到料錢成本品項"
+              reason="可能是網路斷了,或你沒有管理料錢成本的權限"
+              onRetry={() => void refetch()}
+            />
           ) : !items || items.length === 0 ? (
+            // 下一步(頁首的「新增品項」)就在同一個畫面上、一眼看得到 ⇒ 依 EmptyState.action 的
+            // 唯一豁免,這裡不放第二顆主要按鈕(一個畫面只能有一顆),用一句話指路就好。
             <EmptyState
               title="還沒有任何料錢成本品項"
-              description="建立品項後,建單時就能勾選這次會用掉的材料,方便之後算成本。"
-              action={
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="touch"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  新增第一個品項
-                </Button>
-              }
+              description="建立品項後,建單時就能勾選這次會用掉的材料,方便之後算成本。請用右上角的「新增品項」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

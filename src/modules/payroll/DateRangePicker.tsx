@@ -68,12 +68,19 @@ export function DateRangePicker({
 
   return (
     <div className="flex flex-col gap-3">
-      <ChoiceChipGroup
-        aria-label="區間顆粒度"
-        value={granularity}
-        onValueChange={setGranularity}
-        options={GRANULARITY_OPTIONS}
-      />
+      {/* 🔴 2026-09-30 QA:這條 chip 列原本只有 aria-label,畫面上沒有任何可見標籤 —— 在店家帳務
+          報表切到「自訂區間」時,它會緊貼在上面那條「查詢期間」chip 列底下,變成兩條長得一樣、
+          都沒有標題的列疊在一起,使用者看不出哪條是哪條。包進 FormField 給它可見標籤。
+          aria-label 保留:FormField 的 <Label> 沒有 htmlFor(radiogroup 不是單一控制項),
+          語意名稱還是靠 aria-label 提供。 */}
+      <FormField label="區間單位" help="「按日期」可以挑任意兩天;「按月份」會自動抓整個月。">
+        <ChoiceChipGroup
+          aria-label="區間單位"
+          value={granularity}
+          onValueChange={setGranularity}
+          options={GRANULARITY_OPTIONS}
+        />
+      </FormField>
 
       <div className="grid grid-cols-2 gap-2">
         <FormField label="起" htmlFor="date-range-start">

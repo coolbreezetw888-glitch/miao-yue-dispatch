@@ -13,7 +13,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { EmptyState, LoadingSkeleton, PageHeader } from "@/components/patterns";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingSkeleton,
+  PageHeader,
+  useHorizontalScrollHint,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -43,11 +49,15 @@ function SchedulingOverviewPageInner() {
   const startDateKey = toDateKey(weekStart);
   const endDateKey = toDateKey(addDays(weekStart, 6));
 
-  const { data: overview, isLoading } = useStaffScheduleOverview(
-    merchantId,
-    startDateKey,
-    endDateKey,
-  );
+  const {
+    data: overview,
+    isLoading,
+    isError,
+    refetch,
+  } = useStaffScheduleOverview(merchantId, startDateKey, endDateKey);
+
+  // 右緣漸層只在真的還能往右捲時顯示(skill 六;2026-09-30 QA:原本永遠顯示,擋住最右 24px)。
+  const scrollHint = useHorizontalScrollHint();
 
   const weekdayLabels = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -59,13 +69,15 @@ function SchedulingOverviewPageInner() {
         description={`「${merchant!.name}」跨服務人員的每週時段/單日例外/請假彙整總覽`}
       />
 
-      {/* 週切換:三顆都是次要動作(這一頁沒有「主要」動作),手機上三顆等分一列。 */}
+      {/* 週切換:三顆都是次要動作(這一頁沒有「主要」動作),手機上三顆等分一列。
+          🔴 2026-09-30 QA:size 從 "card"(36px)改成 "touch"(44px)——skill 二之三 的 36px 是
+          「卡片內的小按鈕」,這三顆不在卡片裡,是頁面層級的操作,要 44px 觸控目標。 */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
           <Button
             type="button"
             variant="neutral"
-            size="card"
+            size="touch"
             onClick={() => setWeekStart((d) => addDays(d, -7))}
           >
             上一週
@@ -73,7 +85,7 @@ function SchedulingOverviewPageInner() {
           <Button
             type="button"
             variant="neutral"
-            size="card"
+            size="touch"
             onClick={() => setWeekStart(startOfWeek(getTaipeiNow()))}
           >
             本週
@@ -81,7 +93,7 @@ function SchedulingOverviewPageInner() {
           <Button
             type="button"
             variant="neutral"
-            size="card"
+            size="touch"
             onClick={() => setWeekStart((d) => addDays(d, 7))}
           >
             下一週
@@ -94,6 +106,13 @@ function SchedulingOverviewPageInner() {
 
       {isLoading ? (
         <LoadingSkeleton variant="lines" rows={5} />
+      ) : isError ? (
+        // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有在職的服務人員」,商家會以為人都不見了。
+        <ErrorState
+          title="讀不到排班一覽"
+          reason="可能是網路斷了,或你沒有查看排班的權限"
+          onRetry={() => void refetch()}
+        />
       ) : !overview || overview.staff.length === 0 ? (
         <EmptyState
           title="目前沒有在職的服務人員"
@@ -107,11 +126,21 @@ function SchedulingOverviewPageInner() {
       ) : (
         // skill 六:放不下橫向捲、名稱欄固定在左邊(sticky)、右緣漸層陰影暗示還有內容。
         <div className="relative">
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
+          <div ref={scrollHint.attach} className="overflow-x-auto rounded-md border border-border">
+            {/* 🔴 2026-09-30 QA 實測:表格的 min-w 原本是 720px,但七個日期欄各自 min-w-[120px]
+                (= 840px)已經超過它,auto table layout 於是把沒有下限保護的服務人員名稱欄一路壓到
+                **30.5px**(扣掉 p-2 只剩 14.5px = 一個中文字),名字直排 13 行、連表頭「服務人員」
+                四個字都直排——skill 二之六 明文禁止的失敗模式。
+                修法:把表格的 min-w 提高到「名稱欄 + 七天」的實際總和(112 + 7×120 = 952px),
+                名稱欄自己也給 min-w-[112px](扣掉內距還有 96px,放得下 6 個中文字)。
+                w-32(128px)留著當「螢幕寬的時候用這個寬度」的偏好值,min-w-[112px] 是窄螢幕的下限。
+                真瀏覽器實測(2026-09-30,headless chromium):
+                  舊:320/390 都是 30.5px(內容寬 14.5px)、列高 93px(名字直排三行);1280 才 128px
+                  新:320/390 = 112px(內容寬 96px)、列高 36px(一行);1280 = 128px */}
+            <table className="w-full min-w-[952px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface">
-                  <th className="sticky left-0 z-10 w-32 border-r border-border bg-surface p-2 text-left font-medium text-foreground">
+                  <th className="sticky left-0 z-10 w-32 min-w-[112px] border-r border-border bg-surface p-2 text-left font-medium text-foreground">
                     服務人員
                   </th>
                   {weekDays.map((d, i) => (
@@ -127,7 +156,7 @@ function SchedulingOverviewPageInner() {
               <tbody>
                 {overview.staff.map((staffBlock) => (
                   <tr key={staffBlock.staff_id} className="border-b border-border last:border-b-0">
-                    <td className="sticky left-0 z-10 border-r border-border bg-background p-2 align-top font-medium text-foreground">
+                    <td className="sticky left-0 z-10 w-32 min-w-[112px] border-r border-border bg-background p-2 align-top font-medium text-foreground">
                       <span className="break-words">{staffBlock.staff_name}</span>
                     </td>
                     {staffBlock.days.map((day) => {
@@ -157,10 +186,14 @@ function SchedulingOverviewPageInner() {
               </tbody>
             </table>
           </div>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-md bg-gradient-to-l from-background/90 to-transparent"
-          />
+          {/* 🔴 2026-09-30 QA:漸層原本永遠顯示,螢幕夠寬(或已經捲到最右端)時也把最右 24px 蓋住。
+              漸層的語意是「這個方向還有內容」⇒ 只有真的還能往右捲才顯示。 */}
+          {scrollHint.canScrollRight ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-md bg-gradient-to-l from-background/90 to-transparent"
+            />
+          ) : null}
         </div>
       )}
     </main>

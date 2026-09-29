@@ -11,8 +11,10 @@
 // | 列表卡片 | ListCard.tsx | 二之五 |
 // | 明細列 | DetailRows.tsx | 二之六 |
 // | 表單欄位(輸入框 / 金額 / 下拉 FieldSelect / 原生 select・time・date・month / 多選 ChoiceChip / 單選 ChoiceChipGroup / 開關列) | FormField.tsx | 二之七 |
+// | 金額字串解析(送出前驗證) | parseAmountInput.ts | 二之七 |
 // | 頁面骨架 + 三種狀態 | PageScaffold.tsx | 二之八 |
 // | 底線式切換列 | UnderlineTabs.tsx | 二之四末段 + 二之八 |
+// | 右緣漸層要不要顯示(橫捲提示) | useHorizontalScrollHint.ts | 六 |
 // | `?` 說明鈕 / `!` 提醒條 | HelpHint.tsx | 二 |
 
 export * from "./ActionBar";
@@ -24,5 +26,7 @@ export * from "./FullPageLayer";
 export * from "./HelpHint";
 export * from "./ListCard";
 export * from "./PageScaffold";
+export * from "./parseAmountInput";
 export * from "./Tags";
 export * from "./UnderlineTabs";
+export * from "./useHorizontalScrollHint";

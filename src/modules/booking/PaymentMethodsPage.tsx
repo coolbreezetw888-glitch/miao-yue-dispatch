@@ -25,6 +25,7 @@ import {
   CardDialogTitle,
   ChoiceChipGroup,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldTextarea,
   FormField,
@@ -66,7 +67,7 @@ const methodsQueryKey = (merchantId: string) =>
 // DEFAULT_MERCHANT_TAX_SETTINGS(useMerchantTaxSettings 已經處理過)。
 function TaxSettingsCard({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
-  const { data: taxSettings, isLoading } = useMerchantTaxSettings(merchantId);
+  const { data: taxSettings, isLoading, isError, refetch } = useMerchantTaxSettings(merchantId);
 
   const [taxMode, setTaxMode] = useState<AmountAdjustmentMode>("percentage");
   const [taxValue, setTaxValue] = useState("5");
@@ -114,6 +115,14 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
       <CardContent className="flex flex-col gap-4">
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={2} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:讀不到稅金設定時,原本會直接顯示元件的預設值(百分比 / 5%),
+          // 使用者以為那是自己存過的設定,一按儲存就把真實設定覆寫掉。出錯就不給表單。
+          <ErrorState
+            title="讀不到稅金設定"
+            reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值當成自己的設定存回去"
+            onRetry={() => void refetch()}
+          />
         ) : (
           <>
             <FormField label="稅金模式" required>
@@ -141,6 +150,14 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
               }
             >
               <div className="flex items-center gap-2">
+                {/* 🔴 這一欄刻意**維持 type="number"**,跟全站其他金額欄位不一致是有理由的
+                    (2026-09-30 主腦裁決,不要「順手統一」掉):
+                      1. 它在百分比模式下裝的是**百分比**,不是金額——不該有 `$` 前綴,所以
+                         用不到 FieldAmountInput(那個元件的重點就是左側 `$`)。
+                      2. 它同時要吃 0~100(百分比)跟任意金額(固定金額)兩種範圍,原生的
+                         min / max 會隨 taxMode 換,是這裡最省事也最不會錯的做法。
+                    其他金額欄位(料錢成本 / 每天扣固定金額 / 月薪)是 FieldAmountInput + text,
+                    所以要靠 parseAmountInput 驗證;這一欄有原生約束,不需要。 */}
                 <FieldInput
                   id="merchant-tax-value"
                   type="number"
@@ -313,7 +330,12 @@ function PaymentMethodsPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
 
-  const { data: methods, isLoading } = useQuery({
+  const {
+    data: methods,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: methodsQueryKey(merchantId),
     queryFn: () => fetchMerchantPaymentMethodsAll(merchantId),
   });
@@ -367,20 +389,18 @@ function PaymentMethodsPageInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「還沒有任何付款方式」。skill 二之八 出錯。
+            <ErrorState
+              title="讀不到付款方式"
+              reason="可能是網路斷了,或你沒有管理付款方式的權限"
+              onRetry={() => void refetch()}
+            />
           ) : !methods || methods.length === 0 ? (
+            // 下一步(頁首的「新增付款方式」)就在同一個畫面上 ⇒ 不放第二顆主要按鈕,改用一句話指路。
             <EmptyState
               title="還沒有任何付款方式"
-              description="建立付款方式後,建單時就能標記客戶是怎麼付款的,方便之後對帳。"
-              action={
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="touch"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  新增第一個付款方式
-                </Button>
-              }
+              description="建立付款方式後,建單時就能標記客戶是怎麼付款的,方便之後對帳。請用右上角的「新增付款方式」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

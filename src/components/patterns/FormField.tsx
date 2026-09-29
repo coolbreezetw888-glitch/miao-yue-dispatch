@@ -157,7 +157,15 @@ export const FieldTextarea = React.forwardRef<
 ));
 FieldTextarea.displayName = "FieldTextarea";
 
-/** 金額:靠右、tabular-nums、左側 `$`。 */
+/**
+ * 金額:靠右、tabular-nums、左側 `$`。
+ *
+ * 🔴 這是 `type="text" inputMode="decimal"`,**不是** `type="number"`(刻意避開手機數字鍵盤與
+ * 滑鼠滾輪誤觸,2026-09-30 主腦裁決)。代價是**原生的 `min` / `step` 約束不存在**,所以
+ * 送出前一定要用 `parseAmountInput()` 驗證,不可以只寫 `Number(x)` + `Number.isNaN` ——
+ * 那樣 `1e3` / `0x10` / `Infinity` / 只有空白 都會過關,原本 `step="1"` 的欄位也會存進小數。
+ * 原本 `step="1"` 的欄位請傳 `{ integerOnly: true }`。
+ */
 export const FieldAmountInput = React.forwardRef<
   HTMLInputElement,
   Omit<React.ComponentProps<"input">, "type">

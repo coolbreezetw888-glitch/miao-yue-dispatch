@@ -25,10 +25,12 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   ChoiceChipGroup,
+  ErrorState,
   FieldAmountInput,
   FieldInput,
   FormField,
   LoadingSkeleton,
+  parseAmountInput,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 
@@ -64,18 +66,30 @@ export function LeaveDeductionRuleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: rule, isLoading } = useLeaveTypeDeductionRule(open ? leaveTypeId : null);
+  const {
+    data: rule,
+    isLoading,
+    isError,
+    refetch,
+  } = useLeaveTypeDeductionRule(open ? leaveTypeId : null);
 
   const [mode, setMode] = useState<DeductionMode>("no_deduction");
   const [percentageValue, setPercentageValue] = useState("0");
   const [fixedAmountValue, setFixedAmountValue] = useState("0");
   const [saving, setSaving] = useState(false);
+  // 固定金額的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明)。
+  const [fixedAmountError, setFixedAmountError] = useState<string | null>(null);
 
   useEffect(() => {
+    // 🔴 2026-09-30 QA:這個 effect 靠「rule 有值」才會跑,所以查詢失敗時三個 state 會停在
+    // 初始值(模式 = 不扣款 / 0 / 0)。原本底部的儲存鈕只 disabled 在 saving || isLoading,
+    // 「錯誤但不是載入中」的狀態下是可以按的 ⇒ 一按就把真實規則靜默覆寫成「不扣款」。
+    // 現在出錯時整個表單換成 ErrorState(下面),儲存鈕也一起擋掉,見 disabled 的條件。
     if (!open || !rule) return;
     setMode(rule.deduction_mode as DeductionMode);
     setPercentageValue(rule.percentage_value !== null ? String(rule.percentage_value) : "0");
     setFixedAmountValue(rule.fixed_amount_value !== null ? String(rule.fixed_amount_value) : "0");
+    setFixedAmountError(null);
   }, [open, rule]);
 
   async function handleSubmit(e: FormEvent) {
@@ -94,12 +108,15 @@ export function LeaveDeductionRuleDialog({
     }
 
     if (mode === "fixed_amount_per_day") {
-      const numeric = Number(fixedAmountValue);
-      if (Number.isNaN(numeric) || numeric < 0) {
-        toast.error("固定金額不可為負數");
+      // 🔴 2026-09-30:這一欄是 FieldAmountInput(type="text"),原生的 min={0} step="1" 已經不存在,
+      // 所以解析走 parseAmountInput + integerOnly(原本 step="1",每天扣的金額不收小數)。
+      const parsed = parseAmountInput(fixedAmountValue, { integerOnly: true });
+      if (!parsed.ok) {
+        setFixedAmountError(parsed.error);
         return;
       }
-      fixedAmountToSave = numeric;
+      setFixedAmountError(null);
+      fixedAmountToSave = parsed.value;
     }
 
     setSaving(true);
@@ -150,6 +167,14 @@ export function LeaveDeductionRuleDialog({
 
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={3} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:讀不到現有規則時不可以顯示表單——表單上的值會是初始值
+          // (不扣款 / 0 / 0),使用者以為那是現在的設定,一按儲存就把真實規則覆寫掉。
+          <ErrorState
+            title="讀不到這個假別現在的扣款規則"
+            reason="可能是網路斷了;現在先不顯示表單,避免你把預設值當成現有設定存回去"
+            onRetry={() => void refetch()}
+          />
         ) : (
           <form id={RULE_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-4">
             <FormField label="扣款模式" required>
@@ -182,11 +207,21 @@ export function LeaveDeductionRuleDialog({
             ) : null}
 
             {mode === "fixed_amount_per_day" ? (
-              <FormField label="每天扣固定金額" htmlFor="fixed-amount-value" required>
+              <FormField
+                label="每天扣固定金額"
+                htmlFor="fixed-amount-value"
+                required
+                error={fixedAmountError}
+                helpLabel="說明:每天扣的金額要怎麼填"
+                help="只能填整數(不含小數點),例如 500。"
+              >
                 <FieldAmountInput
                   id="fixed-amount-value"
                   value={fixedAmountValue}
-                  onChange={(e) => setFixedAmountValue(e.target.value)}
+                  onChange={(e) => {
+                    setFixedAmountValue(e.target.value);
+                    if (fixedAmountError) setFixedAmountError(null);
+                  }}
                 />
               </FormField>
             ) : null}
@@ -216,7 +251,9 @@ export function LeaveDeductionRuleDialog({
             form={RULE_FORM_ID}
             variant="primary"
             size="touch"
-            disabled={saving || isLoading}
+            // 🔴 出錯時也要擋:原本只擋 saving || isLoading,「錯誤但非載入中」是 enabled,
+            // 一按就把真實規則覆寫成表單上的初始值(不扣款)。
+            disabled={saving || isLoading || isError}
           >
             {saving ? "儲存中⋯" : "儲存"}
           </Button>

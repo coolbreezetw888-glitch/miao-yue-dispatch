@@ -376,6 +376,95 @@ describe("computeDropTarget(以色塊頂端為準、round 到最近格、上下 
       }),
     ).toBeNull();
   });
+
+  // -------------------------------------------------------------------------
+  // #846:sticky 時間欄蓋住的那一段 x(2026-09-30 QA 抓到的 32px 誤判帶)
+  // -------------------------------------------------------------------------
+  describe("occludedLeftClientX —— 被 sticky 時間欄蓋住的那一段 x 不算落點", () => {
+    // 情境重現:捲動之後,A 欄的 rect 仍然是 100–200,但視覺上最左 72px(視窗 x 0–72)被
+    // sticky 時間欄蓋住;時間欄的右邊界 = 172(= 容器左緣 100 + 時間欄寬 72 …這裡直接用
+    // 「A 欄被蓋掉一半」的數字,方便一眼看出邊界兩側的差別)。
+    // AUTO_SCROLL_EDGE_PX = 40 會先吃掉最左 40px(那段是自動捲動),真正的誤判帶是
+    // 「40px 之後、時間欄右邊界之前」那一段 —— 就是這裡要擋掉的東西。
+    const occluded = { ...base, occludedLeftClientX: 172 };
+
+    it("🔴 x 在時間欄底下(140:看起來按在時間欄上)→ null,不可以算進被蓋住的 A 欄", () => {
+      expect(
+        computeDropTarget({
+          ...occluded,
+          pointerClientX: 140,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toBeNull();
+    });
+
+    it("🔴 誤判帶的右界(171,差 1px)仍然是 null", () => {
+      expect(
+        computeDropTarget({
+          ...occluded,
+          pointerClientX: 171,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toBeNull();
+    });
+
+    it("正向對照:同一個位置,沒有固定欄遮擋時會算進 A 欄(證明這條擋的是遮擋、不是別的)", () => {
+      expect(
+        computeDropTarget({ ...base, pointerClientX: 140, pointerClientY: 150, grabOffsetY: 0 }),
+      ).toMatchObject({ staffId: A });
+    });
+
+    it("正向對照:剛好在時間欄右邊界(172)就算進 A 欄,不是整欄都被吃掉", () => {
+      expect(
+        computeDropTarget({
+          ...occluded,
+          pointerClientX: 172,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toMatchObject({ staffId: A });
+    });
+
+    it("沒捲動時(時間欄右邊界 = 第一欄 left)行為跟改版前完全一樣", () => {
+      const notScrolled = { ...base, occludedLeftClientX: 100 };
+      expect(
+        computeDropTarget({
+          ...notScrolled,
+          pointerClientX: 150,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toMatchObject({ staffId: A });
+      // 時間軸上(50)照舊是 null。
+      expect(
+        computeDropTarget({
+          ...notScrolled,
+          pointerClientX: 50,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toBeNull();
+    });
+
+    it("遮擋不影響右邊的欄位", () => {
+      expect(
+        computeDropTarget({
+          ...occluded,
+          pointerClientX: 350,
+          pointerClientY: 150,
+          grabOffsetY: 0,
+        }),
+      ).toMatchObject({ staffId: C });
+    });
+
+    it("不傳 occludedLeftClientX 時完全不改變原本的行為", () => {
+      expect(
+        computeDropTarget({ ...base, pointerClientX: 105, pointerClientY: 150, grabOffsetY: 0 }),
+      ).toMatchObject({ staffId: A });
+    });
+  });
 });
 
 // ===========================================================================

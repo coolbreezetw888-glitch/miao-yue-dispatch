@@ -103,19 +103,29 @@ export async function upsertMerchantPayrollSettings(
 /** 查詢某位服務人員目前所有服務項目層級的抽成設定,唯讀。查無資料的服務項目一律視為
  * commission_mode='percentage', commission_value=0(規則 2.4,財務保守預設)。回傳一個以
  * service_item_id 為 key 的 map,方便畫面逐項查詢。 */
+export const staffServiceCommissionRatesQueryKey = (staffId: string | null | undefined) =>
+  ["payroll-module", "staff-service-commission-rates", staffId] as const;
+
+/** 同上,但是不帶 hook 的版本——抽成設定頁需要一次算「整份名單」的統計(判斷這家商家到底有沒有在
+ * 用逐項抽成),那裡走 useQueries,不能用 hook 版。兩邊共用同一個 queryKey,所以 react-query 會
+ * 去重,不會因此多打一次 API。 */
+export async function fetchStaffServiceCommissionRates(
+  staffId: string,
+): Promise<Map<string, StaffServiceCommissionRate>> {
+  const { data, error } = await supabase
+    .from("staff_service_commission_rates")
+    .select("*")
+    .eq("staff_id", staffId);
+  if (error) throw error;
+  return new Map((data ?? []).map((row) => [row.service_item_id, row]));
+}
+
 export function useStaffServiceCommissionRates(
   staffId: string | null | undefined,
 ): UseQueryResult<Map<string, StaffServiceCommissionRate>> {
   return useQuery({
-    queryKey: ["payroll-module", "staff-service-commission-rates", staffId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("staff_service_commission_rates")
-        .select("*")
-        .eq("staff_id", staffId as string);
-      if (error) throw error;
-      return new Map((data ?? []).map((row) => [row.service_item_id, row]));
-    },
+    queryKey: staffServiceCommissionRatesQueryKey(staffId),
+    queryFn: () => fetchStaffServiceCommissionRates(staffId as string),
     enabled: Boolean(staffId),
   });
 }

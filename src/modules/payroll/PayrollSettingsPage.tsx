@@ -24,14 +24,16 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
   ActionBar,
   AlertNote,
+  AttributeTag,
   ChoiceChipGroup,
   EmptyState,
+  ErrorState,
   FieldAmountInput,
   FieldInput,
   FormField,
@@ -41,6 +43,7 @@ import {
   ListCard,
   LoadingSkeleton,
   PageHeader,
+  parseAmountInput,
   SwitchRow,
   TodoTag,
 } from "@/components/patterns";
@@ -61,6 +64,8 @@ import type { ServiceItem } from "@/modules/service-items/types";
 
 import {
   batchApplyStaffServiceCommissionRates,
+  fetchStaffServiceCommissionRates,
+  staffServiceCommissionRatesQueryKey,
   upsertMerchantPayrollSettings,
   upsertStaffSalarySettings,
   upsertStaffServiceCommissionRate,
@@ -68,6 +73,10 @@ import {
   useStaffSalarySettings,
   useStaffServiceCommissionRates,
 } from "./api";
+import {
+  merchantUsesPieceRateCommission,
+  shouldFlagCommissionAttention,
+} from "./commissionAttention";
 import { previewServiceCommission, calculateDayRate, getDaysInMonth } from "./previewCalculators";
 import {
   COMMISSION_BASIS_TYPE_LABELS,
@@ -529,8 +538,40 @@ function StaffServiceCommissionDialog({
 
 function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
-  const { data: staffList, isLoading } = useMerchantStaffList(merchantId);
+  const {
+    data: staffList,
+    isLoading,
+    isError,
+    refetch: refetchStaffList,
+  } = useMerchantStaffList(merchantId);
   const pieceRateStaff = (staffList ?? []).filter((s) => s.compensation_type === "piece_rate");
+
+  // 🔴 2026-09-30 QA:黃卡的守門條件要看「整份名單」,不是單一張卡自己算(理由與規則寫在
+  // commissionAttention.ts)。所以這裡先把每一位的「可接服務數 / 已設抽成數」都撈出來,
+  // 算出「這家商家到底有沒有在用逐項抽成」,再往下傳給每一張卡。
+  // queryKey 跟下面每張卡自己用的那兩個 query 完全相同 ⇒ react-query 去重,不會多打 API。
+  const serviceItemIdQueries = useQueries({
+    queries: pieceRateStaff.map((staff) => ({
+      queryKey: staffServiceItemIdsQueryKey(staff.id),
+      queryFn: () => fetchStaffServiceItemIds(staff.id),
+    })),
+  });
+  const rateQueries = useQueries({
+    queries: pieceRateStaff.map((staff) => ({
+      queryKey: staffServiceCommissionRatesQueryKey(staff.id),
+      queryFn: () => fetchStaffServiceCommissionRates(staff.id),
+    })),
+  });
+  const coverages = pieceRateStaff.map((_staff, i) => {
+    const ids = serviceItemIdQueries[i]?.data ?? [];
+    const rates = rateQueries[i]?.data;
+    return {
+      total: ids.length,
+      configured: ids.filter((id) => rates?.has(id)).length,
+    };
+  });
+  // 還在載入時先當成「沒在用」——寧可晚幾百毫秒才把該黃的標黃,也不要先閃一整頁黃色。
+  const usesCommission = merchantUsesPieceRateCommission(coverages);
 
   function refetch() {
     return Promise.all([
@@ -552,6 +593,13 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
       <CardContent>
         {isLoading ? (
           <LoadingSkeleton variant="cards" rows={2} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有抽成制的服務人員」。skill 二之八 出錯。
+          <ErrorState
+            title="讀不到服務人員名單"
+            reason="可能是網路斷了,或你沒有查看服務人員的權限"
+            onRetry={() => void refetchStaffList()}
+          />
         ) : pieceRateStaff.length === 0 ? (
           <EmptyState
             title="目前沒有抽成制的服務人員"
@@ -569,6 +617,7 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
                 key={staff.id}
                 merchantId={merchantId}
                 staff={staff}
+                merchantUsesCommission={usesCommission}
                 onSaved={refetch}
               />
             ))}
@@ -582,10 +631,13 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
 function StaffCommissionRateRow({
   merchantId,
   staff,
+  merchantUsesCommission,
   onSaved,
 }: {
   merchantId: string;
   staff: MerchantStaff;
+  /** 這家商家整份名單裡有沒有任何一項抽成設定過(黃卡的守門條件,由 PieceRateStaffSection 算)。 */
+  merchantUsesCommission: boolean;
   onSaved: () => void;
 }) {
   const { data: serviceItemIds } = useQuery({
@@ -600,7 +652,12 @@ function StaffCommissionRateRow({
   const unconfigured = total - configured;
   // skill 二之五:需要處理的卡片整張變黃(+ 待辦標籤)——沒有可接服務、或有項目還沒設抽成,
   // 都是「這個人的抽成算出來會是 0」的狀態,商家要去處理。
-  const needsAttention = total === 0 || unconfigured > 0;
+  // 🔴 但**先過守門條件**:「逐項抽成」是選配功能,沒在用的商家每一位都永遠「沒設抽成」,
+  // 原本會讓整份名單永久全黃(= 黃色失去意義)。規則與使用者裁決寫在 commissionAttention.ts。
+  const needsAttention = shouldFlagCommissionAttention(
+    { total, configured },
+    merchantUsesCommission,
+  );
 
   return (
     <li>
@@ -608,10 +665,20 @@ function StaffCommissionRateRow({
         title={staff.name}
         state={needsAttention ? "attention" : "default"}
         tags={
+          // 標籤文字不變(資訊仍然要看得到),只有「要不要用警示色」跟著守門條件走:
+          // 沒在用逐項抽成的商家 ⇒ 降成中性的屬性標籤(方角灰底,skill 二之四)。
           total === 0 ? (
-            <TodoTag>尚未設定可接服務</TodoTag>
+            needsAttention ? (
+              <TodoTag>尚未設定可接服務</TodoTag>
+            ) : (
+              <AttributeTag>尚未設定可接服務</AttributeTag>
+            )
           ) : unconfigured > 0 ? (
-            <TodoTag>{unconfigured} 項尚未設定抽成</TodoTag>
+            needsAttention ? (
+              <TodoTag>{unconfigured} 項尚未設定抽成</TodoTag>
+            ) : (
+              <AttributeTag>{unconfigured} 項尚未設定抽成</AttributeTag>
+            )
           ) : undefined
         }
         meta={
@@ -659,9 +726,12 @@ function StaffSalarySettingsDialog({
   const [baseSalary, setBaseSalary] = useState("0");
   const [quotaDays, setQuotaDays] = useState("");
   const [saving, setSaving] = useState(false);
+  // 月薪的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明)。
+  const [baseSalaryError, setBaseSalaryError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    setBaseSalaryError(null);
     setBaseSalary(settings ? String(settings.monthly_base_salary) : "0");
     setQuotaDays(
       settings?.monthly_leave_quota_days !== undefined &&
@@ -671,15 +741,20 @@ function StaffSalarySettingsDialog({
     );
   }, [open, settings]);
 
-  const numericBaseSalary = Number(baseSalary);
+  // 🔴 2026-09-30:月薪欄位換成 FieldAmountInput(type="text")之後原生的 min={0} step="1" 就沒了,
+  // 所以解析一律走 parseAmountInput,並且傳 integerOnly(這一欄原本是 step="1",月薪不收小數)。
+  // 試算文字也讀同一個解析結果,避免「畫面上算得出來、按儲存卻被擋」這種矛盾。
+  const parsedBaseSalary = parseAmountInput(baseSalary, { integerOnly: true });
+  const numericBaseSalary = parsedBaseSalary.ok ? parsedBaseSalary.value : Number.NaN;
   const dayRate = calculateDayRate(numericBaseSalary, payDaysPerMonth);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (Number.isNaN(numericBaseSalary) || numericBaseSalary < 0) {
-      toast.error("月薪金額不可為負數");
+    if (!parsedBaseSalary.ok) {
+      setBaseSalaryError(parsedBaseSalary.error);
       return;
     }
+    setBaseSalaryError(null);
     const numericQuota = quotaDays.trim() ? Number(quotaDays) : null;
     if (numericQuota !== null && (Number.isNaN(numericQuota) || numericQuota < 0)) {
       toast.error("月休天數不可為負數");
@@ -688,7 +763,7 @@ function StaffSalarySettingsDialog({
     setSaving(true);
     try {
       await upsertStaffSalarySettings(staff.id, {
-        monthlyBaseSalary: numericBaseSalary,
+        monthlyBaseSalary: parsedBaseSalary.value,
         monthlyLeaveQuotaDays: numericQuota,
       });
       toast.success("已更新薪資設定");
@@ -729,11 +804,21 @@ function StaffSalarySettingsDialog({
           <LoadingSkeleton variant="lines" rows={3} />
         ) : (
           <form id={SALARY_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <FormField label="月薪金額" htmlFor="base-salary" required>
+            <FormField
+              label="月薪金額"
+              htmlFor="base-salary"
+              required
+              error={baseSalaryError}
+              helpLabel="說明:月薪金額要怎麼填"
+              help="只能填整數(不含小數點),例如 30000。"
+            >
               <FieldAmountInput
                 id="base-salary"
                 value={baseSalary}
-                onChange={(e) => setBaseSalary(e.target.value)}
+                onChange={(e) => {
+                  setBaseSalary(e.target.value);
+                  if (baseSalaryError) setBaseSalaryError(null);
+                }}
               />
             </FormField>
             <FormField

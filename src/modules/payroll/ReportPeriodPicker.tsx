@@ -117,12 +117,16 @@ export function ReportPeriodPicker({
 }) {
   return (
     <div className="flex flex-col gap-3">
-      <ChoiceChipGroup
-        aria-label="查詢期間"
-        value={mode}
-        onValueChange={onModeChange}
-        options={MODE_ORDER.map((m) => ({ value: m, label: MODE_LABELS[m] }))}
-      />
+      {/* 🔴 2026-09-30 QA:原本只有 aria-label、畫面上沒有可見標籤,切到「自訂區間」時會跟
+          DateRangePicker 那條 chip 列變成兩條無標題的列疊在一起。包進 FormField 給可見標籤。 */}
+      <FormField label="查詢期間">
+        <ChoiceChipGroup
+          aria-label="查詢期間"
+          value={mode}
+          onValueChange={onModeChange}
+          options={MODE_ORDER.map((m) => ({ value: m, label: MODE_LABELS[m] }))}
+        />
+      </FormField>
 
       {mode === "pick_month" ? (
         <FormField label="月份" htmlFor="report-period-month" className="sm:max-w-xs">

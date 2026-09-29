@@ -31,6 +31,7 @@ import {
   CardAlertDialogHeader,
   CardAlertDialogTitle,
   EmptyState,
+  ErrorState,
   FieldDate,
   FieldSelect,
   FieldTextarea,
@@ -281,10 +282,12 @@ function CreateLeaveDialog({
           </div>
 
           <FormField label="備註" htmlFor="leave-notes">
+            {/* 🔴 2026-09-30 QA:這裡原本寫 className="min-h-0",cn() 是 twMerge,會把共用元件的
+                min-h-[88px] 直接蓋掉(不是「加上去」)。FieldTextarea 的註解要求 className 只用在
+                版面寬度,不要改高度——全站備註欄同高才是對的,所以拿掉。 */}
             <FieldTextarea
               id="leave-notes"
               rows={2}
-              className="min-h-0"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
@@ -338,7 +341,14 @@ function LeaveRecordsPageInner() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const { data: records, isLoading } = useStaffLeaveRecords({
+  // refetchRecords 是 react-query 自己的重抓(ErrorState 的「重試」用);下面那個 refetch() 是
+  // 「取消 / 登記完之後讓清單失效」的既有函式,兩個不一樣,名字要分開。
+  const {
+    data: records,
+    isLoading,
+    isError,
+    refetch: refetchRecords,
+  } = useStaffLeaveRecords({
     staffId: filterStaffId === "__all__" ? null : filterStaffId,
     startDateFrom: dateFrom || null,
     startDateTo: dateTo || null,
@@ -431,6 +441,14 @@ function LeaveRecordsPageInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「沒有符合篩選條件的紀錄」,客服會以為請假
+            // 紀錄真的不存在,重複登記一次。skill 二之八 出錯。
+            <ErrorState
+              title="讀不到請假紀錄"
+              reason="可能是網路斷了,或你沒有查看請假紀錄的權限"
+              onRetry={() => void refetchRecords()}
+            />
           ) : !records || records.length === 0 ? (
             // 下一步就在同一個畫面上(上方的篩選卡 + 頁首的「登記請假」),用一句話指路即可。
             <EmptyState

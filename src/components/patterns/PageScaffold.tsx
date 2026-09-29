@@ -198,7 +198,9 @@ export function ErrorState({
       </div>
       {action ??
         (onRetry ? (
-          <Button type="button" variant="danger" size="touch" onClick={onRetry}>
+          // 🔴 2026-09-30 QA + skill 二之三:「重試」是可逆的,**不給紅色**。紅色只留給不可逆的
+          // (真正刪除)。出錯畫面上放一顆紅按鈕,使用者會以為按下去會把東西弄壞,反而不敢按。
+          <Button type="button" variant="neutral" size="touch" onClick={onRetry}>
             {retryLabel}
           </Button>
         ) : null)}
