@@ -2,17 +2,35 @@
 // 5 張卡片(對應 5 種事件),每張顯示:白話名稱、總開關、通知對象勾選(staff_leave_created
 // 隱藏服務人員/會員兩個選項,對應 1.2 邊界情況)、文案範本編輯區 + 「可用變數」說明清單 +
 // 即時預覽(純前端函式,判斷 11)。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader(‹ 返回功能 → 標題 → 說明);載入中改灰色骨架,不用「載入中⋯」(二之八)。
+//   - 每張卡的總開關改 SwitchRow(二之七「開關做成一整列」),卡片標題不再跟開關擠在同一列。
+//   - 「通知對象」從打勾方框改成可點的方塊 ChoiceChip(二之七:手機好按)—— 通知對象可以同時
+//     選好幾個,所以是 ChoiceChip(aria-pressed 多選語意),不是 ChoiceChipGroup(單選)。
+//   - 「文案範本」改 FormField + FieldTextarea;「可用變數」改成 skill 二之七指定的三欄說明表
+//     + 「○○○實際會收到」預覽框(做在共用元件 TemplateVariablePreview 裡)。
+//   - 儲存按鈕改 ② 次要(neutral):這一頁有 5 張一模一樣的事件卡,每張都放一顆主要按鈕等於
+//     一頁 5 顆 primary,違反 skill 二之三「一個畫面只能有一顆」,而且整頁都是主題色實心按鈕時
+//     反而沒有任何一顆突出(跟 #846 黃卡「全部都黃 = 都不黃」是同一個道理)。
+//
+// **只動外觀,不動行為**:儲存送出的欄位、事件類型清單、哪些事件隱藏服務人員/會員選項、
+// toast 文案全部照舊。
 
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  ChoiceChip,
+  FieldTextarea,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -28,7 +46,11 @@ import {
   type LineNotificationEventType,
   type MerchantLineEventSetting,
 } from "./types";
-import { getTemplateVariableDefinitions, previewLineMessageTemplate } from "./templateVariables";
+import {
+  getTemplateVariableDefinitions,
+  LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES,
+  previewLineMessageTemplate,
+} from "./templateVariables";
 
 interface EventFormState {
   enabled: boolean;
@@ -96,69 +118,80 @@ function EventSettingCard({
 
   const showStaffOption = eventSupportsStaffTarget(eventType);
   const showMemberOption = eventSupportsMemberTarget(eventType);
+  const templateFieldId = `line-event-template-${eventType}`;
+
+  // 通知對象可以同時選好幾個 ⇒ ChoiceChip(多選,aria-pressed),不是 ChoiceChipGroup(單選)。
+  // staff_leave_created 沒有服務人員 / 會員這兩個對象(§1.2 邊界情況),清單就不放那兩顆。
+  type TargetKey = "notifyAdmin" | "notifyAgent" | "notifyStaff" | "notifyMember";
+  const targetOptions: { key: TargetKey; label: string }[] = [
+    { key: "notifyAdmin", label: "商家管理員" },
+    { key: "notifyAgent", label: "客服" },
+    ...(showStaffOption ? [{ key: "notifyStaff" as const, label: "服務人員" }] : []),
+    ...(showMemberOption ? [{ key: "notifyMember" as const, label: "會員" }] : []),
+  ];
 
   return (
     <Card data-testid={`line-event-card-${eventType}`}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle>{LINE_NOTIFICATION_EVENT_LABELS[eventType]}</CardTitle>
-          <CardDescription>{form.enabled ? "通知已開啟" : "通知目前關閉"}</CardDescription>
-        </div>
-        <Switch checked={form.enabled} onCheckedChange={(v) => setField("enabled", v)} />
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <p className="mb-2 text-sm font-medium text-foreground">通知對象</p>
-          <div className="flex flex-wrap gap-4 text-sm">
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={form.notifyAdmin}
-                onCheckedChange={(v) => setField("notifyAdmin", v === true)}
-              />
-              商家管理員
-            </label>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={form.notifyAgent}
-                onCheckedChange={(v) => setField("notifyAgent", v === true)}
-              />
-              客服
-            </label>
-            {showStaffOption ? (
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={form.notifyStaff}
-                  onCheckedChange={(v) => setField("notifyStaff", v === true)}
-                />
-                服務人員
-              </label>
-            ) : null}
-            {showMemberOption ? (
-              <label className="flex items-center gap-2">
-                <Checkbox
-                  checked={form.notifyMember}
-                  onCheckedChange={(v) => setField("notifyMember", v === true)}
-                />
-                會員
-              </label>
-            ) : null}
-          </div>
-        </div>
+      <CardContent className="flex flex-col gap-4 pt-6">
+        {/* skill 二之七:開關做成一整列 —— 左邊標題 + 一行說明,右邊開關。 */}
+        <SwitchRow
+          title={LINE_NOTIFICATION_EVENT_LABELS[eventType]}
+          description={
+            form.enabled
+              ? "通知已開啟,符合條件時會依下方設定發送 LINE 訊息。"
+              : "通知目前關閉,這類事件不會發出任何 LINE 訊息。"
+          }
+          checked={form.enabled}
+          onCheckedChange={(v) => setField("enabled", v)}
+        />
 
-        <div>
-          <p className="mb-2 text-sm font-medium text-foreground">文案範本</p>
-          <Textarea
+        <FormField
+          label="通知對象"
+          help={
+            <>
+              勾選這類事件發生時要通知誰。<strong>只有已經綁定 LINE 的人收得到</strong>
+              ,沒綁定的人會被安靜略過,不會報錯。
+            </>
+          }
+          helpLabel="說明:通知對象怎麼選、沒綁定 LINE 的人會怎樣"
+        >
+          <div className="flex flex-wrap gap-2">
+            {targetOptions.map((option) => (
+              <ChoiceChip
+                key={option.key}
+                selected={form[option.key]}
+                onClick={() => setField(option.key, !form[option.key])}
+              >
+                {option.label}
+              </ChoiceChip>
+            ))}
+          </div>
+        </FormField>
+
+        <FormField label="文案範本" htmlFor={templateFieldId}>
+          <FieldTextarea
+            id={templateFieldId}
             rows={3}
             value={form.messageTemplate}
             onChange={(e) => setField("messageTemplate", e.target.value)}
           />
-          <TemplateVariablePreview
-            variables={getTemplateVariableDefinitions(eventType)}
-            previews={[{ text: previewLineMessageTemplate(form.messageTemplate) }]}
-          />
-        </div>
+        </FormField>
+        {/* skill 二之七:變數說明要完整(三欄:變數 / 中文意思 / 範例值)+ 預覽框。 */}
+        <TemplateVariablePreview
+          variables={getTemplateVariableDefinitions(eventType)}
+          sampleValues={LINE_TEMPLATE_PREVIEW_SAMPLE_VALUES}
+          recipientLabel="收到通知的人"
+          previews={[{ text: previewLineMessageTemplate(form.messageTemplate) }]}
+        />
 
-        <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+        <Button
+          type="button"
+          variant="neutral"
+          size="touch"
+          className="self-start"
+          disabled={saving}
+          onClick={handleSave}
+        >
           {saving ? "儲存中⋯" : "儲存"}
         </Button>
       </CardContent>
@@ -181,20 +214,14 @@ function LineEventSettingsPageInner() {
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">LINE 通知設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          設定每一類事件要不要透過 LINE 通知、通知誰、文案內容。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="LINE 通知設定"
+        description="設定每一類事件要不要透過 LINE 通知、通知誰、文案內容。"
+      />
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="cards" rows={3} />
       ) : (
         <div className="space-y-4">
           {LINE_NOTIFICATION_EVENT_TYPES.map((eventType) => {

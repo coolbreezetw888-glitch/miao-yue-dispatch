@@ -17,14 +17,26 @@
 //    客服/服務人員呼叫。管理員的行為完全不變(管理員本來也只用到 line_bot_basic_id 這一個欄位;
 //    LINE 設定頁 LineSettingsPage 的串接管理資訊仍然走原本的 useMerchantLineConfigStatus,
 //    那一支維持管理員專用、一個字都沒改)。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 「已綁定 / 未綁定」改 StatusTag(二之四);載入中改灰色骨架,不用「載入中⋯」(二之八)。
+//   - 「綁定碼已過期」「商家尚未完成 LINE 串接」改成 🟡 常駐 `!`(AlertNote)—— 兩句都屬於
+//     「現在的狀態跟使用者以為的不一樣」,不能只用一行灰字帶過(二)。
+//   - 🔴「解除綁定」是可逆動作(解除後重新產生綁定碼就能再綁)⇒ 不標紅,用 ② 次要。
+//   - 「產生綁定碼」是這張卡片最主要的動作 ⇒ ① 主要;加好友連結長,改成可折行、各佔一行
+//     (比照二之六地址那條:長連結並排會被截斷)。綁定碼數字加 tabular-nums。
+//
+// **只動外觀,不動行為**:產生 / 解除綁定走哪一支 API(依 admin / agent 角色)、倒數計時、
+// 「我已經傳送完成,重新檢查」重新查詢、toast 文案全部照舊。
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { Badge } from "@/components/ui/badge";
+import { AlertNote, StatusTag } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -143,58 +155,70 @@ export function MyLineBindingCard() {
           綁定後,商家開啟通知時,你可以直接在自己的 LINE 收到訂單/請假相關通知。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
-        <div className="flex items-center justify-between">
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-muted-foreground">目前綁定狀態</span>
           {bindingLoading ? (
-            <span className="text-muted-foreground">載入中⋯</span>
+            <Skeleton className="h-5 w-16 rounded-full bg-muted" />
           ) : bindingStatus?.lineBound ? (
-            <Badge variant="default">已綁定</Badge>
+            <StatusTag tone="success">已綁定</StatusTag>
           ) : (
-            <Badge variant="secondary">未綁定</Badge>
+            <StatusTag tone="neutral">未綁定</StatusTag>
           )}
         </div>
 
         {bindingStatus?.lineBound ? (
+          // 🔴 可逆動作(解除後重新產生綁定碼就能再綁)⇒ 不標紅,用 ② 次要。
           <Button
             type="button"
-            variant="outline"
-            size="sm"
+            variant="neutral"
+            size="card"
+            className="self-start"
             disabled={unbinding}
             onClick={handleUnbind}
           >
             {unbinding ? "處理中⋯" : "解除綁定"}
           </Button>
         ) : (
-          <div className="space-y-3">
-            <Button type="button" size="sm" disabled={generating} onClick={handleGenerate}>
+          <div className="flex flex-col gap-3">
+            {/* 這張卡片最主要的動作 ⇒ ① 主要(skill 二之三)。 */}
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="self-start"
+              disabled={generating}
+              onClick={handleGenerate}
+            >
               {generating ? "產生中⋯" : "產生綁定碼"}
             </Button>
 
             {issuedCode && !codeExpired ? (
-              <div className="rounded-md border border-dashed border-border px-3 py-3 space-y-2">
-                <p className="text-xs text-muted-foreground">
+              <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3.5 py-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
                   請在 LINE 加好友後,把這組數字當作一則訊息傳送過去完成綁定
                 </p>
-                <p className="text-2xl font-bold tracking-widest text-foreground">
+                <p className="text-2xl font-bold tracking-widest tabular-nums text-foreground">
                   {issuedCode.code}
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs tabular-nums text-muted-foreground">
                   剩餘時間 {formatBindingCodeCountdown(msRemaining)}
                 </p>
                 {addFriendUrl ? (
+                  // 連結很長,320px 下必須自成一行、能折行(比照 skill 二之六地址那條)。
                   <a
                     href={addFriendUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-block text-xs text-brand hover:underline"
+                    className="block min-w-0 break-all text-xs text-brand hover:underline"
                   >
                     點此加好友:{addFriendUrl}
                   </a>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    (商家尚未完成 LINE 串接測試連線,暫時沒有加好友連結可以顯示)
-                  </p>
+                  <AlertNote>
+                    商家還沒完成 LINE 串接的測試連線,所以這裡暫時沒有加好友連結可以顯示。
+                    綁定碼仍然有效,加好友之後一樣可以把它傳過去完成綁定。
+                  </AlertNote>
                 )}
                 {/* 綁定是在 LINE 那邊完成的(Webhook 收到那則訊息才會寫入 line_bound),這個頁面
                     不會自己知道。給一顆「我傳完了」的按鈕重新查一次自己的紀錄,否則使用者傳完
@@ -203,15 +227,16 @@ export function MyLineBindingCard() {
                     完全一致——同一件事在不同角色的畫面上行為不一致,之後一定會有人來問。 */}
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
+                  variant="neutral"
+                  size="card"
+                  className="self-start"
                   onClick={() => void refetchBindingStatus()}
                 >
                   我已經傳送完成,重新檢查
                 </Button>
               </div>
             ) : issuedCode && codeExpired ? (
-              <p className="text-xs text-muted-foreground">綁定碼已過期,請重新產生。</p>
+              <AlertNote>這組綁定碼已經過期,請按「產生綁定碼」重新產生一組。</AlertNote>
             ) : null}
           </div>
         )}
