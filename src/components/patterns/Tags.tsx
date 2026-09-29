@@ -12,6 +12,12 @@
  *
  * 🔴 顏色不能是唯一的差別(色盲看不出紅綠)—— 每個標籤都要有文字,這裡的圓點只是輔助。
  * 🔴 不用實心色塊。
+ *
+ * `wrap`:標籤預設一行不折(whitespace-nowrap),因為短標籤折行會很醜。但標籤裡夾著使用者自填的
+ * 文字(登入信箱、客戶名)時,320px 會撐爆卡片 ⇒ 給 `wrap` 讓它能在任意字元折行(email 沒有空白
+ * 可以斷,所以是 break-all),圓點 / `!` 圖示改對齊第一行。頁面不要自己用 className 覆寫 whitespace。
+ *
+ * ⚠️ 這裡改動會影響全站所有標籤,改之前先讀 .claude/skills/ui-overlay-patterns/SKILL.md。
  */
 
 import * as React from "react";
@@ -35,33 +41,64 @@ const STATUS_DOT: Record<StatusTone, string> = {
   danger: "bg-destructive",
 };
 
-interface StatusTagProps extends Omit<BadgeProps, "variant"> {
+interface WrapProps {
+  /** 標籤內含使用者自填的長文字(email、姓名)時開啟,允許折行、不撐爆 320px。預設 false。 */
+  wrap?: boolean | undefined;
+}
+
+/** 依 wrap 決定「一行不折」還是「任意字元可折 + 靠左」。 */
+function wrapClass(wrap: boolean | undefined) {
+  return wrap ? "whitespace-normal break-all text-left" : "whitespace-nowrap";
+}
+
+interface StatusTagProps extends Omit<BadgeProps, "variant">, WrapProps {
   tone: StatusTone;
 }
 
-export function StatusTag({ tone, className, children, ...props }: StatusTagProps) {
+export function StatusTag({ tone, wrap, className, children, ...props }: StatusTagProps) {
   return (
     <Badge
       variant={STATUS_VARIANT[tone]}
-      className={cn("gap-1.5 whitespace-nowrap", className)}
+      className={cn("gap-1.5", wrapClass(wrap), wrap && "items-start", className)}
       {...props}
     >
-      <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[tone])} />
+      {/* 折行時圓點對齊第一行(text-xs 行高 16px,圓點 6px ⇒ 往下推 5px)。 */}
+      <span
+        aria-hidden="true"
+        className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[tone], wrap && "mt-[5px]")}
+      />
       {children}
     </Badge>
   );
 }
 
-export function AttributeTag({ className, ...props }: Omit<BadgeProps, "variant">) {
-  return <Badge variant="attribute" className={cn("whitespace-nowrap", className)} {...props} />;
+export function AttributeTag({
+  wrap,
+  className,
+  ...props
+}: Omit<BadgeProps, "variant"> & WrapProps) {
+  return <Badge variant="attribute" className={cn(wrapClass(wrap), className)} {...props} />;
 }
 
-export function TodoTag({ className, children, ...props }: Omit<BadgeProps, "variant">) {
+export function TodoTag({
+  wrap,
+  className,
+  children,
+  ...props
+}: Omit<BadgeProps, "variant"> & WrapProps) {
   return (
-    <Badge variant="todo" className={cn("gap-1.5 whitespace-nowrap", className)} {...props}>
+    <Badge
+      variant="todo"
+      className={cn("gap-1.5", wrapClass(wrap), wrap && "items-start", className)}
+      {...props}
+    >
+      {/* 折行時 `!` 對齊第一行(text-xs 行高 16px,圖示 14px ⇒ 往下推 1px)。 */}
       <span
         aria-hidden="true"
-        className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-warn-strong text-[10px] font-bold leading-none text-warn-soft"
+        className={cn(
+          "inline-flex size-3.5 shrink-0 items-center justify-center rounded-full bg-warn-strong text-[10px] font-bold leading-none text-warn-soft",
+          wrap && "mt-px",
+        )}
       >
         !
       </span>

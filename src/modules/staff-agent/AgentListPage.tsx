@@ -9,14 +9,16 @@
 //   - 「編輯客服資料」(4 欄,使用者已裁決歸小卡窗)改用 CardDialog,欄位單欄直排。
 //   - 「移除」「真正刪除」兩個確認窗改用 CardAlertDialog(確認鈕白底紅字)。
 //   - 客服列改成 ListCard:右側只放「一顆主要動作(編輯 / 恢復)+ 一個 ⋯」,權限設定、移除、
-//     真正刪除收進 ⋯(危險項紅字、分隔線下方)。因為觸發點變成選單項目,三個對話框改成受控開關,
+//     真正刪除收進 ⋯。因為觸發點變成選單項目,三個對話框改成受控開關,
 //     整頁各只有一顆實例,不再每一列各包一顆 Trigger。
 //   - 篩選分頁籤改成底線式(UnderlineTabs,skill 二之四末段)、邀請表單欄位改用 FormField、
 //     頁首改 PageHeader、載入中改骨架、空狀態補說明(skill 二之八)。
+// ui-v1-full 第二階段回填(2026-09-29 主腦裁決):「移除」可逆 ⇒ ⋯ 一般項目不標紅,只有「真正刪除」
+//   紅字;「權限設定」改成真正的連結(ListCard menuItems 的 `to`);空狀態拿掉「聚焦上方欄位」的
+//   按鈕 hack,改成一句話指路(邀請表單就在正上方,skill 二之八的例外,見 EmptyState 註解)。
 // **只動外觀與版面,不動任何行為**:驗證、送出、移除 / 恢復 / 真正刪除、篩選邏輯全部照舊。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -299,7 +301,6 @@ function AgentListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const { data: agents, isLoading } = useQuery({
     queryKey: agentListQueryKey(merchantId),
@@ -524,19 +525,11 @@ function AgentListInner() {
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
           ) : !agents || agents.length === 0 ? (
+            // skill 二之八的例外(見 EmptyState 元件註解):下一步(邀請表單)就在這個空狀態正上方、
+            // 一眼看得到,所以不做按鈕、用一句話指路就夠了。
             <EmptyState
               title="還沒有任何客服"
-              description="邀請客服加入後,可以指派權限,讓他們協助建單、管理會員等日常工作。"
-              action={
-                <Button
-                  type="button"
-                  variant="neutral"
-                  size="touch"
-                  onClick={() => document.getElementById("agent-email")?.focus()}
-                >
-                  用上方表單邀請第一位客服
-                </Button>
-              }
+              description="邀請客服加入後,可以指派權限,讓他們協助建單、管理會員等日常工作。用上方的邀請表單新增第一位客服。"
             />
           ) : filteredAgents.length === 0 ? (
             <p className="text-sm text-muted-foreground">這個分類目前沒有客服。</p>
@@ -549,7 +542,9 @@ function AgentListInner() {
                   <li key={agent.id}>
                     {/* skill 二之五 列表卡片:姓名 + 狀態標籤 → 次要資訊(email、登入信箱狀態)→
                         右側「一顆主要動作 + ⋯」。已移除整張變灰。主要動作隨狀態換字(編輯 / 恢復),
-                        位置固定;權限設定、移除、真正刪除收進 ⋯,危險項紅字放分隔線下方。 */}
+                        位置固定;權限設定、移除、真正刪除收進 ⋯。
+                        2026-09-29 主腦裁決:「移除」是可逆的(有「恢復」)⇒ 一般項目不標紅,只有不可逆的
+                        「真正刪除」才紅字;「權限設定」是跳頁 ⇒ 用 `to`(真正的連結,可右鍵開新分頁)。 */}
                     <ListCard
                       state={isRemoved ? "inactive" : "default"}
                       title={
@@ -612,13 +607,9 @@ function AgentListInner() {
                               },
                             ]
                           : [
-                              {
-                                label: "權限設定",
-                                onSelect: () => navigate(`/app/agents/${agent.id}/permissions`),
-                              },
+                              { label: "權限設定", to: `/app/agents/${agent.id}/permissions` },
                               {
                                 label: "移除",
-                                danger: true,
                                 disabled: removingId === agent.id,
                                 onSelect: () => setRemovingAgent(agent),
                               },

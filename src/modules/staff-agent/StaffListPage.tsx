@@ -8,15 +8,20 @@
 //     欄位改用 FormField / FieldInput / FieldTextarea / SwitchRow / ChoiceChip(skill 二之七),
 //     服務項目多選從打勾方框改成可點的方塊。
 //   - 「邀請登入」(1 欄)改用小卡窗 CardDialog;「移除」「真正刪除」確認窗改用 CardAlertDialog。
-//   - 服務人員列改成 ListCard:右側只放「一顆主要動作(邀請登入 / 編輯 / 恢復,隨狀態換字、位置固定)
-//     + 一個 ⋯」,其餘動作收進 ⋯(危險項紅字、分隔線下方)。尚未開通登入的整張變黃 + 待辦標籤,
-//     已移除整張變灰。因為觸發點變成選單項目,五個對話框改成受控開關、整頁各只有一顆實例。
+//   - 服務人員列改成 ListCard:右側只放「一顆主要動作 + 一個 ⋯」,其餘動作收進 ⋯。
+//     尚未開通登入的整張變黃 + 待辦標籤,已移除整張變灰。因為觸發點變成選單項目,五個對話框改成
+//     受控開關、整頁各只有一顆實例。
 //   - 篩選分頁籤改底線式、頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕(skill 二之八)。
+// ui-v1-full 第二階段回填(2026-09-29 主腦裁決):
+//   - 主要動作:「編輯」永遠是主要動作(已移除的人才換成「恢復」);「邀請登入」放 ⋯ 第一項。
+//   - ⋯ 選單:「移除」是可逆的 ⇒ 一般項目不標紅,只有「真正刪除」紅字;「服務人員權限」改成真正的
+//     連結(ListCard menuItems 的 `to`),可以右鍵 / 中鍵開新分頁。
+//   - 計酬類型單選改 ChoiceChipGroup(radiogroup 語意);可預約時段的原生 select / time 改共用
+//     FieldNativeSelect / FieldTime;表單全頁層改 size="wide"(760px)。
 // **只動外觀與版面,不動任何行為**:按鈕顯示條件(isAdmin / login_status / status)、驗證、送出、
 // 服務項目勾選即存、頭像上傳即存、可預約時段增刪,全部照舊。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -40,9 +45,12 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   ChoiceChip,
+  ChoiceChipGroup,
   EmptyState,
   FieldInput,
+  FieldNativeSelect,
   FieldTextarea,
+  FieldTime,
   FormField,
   FullPageLayer,
   FullPageLayerClose,
@@ -191,11 +199,6 @@ function FormPlaceholder({ children }: { children: React.ReactNode }) {
   );
 }
 
-// 可預約時段編輯器裡的原生 <select> / <input type="time">:共用元件目前沒有 FieldSelect / FieldTime,
-// 這裡只把高度 / 圓角 / 字級對齊 skill 二之七的 44px / 10px,已在回報裡提請主腦補共用版本。
-const NATIVE_CONTROL_CLASS =
-  "h-11 rounded-md border border-input bg-background px-3 text-[15px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-
 // 模組 5 規格書 4.2:比照模組 4 4.4 節先例,新增一週可預約時段設定區塊。允許同一天多組時段
 // (規格書 1.2)。空狀態(規則 2.5):完全沒設定任何時段、且 no_time_slot_limit=false 時,
 // 這位服務人員這次還不可預約,這裡用提示文字說明,不做任何攔阻(攔阻邏輯在 create_booking 裡)。
@@ -288,34 +291,34 @@ function AvailabilityWindowsEditor({
         </ul>
       )}
 
-      <div className="mt-1 flex flex-wrap items-center gap-2">
-        <select
+      {/* skill 二之七:原生 select / time 用共用的 FieldNativeSelect / FieldTime(高度 / 圓角 / 字級由元件
+          決定,這裡的 className 只管一列裡各佔多寬)。手機直向堆疊、電腦排成一列。 */}
+      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <FieldNativeSelect
           aria-label="星期"
-          className={NATIVE_CONTROL_CLASS}
+          className="sm:w-32"
           value={dayOfWeek}
           onChange={(e) => setDayOfWeek(e.target.value)}
-        >
-          {DAY_OF_WEEK_LABELS.map((label, index) => (
-            <option key={label} value={index}>
-              星期{label}
-            </option>
-          ))}
-        </select>
-        <input
-          type="time"
-          aria-label="開始時間"
-          className={NATIVE_CONTROL_CLASS}
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
+          options={DAY_OF_WEEK_LABELS.map((label, index) => ({
+            value: String(index),
+            label: `星期${label}`,
+          }))}
         />
-        <span className="text-sm text-muted-foreground">至</span>
-        <input
-          type="time"
-          aria-label="結束時間"
-          className={NATIVE_CONTROL_CLASS}
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <FieldTime
+            aria-label="開始時間"
+            className="flex-1 sm:w-36 sm:flex-none"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+          />
+          <span className="shrink-0 text-sm text-muted-foreground">至</span>
+          <FieldTime
+            aria-label="結束時間"
+            className="flex-1 sm:w-36 sm:flex-none"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
+        </div>
         <Button type="button" variant="neutral" size="touch" disabled={adding} onClick={handleAdd}>
           新增時段
         </Button>
@@ -471,8 +474,11 @@ function StaffFormDialog({
 
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      {/* size="wide":這張表有兩欄格線 + 8 個開關列 + LINE / 推播區塊,560px 的電腦面板偏長,
+          760px 較合適(2026-09-29 主腦同意)。手機無差(照樣滿版)。 */}
       <FullPageLayerContent
         title={isEdit ? "編輯服務人員" : "新增服務人員"}
+        size="wide"
         footer={
           // skill 二之三:底部動作列等寬,階層靠顏色(取消白底 / 儲存實心)。儲存鈕在 <form> 外面,
           // 用 form 屬性指回表單,Enter 鍵與按鈕送出走同一個 handleSubmit。
@@ -574,23 +580,21 @@ function StaffFormDialog({
                 時段」(既有的 staff_availability_windows/unlimited_backend_edit 機制)。
                 ⚠️ 2026-09-24:選項的中文從「按件計酬」改成「抽成制」,底層的值 'piece_rate'
                    完全不動(資料庫存的是英文,中文只在這一層顯示)。
-                ui-v1-full:單選改成可點的方塊(skill 二之七),值直接來自常數白名單。 */}
+                ui-v1-full:單選改成 ChoiceChipGroup(skill 二之七,radiogroup 語意、方向鍵可切換),
+                值直接來自常數白名單。 */}
             <FormField
               label="計酬類型"
               helpLabel="說明:計酬類型會影響什麼"
               help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能);抽成制則是用「可預約時段」調整接單時間。"
             >
-              <div className="flex flex-wrap gap-2">
-                {(["piece_rate", "monthly_salary"] as StaffCompensationType[]).map((type) => (
-                  <ChoiceChip
-                    key={type}
-                    selected={(form.compensationType ?? "piece_rate") === type}
-                    onClick={() => setField("compensationType", type)}
-                  >
-                    {STAFF_COMPENSATION_TYPE_LABELS[type]}
-                  </ChoiceChip>
-                ))}
-              </div>
+              <ChoiceChipGroup
+                aria-label="計酬類型"
+                value={form.compensationType ?? "piece_rate"}
+                onValueChange={(type) => setField("compensationType", type)}
+                options={(["piece_rate", "monthly_salary"] as StaffCompensationType[]).map(
+                  (type) => ({ value: type, label: STAFF_COMPENSATION_TYPE_LABELS[type] }),
+                )}
+              />
             </FormField>
           </div>
 
@@ -909,7 +913,6 @@ function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   // 使用者決策(2026-09-23):「服務人員管理」開放給有 staff_management 權限的客服使用,但邀請
   // 服務人員登入(帳號/密碼授權)、指派服務人員權限、真正刪除這三項比照「客服管理」同一類的
   // 帳號/敏感操作,維持永遠只給商家管理員(見下方各自的 isAdmin 判斷)——底層 Edge Function
@@ -1044,8 +1047,12 @@ function StaffListInner() {
                 const isRemoved = staff.status !== "active";
                 // 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請入口(只給管理員)。
                 const canInvite = isAdmin && !isRemoved && loginStatus === "not_invited";
-                // 主要動作隨狀態換字、位置固定:恢復(已移除)/ 邀請登入(尚未開通且是管理員)/ 編輯。
-                // 其餘動作收進 ⋯:編輯(當主要動作被邀請登入佔走時)、服務人員權限、移除 / 真正刪除。
+                // 2026-09-29 主腦裁決(skill 二之三「位置固定」的精神是不要讓人每次都得重新找):
+                //   - 「編輯」是天天用的動作 ⇒ 永遠是主要動作;唯一例外是已移除的人(主要動作換成「恢復」,
+                //     那時編輯沒有意義)。
+                //   - 「邀請登入」一個人一輩子按一次 ⇒ 放 ⋯ 選單第一項(顯示條件 canInvite 照舊)。
+                //   - 「服務人員權限」是跳頁 ⇒ 用 `to`(底層是真正的 <Link>,可右鍵 / 中鍵開新分頁)。
+                //   - 「移除」是可逆的(有「恢復」)⇒ 一般項目、不標紅;只有不可逆的「真正刪除」才紅字。
                 const menuItems: ListCardMenuItem[] | undefined = isRemoved
                   ? isAdmin
                     ? [
@@ -1063,23 +1070,18 @@ function StaffListInner() {
                       ...(canInvite
                         ? [
                             {
-                              label: "編輯",
+                              label: "邀請登入",
                               onSelect: () => {
-                                setEditingStaff(staff);
-                                setEditOpen(true);
+                                setInvitingStaff(staff);
+                                setInviteOpen(true);
                               },
                             },
                           ]
                         : []),
                       ...(isAdmin && loginStatus === "active"
-                        ? [
-                            {
-                              label: "服務人員權限",
-                              onSelect: () => navigate(`/app/staff/${staff.id}/permissions`),
-                            },
-                          ]
+                        ? [{ label: "服務人員權限", to: `/app/staff/${staff.id}/permissions` }]
                         : []),
-                      { label: "移除", danger: true, onSelect: () => setRemovingStaff(staff) },
+                      { label: "移除", onSelect: () => setRemovingStaff(staff) },
                     ];
 
                 return (
@@ -1158,18 +1160,6 @@ function StaffListInner() {
                             onClick={() => handleReactivate(staff.id)}
                           >
                             恢復
-                          </Button>
-                        ) : canInvite ? (
-                          <Button
-                            type="button"
-                            variant="neutral"
-                            size="card"
-                            onClick={() => {
-                              setInvitingStaff(staff);
-                              setInviteOpen(true);
-                            }}
-                          >
-                            邀請登入
                           </Button>
                         ) : (
                           <Button

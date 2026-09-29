@@ -7,7 +7,16 @@
  *   - 🔴 需要處理的卡片整張變黃(state="attention"),不只是加個標籤。
  *   - 已移除 / 停用的卡片整張變灰、名稱變淡(state="inactive")。
  *   - 右側永遠只有「一顆主要動作 + 一個 ⋯」,不常用和危險的都收進 ⋯,危險項紅字並放在分隔線下方。
- *     這樣不管卡片是什麼狀態,右邊永遠只有兩個東西,位置不會跳。主要動作可以隨狀態換字,但位置固定。
+ *     這樣不管卡片是什麼狀態,右邊永遠只有兩個東西,位置不會跳。
+ *   - 🔴 **主要動作的位置固定,而且天天用的那個動作要一直待在那裡**(skill 二之三)。
+ *     「編輯」永遠是主要動作;唯一例外是已移除 / 已停用的那筆,主要動作換成「恢復」(那時編輯沒有意義)。
+ *     像「邀請登入」這種一個人一輩子按一次的,放 ⋯ 選單第一項,不要搶走「編輯」的位子
+ *     (2026-09-29 主腦裁決,推翻第 1 批「尚未開通登入就把邀請登入當主要動作」的做法)。
+ *   - 🔴 **`danger` 只給「會刪東西、不可逆」的動作**(真正刪除 / 硬刪除)。下架、移除、取消這類**有「恢復」
+ *     可以回頭的可逆動作 = 一般項目**,不標紅。理由:把可逆動作也標紅,人會對紅色麻木,真正不可逆的
+ *     「真正刪除」就失去警示效果(2026-09-29 主腦裁決,推翻第 1 批把下架 / 移除也標紅的做法)。
+ *   - 🔴 **會跳頁的項目用 `to`,不要用 onSelect + navigate()**:底層會用 `DropdownMenuItem asChild` 包
+ *     `<Link>`,選單外觀不變,但保有右鍵 / 中鍵「在新分頁開啟」的能力(每天用的人會靠這個)。
  *   - 🔴 列表一律卡片式,不做多欄表格(skill 一、核心原則)。
  *
  * 用法:
@@ -17,12 +26,20 @@
  *     tags={<><StatusTag tone="success">已上架</StatusTag><AttributeTag>抽成制</AttributeTag></>}
  *     meta={<span>0912-345-678</span>}
  *     primaryAction={<Button variant="neutral" size="card">編輯</Button>}
- *     menuItems={[{ label: "修改登入信箱", onSelect: ... }, { label: "移除", danger: true, onSelect: ... }]}
+ *     menuItems={[
+ *       { label: "邀請登入", onSelect: ... },                   // 一般項目(按了做事)
+ *       { label: "服務人員權限", to: `/app/staff/${id}/permissions` }, // 跳頁項目(真正的連結)
+ *       { label: "移除", onSelect: ... },                       // 可逆 ⇒ 一般項目,不標紅
+ *       { label: "真正刪除", danger: true, onSelect: ... },     // 不可逆 ⇒ 紅字、分隔線下方
+ *     ]}
  *   />
+ *
+ * ⚠️ 這裡改動會影響全站所有列表,改之前先讀 .claude/skills/ui-overlay-patterns/SKILL.md。
  */
 
 import * as React from "react";
 import { MoreHorizontal } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,12 +51,47 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-export interface ListCardMenuItem {
+interface ListCardMenuItemBase {
   label: React.ReactNode;
-  onSelect: () => void;
-  /** 危險項:紅字,自動排在分隔線下方(不管在陣列裡的順序)。 */
+  /** 危險項:紅字,自動排在分隔線下方(不管在陣列裡的順序)。🔴 只給不可逆的「真正刪除」類動作。 */
   danger?: boolean | undefined;
   disabled?: boolean | undefined;
+}
+
+/** 按了做事的一般項目。 */
+interface ListCardActionMenuItem extends ListCardMenuItemBase {
+  onSelect: () => void;
+  to?: undefined;
+}
+
+/** 會跳頁的項目:底層是真正的 <Link>,可以右鍵 / 中鍵開新分頁。 */
+interface ListCardLinkMenuItem extends ListCardMenuItemBase {
+  to: string;
+  onSelect?: undefined;
+}
+
+export type ListCardMenuItem = ListCardActionMenuItem | ListCardLinkMenuItem;
+
+const MENU_ITEM_CLASS = "h-10 cursor-pointer";
+const MENU_ITEM_DANGER_CLASS = "h-10 cursor-pointer text-destructive focus:text-destructive";
+
+function MenuItem({ item, className }: { item: ListCardMenuItem; className: string }) {
+  if (item.to !== undefined) {
+    return (
+      <DropdownMenuItem asChild disabled={item.disabled ?? false} className={className}>
+        <Link to={item.to}>{item.label}</Link>
+      </DropdownMenuItem>
+    );
+  }
+  return (
+    <DropdownMenuItem
+      disabled={item.disabled ?? false}
+      onSelect={() => item.onSelect()}
+      className={className}
+    >
+      {item.label}
+    </DropdownMenuItem>
+  );
 }
 
 export type ListCardState = "default" | "attention" | "inactive";
@@ -151,27 +203,17 @@ export function ListCard({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="min-w-[180px]">
                 {normalItems.map((item, index) => (
-                  <DropdownMenuItem
-                    key={index}
-                    disabled={item.disabled ?? false}
-                    onSelect={() => item.onSelect()}
-                    className="h-10 cursor-pointer"
-                  >
-                    {item.label}
-                  </DropdownMenuItem>
+                  <MenuItem key={index} item={item} className={MENU_ITEM_CLASS} />
                 ))}
                 {normalItems.length > 0 && dangerItems.length > 0 ? (
                   <DropdownMenuSeparator />
                 ) : null}
                 {dangerItems.map((item, index) => (
-                  <DropdownMenuItem
+                  <MenuItem
                     key={`danger-${index}`}
-                    disabled={item.disabled ?? false}
-                    onSelect={() => item.onSelect()}
-                    className="h-10 cursor-pointer text-destructive focus:text-destructive"
-                  >
-                    {item.label}
-                  </DropdownMenuItem>
+                    item={item}
+                    className={MENU_ITEM_DANGER_CLASS}
+                  />
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>

@@ -6,7 +6,7 @@
  *
  * | 狀態 | 做法 |
  * |---|---|
- * | EmptyState 空的 | 圖示 + 一句「還沒有○○」+ 一句「做了之後能幹嘛」+ 🔴 一顆下一步按鈕。只寫「目前沒有資料」等於把人丟在那裡 |
+ * | EmptyState 空的 | 圖示 + 一句「還沒有○○」+ 一句「做了之後能幹嘛」+ 🔴 一顆下一步按鈕。只寫「目前沒有資料」等於把人丟在那裡。唯一例外見 EmptyStateProps.action 的說明 |
  * | LoadingSkeleton 載入中 | 灰色骨架方塊,不要用「載入中⋯」四個字。骨架讓人覺得快,而且資料進來時版面不會跳 |
  * | ErrorState 出錯 | 講三件事:什麼壞了 / 可能原因 / 下一步,外加一句 🔴「你的資料沒有遺失」讓人安心 |
  */
@@ -77,10 +77,15 @@ interface EmptyStateProps {
   icon?: React.ReactNode | undefined;
   /** 「還沒有○○」 */
   title: React.ReactNode;
-  /** 「做了之後能幹嘛」 */
+  /** 「做了之後能幹嘛」;沒有 action 時,這裡要順便指路(例:「用上方的邀請表單新增客服」)。 */
   description?: React.ReactNode | undefined;
-  /** 🔴 下一步按鈕(必填)。 */
-  action: React.ReactNode;
+  /**
+   * 🔴 下一步按鈕。skill 二之八寫「空狀態一定要有一顆下一步按鈕」,那條的**精神**是「不要把人丟在那裡」。
+   * 所以只有一種情況可以不給:**下一步就在同一個畫面上、而且一眼看得到**(例如客服名單的邀請表單
+   * 就在空狀態正上方)——這時候硬做一顆「聚焦上方欄位」的按鈕反而脆弱又多餘,改在 description
+   * 用一句話指路就夠了。**下一步不在這個畫面上(要開對話框、要跳頁)的,一律要給按鈕,不是漏做。**
+   */
+  action?: React.ReactNode | undefined;
   className?: string | undefined;
 }
 
@@ -101,7 +106,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
           <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
         ) : null}
       </div>
-      {action}
+      {action ?? null}
     </div>
   );
 }

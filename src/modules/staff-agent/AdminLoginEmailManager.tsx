@@ -37,8 +37,8 @@ import type { LoginEmailStatus } from "./api";
  *
  * 標籤改用 skill 二之四的三類:「已建議新信箱,待本人確認套用」是要人去處理的 → 待辦標籤(TodoTag);
  * 「待驗證變更中,尚未生效」是進行中的狀態 → 狀態標籤(StatusTag warning)。
- * 兩個標籤裡都夾著使用者自填的 email,長度不固定,所以把 Tags 預設的 whitespace-nowrap 放開
- * (whitespace-normal + break-all),320px 才不會撐爆卡片。
+ * 兩個標籤裡都夾著使用者自填的 email,長度不固定,所以開 Tags 的 `wrap`(允許任意字元折行),
+ * 320px 才不會撐爆卡片。
  */
 export function LoginEmailStatusDisplay({
   statusQuery,
@@ -55,12 +55,10 @@ export function LoginEmailStatusDisplay({
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
       <span className="break-all">登入信箱:{status.currentLoginEmail ?? "-"}</span>
       {status.pendingAdminSuggestedEmail ? (
-        <TodoTag className="whitespace-normal break-all text-left">
-          已建議新信箱「{status.pendingAdminSuggestedEmail}」,待本人確認套用
-        </TodoTag>
+        <TodoTag wrap>已建議新信箱「{status.pendingAdminSuggestedEmail}」,待本人確認套用</TodoTag>
       ) : null}
       {status.pendingConfirmationEmail ? (
-        <StatusTag tone="warning" className="whitespace-normal break-all text-left">
+        <StatusTag tone="warning" wrap>
           待驗證變更中(新信箱:{status.pendingConfirmationEmail}),尚未生效
         </StatusTag>
       ) : null}
