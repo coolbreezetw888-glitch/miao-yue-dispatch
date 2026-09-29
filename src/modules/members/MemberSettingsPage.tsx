@@ -36,8 +36,14 @@
 //     比照 skill 二之七金額欄位的同一個理由)。驗證沒變(仍然是 `Number(sortOrder) || 0`)。
 //   - 會員等級清單改 ListCard(二之五)+ StatusTag(二之四);右側只放「一顆主要動作 + 一個 ⋯」:
 //     「編輯」永遠是主要動作,已下架的換成「重新上架」;「下架」收進 ⋯ 且**不標紅**(可逆)。
-//   - 「新增等級」「儲存」分別是各自卡片的 ① 主要按鈕,「預覽效果」是 ② 次要(二之三)。
-//   - 沒有任何等級時改 EmptyState,附一顆「新增等級」下一步按鈕(二之八)。
+//   - 🔴 2026-09-30 修正(品管第二次打回,必修-2):原本寫「新增等級」「儲存」分別是各自卡片的
+//     ① 主要按鈕 —— **那是錯的**。「會員政策」卡跟 `MemberTiersCard` 同時渲染在同一個 `<main>`
+//     (沒有分頁、沒有條件分支),所以這是**同一個畫面上兩顆 primary**,違反二之三。
+//     使用者裁決:「儲存」留 primary,「新增等級」改 ② 次要(neutral);「預覽效果」也是 ② 次要。
+//     📌 通則:「一個畫面只能有一顆主要按鈕」的判斷單位是**整個畫面**,不是單張卡片。
+//     (等級編輯小卡窗裡那顆 primary 是 overlay 內部,不算同一個畫面,維持 primary。)
+//   - 沒有任何等級時改 EmptyState(二之八);**刻意不放下一步按鈕** —— 下一步就在空狀態正上方的
+//     卡片標題列,再放一顆是同一個動作的兩個實例,改在文案裡指路(見 createTrigger 的註解)。
 //
 // **只動外觀,不動行為**:整列 upsert 的 saveSettings(把這頁沒有 UI 的欄位原樣回填)、
 // 等級的新增 / 編輯 / 下架 / 重新上架 API、政策內容的自動長高、toast 文案全部照舊。
@@ -317,14 +323,24 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
   /** 新增等級的按鈕(只放在卡片右上角一處)。
    *  📌 空狀態刻意**不再放一顆**:EmptyState.action 的例外條款 —— 下一步就在空狀態正上方的
    *     卡片標題列、一眼看得到,再放一顆會變成同一張卡片上兩顆 primary(違反 skill 二之三),
-   *     而且是同一個動作的兩個實例。改在空狀態文案裡指路。 */
+   *     而且是同一個動作的兩個實例。改在空狀態文案裡指路。
+   *
+   *  🔴 2026-09-30(品管第二次打回,必修-2):這顆從 ① 主要改成 ② 次要(neutral)。
+   *     原因:`MemberTiersCard` 跟上面的「會員政策」卡**同時渲染在同一個 `<main>` 裡**
+   *     (沒有分頁、也沒有條件分支),所以整個畫面會同時出現兩顆 primary
+   *     ——會員政策的「儲存」+ 這顆「新增等級」,違反 skill 二之三「一個畫面只能有一顆」。
+   *     **使用者裁決:「儲存」留 primary,「新增等級」改次要。**
+   *     使用者原話:「如果一定必須選一個,我會選儲存」。
+   *     ⚠️ 不要因為「它是這張卡片的主要動作」就改回 primary —— 判斷單位是**整個畫面**,
+   *     不是單張卡片(同一批的 LineEventSettingsPage 5 張卡、PushEventSettingsPage 4 張卡
+   *     都是照這條做的)。等級編輯小卡窗裡那顆 primary 是 overlay 內部、不算同一個畫面,
+   *     維持 primary。 */
   const createTrigger = (
     <TierFormDialog
       merchantId={merchantId}
       tier={null}
       trigger={
-        // 這張卡片的 ① 主要動作。
-        <Button type="button" variant="primary" size="touch">
+        <Button type="button" variant="neutral" size="touch">
           新增等級
         </Button>
       }
@@ -505,7 +521,9 @@ function MemberSettingsPageInner() {
               </FormField>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* 這張卡片的 ① 主要動作。 */}
+                {/* 🔴 這**整個畫面**唯一的 ① 主要動作(2026-09-30 使用者裁決:「如果一定必須
+                    選一個,我會選儲存」)。下面的「會員等級」卡跟這張卡同時顯示在同一個 <main>,
+                    所以那張卡的「新增等級」是 ② 次要,不要兩邊都做成 primary。 */}
                 <Button
                   type="button"
                   variant="primary"
