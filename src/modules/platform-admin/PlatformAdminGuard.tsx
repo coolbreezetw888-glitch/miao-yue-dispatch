@@ -6,6 +6,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { GuardLoading } from "@/components/patterns";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { amIPlatformAdmin } from "./api";
@@ -54,11 +55,7 @@ export function PlatformAdminGuard({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   if (status !== "allowed") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   return <>{children}</>;

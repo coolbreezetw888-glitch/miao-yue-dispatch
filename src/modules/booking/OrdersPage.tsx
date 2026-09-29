@@ -38,6 +38,10 @@
 //   - 分頁控制項按鈕改次要樣式、每頁筆數改 FieldNativeSelect;載入中改骨架、空狀態改 EmptyState;
 //     頁首改 PageHeader;無權限提示改 EmptyState。
 // **只動外觀與版面,不動任何行為**:查詢參數、分頁、每頁筆數記憶、統計數字全部照舊。
+//
+// ui-v1-full 收尾批(2026-09-30 使用者裁決,SPECS-INDEX #832):訂單卡片的狀態膠囊改成
+// 「實心填入商家自訂的那個顏色、文字依底色自動挑黑或白」(StatusTag 的 fillColor)。
+// 四種狀態一律實心,左側 4px 色條維持現狀不拿掉。詳見 OrderCard 裡 tags 那段的說明。
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -103,6 +107,7 @@ import {
   bookingCardHoverBorderColor,
   bookingStatusTone,
   DEFAULT_BOOKING_STATUS_COLORS,
+  getBookingStatusColor,
   type Booking,
   type BookingStatus,
   type BookingStatusColorMap,
@@ -608,7 +613,20 @@ function OrderCard({
         } as CSSProperties
       }
       title={serviceItemNames.length > 0 ? serviceItemNames.join("、") : "(無服務項目資料)"}
-      tags={<StatusTag tone={bookingStatusTone(status)}>{BOOKING_STATUS_LABELS[status]}</StatusTag>}
+      tags={
+        // 🔴 2026-09-30 使用者裁決(SPECS-INDEX #832):狀態膠囊改成「實心填入商家自訂的那個
+        // 顏色 + 自動挑黑白字」。原因:「待確認」的預設色 #ebaa2d 剛好跟待確認卡片的淡黃底
+        // 撞色,左側色條整個融進黃底看不見,那顆淺黃膠囊也失去膠囊感。實心之後不管商家把顏色
+        // 改成什麼,在白底 / 黃底 / 灰底上都看得見,不會再出現「剛好撞色就消失」。
+        // 🔴 四種狀態一律實心(不是只改待確認那一顆)—— 只改一顆會變成同一排卡片兩種膠囊樣式。
+        // 🔴 左側那條 4px 色條維持現狀,沒有拿掉:白底卡片上它仍然有用。
+        <StatusTag
+          tone={bookingStatusTone(status)}
+          fillColor={getBookingStatusColor(statusColors, status)}
+        >
+          {BOOKING_STATUS_LABELS[status]}
+        </StatusTag>
+      }
       meta={
         <div className="flex flex-col gap-0.5">
           <span>

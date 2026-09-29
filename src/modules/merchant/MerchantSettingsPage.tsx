@@ -65,6 +65,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { acquireBottomActionBarSlot, BOTTOM_LAYER_ACTION_BAR } from "@/lib/bottomFixedLayers";
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
+import { solidFillStyle } from "@/lib/readableTextColor";
 import { cn } from "@/lib/utils";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -495,8 +496,9 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>訂單狀態顏色設定</CardTitle>
         <CardDescription>
-          自訂 4 種訂單狀態在行事曆、訂單管理頁顯示的代表色。這次不強制檢查顏色搭配文字是否夠清楚,
-          請自行參考右側的即時預覽色塊判斷。
+          自訂 4 種訂單狀態在行事曆、訂單管理頁顯示的代表色。訂單卡片上的狀態標籤會實心填入這個顏色,
+          文字會自動選黑色或白色(挑看得比較清楚的那一個),所以挑淺色也不會看不到字。
+          右側色塊就是實際會顯示的樣子。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">
@@ -523,10 +525,14 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
                   value={form[key]}
                   onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
-                {/* 即時預覽色塊,跟搬家前行為一致。 */}
+                {/* 即時預覽色塊。🔴 2026-09-30(SPECS-INDEX #832):原本文字色寫死 "#ffffff",
+                    商家挑淺色時預覽框裡的白字自己就看不見 —— 而且訂單卡片的狀態膠囊現在會
+                    「依底色自動挑黑或白」,預覽如果還固定白字,就等於騙商家(他看到看不清的白字,
+                    實際畫面卻是黑字)。改成套用跟膠囊完全同一支純函式 solidFillStyle,
+                    預覽 = 實際。 */}
                 <span
-                  className="ml-auto shrink-0 rounded-md border border-border px-3 py-1 text-xs font-medium"
-                  style={{ backgroundColor: form[key], color: "#ffffff" }}
+                  className="ml-auto shrink-0 rounded-full border px-3 py-1 text-xs font-medium"
+                  style={solidFillStyle(form[key])}
                 >
                   預覽文字
                 </span>

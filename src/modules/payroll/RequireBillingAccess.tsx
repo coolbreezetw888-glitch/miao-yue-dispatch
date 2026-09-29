@@ -12,6 +12,7 @@
 
 import type { ReactNode } from "react";
 
+import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
@@ -27,11 +28,7 @@ export function RequireBillingAccess({ children }: { children: ReactNode }) {
   const allowed = isAdmin || isAuthorizedAgent;
 
   if (loading || !merchant) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   if (!allowed) {

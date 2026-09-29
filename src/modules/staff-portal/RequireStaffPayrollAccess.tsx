@@ -19,6 +19,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
 import { useActiveMyStaffRecord, useMyStaffPermission } from "./context";
@@ -52,11 +53,7 @@ export function RequireStaffPayrollAccess({ children }: { children: ReactNode })
   }, [shouldRedirect, navigate]);
 
   if (loading || !merchant || !isStaffSelf) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   if (hasPermission !== true) {

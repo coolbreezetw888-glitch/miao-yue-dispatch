@@ -11,7 +11,10 @@
  *   TodoTag      要你去處理(尚未開通登入)。黃底 + `!`。
  *
  * 🔴 顏色不能是唯一的差別(色盲看不出紅綠)—— 每個標籤都要有文字,這裡的圓點只是輔助。
- * 🔴 不用實心色塊。
+ * 🔴 不用實心色塊。**唯一例外:StatusTag 的 `fillColor`**(2026-09-30 使用者裁決,
+ *    SPECS-INDEX #832)—— 顏色是商家自己挑的那一種情境,淺底膠囊會跟卡片底色撞色整個消失
+ *    (預設的「待確認」#ebaa2d 撞上黃卡就是這樣),所以改成實心填滿商家的色 + 自動挑黑白字。
+ *    詳見 fillColor 那個 prop 的說明。其他標籤維持「不用實心色塊」。
  *
  * `wrap`:標籤預設一行不折(whitespace-nowrap),因為短標籤折行會很醜。但標籤裡夾著使用者自填的
  * 文字(登入信箱、客戶名)時,320px 會撐爆卡片 ⇒ 給 `wrap` 讓它能在任意字元折行(email 沒有空白
@@ -23,6 +26,7 @@
 import * as React from "react";
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { solidFillStyle } from "@/lib/readableTextColor";
 import { cn } from "@/lib/utils";
 
 export type StatusTone = "success" | "warning" | "neutral" | "danger";
@@ -53,19 +57,52 @@ function wrapClass(wrap: boolean | undefined) {
 
 interface StatusTagProps extends Omit<BadgeProps, "variant">, WrapProps {
   tone: StatusTone;
+  /**
+   * 🔴 逃生門,只給「顏色是商家自己在設定裡挑的、build 時不知道是什麼色」的情境用。
+   * 目前唯一的使用點:訂單管理 / 行事曆的訂單狀態膠囊(商家設定 > 訂單狀態顏色設定,
+   * SPECS-INDEX #832)。**其他頁面的 StatusTag 不吃商家自訂色,不要為了統一而到處傳這個。**
+   *
+   * 給了之後這顆膠囊變成「實心填滿這個顏色」:
+   *   - 文字顏色由 readableTextColorOn() 依底色亮度自動挑黑或白,**不寫死白字**——
+   *     商家可能挑很淺的黃色,白字會完全看不見(2026-09-30 使用者裁決)。
+   *   - 左邊那顆小圓點改成 bg-current(跟文字同色),否則圓點會用 tone 的固定色、
+   *     在商家自訂的底色上有機率整個看不見(這次要修的就是這種「撞色就消失」)。
+   *   - 邊框用文字色的 25% 透明度,保證商家挑接近白色時膠囊輪廓還在。
+   *
+   * 沒給的時候(全站其他所有使用點)渲染結果跟改版前完全一樣:淺底 + 深字 + tone 色圓點。
+   *
+   * 📌 做法跟 ListCard 的 `style` prop(第 2 批為了訂單卡片左側色條加的)同一個立場:
+   *    動態顏色沒辦法寫成 Tailwind class(build 時就固定了),只能走 inline style;
+   *    所以開一個**明確標示用途**的 opt-in 插槽,而不是放寬公版樣式。
+   */
+  fillColor?: string | undefined;
 }
 
-export function StatusTag({ tone, wrap, className, children, ...props }: StatusTagProps) {
+export function StatusTag({
+  tone,
+  wrap,
+  fillColor,
+  className,
+  style,
+  children,
+  ...props
+}: StatusTagProps) {
+  const solid = fillColor ? solidFillStyle(fillColor) : undefined;
   return (
     <Badge
       variant={STATUS_VARIANT[tone]}
       className={cn("gap-1.5", wrapClass(wrap), wrap && "items-start", className)}
+      style={solid ? { ...solid, ...style } : style}
       {...props}
     >
       {/* 折行時圓點對齊第一行(text-xs 行高 16px,圓點 6px ⇒ 往下推 5px)。 */}
       <span
         aria-hidden="true"
-        className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT[tone], wrap && "mt-[5px]")}
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          solid ? "bg-current" : STATUS_DOT[tone],
+          wrap && "mt-[5px]",
+        )}
       />
       {children}
     </Badge>

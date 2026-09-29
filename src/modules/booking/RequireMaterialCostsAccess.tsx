@@ -9,6 +9,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
@@ -33,11 +34,7 @@ export function RequireMaterialCostsAccess({ children }: { children: ReactNode }
   }, [merchant, allowed, loading, navigate]);
 
   if (loading || !merchant || !allowed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   return <>{children}</>;

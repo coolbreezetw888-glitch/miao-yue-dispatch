@@ -8,6 +8,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useCurrentMerchantRole } from "./context";
 
@@ -24,11 +25,7 @@ export function RequireMerchantAdmin({ children }: { children: ReactNode }) {
   }, [merchant, merchantLoading, role, roleLoading, navigate]);
 
   if (merchantLoading || roleLoading || !merchant || role !== "admin") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    return <GuardLoading />;
   }
 
   return <>{children}</>;

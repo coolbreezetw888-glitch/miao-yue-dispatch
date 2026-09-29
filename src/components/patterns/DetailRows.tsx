@@ -9,6 +9,7 @@
  *   4. 標籤縮小變淡(13px 灰)、值變粗 —— 值才是主角
  *   5. 數字一律 tabular-nums
  *   6. DetailLinkRow  「去別的地方看」做成可點的列 + ›,不是整條寬的按鈕(相關訂單、操作記錄)
+ *      🔴 會跳到別的網址的用 `to`(真正的 <a href>,可以中鍵開新分頁),原地做事的才用 `onClick`。
  *
  * 🔴 電話與地址做成可點擊(DetailPhoneRow / DetailAddressRow):tel: 直接撥號、開地圖導航;
  *    **各佔一行,不要並排**,地址那行要能折行。
@@ -19,6 +20,7 @@
 
 import * as React from "react";
 import { ChevronRight, Lock, MapPin, Phone } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 
@@ -222,25 +224,72 @@ export function DetailLinkRows({
   );
 }
 
-interface DetailLinkRowProps {
+interface DetailLinkRowBaseProps {
   label: React.ReactNode;
   /** 右側的次要文字,例如「2 筆」。 */
   extra?: React.ReactNode | undefined;
-  onClick: () => void;
   disabled?: boolean | undefined;
 }
 
-export function DetailLinkRow({ label, extra, onClick, disabled }: DetailLinkRowProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled ?? false}
-      className="flex h-12 w-full cursor-pointer items-center gap-2.5 px-1 text-left text-sm text-foreground transition-colors hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <span className="min-w-0 flex-1">{label}</span>
+/** 純動作:按了在原地做事(展開子面板、打開另一個彈窗),不會離開目前的網址。 */
+interface DetailLinkRowActionProps extends DetailLinkRowBaseProps {
+  onClick: () => void;
+  to?: undefined;
+}
+
+/** 跳頁:底層是真正的 <Link>(渲染成 <a href>),可以中鍵 / 右鍵「在新分頁開啟」。 */
+interface DetailLinkRowLinkProps extends DetailLinkRowBaseProps {
+  to: string;
+  onClick?: undefined;
+}
+
+/**
+ * 🔴 **跳頁用 `to`、純動作用 `onClick`,不要用 `onClick` + `navigate()`。**
+ *
+ * `to` 會渲染成真正的 `<a href>`,使用者才能中鍵 / 右鍵「在新分頁開啟」——
+ * 每天要開很多筆的人(客服核對訂單、看會員推薦名單)就是靠這個。`onClick` + `navigate()`
+ * 外觀一模一樣,但那是一顆 `<button>`,中鍵點下去什麼都不會發生,而且使用者不會來回報,
+ * 他只會覺得「這個系統很難用」。這是第 1 批就定案的裁決,ListCard 的選單項目(`to`)
+ * 走的是同一條規則。
+ *
+ * `disabled` 對兩種都有效:給 `to` 時會退化成不可點的一列(`<a>` 沒有 disabled 屬性,
+ * 所以不渲染 `<a>`,改渲染一個 `aria-disabled` 的 div,避免鍵盤還能 Tab 進去按下去)。
+ */
+export type DetailLinkRowProps = DetailLinkRowActionProps | DetailLinkRowLinkProps;
+
+// h-12 改 min-h-12:label 現在可能夾著狀態標籤等會折行的內容(例:會員詳情的推薦名單),
+// 固定高度會讓折到第二行的內容直接溢出到隔壁列上面。單行時的視覺高度完全沒變。
+const LINK_ROW_CLASS =
+  "flex min-h-12 w-full cursor-pointer items-center gap-2.5 px-1 py-1.5 text-left text-sm text-foreground no-underline transition-colors hover:bg-accent/60 disabled:cursor-not-allowed disabled:opacity-50";
+
+export function DetailLinkRow({ label, extra, onClick, to, disabled }: DetailLinkRowProps) {
+  const inner = (
+    <>
+      {/* label 可能是「名稱 + 好幾顆標籤」,320px 要能折行(flex-wrap),不是被截斷。 */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">{label}</span>
       {extra ? <span className="shrink-0 text-xs text-muted-foreground">{extra}</span> : null}
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </>
+  );
+
+  if (to !== undefined) {
+    if (disabled) {
+      return (
+        <div aria-disabled="true" className={cn(LINK_ROW_CLASS, "cursor-not-allowed opacity-50")}>
+          {inner}
+        </div>
+      );
+    }
+    return (
+      <Link to={to} className={LINK_ROW_CLASS}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} disabled={disabled ?? false} className={LINK_ROW_CLASS}>
+      {inner}
     </button>
   );
 }
