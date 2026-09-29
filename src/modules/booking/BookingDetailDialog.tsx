@@ -123,6 +123,7 @@ function RelatedBookingsView({
       ) : bookings.length === 0 ? (
         <EmptyState
           title="這位客戶目前沒有其他訂單紀錄"
+          description="之後這位客戶再預約,會自動列在這裡,方便對照上次做過什麼。"
           action={
             <Button type="button" variant="neutral" size="touch" onClick={onBack}>
               返回訂單詳情
@@ -192,6 +193,7 @@ function StatusChangeLogsView({
       ) : logs.length === 0 ? (
         <EmptyState
           title="目前沒有任何操作紀錄"
+          description="之後有人確認、完成或取消這筆訂單,會記在這裡,可以查是誰、什麼時候改的。"
           action={
             <Button type="button" variant="neutral" size="touch" onClick={onBack}>
               返回訂單詳情

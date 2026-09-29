@@ -30,7 +30,9 @@ const buttonVariants = cva(
         //   ④ text     無底無框、主題色字 —— 很次要的動作
         // 顏色吃 --brand(商家主題色會覆寫它),不用 --primary(主題色不會覆寫 --primary)。
         // ─────────────────────────────────────────────────────────────────
-        primary: "bg-brand text-brand-foreground font-semibold shadow-sm hover:bg-brand/90",
+        // QA D2:補 border-transparent,跟 neutral / danger 一樣佔 1px 邊框,底部三顆等寬時才不會差 2px。
+        primary:
+          "border border-transparent bg-brand text-brand-foreground font-semibold shadow-sm hover:bg-brand/90",
         neutral: "border border-input bg-background text-foreground shadow-sm hover:bg-accent",
         danger:
           "border border-destructive/40 bg-background text-destructive shadow-sm hover:bg-destructive-soft",

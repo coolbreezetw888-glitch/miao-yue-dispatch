@@ -83,17 +83,27 @@ const VALUE_CLASS: Record<NonNullable<DetailRowProps["size"]>, string> = {
 };
 
 export function DetailRow({ label, size = "md", className, children }: DetailRowProps) {
+  // 🔴 QA D1(2026-09-29)兩側都可能是商家自己填的動態文字(標籤 = 「服務項目名稱 × 數量」,
+  // 值 = 客戶姓名 / 會員姓名),所以不能任何一側 shrink-0、另一側 min-w-0 —— 那只是把「誰被壓成 0 寬」
+  // 換一邊。這裡的規則:
+  //   值:flex 預設(basis = 內容寬、不主動搶空間),用 max-w-[70%] 封頂。因為沒有 min-w-0,
+  //       flex 的自動最小寬度 = 內容寬(再被 max-w 夾住),所以「$1,000」「11:00 – 12:00」這種
+  //       數字永遠拿得到自己的完整寬度,不會被擠成一個字一行直排;超過 70% 的長文字(姓名、
+  //       email)才在 70% 內折行。
+  //   標籤:flex-1(basis 0)只拿值剩下的空間,所以永遠 ≥ 30% − gap、永遠不會是 0;長名稱在
+  //       這個空間內折行,min-w-0 + break-words 是給沒有斷行點的英文 / email 用的。
+  // 320px 實測(22 字項目名 × 26px 金額)見 commit 訊息。
   return (
     <div className={cn("flex items-baseline justify-between gap-3", className)}>
       <span
         className={cn(
-          "shrink-0 text-[13px]",
+          "min-w-0 flex-1 break-words text-[13px]",
           size === "xl" ? "text-sm font-bold text-foreground" : "text-muted-foreground",
         )}
       >
         {label}
       </span>
-      <span className={cn("min-w-0 break-words text-right tabular-nums", VALUE_CLASS[size])}>
+      <span className={cn("max-w-[70%] break-words text-right tabular-nums", VALUE_CLASS[size])}>
         {children}
       </span>
     </div>
