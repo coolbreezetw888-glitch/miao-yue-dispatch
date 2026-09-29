@@ -32,6 +32,7 @@ import {
   ListCard,
   LoadingSkeleton,
   PageHeader,
+  parseAmountInput,
   StatusTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
@@ -80,15 +81,17 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
   }, [taxSettings]);
 
   async function handleSave() {
-    const numericValue = Number(taxValue);
-    if (Number.isNaN(numericValue) || numericValue < 0) {
-      toast.error("請輸入正確的數字");
+    // 🔴 2026-09-30:原本是 `Number(taxValue)` + `Number.isNaN` + `< 0`,那個組合放行了
+    // 固定金額模式的 `Infinity`(`Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false),
+    // 以及 `1e3` → 1000、`0x10` → 16。這一欄是原生 `type="number"`,但這張卡沒有 `<form>`、
+    // 儲存鈕是 `type="button"` + onClick ⇒ 原生 min / max 從來不會觸發,擋不住任何東西。
+    // 改走全站共用的 parseAmountInput(百分比模式順便把 0~100 的上限交給它一起檢查)。
+    const parsed = parseAmountInput(taxValue, taxMode === "percentage" ? { max: 100 } : {});
+    if (!parsed.ok) {
+      toast.error(parsed.error);
       return;
     }
-    if (taxMode === "percentage" && numericValue > 100) {
-      toast.error("百分比模式下,數字必須介於 0~100 之間");
-      return;
-    }
+    const numericValue = parsed.value;
     setSaving(true);
     try {
       await upsertMerchantTaxSettings(merchantId, { taxMode, taxValue: numericValue });
@@ -156,8 +159,21 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
                          用不到 FieldAmountInput(那個元件的重點就是左側 `$`)。
                       2. 它同時要吃 0~100(百分比)跟任意金額(固定金額)兩種範圍,原生的
                          min / max 會隨 taxMode 換,是這裡最省事也最不會錯的做法。
-                    其他金額欄位(料錢成本 / 每天扣固定金額 / 月薪)是 FieldAmountInput + text,
-                    所以要靠 parseAmountInput 驗證;這一欄有原生約束,不需要。 */}
+                    🔴 **全站 FieldAmountInput(type="text")的完整清單,要靠 parseAmountInput 驗證**
+                    ——2026-09-30 這份清單只列了前 3 個,建單表單那 4 個被漏掉,結果那 4 格整批沒接上
+                    驗證(折扣填 `abc` 會讓最終金額變 NaN 還能送出)。**新增 FieldAmountInput 使用點時
+                    一定要把它加進這份清單**,不然下一次還是會漏:
+                      1. 料錢成本金額(`MaterialCostsPage.tsx`)
+                      2. 每天扣固定金額(`LeaveDeductionRuleDialog.tsx`,integerOnly)
+                      3. 月薪(`PayrollSettingsPage.tsx`,integerOnly)
+                      4. 服務項目價格(`ServiceItemsPage.tsx`)
+                      5~8. 建單 / 編輯預約表單 4 格(`CalendarPage.tsx`):自訂總金額、折扣金額、
+                         稅額、每個已選服務項目的單價 —— 解析集中在 `bookingAmountFields.ts`
+                    這一欄(商家稅金設定)不是 FieldAmountInput,但它**也不能靠原生約束**:
+                    🔴 原生 min / max 只在「外面包著 `<form>`、送出鈕是 `type="submit"`」時才會觸發,
+                    而這張稅金設定卡沒有 `<form>`、儲存鈕是 `type="button"` + onClick
+                    ⇒ 原生約束從來不會跑。所以它的 handleSave 一樣改用 parseAmountInput
+                    (2026-09-30,原本的 `Number()` + `Number.isNaN` 放行了固定金額模式的 `Infinity`)。 */}
                 <FieldInput
                   id="merchant-tax-value"
                   type="number"

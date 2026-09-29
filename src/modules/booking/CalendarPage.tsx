@@ -24,6 +24,14 @@
 //     空狀態改 EmptyState(+ 下一步);時間軸格線套 skill 六:時間欄固定在左邊(sticky)、服務人員欄有最小
 //     寬度、右緣漸層陰影暗示還有內容。手勢(#641 點擊 vs 拖曳、#811 長按拖拉)完全不動。
 // **只動外觀與版面,不動任何行為**:所有驗證、送出、金額 / 工時計算、#829 的鎖定判斷、幽靈空值防護照舊。
+//
+// 🔴 2026-09-30 回歸修正(品管第二次打回):上面那句「不動任何行為」在金額欄位上是錯的 ——
+// 把 `type="number" min={0} step="1"` 換成 `FieldAmountInput`(`type="text"`)就等於把原生約束拆掉了,
+// 而本檔 4 個金額欄位(自訂總金額 / 折扣金額 / 稅額 / 每個已選服務項目的單價)當時都沒補上驗證,
+// 送出路徑也還是裸 `Number()`(預覽 5 處 + 送出 4 處,共 9 處)。現在一律走
+// `bookingAmountFields.ts` 的 `resolveBookingAmountFields`,**預覽、#829 單價調整判定、送出 payload
+// 三處共用同一份解析結果**,任何一格解析失敗就標紅 + 送出按鈕 disabled + 底部常駐 `!` 說明原因。
+// 📌 教訓:**換掉輸入元件的 type 就是改行為**,不是純外觀改動。
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -142,6 +150,11 @@ import {
 // 2026-09-24 稽核修正(問題 1):數量欄位清空時三處 fallback 不一致(畫面顯示 $0、實際送出全額),
 // 統一走這支共用解析函式,見該檔案開頭的完整說明。
 import { parseItemQuantity } from "./itemQuantity";
+import {
+  resolveBookingAmountFields,
+  resolveEnteredUnitPrice,
+  resolveUnitPrice,
+} from "./bookingAmountFields";
 import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
@@ -563,6 +576,41 @@ export function BookingFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit, editingDetail, merchantTaxSettings]);
 
+  // 🔴 2026-09-30(品管第二次打回 + 主腦複查):四個金額欄位(自訂總金額 / 折扣金額 / 稅額 /
+  // 每個服務項目的單價)全部是 FieldAmountInput(type="text"),原生的 min / step 已經不存在,
+  // 送出路徑卻還留著 9 處裸 `Number()`。實測 `abc` 會讓最終金額變 NaN 且毫無提示就能送出,
+  // `Infinity` / `1e3` / `0x10` 也全部通過,單價填錯字會靜默算成 0 元(這項服務變免費)。
+  // 解析集中在 resolveBookingAmountFields 這一支,**畫面預覽、#829 單價調整判定、送出 payload
+  // 三處一律從這個物件取值**,不允許任何一處自己再 Number()——否則又會出現「畫面算得出來、
+  // 按儲存卻被擋」這種對不起來的狀況。完整背景見 bookingAmountFields.ts 開頭。
+  const amountFields = useMemo(
+    () =>
+      resolveBookingAmountFields({
+        serviceItemIds,
+        itemUnitPrices,
+        customTotalAmountEnabled,
+        customTotalAmount,
+        discountEnabled,
+        discountMode,
+        discountValue,
+        taxEnabled,
+        taxMode,
+        taxValue,
+      }),
+    [
+      serviceItemIds,
+      itemUnitPrices,
+      customTotalAmountEnabled,
+      customTotalAmount,
+      discountEnabled,
+      discountMode,
+      discountValue,
+      taxEnabled,
+      taxMode,
+      taxValue,
+    ],
+  );
+
   // 模組 6 §2.2 新公式:每個服務項目的工時貢獻 = duration_minutes × quantity。
   const itemsTotalDurationMinutes = useMemo(() => {
     return serviceItemIds.reduce((sum, id) => {
@@ -587,16 +635,22 @@ export function BookingFormDialog({
       // `|| 1` 不一致——數量格子清空時,畫面上的小計/最終金額會顯示 $0,後端卻收到 quantity=1
       // 存成全額,對帳時完全對不上。三處統一改用 parseItemQuantity。
       const quantity = parseItemQuantity(itemQuantities[id]);
-      const unitPrice = Number(itemUnitPrices[id] ?? "0") || 0;
+      // 🔴 2026-09-30:原本是 `Number(itemUnitPrices[id] ?? "0") || 0` —— 那個 `|| 0` 就是
+      // 「單價打錯字 → 這項服務靜默變免費」的來源。改走 resolveUnitPrice,跟 handleSubmit
+      // 送出的 unitPrice 是同一支函式、同一份解析結果;解析失敗時送出會被 amountFields.hasError 擋下。
+      const unitPrice = resolveUnitPrice(amountFields, id);
       return sum + quantity * unitPrice;
     }, 0);
-  }, [serviceItemIds, itemQuantities, itemUnitPrices]);
+  }, [serviceItemIds, itemQuantities, amountFields]);
 
   // SPECS-INDEX #829(2026-09-29 使用者巡檢回報第 5 項,裁決 Q1 採 (B) 方案):「自訂總金額」跟
   // 「逐項改單價」是兩套會互相打架的算法——已經手動改過任一個服務項目的單價之後,再用一個總金額
   // 蓋掉它,對帳時看不出哪個才是本意。任一個已勾選項目目前填的單價 ≠ 它的「基準值」,就算
-  // 「已個別調整金額」。單價欄位的解析方式刻意跟 handleSubmit 實際送出的公式(Number(x) || 0)
-  // 一致,欄位被清空時等同送出 0,也算已調整(新增/編輯兩種模式都一樣)。
+  // 「已個別調整金額」。單價欄位的解析方式刻意跟 handleSubmit 實際送出的值走同一支
+  // resolveEnteredUnitPrice(同一份 amountFields 解析結果),不再各寫一次 `Number(x) || 0`。
+  // 🔴 2026-09-30:欄位被清空、或填了 `abc` / `1e3` 這種解析不出來的字串時,回傳 null ⇒
+  // 一律視為「已調整」。舊寫法把這些都算成 0 元,雖然也算已調整,但那是靠 `|| 0` 的巧合,
+  // 不是刻意的;現在是明確判斷(而且這種情況送出本來就會被 amountFields.hasError 擋下)。
   //
   // 「基準值」依模式不同(2026-09-29 第三輪使用者裁決修正,推翻第一版「一律比對現價」的做法):
   //   ・新增預約:基準 = service_items.price 當下的值(維持第一版行為)。
@@ -618,10 +672,10 @@ export function BookingFormDialog({
       const baseline: { price: number; name: string } | undefined =
         snapshot ?? (item ? { price: Number(item.price), name: item.name } : undefined);
       if (!baseline) return [];
-      const enteredPrice = Number(itemUnitPrices[id] ?? String(baseline.price)) || 0;
+      const enteredPrice = resolveEnteredUnitPrice(amountFields, id, baseline.price);
       return enteredPrice === baseline.price ? [] : [baseline.name];
     });
-  }, [serviceItemIds, serviceItems, itemUnitPrices, isEdit, loadedUnitPriceSnapshots]);
+  }, [serviceItemIds, serviceItems, amountFields, isEdit, loadedUnitPriceSnapshots]);
   const hasAdjustedUnitPrice = adjustedUnitPriceItemNames.length > 0;
   // #829 裁決:「不自動把已經開啟的開關關掉」。所以 disabled 只擋「從關 → 開」這個方向;如果客服
   // 先開了自訂總金額、之後才去改單價,開關維持開啟、仍然可以自己關掉(不然會卡死在開啟狀態,
@@ -630,29 +684,41 @@ export function BookingFormDialog({
 
   // §4.8 金額即時預覽:跟後端 private.calculate_booking_amount 相同公式,體驗層預覽,
   // 真正落地金額由後端重算(規則 2.2)。
+  // 🔴 2026-09-30:三個值原本是 `x.trim() ? Number(x) : null`,現在一律取 amountFields 解析好的值
+  // (跟 handleSubmit 送出的完全同一份),所以不可能再把 NaN / Infinity 餵進計算公式。
+  // 有任何一格解析失敗時,直接回一個帶錯誤訊息的結果——不要拿「把壞值當 0」算出來的假金額給人看,
+  // 那正是「折扣填 abc → 最終金額 NaN 卻沒人提醒」的翻版。
   const amountPreview = useMemo(
     () =>
-      calculateBookingAmountPreview({
-        itemsSubtotal,
-        customTotalAmountEnabled,
-        customTotalAmount: customTotalAmount.trim() ? Number(customTotalAmount) : null,
-        discountEnabled,
-        discountMode,
-        discountValue: discountValue.trim() ? Number(discountValue) : null,
-        taxEnabled,
-        taxMode,
-        taxValue: taxValue.trim() ? Number(taxValue) : null,
-      }),
+      amountFields.hasError
+        ? {
+            // NaN ⇒ formatAmount 顯示「—」。刻意不顯示 $0:0 元是一個看起來合理的金額,
+            // 使用者可能以為那就是答案;「—」+ 下面的紅字才講得清楚「現在算不出來」。
+            subtotalAmount: Number.NaN,
+            discountAmount: Number.NaN,
+            taxAmount: Number.NaN,
+            finalAmount: Number.NaN,
+            error: "有金額欄位填錯了(上面標紅的那幾格),修好之後才算得出金額。",
+          }
+        : calculateBookingAmountPreview({
+            itemsSubtotal,
+            customTotalAmountEnabled,
+            customTotalAmount: amountFields.customTotalAmount.value,
+            discountEnabled,
+            discountMode,
+            discountValue: amountFields.discountValue.value,
+            taxEnabled,
+            taxMode,
+            taxValue: amountFields.taxValue.value,
+          }),
     [
+      amountFields,
       itemsSubtotal,
       customTotalAmountEnabled,
-      customTotalAmount,
       discountEnabled,
       discountMode,
-      discountValue,
       taxEnabled,
       taxMode,
-      taxValue,
     ],
   );
 
@@ -751,6 +817,14 @@ export function BookingFormDialog({
         return;
       }
     }
+    // 🔴 2026-09-30:四個金額欄位任何一格解析不出數字就擋在這裡。按鈕本身也已經 disabled
+    // (見底部 ActionBar),這一道是防呆:欄位錯誤絕對不可以只顯示紅字就讓人送出去。
+    if (amountFields.hasError) {
+      toast.error("金額欄位有填錯的地方", {
+        description: "請看金額區塊裡標紅的欄位,只能填數字和小數點。",
+      });
+      return;
+    }
     if (amountPreview.error) {
       // §4.8:金額預覽算出來的錯誤(例如折扣超過小計),體驗層先擋一次,避免明知道會被後端
       // 擋下還讓客服白跑一趟(真正的邊界仍在後端 create_booking/update_booking)。
@@ -776,7 +850,9 @@ export function BookingFormDialog({
           // 2026-09-24 稽核修正(問題 1):跟畫面上的工時加總/金額預覽走同一支解析函式,
           // 確保「畫面顯示的數量」跟「真正送出的數量」永遠是同一個數字。
           quantity: parseItemQuantity(itemQuantities[id]),
-          unitPrice: Number(itemUnitPrices[id] ?? "0") || 0,
+          // 🔴 2026-09-30:跟畫面上的 itemsSubtotal 走同一支 resolveUnitPrice(同一份解析結果),
+          // 不再各寫一次 `Number(x ?? "0") || 0`。
+          unitPrice: resolveUnitPrice(amountFields, id),
         })),
         startAt: buildTaipeiIso(dateKey, time),
         customerName,
@@ -789,14 +865,16 @@ export function BookingFormDialog({
         assistantStaffIds,
         materialCostItemIds,
         customTotalAmountEnabled,
-        customTotalAmount:
-          customTotalAmountEnabled && customTotalAmount.trim() ? Number(customTotalAmount) : null,
+        // 🔴 2026-09-30:這三個值原本是 `enabled && x.trim() ? Number(x) : null`,現在一律取
+        // amountFields 解析好的值——跟上面金額預覽用的是同一份結果,所以「畫面上看到的金額」
+        // 跟「真正送出去的金額」不可能再對不起來(開關關閉時 amountFields 本來就回 null)。
+        customTotalAmount: amountFields.customTotalAmount.value,
         discountEnabled,
         discountMode: discountEnabled ? discountMode : null,
-        discountValue: discountEnabled && discountValue.trim() ? Number(discountValue) : null,
+        discountValue: amountFields.discountValue.value,
         taxEnabled,
         taxMode: taxEnabled ? taxMode : null,
-        taxValue: taxEnabled && taxValue.trim() ? Number(taxValue) : null,
+        taxValue: amountFields.taxValue.value,
         paymentMethodId: paymentMethodValue === PAYMENT_METHOD_UNSET ? null : paymentMethodValue,
         // §4.3 邊界情況:關閉時 customDurationMinutes 一律傳 null,避免留著舊值造成混淆
         // (後端 create_booking/update_booking 也會在關閉時一律存 null,這裡是雙重保險)。
@@ -872,22 +950,32 @@ export function BookingFormDialog({
         title={isEdit ? "編輯預約" : "新增預約"}
         subtitle={!isEdit ? "建立後狀態是「待確認」,需要再次確認才會正式成立。" : undefined}
         footer={
-          <ActionBar>
-            <FullPageLayerClose asChild>
-              <Button type="button" variant="neutral" size="touch">
-                取消
+          /* 🔴 2026-09-30:金額欄位有填錯時「送出按鈕要擋住」,不能只在欄位下面顯示紅字。
+             按鈕變灰就一定要說明原因(skill 二之三:不能按的按鈕旁邊一定要有 `!` 說明),
+             所以這裡在按鈕列上方放常駐的 AlertNote,不是收進 `?`。 */
+          <div className="flex flex-col gap-2.5">
+            {amountFields.hasError ? (
+              <AlertNote>
+                金額欄位有填錯的地方(上面標紅的那幾格),修好之後才能送出。金額只能填數字和小數點。
+              </AlertNote>
+            ) : null}
+            <ActionBar>
+              <FullPageLayerClose asChild>
+                <Button type="button" variant="neutral" size="touch">
+                  取消
+                </Button>
+              </FullPageLayerClose>
+              <Button
+                type="button"
+                variant="primary"
+                size="touch"
+                disabled={saving || amountFields.hasError}
+                onClick={handleSubmit}
+              >
+                {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
               </Button>
-            </FullPageLayerClose>
-            <Button
-              type="button"
-              variant="primary"
-              size="touch"
-              disabled={saving}
-              onClick={handleSubmit}
-            >
-              {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
-            </Button>
-          </ActionBar>
+            </ActionBar>
+          </div>
         }
       >
         {/* min-w-0:內容區是 flex 容器的子項,預設 min-width:auto 會被裡面過長的文字(例如服務人員
@@ -1105,7 +1193,15 @@ export function BookingFormDialog({
                               }}
                             />
                           </FormField>
-                          <FormField label="單價" htmlFor={`booking-item-price-${item.id}`}>
+                          {/* 🔴 2026-09-30:單價是 FieldAmountInput(type="text"),沒有原生
+                              min / step,所以錯誤一律靠 parseAmountInput + FormField error=
+                              (skill 二之七:框變紅 + 下面一行 `!` 說明,不可以只把框變紅)。
+                              錯誤訊息是從目前輸入內容即時算出來的,改成正確的數字就會自己消失。 */}
+                          <FormField
+                            label="單價"
+                            htmlFor={`booking-item-price-${item.id}`}
+                            error={amountFields.unitPriceErrors[item.id] ?? null}
+                          >
                             <FieldAmountInput
                               id={`booking-item-price-${item.id}`}
                               value={itemUnitPrices[item.id] ?? String(item.price)}
@@ -1209,7 +1305,14 @@ export function BookingFormDialog({
                     </AlertNote>
                   ) : null}
                   {customTotalAmountEnabled ? (
-                    <FormField label="總金額" htmlFor="booking-custom-total" required>
+                    <FormField
+                      label="總金額"
+                      htmlFor="booking-custom-total"
+                      required
+                      error={amountFields.customTotalAmount.error}
+                      helpLabel="說明:總金額要怎麼填"
+                      help="只能填數字和小數點,例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法,也不能填文字。"
+                    >
                       <FieldAmountInput
                         id="booking-custom-total"
                         placeholder="輸入這筆訂單的總金額"
@@ -1241,9 +1344,15 @@ export function BookingFormDialog({
                       options={AMOUNT_ADJUSTMENT_MODE_OPTIONS}
                     />
                   </FormField>
+                  {/* 🔴 2026-09-30:兩種模式都掛 error。固定金額模式是 FieldAmountInput
+                      (type="text",沒有原生約束);百分比模式雖然是 type="number" + min/max,
+                      但這張表單的送出鈕是 type="button" 且外面沒有 <form>,瀏覽器的原生驗證
+                      從來不會觸發(見 handleSubmit 裡 Email 驗證那段註解),而 type="number"
+                      依 HTML 規格本來就吃 `1e3` —— 所以兩種模式一律靠 parseAmountInput 擋。 */}
                   <FormField
                     label={discountMode === "percentage" ? "折扣比例(%)" : "折扣金額"}
                     htmlFor="booking-discount-value"
+                    error={amountFields.discountValue.error}
                   >
                     {discountMode === "percentage" ? (
                       <FieldInput
@@ -1280,10 +1389,12 @@ export function BookingFormDialog({
               onCheckedChange={setTaxEnabled}
               className="bg-background"
             >
+              {/* 🔴 2026-09-30:稅額 / 稅率兩種模式都掛 error,理由同上面折扣欄位的註解。 */}
               {taxEnabled ? (
                 <FormField
                   label={taxMode === "percentage" ? "稅率(%)" : "稅額"}
                   htmlFor="booking-tax-value"
+                  error={amountFields.taxValue.error}
                 >
                   {taxMode === "percentage" ? (
                     /* §2 第 1 點:比例模式時在輸入框旁明確標示「%」,避免使用者誤以為是輸入金額。 */
