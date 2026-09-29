@@ -45,6 +45,7 @@ import {
   ListCard,
   LoadingSkeleton,
   PageHeader,
+  parseAmountInput,
   StatusTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
@@ -330,10 +331,14 @@ function ServiceItemFormDialog({
   const isEdit = Boolean(item);
   const [form, setForm] = useState<ItemFormState>(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
   const [saving, setSaving] = useState(false);
+  // 🔴 2026-09-30:金額欄位的錯誤改成顯示在欄位下面(skill 二之七:框變紅 + 一行 `!`),
+  // 不是只丟一個 toast——toast 會飄走,使用者回頭看不出是哪一格有問題。
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setForm(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
+      setPriceError(null);
     }
   }, [open, item]);
 
@@ -347,11 +352,18 @@ function ServiceItemFormDialog({
       toast.error("請填寫服務項目名稱");
       return;
     }
-    const price = Number(form.price);
-    if (form.price.trim() === "" || Number.isNaN(price) || price < 0) {
-      toast.error("金額必須是不小於 0 的數字");
+    // 🔴 2026-09-30(品管第二次打回,必修-1b):這一欄是 FieldAmountInput(type="text"),
+    // 原生的 min / step 不存在,而舊的 `Number()` + `Number.isNaN` + `< 0` 組合放行了
+    // `Infinity`(isNaN 是 false、`Infinity < 0` 也是 false)、`1e3` → 1000、`0x10` → 16。
+    // 這個檔案第 1 批就上線、不在本輪 diff 內,但漏洞跟建單表單那 4 格完全同型,一併修掉。
+    // 規則與白話錯誤訊息都在 parseAmountInput(服務項目金額允許小數,不傳 integerOnly)。
+    const parsedPrice = parseAmountInput(form.price);
+    if (!parsedPrice.ok) {
+      setPriceError(parsedPrice.error);
       return;
     }
+    setPriceError(null);
+    const price = parsedPrice.value;
     const durationMinutes = Number(form.durationMinutes);
     if (
       form.durationMinutes.trim() === "" ||
@@ -426,12 +438,23 @@ function ServiceItemFormDialog({
           </FormField>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <FormField label="金額" htmlFor="item-price" required>
-              {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證仍在 handleSubmit(不小於 0 的數字)。 */}
+            <FormField
+              label="金額"
+              htmlFor="item-price"
+              required
+              error={priceError}
+              helpLabel="說明:金額要怎麼填"
+              help="只能填數字和小數點,例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法,也不能填文字。"
+            >
+              {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證走 parseAmountInput
+                  (handleSubmit),錯誤顯示在下面一行、一改內容就消失。 */}
               <FieldAmountInput
                 id="item-price"
                 value={form.price}
-                onChange={(e) => setField("price", e.target.value)}
+                onChange={(e) => {
+                  setField("price", e.target.value);
+                  if (priceError) setPriceError(null);
+                }}
                 required
               />
             </FormField>
