@@ -1,11 +1,21 @@
 // 對應模組 10(會員與紅利)規格書 §4.2:會員詳情頁(新路由 /app/members/:id)。
 // 基本資料 + 電話驗證 + 點數摘要 + 相關訂單 + 推薦名單。
 //
-// #617(.project/specs/會員與紅利.md §10.5「紅利點數獨立化」):點數區塊這次不再是完整的
+// #617(.project/specs/會員與紅利.md §10.5「紅利點數獨立化」):點數區塊當時不再是完整的
 // 兌換/手動調整/異動歷史操作面板——那些操作搬到新的獨立頁面 MemberPointsPage.tsx
 // (/app/member-points),這裡只保留精簡摘要(目前餘額 + 「查看完整點數紀錄」連結導到獨立頁面
 // 並帶入這位會員),避免兩邊各維護一份幾乎一樣的點數操作 UI。points_feature_enabled 關閉時
 // 整個「點數」卡片不顯示。
+//
+// SPECS-INDEX #830(2026-09-29 使用者裁決 Q2,推翻上面 #617 那段):紅利點數管理頁的「會員點數餘額
+// 總覽」被移除,而它是那頁唯一的選人入口,所以「異動歷史 / 手動調整 / 登記兌換」整組搬回這頁的
+// 「點數」卡片(元件抽在 MemberPointsPanel.tsx,權限邊界逐項對照見該檔案開頭)。這頁不再有
+// 「查看完整點數紀錄」連結,/app/member-points 也不再支援 ?member= 深連結。
+// ⚠️ 連帶調整:「點數」卡片改成 points_feature_enabled 關閉時**仍然顯示**(卡片內多一條「功能已
+//    關閉」提示)。理由:2026-09-24 的開關語意升級刻意讓後端在關閉後仍放行「手動調整 / 登記兌換」,
+//    好讓商家把會員剩餘點數結清;那兩個入口現在只剩這裡一處,如果沿用 #617「關閉就整張卡片隱藏」,
+//    商家關掉功能後就再也找不到地方結清餘額,跟後端刻意放行的設計互相矛盾。這是 engineer 的判斷,
+//    已在 #830 回報裡標明待主腦/使用者確認。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -52,6 +62,7 @@ import {
   useMerchantMemberSettings,
   useMerchantMemberTiers,
 } from "./api";
+import { MemberPointsPanel } from "./MemberPointsPanel";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { MEMBER_STATUS_LABELS, type Member } from "./types";
 
@@ -480,25 +491,23 @@ function MemberDetailInner() {
         </CardContent>
       </Card>
 
-      {/* #617:點數區塊這次只保留精簡摘要,完整的兌換/手動調整/異動歷史操作搬到獨立頁面
-          MemberPointsPage.tsx(/app/member-points)。points_feature_enabled 關閉時整張卡片不顯示,
-          既有的點數餘額資料不受影響,只是隱藏。 */}
-      {pointsFeatureEnabled ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>點數</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-3xl font-bold text-foreground">{member.points_balance} 點</p>
-            <Link
-              to={`/app/member-points?member=${member.id}`}
-              className="text-sm text-brand hover:underline"
-            >
-              查看完整點數紀錄 →
-            </Link>
-          </CardContent>
-        </Card>
-      ) : null}
+      {/* SPECS-INDEX #830:點數卡片改成完整的操作面板(餘額 + 登記兌換 / 手動調整 + 異動歷史),
+          從 MemberPointsPage.tsx 搬回來,見檔案開頭說明。points_feature_enabled 關閉時卡片不再隱藏
+          (理由同見檔案開頭),改成在卡片內提示「功能已關閉」,讓商家仍能在這裡結清既有點數。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>點數</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!pointsFeatureEnabled ? (
+            <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
+              目前紅利點數功能已關閉,系統不會再自動給這位會員任何新點數(消費、推薦、生日都不發)。
+              你仍然可以在這裡查看、手動調整、登記兌換既有的點數,把剩餘餘額結清。
+            </div>
+          ) : null}
+          <MemberPointsPanel member={member} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

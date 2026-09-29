@@ -42,28 +42,27 @@
 // 這也是為什麼這頁停用時「本身仍可操作」的既有行為依然正確:手動調整/登記兌換就是後端刻意
 // 放行的兩條路徑,跟這頁不隱藏任何操作入口的既有 UI 行為是一致的,不需要改。
 //
-// 支援 ?member=<id> query 參數直接帶入某位會員(會員詳情頁「查看完整點數紀錄」連結會這樣用)。
-//
-// RedeemPointsDialog/AdjustPointsDialog 這兩個 Dialog 元件是從 MemberDetailPage.tsx 搬過來的
-// (該頁面的「點數」卡片這次簡化成摘要 + 連結,完整操作集中到這裡,避免兩邊重複維護)。
+// SPECS-INDEX #830(2026-09-29 使用者巡檢回報第 6 項,裁決 Q2,見 .project/notes/2026-09-29-使用者
+// 調整清單.md):使用者認為「會員點數餘額總覽」跟會員名單每列的點數 Badge 重複,決定移除。但那張
+// 卡片是這頁唯一的會員選擇器,點了才會展開 MemberPointsDetail(異動歷史/手動調整/登記兌換),
+// 直接刪會讓那三個功能沒有入口,所以裁決是整組搬到「會員管理 > 點擊某位會員」的詳情頁
+// (元件抽成 MemberPointsPanel.tsx,由 MemberDetailPage.tsx 掛載)。搬走之後:
+//   ・這頁只剩「規則」那一半:核發獎勵資格條件 + 點數設定,權限判斷(canManagePointsRules)沒動。
+//   ・原本的 ?member=<id> 深連結、RedeemPointsDialog/AdjustPointsDialog/MemberPointsDetail 都從
+//     這個檔案移除(#617 當初是從 MemberDetailPage.tsx 搬過來的,現在等於搬回去)。
+//   ・整頁守衛 RequireMemberPointsAccess 仍然只認 members 這把鑰匙,**刻意不改**——改成認
+//     member_points 等於收緊「誰能打開這頁」,違反 #830「權限不能因搬家而放寬或收緊」的要求。
+//     代價是只有 members、沒有 member_points 的客服打開這頁會看到一個沒有卡片的畫面,所以補了
+//     一段說明文字告訴他規則設定需要什麼權限、交易功能現在在哪裡。要不要連守衛/功能卡片一起改,
+//     屬於權限調整,留給主腦/使用者另外裁決。
 
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -74,7 +73,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -82,273 +80,18 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
-  adjustMemberPoints,
-  redeemMemberPoints,
   upsertMerchantMemberSettings,
-  useMember,
-  useMemberPointHistory,
   useMerchantMemberSettings,
-  useMerchantMembersList,
   type UpsertMerchantMemberSettingsInput,
 } from "./api";
 import { previewLoyaltyPoints } from "./previewCalculators";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
-import {
-  MEMBER_POINT_TRANSACTION_TYPE_LABELS,
-  REWARD_CONDITION_MODE_LABELS,
-  type Member,
-  type MemberSummary,
-  type RewardConditionMode,
-} from "./types";
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString("zh-TW", { hour12: false });
-}
-
-function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [points, setPoints] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const numericPoints = Number(points);
-    if (!Number.isInteger(numericPoints) || numericPoints <= 0) {
-      toast.error("兌換點數必須是大於 0 的整數");
-      return;
-    }
-    if (!note.trim()) {
-      toast.error("請說明這次兌換的用途");
-      return;
-    }
-    setSaving(true);
-    try {
-      await redeemMemberPoints(member.id, numericPoints, note.trim());
-      toast.success("已登記兌換");
-      setOpen(false);
-      setPoints("");
-      setNote("");
-      onSaved();
-    } catch (err) {
-      toast.error("兌換失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          登記兌換
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>登記兌換點數</DialogTitle>
-          <DialogDescription>
-            目前餘額 {member.points_balance}{" "}
-            點。這裡只登記點數異動紀錄,不會自動反映在任何訂單金額上。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="redeem-points">兌換點數 *</Label>
-            <Input
-              id="redeem-points"
-              type="number"
-              min={1}
-              className="mt-2"
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="redeem-note">用途說明 *</Label>
-            <Textarea
-              id="redeem-note"
-              className="mt-2"
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "處理中⋯" : "確認兌換"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** 規則 2.6(核心):這個按鈕只有商家管理員看得到,依 merchantRole==='admin' 判斷,不是依
- * useAgentPermission——這個操作本來就不透過 section_key 開放。 */
-function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [delta, setDelta] = useState("");
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const numericDelta = Number(delta);
-    if (!Number.isInteger(numericDelta) || numericDelta === 0) {
-      toast.error("調整點數必須是不為 0 的整數(正數增加、負數扣除)");
-      return;
-    }
-    if (!note.trim()) {
-      toast.error("請填寫調整原因");
-      return;
-    }
-    setSaving(true);
-    try {
-      await adjustMemberPoints(member.id, numericDelta, note.trim());
-      toast.success("已調整點數");
-      setOpen(false);
-      setDelta("");
-      setNote("");
-      onSaved();
-    } catch (err) {
-      toast.error("調整失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          手動調整
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>手動調整點數</DialogTitle>
-          <DialogDescription>
-            目前餘額 {member.points_balance} 點,不能調整成負數。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="adjust-delta">調整點數 *</Label>
-            <Input
-              id="adjust-delta"
-              type="number"
-              className="mt-2"
-              value={delta}
-              onChange={(e) => setDelta(e.target.value)}
-              placeholder="正數增加、負數扣除"
-            />
-          </div>
-          <div>
-            <Label htmlFor="adjust-note">調整原因 *</Label>
-            <Textarea
-              id="adjust-note"
-              className="mt-2"
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "處理中⋯" : "確認調整"}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** 點擊清單裡某位會員之後顯示的完整點數異動歷史 + 兌換/調整入口。 */
-function MemberPointsDetail({ memberId }: { memberId: string }) {
-  const queryClient = useQueryClient();
-  const { data: merchantRole } = useCurrentMerchantRole();
-  const isAdmin = merchantRole === "admin";
-
-  const { data: member, isLoading } = useMember(memberId);
-  const { data: pointHistory } = useMemberPointHistory(memberId);
-
-  function refetch() {
-    void queryClient.invalidateQueries({ queryKey: ["members-module", "member-detail", memberId] });
-    void queryClient.invalidateQueries({ queryKey: ["members-module", "point-history", memberId] });
-    void queryClient.invalidateQueries({ queryKey: ["members-module", "members-list"] });
-  }
-
-  if (isLoading) {
-    return <p className="text-sm text-muted-foreground">載入中⋯</p>;
-  }
-  if (!member) {
-    return <p className="text-sm text-muted-foreground">找不到這位會員(可能已被移除)。</p>;
-  }
-
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <div>
-          <CardTitle>{member.name}</CardTitle>
-          <CardDescription>{member.phone ?? "未填寫電話"}</CardDescription>
-        </div>
-        <Link to={`/app/members/${member.id}`} className="text-sm text-brand hover:underline">
-          查看會員基本資料 →
-        </Link>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-3xl font-bold text-foreground">{member.points_balance} 點</p>
-        <div className="flex flex-wrap gap-2">
-          <RedeemPointsDialog member={member} onSaved={refetch} />
-          {isAdmin ? <AdjustPointsDialog member={member} onSaved={refetch} /> : null}
-        </div>
-
-        <div>
-          <p className="mb-2 text-sm font-semibold text-foreground">異動歷史</p>
-          {!pointHistory || pointHistory.length === 0 ? (
-            <p className="text-sm text-muted-foreground">目前沒有任何點數異動紀錄。</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {pointHistory.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-xs"
-                >
-                  <div className="min-w-0">
-                    <p className="text-foreground">
-                      {MEMBER_POINT_TRANSACTION_TYPE_LABELS[entry.transactionType]}
-                      {entry.relatedMemberName ? `(${entry.relatedMemberName})` : ""}
-                    </p>
-                    {entry.note ? <p className="text-muted-foreground">{entry.note}</p> : null}
-                    <p className="text-muted-foreground">{formatDateTime(entry.createdAt)}</p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={entry.pointsDelta > 0 ? "text-cta" : "text-destructive"}>
-                      {entry.pointsDelta > 0 ? "+" : ""}
-                      {entry.pointsDelta}
-                    </p>
-                    <p className="text-muted-foreground">餘額 {entry.balanceAfter}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+import { REWARD_CONDITION_MODE_LABELS, type RewardConditionMode } from "./types";
 
 function MemberPointsPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState("");
   const [savingFeatureToggle, setSavingFeatureToggle] = useState(false);
 
   // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的編輯 state,從 MemberSettingsPage.tsx 搬過來。
@@ -370,6 +113,8 @@ function MemberPointsPageInner() {
   // 也就是同一頁由兩把鑰匙共管:交易歸既有的 members,規則歸新增的 member_points。
   // 整頁的進入守衛(RequireMemberPointsAccess)刻意「維持只認 members」——否則只有交易權限的
   // 客服連這一頁都進不去,就違反使用者「客服可以處理會員管理內的資料包含紅利點數異動等等」的裁決。
+  // (SPECS-INDEX #830 之後「交易」那一半已搬到會員詳情頁,這頁只剩規則;守衛仍維持不變的理由
+  //  改見檔案開頭的 #830 說明。下面 canManagePointsRules 的判斷本身一個字都沒動。)
   //
   // 判斷寫法沿用專案既有慣例(CalendarPage.tsx canManageDayOverride、LeaveTypesPage.tsx
   // showDeductionRuleButton 這兩處「頁面層一把鑰匙、區塊層另一把鑰匙」的先例),不自創新寫法:
@@ -392,10 +137,7 @@ function MemberPointsPageInner() {
   const canManagePointsRules =
     merchantRole === "admin" || (merchantRole === "agent" && canManageMemberPointsRules === true);
 
-  const selectedMemberId = searchParams.get("member");
   const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
-  const { data: members, isLoading } = useMerchantMembersList(merchantId, search);
-  const activeMembers: MemberSummary[] = (members ?? []).filter((m) => m.status === "active");
 
   useEffect(() => {
     if (!settings) return;
@@ -408,14 +150,6 @@ function MemberPointsPageInner() {
   const numericRate = Number(pointsEarnRate);
   const numericReferral = Number(referralBonusPoints);
   const numericBirthday = Number(birthdayBonusPoints);
-
-  function selectMember(memberId: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("member", memberId);
-      return next;
-    });
-  }
 
   // #639/#642(.project/specs/會員與紅利.md §10.5):「點數設定」卡片現在一次管理 4 個欄位(啟用
   // 開關+消費點數比例+推薦獎勵+生日贈點),但 upsertMerchantMemberSettings 是整列 upsert,不是
@@ -509,21 +243,22 @@ function MemberPointsPageInner() {
       </div>
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">紅利點數管理</h1>
-        {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流
-            ——只有交易權限的客服看到的畫面裡根本沒有那兩張規則卡片,如果還寫「核發獎勵資格條件、
-            點數設定也在這裡操作」,對方會一直在頁面上找一個他看不到的東西。 */}
+        {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流。
+            SPECS-INDEX #830 之後「交易」那一半已搬到會員管理的會員詳情頁,這頁只剩規則,描述照實改寫:
+            有規則權限的人看到的是規則說明;沒有的人要被明確告知這頁沒有他能操作的東西、以及點數
+            交易現在去哪裡做,不要讓他在頁面上找一個看不到的東西。 */}
         <p className="mt-1 text-sm text-muted-foreground">
           {canManagePointsRules
-            ? `「${merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史,以及核發獎勵資格條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點),一站式在這裡操作。`
-            : `「${merchant!.name}」會員的點數餘額總覽、手動調整、登記兌換與異動歷史。點數的核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點)需要另外的「紅利點數管理」權限才能調整,請找商家管理員。`}
+            ? `「${merchant!.name}」的紅利點數核發規則:核發獎勵資格條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點)。個別會員的點數餘額、手動調整、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
+            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`}
         </p>
       </div>
 
       {settings && settings.points_feature_enabled === false ? (
         <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
           目前紅利點數功能已關閉,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
-          建單表單跟會員詳情頁也不顯示點數相關內容給客戶/服務人員看。你仍然可以在這裡查看、手動
-          調整、登記兌換既有的點數。
+          建單表單也不顯示點數相關內容。你仍然可以到「會員管理」點進某位會員,查看、手動調整、
+          登記兌換既有的點數。
           {/* 2026-09-24 使用者裁決:這句「要重新開啟請到下方點數設定」只有看得到那張卡片的人適用。
               沒有 member_points 權限的客服看不到那張卡片,對他們說「去下方切換開關」等於叫他們去找
               一個畫面上不存在的東西,所以改成告訴他們該找誰。 */}
@@ -608,9 +343,9 @@ function MemberPointsPageInner() {
                       <p className="text-sm font-medium text-foreground">啟用紅利點數功能</p>
                       <p className="text-xs text-muted-foreground">
                         關閉後系統就不再自動給點數了:客人消費不再累點、推薦朋友不發獎勵、生日也不
-                        送點。你仍然可以在這一頁手動調整點數、登記兌換,把會員手上剩下的點數結清;
-                        既有的點數餘額與異動歷史不會被清空,建單表單跟會員詳情頁則不再顯示點數相關
-                        的數字與入口,重新開啟後會完整還原顯示。
+                        送點。你仍然可以到「會員管理」點進某位會員手動調整點數、登記兌換,把會員手上
+                        剩下的點數結清;既有的點數餘額與異動歷史不會被清空,建單表單則不再顯示點數
+                        相關的數字與入口,重新開啟後會完整還原顯示。
                       </p>
                     </div>
                     <Switch
@@ -690,55 +425,21 @@ function MemberPointsPageInner() {
             </CardContent>
           </Card>
         </>
-      ) : null}
-
-      {/* 以下是「交易」那一半(餘額總覽/手動調整/登記兌換/異動歷史),維持只認 members 權限,
-          也就是能進到這一頁的人一律看得到,不受 member_points 這把新鑰匙影響。 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>會員點數餘額總覽</CardTitle>
-          <CardDescription>
-            搜尋姓名/電話,點擊某位會員查看完整異動歷史與兌換/調整入口
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            className="max-w-xs"
-            placeholder="搜尋姓名/電話"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
-          ) : activeMembers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">目前沒有符合條件的會員。</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {activeMembers.map((m) => (
-                <li key={m.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectMember(m.id)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                      selectedMemberId === m.id
-                        ? "border-brand bg-brand-soft/40"
-                        : "border-border hover:bg-muted"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {m.name}
-                      {m.phone ? `・${m.phone}` : ""}
-                    </span>
-                    <Badge variant="outline">{m.pointsBalance} 點</Badge>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      {selectedMemberId ? <MemberPointsDetail memberId={selectedMemberId} /> : null}
+      ) : (
+        /* SPECS-INDEX #830:交易那一半搬走之後,只有 members、沒有 member_points 權限的客服打開這頁
+           會什麼卡片都看不到(守衛刻意不改,見檔案開頭)。這裡補一段說明,避免看起來像壞掉。 */
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">
+              你目前的權限看不到這頁的規則設定。個別會員的點數餘額、登記兌換與異動歷史,請到
+              <Link to="/app/members" className="text-brand hover:underline">
+                「會員管理」
+              </Link>
+              點進該位會員操作;要調整點數核發規則,請找商家管理員開放「紅利點數管理」權限。
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }
