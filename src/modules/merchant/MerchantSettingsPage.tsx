@@ -27,26 +27,44 @@
 // 帳號會失去這個設定的存取權(只剩商家管理員能改)。這是移動到「商家設定」頁面後的自然結果
 // (這個頁面本來就整頁只開放管理員),沒有另外新增或收緊任何權限判斷邏輯,但如果之前有客服
 // 帳號依賴這個功能,需要請他們改請商家管理員代為設定。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;載入中改灰色骨架;找不到商家改 ErrorState(二之八)。
+//   - 所有欄位改 FormField + FieldInput / FieldTextarea / FieldSelect;說明文字收進 `?`(二 / 二之七)。
+//   - 🔴 產業模組的下拉:原本是手寫的「不在白名單就 return」防護(那其實就是
+//     guardPhantomEmptyChange 白名單版的手寫版本),改成直接用共用 helper,行為完全相同、
+//     原本那段踩坑說明原樣保留(skill 第 1/2 批裁決:FieldSelect 的 guard 一律保留)。
+//   - 「啟用公告」改 SwitchRow(二之七)。
+//   - 兩張顏色設定卡的原生色彩選擇器改用新補的共用元件 FieldColor(44px 見方,原本只有 32px,
+//     不到 skill 二之三的觸控目標);色碼文字框改 FieldInput + 等寬字 + 大寫。
+//   - 按鈕階層(二之三):主表單的「儲存變更」與底部固定提示列的那一顆是**同一個動作**⇒ ① 主要;
+//     兩張顏色卡各自的「儲存」寫入的是別張表、屬於子區塊的動作 ⇒ ② 次要(否則一個畫面上會出現
+//     三顆互相競爭的主要按鈕);「新增分店」是跳頁 ⇒ ② 次要。
+//   - 「預約網址」那一塊是唯讀的事實,不是欄位,改成明細列樣式的唯讀區塊 + `?` 說明。
+//
+// **只動外觀,不動行為**:主表單一次送出哪些欄位、兩張顏色卡各自獨立儲存、hasUnsavedChanges
+// 的判斷與底部固定提示列的層級(BOTTOM_LAYER_ACTION_BAR)、LOGO 選完即上傳全部照舊。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  ErrorState,
+  FieldColor,
+  FieldInput,
+  FieldSelect,
+  FieldTextarea,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { acquireBottomActionBarSlot, BOTTOM_LAYER_ACTION_BAR } from "@/lib/bottomFixedLayers";
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { cn } from "@/lib/utils";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -141,18 +159,29 @@ function MerchantSettingsPageInner() {
   }, [hasUnsavedChanges]);
 
   if (isLoading) {
+    // skill 二之八:載入中用灰色骨架,不要用「載入中⋯」四個字。
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
+      <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
+        <LoadingSkeleton variant="lines" rows={3} />
+        <LoadingSkeleton variant="cards" rows={3} />
+      </main>
     );
   }
 
   if (!merchant) {
+    // skill 二之八:出錯要講三件事 +「你的資料沒有遺失」(那句由 ErrorState 固定加上)。
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">找不到目前操作中的商家</p>
-      </div>
+      <main className="mx-auto max-w-2xl px-5 py-12">
+        <ErrorState
+          title="找不到目前操作中的商家"
+          reason="可能是剛剛切換商家的時候斷線,或是這個帳號在這間店的管理員身分被移除了"
+          action={
+            <Button asChild variant="primary" size="touch">
+              <Link to="/app">回到後台首頁</Link>
+            </Button>
+          }
+        />
+      </main>
     );
   }
 
@@ -195,17 +224,11 @@ function MerchantSettingsPageInner() {
   return (
     // 有未儲存提示列時多留一段底部空間,避免最後一張卡片被那條固定提示列蓋住。
     <main className={cn("mx-auto max-w-3xl space-y-6 px-5 py-12", hasUnsavedChanges && "pb-32")}>
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">商家設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          管理「{merchant.name}」的基本資料與外觀
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="商家設定"
+        description={`管理「${merchant.name}」的基本資料與外觀`}
+      />
 
       {/* 下方固定提示列的「儲存變更」按鈕靠這個 id 送出同一份表單(HTML 原生的 form 屬性),
           不用把按鈕真的塞進表單裡面,也就不會影響既有版面。 */}
@@ -215,105 +238,96 @@ function MerchantSettingsPageInner() {
             <CardTitle>基本資料</CardTitle>
             <CardDescription>LOGO、店名、地址、電話、對外聯絡信箱與簡介</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="flex flex-col gap-4">
             <LogoUploader currentLogoUrl={merchant.logo_url} onUpload={handleLogoUpload} />
 
-            <div>
-              <Label htmlFor="settings-name">店名</Label>
-              <Input
+            <FormField label="店名" htmlFor="settings-name" required>
+              <FieldInput
                 id="settings-name"
-                className="mt-2"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <Label htmlFor="settings-industry-type">產業模組</Label>
-              <Select
+            <FormField
+              label="產業模組"
+              htmlFor="settings-industry-type"
+              help="可隨時切換,只影響之後新增/編輯預約時「客戶地址」欄位要不要顯示/必填(到府派工要填、到店服務不用),不會更動已經建立的訂單資料。"
+              helpLabel="說明:切換產業模組會影響什麼"
+            >
+              <FieldSelect<IndustryType>
+                id="settings-industry-type"
                 value={industryType}
                 // Radix Select 內部會額外渲染一個隱藏的原生 <select>(給表單相容用)。實測發現:
                 // 受控的 value 在「掛載之後」才被 useEffect 從資料庫灌進新值時(這個頁面正是這種
                 // 情況——初始值是 on_site_dispatch,資料載入後才改成商家實際的值),瀏覽器會對那個
                 // 隱藏的原生 select 補發一次 change 事件,把空字串回傳進 onValueChange,瞬間把剛
                 // 灌好的值洗成空白,畫面上的產業模組就變成沒有選取任何東西的空欄位。
-                // 這裡只接受合法的產業類型,把這種假事件忽略掉。
-                onValueChange={(v) => {
-                  if (!INDUSTRY_TYPES.includes(v as IndustryType)) return;
-                  setIndustryType(v as IndustryType);
-                }}
-              >
-                <SelectTrigger id="settings-industry-type" className="mt-2">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {INDUSTRY_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {INDUSTRY_TYPE_LABELS[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="mt-1 text-xs text-muted-foreground">
-                可隨時切換,只影響之後新增/編輯預約時「客戶地址」欄位要不要顯示/必填(到府派工要填、
-                到店服務不用),不會更動已經建立的訂單資料。
-              </p>
-            </div>
+                // 這裡只接受合法的產業類型,把這種假事件忽略掉 —— 改用共用的
+                // guardPhantomEmptyChange(白名單版),行為跟原本手寫的判斷完全相同。
+                onValueChange={guardPhantomEmptyChange<IndustryType>(setIndustryType, (v) =>
+                  INDUSTRY_TYPES.includes(v as IndustryType),
+                )}
+                options={INDUSTRY_TYPES.map((type) => ({
+                  value: type,
+                  label: INDUSTRY_TYPE_LABELS[type],
+                }))}
+              />
+            </FormField>
 
-            <div>
-              <Label htmlFor="settings-address">地址</Label>
-              <Input
+            <FormField label="地址" htmlFor="settings-address">
+              <FieldInput
                 id="settings-address"
-                className="mt-2"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <Label htmlFor="settings-phone">電話</Label>
-              <Input
+            <FormField label="電話" htmlFor="settings-phone">
+              <FieldInput
                 id="settings-phone"
-                className="mt-2"
+                type="tel"
+                inputMode="tel"
+                className="tabular-nums"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <Label htmlFor="settings-contact-email">對外聯絡 Email</Label>
-              <Input
+            <FormField
+              label="對外聯絡 Email"
+              htmlFor="settings-contact-email"
+              help="這是顯示給客戶看的信箱,跟你登入帳號用的 Email 是不同的兩件事。改這裡不會影響你怎麼登入。"
+              helpLabel="說明:對外聯絡 Email 跟登入信箱的差別"
+            >
+              <FieldInput
                 id="settings-contact-email"
                 type="email"
-                className="mt-2"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                這是顯示給客戶看的信箱,跟你登入帳號用的 Email 是不同的兩件事。
-              </p>
-            </div>
+            </FormField>
 
-            <div>
-              <Label htmlFor="settings-intro">商家簡介</Label>
-              <Textarea
+            <FormField label="商家簡介" htmlFor="settings-intro">
+              <FieldTextarea
                 id="settings-intro"
-                className="mt-2"
                 rows={3}
                 value={intro}
                 onChange={(e) => setIntro(e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div>
-              <Label>預約網址</Label>
-              <p className="mt-2 rounded-md border border-border bg-muted px-3 py-2 font-mono text-sm text-muted-foreground">
+            <FormField
+              label="預約網址"
+              help="這組網址代碼由系統自動產生,目前不開放自行修改。實際的客戶預約頁面會在「客戶端自助預約」模組推出。"
+              helpLabel="說明:預約網址是什麼、可以改嗎"
+            >
+              {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
+                  輸入框(disabled 的輸入框會讓人一直想點它)。 */}
+              <p className="break-all rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-sm text-muted-foreground">
                 {merchant.booking_slug ?? "尚未產生"}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                這組網址代碼由系統自動產生,目前不開放自行修改。實際的客戶預約頁面會在「客戶端自助預約」模組推出。
-              </p>
-            </div>
+            </FormField>
           </CardContent>
         </Card>
 
@@ -337,26 +351,24 @@ function MerchantSettingsPageInner() {
             <CardTitle>公告</CardTitle>
             <CardDescription>在客戶看到的頁面上顯示一則公告訊息</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="settings-announcement-enabled">啟用公告</Label>
-              <Switch
-                id="settings-announcement-enabled"
-                checked={announcementEnabled}
-                onCheckedChange={setAnnouncementEnabled}
-              />
-            </div>
-            <div>
-              <Label htmlFor="settings-announcement-content">公告內容</Label>
-              <Textarea
+          <CardContent className="flex flex-col gap-4">
+            {/* skill 二之七:開關做成一整列(左邊標題 + 一行說明,右邊開關)。 */}
+            <SwitchRow
+              id="settings-announcement-enabled"
+              title="啟用公告"
+              description="關閉時,即使填了內容,客戶端也不會顯示(內容會保留)。"
+              checked={announcementEnabled}
+              onCheckedChange={setAnnouncementEnabled}
+            />
+            <FormField label="公告內容" htmlFor="settings-announcement-content">
+              <FieldTextarea
                 id="settings-announcement-content"
-                className="mt-2"
                 rows={3}
                 value={announcementContent}
                 onChange={(e) => setAnnouncementContent(e.target.value)}
                 placeholder="公告關閉時,這裡的內容不會顯示,但會保留"
               />
-            </div>
+            </FormField>
           </CardContent>
         </Card>
 
@@ -370,10 +382,11 @@ function MerchantSettingsPageInner() {
           </CardContent>
         </Card>
 
+        {/* 這一頁的 ① 主要按鈕(底部固定提示列那一顆是同一個動作,不算第二顆)。 */}
         <Button
           type="submit"
-          variant="cta"
-          size="lg"
+          variant="primary"
+          size="touch"
           className="w-full"
           disabled={saving || !hasUnsavedChanges}
         >
@@ -395,12 +408,13 @@ function MerchantSettingsPageInner() {
       {/* 使用者決策(2026-09-23):「新增分店」從舊版 HomePage.tsx 搬到這裡最下方——這個頁面
           整頁已經套用 RequireMerchantAdmin,自然滿足「只有管理員這個角色時才會出現」,不需要
           另外加角色判斷。 */}
-      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
-        <div>
-          <p className="text-sm font-medium text-foreground">新增分店</p>
-          <p className="mt-1 text-xs text-muted-foreground">在同一個集團底下再開一間新的分店</p>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">新增分店</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">在同一個集團底下再開一間新的分店</p>
         </div>
-        <Button variant="outline" size="sm" asChild>
+        {/* ② 次要:跳頁,不是這一頁的主要動作(skill 二之三)。 */}
+        <Button asChild variant="neutral" size="card" className="shrink-0">
           <Link to="/app/new-merchant">新增分店</Link>
         </Button>
       </div>
@@ -420,8 +434,15 @@ function MerchantSettingsPageInner() {
           )}
         >
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
-            <p className="text-sm font-medium text-foreground">尚未儲存變更</p>
-            <Button type="submit" form={MERCHANT_SETTINGS_FORM_ID} variant="cta" disabled={saving}>
+            <p className="text-sm font-semibold text-foreground">尚未儲存變更</p>
+            {/* 跟上面表單裡那顆是**同一個動作**(form= 指回同一份表單),不是第二顆主要按鈕。 */}
+            <Button
+              type="submit"
+              form={MERCHANT_SETTINGS_FORM_ID}
+              variant="primary"
+              size="touch"
+              disabled={saving}
+            >
               {saving ? "儲存中⋯" : "儲存變更"}
             </Button>
           </div>
@@ -478,38 +499,49 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
           請自行參考右側的即時預覽色塊判斷。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-2.5">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="lines" rows={4} />
         ) : (
           <>
             {STATUS_COLOR_FIELDS.map(({ key, label }) => (
               <div
                 key={key}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5"
               >
-                <span className="w-16 shrink-0 text-sm font-medium text-foreground">{label}</span>
-                <input
-                  type="color"
-                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-input bg-background p-0.5"
+                <span className="shrink-0 text-[13px] font-semibold text-foreground sm:w-16">
+                  {label}
+                </span>
+                <FieldColor
+                  aria-label={`「${label}」的代表色`}
                   value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : "#000000"}
                   onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
-                <Input
-                  className="w-32"
+                <FieldInput
+                  aria-label={`「${label}」的色碼`}
+                  className="w-28 min-w-0 font-mono uppercase"
                   value={form[key]}
                   onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
                 {/* 即時預覽色塊,跟搬家前行為一致。 */}
                 <span
-                  className="ml-auto rounded-md border border-border px-3 py-1 text-xs font-medium"
+                  className="ml-auto shrink-0 rounded-md border border-border px-3 py-1 text-xs font-medium"
                   style={{ backgroundColor: form[key], color: "#ffffff" }}
                 >
                   預覽文字
                 </span>
               </div>
             ))}
-            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+            {/* ② 次要:這張卡片寫入的是另一張表、屬於子區塊的儲存;這一頁的 ① 主要按鈕是
+                上面主表單的「儲存變更」(skill 二之三)。 */}
+            <Button
+              type="button"
+              variant="neutral"
+              size="touch"
+              className="self-start"
+              disabled={saving}
+              onClick={handleSave}
+            >
               {saving ? "儲存中⋯" : "儲存"}
             </Button>
           </>
@@ -577,42 +609,50 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
           (不是純色塊),方便一眼分辨是哪一種狀態,不用只靠顏色判斷。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-2.5">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="lines" rows={3} />
         ) : (
           <>
             {CALENDAR_STATE_FIELDS.map(({ key, state, label, hint }) => (
               <div
                 key={key}
-                className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5"
               >
-                <div className="w-20 shrink-0">
-                  <span className="block text-sm font-medium text-foreground">{label}</span>
+                <div className="shrink-0 sm:w-20">
+                  <span className="block text-[13px] font-semibold text-foreground">{label}</span>
                   <span className="block text-[11px] text-muted-foreground">{hint}</span>
                 </div>
-                <input
-                  type="color"
-                  className="h-8 w-10 shrink-0 cursor-pointer rounded border border-input bg-background p-0.5"
+                <FieldColor
+                  aria-label={`「${label}」的底色`}
                   value={/^#[0-9a-fA-F]{6}$/.test(form[key]) ? form[key] : "#000000"}
                   onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
-                <Input
-                  className="w-32"
+                <FieldInput
+                  aria-label={`「${label}」的色碼`}
+                  className="w-28 min-w-0 font-mono uppercase"
                   value={form[key]}
                   onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                 />
                 {/* 即時預覽:直接套用實際渲染時用的同一支函式,商家看到的圖樣效果跟行事曆上
                     一模一樣。 */}
                 <span
-                  className="ml-auto flex h-8 w-24 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium"
+                  className="ml-auto flex h-9 w-24 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium"
                   style={calendarStateBlockStyle(form, state)}
                 >
                   預覽
                 </span>
               </div>
             ))}
-            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
+            {/* ② 次要:理由同上面那張顏色卡。 */}
+            <Button
+              type="button"
+              variant="neutral"
+              size="touch"
+              className="self-start"
+              disabled={saving}
+              onClick={handleSave}
+            >
               {saving ? "儲存中⋯" : "儲存"}
             </Button>
           </>

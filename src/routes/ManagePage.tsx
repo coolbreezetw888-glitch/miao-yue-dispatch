@@ -1,5 +1,21 @@
 // 後台導覽外殼「功能」分頁籤(路由 /app/manage,新增)。
 //
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader(這一頁是功能入口頁,沒有返回、也沒有單一主要動作)。
+//   - 🔴「編輯個人資料」改用小卡窗殼 CardDialog:skill 三「使用者已裁決的個案」點名
+//     「功能頁 > 編輯個人資料(2 或 4 欄)= 小卡窗」,不要有人照「4 欄」的直覺改成全頁層。
+//     殼的寬度是全站統一規格(電腦固定 400px),所以欄位從 sm:grid-cols-2 改成單欄 ——
+//     兩欄在 400px 裡每個 44px 欄位只剩不到 180px。頁面不再自己寫 max-h-[90vh] / max-w-lg
+//     (高度限制與捲動由殼處理)。按鈕列補「取消」。
+//   - 欄位改 FormField + FieldInput,必填紅色 `*`,說明文字收進 `?`(skill 二 / 二之七)。
+//   - 「編輯個人資料」「複製連結」都是 ② 次要(這一頁沒有單一主要動作,不該有東西搶版面)。
+//   - 一張卡片都看不到時的空狀態改 EmptyState;雙重身分的人保留那顆「切換到服務人員端」
+//     當空狀態的下一步按鈕(skill 二之八:不要只留一句死路文字)。
+//   - 切換到服務人員端的過場改灰色骨架,不用「載入中⋯」四個字。
+//
+// **只動外觀,不動行為**:所有 useAgentPermission 的呼叫順序與權限判斷、哪些卡片顯示、
+// 雙重身分切換、data-testid="manage-page" 這個 e2e 錨點全部照舊。
+//
 // 2026-09-16 修正:規格書從「管理功能/設定功能」兩個分頁籤合併成單一個「功能」分頁籤——
 // 使用者澄清不需要分類區隔,所有功能入口(服務人員/客服管理/服務項目管理/商家設定)
 // 全部放在同一個卡片網格裡,不分類別。之後模組 6-13 只要在下面 CARDS 陣列多加一筆設定就好,
@@ -56,16 +72,20 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  CardDialogTrigger,
+  EmptyState,
+  FieldInput,
+  FormField,
+  LoadingSkeleton,
+  PageHeader,
+} from "@/components/patterns";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
@@ -89,6 +109,9 @@ import {
   LoginEmailSection,
   PendingAdminLoginEmailSuggestionCard,
 } from "./ProfileCardShared";
+
+/** 小卡窗的按鈕列在 <form> 外面(位置由殼決定),送出鈕用 form= 指回來。 */
+const PROFILE_FORM_ID = "manage-profile-form";
 
 interface EditProfileDialogProps {
   role: "admin" | "agent";
@@ -222,91 +245,100 @@ function EditProfileDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+    <CardDialog open={open} onOpenChange={setOpen}>
+      <CardDialogTrigger asChild>
+        {/* ② 次要:這一頁沒有單一主要動作(它是功能入口頁),編輯個人資料不該搶版面。 */}
+        <Button type="button" variant="neutral" size="card">
           編輯個人資料
         </Button>
-      </DialogTrigger>
-      {/* 手機版:客服版本現在有 4 個欄位,比原本的 2 個高很多,所以補上
-          max-h-[90vh] + overflow-y-auto,照 StaffListPage.tsx / AgentListPage.tsx 既有對話框
-          同一組寫法,避免在矮螢幕上內容被切掉、儲存按鈕按不到。 */}
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>編輯個人資料</DialogTitle>
-          <DialogDescription>只會更新你自己的資料,不會影響到其他人。</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 窄螢幕單欄、sm 以上兩欄,比照 AgentListPage.tsx 管理員協助編輯客服那個對話框的排法
-              ——同一組欄位、兩個入口,版面刻意做成一樣的,使用者不用重新學。 */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* 2026-09-24 使用者裁決:客服新增「姓名」欄位。放在最前面,因為這是真正的姓名
-                (merchant_agents.name),原本只有商家管理員在邀請時填得到,客服自己改不了。 */}
-            {isAgentRole ? (
-              <div>
-                <Label htmlFor="profile-agent-name">姓名 *</Label>
-                <Input
-                  id="profile-agent-name"
-                  className="mt-2"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  required
-                />
-              </div>
-            ) : null}
-            <div>
-              <Label htmlFor="profile-name">{nameLabel}</Label>
-              <Input
-                id="profile-name"
-                className="mt-2"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+      </CardDialogTrigger>
+      {/* 🔴 小卡窗:skill 三「使用者已裁決的個案」點名「功能頁 > 編輯個人資料(2 或 4 欄)=
+          小卡窗」,不要有人照「4 欄」的直覺把它改成全頁層。高度限制與捲動由殼統一處理,
+          頁面不再自己寫 max-h-[90vh] / max-w-lg。
+          📌 欄位改成單欄:小卡窗在電腦上固定 400px,兩欄會讓每個 44px 欄位只剩不到 180px,
+             比原本的 max-w-lg(512px)窄很多 —— 殼的寬度是全站統一規格,所以改欄位排法。 */}
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>編輯個人資料</CardDialogTitle>
+          <CardDialogDescription>只會更新你自己的資料,不會影響到其他人。</CardDialogDescription>
+        </CardDialogHeader>
+        <form onSubmit={handleSubmit} id={PROFILE_FORM_ID} className="flex flex-col gap-3.5">
+          {/* 2026-09-24 使用者裁決:客服新增「姓名」欄位。放在最前面,因為這是真正的姓名
+              (merchant_agents.name),原本只有商家管理員在邀請時填得到,客服自己改不了。 */}
+          {isAgentRole ? (
+            <FormField label="姓名" htmlFor="profile-agent-name" required>
+              <FieldInput
+                id="profile-agent-name"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                required
               />
-              {/* 2026-09-24 主腦裁決把顯示 fallback 改成「暱稱 → 姓名 → 登入信箱前半段」之後,
-                  這句說明也要跟著改成實際行為——原本寫「留空會顯示登入信箱前半段」現在只在姓名
-                  也沒填的時候才成立,照實改寫成「會顯示你的姓名」。 */}
-              {isAgentRole ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  給客戶看的稱呼,可以跟本名不一樣;留空的話畫面上會顯示你的姓名。
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label htmlFor="profile-job-title">職位</Label>
-              <Input
-                id="profile-job-title"
-                className="mt-2"
-                value={jobTitle}
-                onChange={(e) => setJobTitle(e.target.value)}
-              />
-            </div>
-            {/* 2026-09-24:電話兩種角色都顯示(管理員那一半是使用者這次追加裁決的)。
-                必填與否不同——客服的電話是必填(NOT NULL 欄位),管理員是選填(nullable,
-                既有管理員本來就沒填過)。所以星號、required、說明文字都要跟著角色變,不能寫死。 */}
-            <div>
-              <Label htmlFor="profile-phone">電話{isAgentRole ? " *" : ""}</Label>
-              <Input
-                id="profile-phone"
-                className="mt-2"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="0912345678"
-                required={isAgentRole}
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
-                {isAgentRole ? "" : "可以留空,但填了就要填對格式。"}
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
+            </FormField>
+          ) : null}
+          <FormField
+            label={nameLabel}
+            htmlFor="profile-name"
+            {...(isAgentRole
+              ? {
+                  // 2026-09-24 主腦裁決把顯示 fallback 改成「暱稱 → 姓名 → 登入信箱前半段」之後,
+                  // 這句說明也要跟著改成實際行為——原本寫「留空會顯示登入信箱前半段」現在只在姓名
+                  // 也沒填的時候才成立,照實改寫成「會顯示你的姓名」。
+                  help: "給客戶看的稱呼,可以跟本名不一樣;留空的話畫面上會顯示你的姓名。",
+                  helpLabel: "說明:暱稱留空會顯示什麼",
+                }
+              : {})}
+          >
+            <FieldInput id="profile-name" value={name} onChange={(e) => setName(e.target.value)} />
+          </FormField>
+          <FormField label="職位" htmlFor="profile-job-title">
+            <FieldInput
+              id="profile-job-title"
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+            />
+          </FormField>
+          {/* 2026-09-24:電話兩種角色都顯示(管理員那一半是使用者這次追加裁決的)。
+              必填與否不同——客服的電話是必填(NOT NULL 欄位),管理員是選填(nullable,
+              既有管理員本來就沒填過)。所以紅色 `*`、required、說明文字都要跟著角色變,不能寫死。 */}
+          <FormField
+            label="電話"
+            htmlFor="profile-phone"
+            required={isAgentRole}
+            help={`請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。${
+              isAgentRole ? "" : "可以留空,但填了就要填對格式。"
+            }`}
+            helpLabel="說明:電話要填什麼格式"
+          >
+            <FieldInput
+              id="profile-phone"
+              type="tel"
+              inputMode="tel"
+              className="tabular-nums"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0912345678"
+              required={isAgentRole}
+            />
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={PROFILE_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={saving}
+          >
+            {saving ? "儲存中⋯" : "儲存"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -329,14 +361,22 @@ function BookingUrlCard() {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
-      <div>
-        <p className="text-sm font-medium text-foreground">預約網址</p>
-        <p className="mt-1 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-foreground">預約網址</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
           顧客預約用的專屬連結,實際頁面會在「客戶端自助預約」模組推出後才能使用。
         </p>
       </div>
-      <Button variant="outline" size="sm" onClick={handleCopy} disabled={!bookingSlug}>
+      {/* ② 次要(skill 二之三)。 */}
+      <Button
+        type="button"
+        variant="neutral"
+        size="card"
+        className="shrink-0"
+        onClick={handleCopy}
+        disabled={!bookingSlug}
+      >
         <Copy className="mr-1.5 h-3.5 w-3.5" />
         複製連結
       </Button>
@@ -530,9 +570,11 @@ export default function ManagePage() {
   // 所有 useAgentPermission hook 都呼叫完畢,這裡才做服務人員端檢視的提早 return(見上面 useEffect
   // 旁的說明),不影響 hooks 呼叫順序的一致性。
   if (isStaffView) {
+    // skill 二之八:載入中用灰色骨架,不要用「載入中⋯」四個字(這裡是切換到服務人員端的
+    // 過場,骨架讓人覺得快、而且版面不會跳)。
     return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+      <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
+        <LoadingSkeleton variant="cards" rows={3} />
       </div>
     );
   }
@@ -751,24 +793,23 @@ export default function ManagePage() {
     // 測試需要一個「不管角色/權限怎麼設定都一定存在」的元素來確認外殼已經渲染完成——頁面上的
     // 功能卡片全部會因權限被藏起來,只有這個根容器永遠在,所以錨點掛在這一層。
     <div data-testid="manage-page" className="mx-auto max-w-3xl space-y-6 px-5 py-10">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">功能</h1>
-        <p className="mt-1 text-sm text-muted-foreground">依照你的權限,顯示你能操作的功能項目</p>
-      </div>
+      {/* 這一頁是功能入口頁,沒有「返回」也沒有單一主要動作(skill 二之八的骨架允許只有標題 +
+          說明)。 */}
+      <PageHeader title="功能" description="依照你的權限,顯示你能操作的功能項目" />
 
       {/* 使用者決策(2026-09-23):「首頁」分頁籤拔掉,個人資料卡片搬到這裡最上方
           (原封不動搬自舊版 HomePage.tsx,服務人員版本留在 HomePage.tsx)。 */}
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <Avatar className="h-12 w-12">
               <AvatarFallback className="bg-brand-soft text-lg font-semibold text-brand">
                 {displayName.slice(0, 1)}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <p className="text-lg font-semibold text-foreground">{displayName}</p>
-              <p className="text-sm text-muted-foreground">{jobTitle}</p>
+            <div className="min-w-0">
+              <p className="break-words text-lg font-semibold text-foreground">{displayName}</p>
+              <p className="break-words text-sm text-muted-foreground">{jobTitle}</p>
             </div>
           </div>
           {merchantId && (isAdmin || isAgent) ? (
@@ -802,40 +843,48 @@ export default function ManagePage() {
            的人來說,這句話是錯誤的指引(他該做的不是聯絡管理員,而是切換到服務人員端),而對
            「在這間商家只有客服身分、服務人員身分在另一間分店」的人來說,他該做的是先切換商家。
            所以這裡依情境補上實際可以按的出路,不只留一句死路文字。 */
-        <div className="space-y-3 rounded-md border border-dashed border-border px-3 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            目前沒有開放給你的功能,請聯絡商家管理員開通權限。
-          </p>
-          {isDualRoleEligible ? (
-            <div className="space-y-2">
-              <p className="text-sm text-foreground">
+        <EmptyState
+          title="目前沒有開放給你的功能"
+          description={
+            isDualRoleEligible ? (
+              <>
                 你同時也是這間商家的<span className="font-semibold">服務人員</span>
                 ——你要找的個人資料、行事曆、休假設定與薪資報表都在服務人員端。
-              </p>
-              <Button type="button" size="sm" onClick={onToggleStaffView}>
-                切換到服務人員端
-              </Button>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              如果你是<span className="font-medium">其他分店</span>
-              的服務人員,請先用左上角的商家切換器切換到那間商家。
-            </p>
-          )}
-        </div>
+              </>
+            ) : (
+              <>
+                請聯絡商家管理員開通權限。如果你是<span className="font-semibold">其他分店</span>
+                的服務人員,請先用左上角的商家切換器切換到那間商家。
+              </>
+            )
+          }
+          {...(isDualRoleEligible
+            ? {
+                action: (
+                  // 這個空狀態唯一、也是使用者現在真正該按的那顆(skill 二之八:空狀態要有
+                  // 一顆下一步按鈕,不要只留一句死路文字)。
+                  <Button type="button" variant="primary" size="touch" onClick={onToggleStaffView}>
+                    切換到服務人員端
+                  </Button>
+                ),
+              }
+            : {})}
+        />
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {visibleCards.map((card) => {
             const Icon = card.icon;
             return (
-              <Link key={card.key} to={card.to}>
-                <Card className="h-full transition-colors hover:border-brand hover:bg-brand-soft/40">
-                  <CardHeader className="items-center gap-3 text-center">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
+              <Link key={card.key} to={card.to} className="rounded-xl">
+                <Card className="h-full rounded-xl transition-colors hover:border-brand hover:bg-brand-soft/40">
+                  <CardHeader className="items-center gap-2.5 text-center">
+                    <span className="flex size-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
                       <Icon className="h-6 w-6" />
                     </span>
                     <CardTitle className="text-base">{card.label}</CardTitle>
-                    <CardDescription className="text-xs">{card.description}</CardDescription>
+                    <CardDescription className="text-xs leading-relaxed">
+                      {card.description}
+                    </CardDescription>
                   </CardHeader>
                 </Card>
               </Link>

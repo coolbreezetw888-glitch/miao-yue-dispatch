@@ -10,7 +10,7 @@
 // | 標籤三類 | Tags.tsx(底層 components/ui/badge.tsx 的新 variant) | 二之四 |
 // | 列表卡片 | ListCard.tsx | 二之五 |
 // | 明細列 | DetailRows.tsx | 二之六 |
-// | 表單欄位(輸入框 / 金額 / 下拉 FieldSelect / 原生 select・time・date・month / 多選 ChoiceChip / 單選 ChoiceChipGroup / 開關列) | FormField.tsx | 二之七 |
+// | 表單欄位(輸入框 / 金額 / 下拉 FieldSelect / 原生 select・time・date・month・color / 多選 ChoiceChip / 單選 ChoiceChipGroup / 開關列) | FormField.tsx | 二之七 |
 // | 頁面骨架 + 三種狀態 | PageScaffold.tsx | 二之八 |
 // | 底線式切換列 | UnderlineTabs.tsx | 二之四末段 + 二之八 |
 // | `?` 說明鈕 / `!` 提醒條 | HelpHint.tsx | 二 |

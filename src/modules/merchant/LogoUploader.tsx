@@ -1,9 +1,16 @@
 // 商家設定頁(4.2)裡的 LOGO 上傳區塊，套用規則 2.6 的格式/大小限制，
 // 前端先擋一次（validateLogoFile），Storage bucket 本身也設了同樣限制當第二道防線（3.5）。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 「更換 LOGO」改 ② 次要(這一頁的主要動作是「儲存變更」,一個畫面只能有一顆主要)。
+//   - 「支援 PNG / JPG / WEBP,單檔上限 2MB」這種「怎麼填」的說明收進 `?`(skill 二),
+//     並順便補上一句原本沒講清楚的事:LOGO 是選完就立刻上傳生效,不用再按下面的「儲存變更」。
+// **只動外觀,不動行為**:格式 / 大小驗證、上傳流程、toast 文案照舊。
 
 import { useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 
+import { HelpToggle } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
@@ -56,7 +63,7 @@ export function LogoUploader({ currentLogoUrl, onUpload }: LogoUploaderProps) {
           <span className="text-xs text-muted-foreground">無 LOGO</span>
         )}
       </div>
-      <div>
+      <div className="min-w-0">
         <input
           ref={fileInputRef}
           type="file"
@@ -64,16 +71,23 @@ export function LogoUploader({ currentLogoUrl, onUpload }: LogoUploaderProps) {
           className="hidden"
           onChange={handleFileChange}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? "上傳中⋯" : "更換 LOGO"}
-        </Button>
-        <p className="mt-1 text-xs text-muted-foreground">支援 PNG / JPG / WEBP，單檔上限 2MB</p>
+        {/* HelpToggle 展開的說明區塊是 basis-full,所以這一列必須是 flex flex-wrap。 */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+          {/* ② 次要:這一頁的主要動作是「儲存變更」(skill 二之三,一個畫面只能有一顆主要)。 */}
+          <Button
+            type="button"
+            variant="neutral"
+            size="card"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? "上傳中⋯" : "更換 LOGO"}
+          </Button>
+          <HelpToggle label="說明:LOGO 可以上傳什麼格式、多大的檔案">
+            支援 PNG / JPG / WEBP，單檔上限 2MB。選好檔案就會<strong>立刻上傳並生效</strong>,
+            不用再按下面的「儲存變更」。
+          </HelpToggle>
+        </div>
       </div>
     </div>
   );
