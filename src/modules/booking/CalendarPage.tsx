@@ -536,6 +536,29 @@ export function BookingFormDialog({
     }, 0);
   }, [serviceItemIds, itemQuantities, itemUnitPrices]);
 
+  // SPECS-INDEX #829(2026-09-29 使用者巡檢回報第 5 項,裁決 Q1 採 (B) 方案):「自訂總金額」跟
+  // 「逐項改單價」是兩套會互相打架的算法——已經手動改過任一個服務項目的單價之後,再用一個總金額
+  // 蓋掉它,對帳時看不出哪個才是本意。判定基準照裁決:任一個已勾選項目目前填的單價 ≠ 該項目
+  // service_items.price 當下的值,就算「已個別調整金額」。單價欄位的解析方式刻意跟 handleSubmit
+  // 實際送出的公式(Number(x) || 0)一致,欄位被清空時等同送出 0,也算已調整。
+  // 邊界:(1) 編輯既有訂單時,單價是從訂單快照 unit_price_snapshot 帶入的,如果商家事後改過該項目
+  // 的定價,快照自然 ≠ 現價,也會被算成「已調整」——這是照裁決字面(比對「當下值」)的結果,已在
+  // 回報裡標明。(2) 已經下架、不在 serviceItems 清單裡的項目沒有「當下值」可比,不列入判定。
+  const adjustedUnitPriceItemNames = useMemo(() => {
+    return serviceItemIds.flatMap((id) => {
+      const item = (serviceItems ?? []).find((s) => s.id === id);
+      if (!item) return [];
+      const currentPrice = Number(item.price);
+      const enteredPrice = Number(itemUnitPrices[id] ?? String(currentPrice)) || 0;
+      return enteredPrice === currentPrice ? [] : [item.name];
+    });
+  }, [serviceItemIds, serviceItems, itemUnitPrices]);
+  const hasAdjustedUnitPrice = adjustedUnitPriceItemNames.length > 0;
+  // #829 裁決:「不自動把已經開啟的開關關掉」。所以 disabled 只擋「從關 → 開」這個方向;如果客服
+  // 先開了自訂總金額、之後才去改單價,開關維持開啟、仍然可以自己關掉(不然會卡死在開啟狀態,
+  // 除非把單價改回去),只在旁邊顯示警示說明目前以總金額為準、關掉之後就不能再開。
+  const customTotalAmountLocked = hasAdjustedUnitPrice && !customTotalAmountEnabled;
+
   // §4.8 金額即時預覽:跟後端 private.calculate_booking_amount 相同公式,體驗層預覽,
   // 真正落地金額由後端重算(規則 2.2)。
   const amountPreview = useMemo(
@@ -1031,12 +1054,26 @@ export function BookingFormDialog({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Label>自訂總金額</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  開啟後用輸入的總金額取代逐項小計。
-                </p>
+                {/* SPECS-INDEX #829:三種狀態的說明文字——(a) 已改單價且目前關閉:開關變灰,寫清楚
+                    原因跟怎麼解;(b) 已改單價但開關本來就開著:不偷關,寫清楚目前以哪個為準;
+                    (c) 一般情況:原本的說明。 */}
+                {customTotalAmountLocked ? (
+                  <p className="text-[11px] text-warn">
+                    {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,無法再套用自訂總金額。要改用自訂總金額,請先把單價改回預設值。`}
+                  </p>
+                ) : hasAdjustedUnitPrice ? (
+                  <p className="text-[11px] text-warn">
+                    {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,但自訂總金額仍在開啟中,金額會以下方輸入的總金額為準;關閉後,在單價改回預設值之前無法再開啟。`}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    開啟後用輸入的總金額取代逐項小計。
+                  </p>
+                )}
               </div>
               <Switch
                 checked={customTotalAmountEnabled}
+                disabled={customTotalAmountLocked}
                 onCheckedChange={setCustomTotalAmountEnabled}
               />
             </div>
