@@ -314,7 +314,10 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
     }
   }
 
-  /** 新增等級的按鈕(卡片右上角與空狀態各用一次,文案與行為一致)。 */
+  /** 新增等級的按鈕(只放在卡片右上角一處)。
+   *  📌 空狀態刻意**不再放一顆**:EmptyState.action 的例外條款 —— 下一步就在空狀態正上方的
+   *     卡片標題列、一眼看得到,再放一顆會變成同一張卡片上兩顆 primary(違反 skill 二之三),
+   *     而且是同一個動作的兩個實例。改在空狀態文案裡指路。 */
   const createTrigger = (
     <TierFormDialog
       merchantId={merchantId}
@@ -346,8 +349,7 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
         ) : !tiers || tiers.length === 0 ? (
           <EmptyState
             title="還沒有任何會員等級"
-            description="建立等級之後,會員卡片上會顯示等級標籤,LINE 行銷通知也可以依等級整批挑人。"
-            action={createTrigger}
+            description="按上方的「新增等級」建立第一個。建立之後,會員卡片上會顯示等級標籤,LINE 行銷通知也可以依等級整批挑人。"
           />
         ) : (
           <ul className="flex flex-col gap-2.5">

@@ -487,16 +487,14 @@ function MembersListInner() {
             <EmptyState
               icon={<Users className="h-6 w-6" aria-hidden="true" />}
               title={allMembers.length === 0 ? "還沒有任何會員" : "沒有符合條件的會員"}
+              // EmptyState.action 的例外條款:下一步(「新增會員」)就在這一頁的頁首、一眼看得到,
+              // 所以不在空狀態再放一顆 —— 再放一顆會變成同一個畫面上兩顆 primary
+              // (違反 skill 二之三),而且是同一個動作的兩個實例。改在文案裡指路。
               description={
                 allMembers.length === 0
-                  ? "建立會員之後,建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 行銷通知。"
+                  ? "按右上角的「新增會員」建立第一位。建立之後,建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 行銷通知。"
                   : "換一個篩選條件或清空搜尋關鍵字再看看。"
               }
-              {...(allMembers.length === 0
-                ? {
-                    action: <NewMemberDialog merchantId={merchantId} onSaved={refetch} />,
-                  }
-                : {})}
             />
           ) : (
             <ul className="flex flex-col gap-2.5">
