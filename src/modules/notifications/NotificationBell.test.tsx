@@ -65,6 +65,11 @@ function openPanel() {
   fireEvent.click(screen.getByTestId("notification-bell"));
 }
 
+/** 2026-09-29 #835:面板容器依螢幕寬度分兩種(640px 以上 Popover、以下 Sheet),判斷來源是
+ * window.matchMedia。jsdom 沒有 matchMedia,所以這裡自己補一個,預設回「電腦」讓上面所有既有測試
+ * 維持走原本的 Popover 路徑;要測手機版的那條再把它切成 false。 */
+let matchMediaMatches = true;
+
 beforeAll(() => {
   // Radix Popover(內部用 floating-ui)在 jsdom 下需要 ResizeObserver。刻意只在這個測試檔案裡
   // 補,不動 src/test/setup.ts —— 那是全專案共用的設定檔,為了一支測試去改它影響面太大。
@@ -75,6 +80,17 @@ beforeAll(() => {
       disconnect() {}
     };
   }
+  window.matchMedia = (query: string) =>
+    ({
+      matches: matchMediaMatches,
+      media: query,
+      onchange: null,
+      addEventListener() {},
+      removeEventListener() {},
+      addListener() {},
+      removeListener() {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
 });
 
 describe("NotificationBell", () => {
@@ -169,6 +185,42 @@ describe("NotificationBell", () => {
     expect(screen.getByTestId("notification-empty")).toHaveTextContent(
       "目前沒有通知。手機推播的內容會同步留在這裡,滑掉了也找得回來。",
     );
+  });
+
+  // -----------------------------------------------------------------------
+  // 2026-09-29 ui-v1-small #835:面板容器(內容不變)
+  // -----------------------------------------------------------------------
+  it("#835 電腦版(≥640px):Popover 固定 380px 寬、對齊右邊,不再用隨螢幕變形的 calc 寬度", () => {
+    render(<NotificationBell />);
+    openPanel();
+    const panel = screen.getByTestId("notification-panel");
+    expect(panel.className).toContain("w-[380px]");
+    expect(panel.className).not.toContain("100vw");
+    expect(panel.getAttribute("data-align")).toBe("end");
+    // 電腦版沒有握把。
+    expect(screen.queryByTestId("notification-sheet-handle")).not.toBeInTheDocument();
+  });
+
+  it("#835 手機版(<640px):改成底部 Sheet,頂部有可關閉面板的握把;面板內容跟電腦版一樣", () => {
+    matchMediaMatches = false;
+    try {
+      render(<NotificationBell />);
+      openPanel();
+      const panel = screen.getByTestId("notification-panel");
+      // Radix Dialog 的內容:role=dialog、對話框名稱就是面板標題「通知」。
+      expect(panel.getAttribute("role")).toBe("dialog");
+      expect(screen.getByRole("dialog", { name: "通知" })).toBe(panel);
+      // 既有內容原封不動(空狀態、全部標為已讀都在)。
+      expect(screen.getByTestId("notification-empty")).toBeInTheDocument();
+      expect(screen.getByTestId("notification-mark-all-read")).toBeInTheDocument();
+      // 握把是一顆 44px 高(h-11)的按鈕,點了會關閉面板。
+      const handle = screen.getByTestId("notification-sheet-handle");
+      expect(handle.className).toContain("h-11");
+      fireEvent.click(handle);
+      expect(screen.queryByTestId("notification-panel")).not.toBeInTheDocument();
+    } finally {
+      matchMediaMatches = true;
+    }
   });
 
   it("§13.7:每一列顯示事件標籤(沿用 PUSH_NOTIFICATION_EVENT_LABELS)、標題、內容", () => {

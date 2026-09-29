@@ -90,29 +90,44 @@ test("§13.6 斷言①:320px 下載入 /app,文件不產生橫向捲軸", async 
   expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 1);
 });
 
-test("§13.6 斷言②:鈴鐺與登出按鈕在 320px 下都看得到、都按得到", async ({ page }) => {
+// 2026-09-29 ui-v1-small(SPECS-INDEX #834,規範:.claude/skills/ui-overlay-patterns/SKILL.md 第四節):
+// 「登出」按鈕已從頁首移除,收進左上角商家切換器的下拉選單最底部。這條測試原本斷言
+// 「鈴鐺與登出都看得到、鈴鐺在登出左邊、兩顆都 32px 高」,現在改成守新版面:
+//   ・頁首上**不能再有**登出按鈕(如果有人把它加回來,這裡會紅);
+//   ・鈴鐺仍然看得到、按得到、32px 高;
+//   ・登出要在商家切換器的選單裡找得到(不然使用者就沒有地方登出了 —— 尤其是只有一間商家的人,
+//     他們在 2026-09-29 之前根本沒有下拉選單)。
+test("§13.6 斷言②(2026-09-29 改):320px 下頁首右側只有鈴鐺,登出在商家切換器選單裡", async ({
+  page,
+}) => {
   const bell = page.getByTestId("notification-bell");
-  const signOut = page.getByRole("button", { name: "登出" });
-
   await expect(bell).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(signOut).toBeVisible({ timeout: LOAD_TIMEOUT });
 
-  // 「看得到」不等於「按得到」:兩顆都要真的有版位、而且沒有被別的元素蓋掉。
+  // 頁首上不能再有登出按鈕(選單還沒打開,所以選單裡那個 menuitem 也不會在 DOM 裡)。
+  await expect(page.getByRole("button", { name: "登出" })).toHaveCount(0);
+
+  // 「看得到」不等於「按得到」:鈴鐺要真的有版位、而且沒有被別的元素蓋掉。
   const bellBox = await bell.boundingBox();
-  const signOutBox = await signOut.boundingBox();
   expect(bellBox).not.toBeNull();
-  expect(signOutBox).not.toBeNull();
   expect(bellBox!.width).toBeGreaterThan(0);
-  expect(signOutBox!.width).toBeGreaterThan(0);
-  // DOM 順序即視覺順序:鈴鐺在登出**左邊**(使用者原話「登出的左側」)。
-  expect(bellBox!.x).toBeLessThan(signOutBox!.x);
-  // §13.6 第 3 點:鈴鐺尺寸對齊登出按鈕(都是 32px 高),不是 Button size="icon" 的 36px。
+  // §13.6 第 3 點:鈴鐺 32px 高(跟左邊 32px 的商家切換器 LOGO 按鈕齊平),不是 size="icon" 的 36px。
   expect(Math.round(bellBox!.height)).toBe(32);
-  expect(Math.round(signOutBox!.height)).toBe(32);
+  // 鈴鐺是頁首最右邊的東西:右緣距離視窗右邊界不超過頁首內距(px-3 = 12px)。
+  expect(bellBox!.x + bellBox!.width).toBeGreaterThanOrEqual(NARROW_VIEWPORT.width - 12 - 1);
 
   // 真的按得到:點下去面板要打開(不是被蓋住吃掉點擊)。
   await bell.click();
   await expect(page.getByTestId("notification-panel")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 手機版是 Sheet(Radix Dialog),Escape 關掉,不要讓它擋住下面對商家切換器的點擊。
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("notification-panel")).toHaveCount(0);
+
+  // 登出在商家切換器的下拉選單最底部。compact 版觸發按鈕的 aria-label 是「切換商家(目前:店名)」。
+  await page.getByRole("button", { name: /^切換商家/ }).click();
+  const signOutItem = page.getByRole("menuitem", { name: "登出" });
+  await expect(signOutItem).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 只驗「在、看得到」,不真的點下去:點了會登出、清掉 session,後面的測試就沒得跑了。
+  await page.keyboard.press("Escape");
 });
 
 test("🔴 §13.6 斷言③:最長的頁首標題「月薪人員假別設定」在 320px 下**沒有被截成省略號**", async ({
@@ -135,6 +150,7 @@ test("🔴 §13.6 斷言③:最長的頁首標題「月薪人員假別設定」�
 });
 
 test("§13.7:320px 下打開通知面板之後,文件仍然沒有橫向捲軸", async ({ page }) => {
+  // 2026-09-29 #835:這裡打開的是手機版的底部 Sheet(640px 以下),不是電腦版的 380px 氣泡。
   await page.getByTestId("notification-bell").click();
   await expect(page.getByTestId("notification-panel")).toBeVisible({ timeout: LOAD_TIMEOUT });
 
@@ -149,7 +165,8 @@ test("§13.7:320px 下打開通知面板之後,文件仍然沒有橫向捲軸", 
 
   // 前提斷言:面板真的有寬度(沒渲染出來的話下面的比較毫無意義)。
   expect(metrics.panelWidth).toBeGreaterThan(0);
-  // §13.7:w-[calc(100vw-1.5rem)] max-w-sm ⇒ 320px 下是 296px,不會撐出捲軸。
+  // 2026-09-29 #835:手機版改成從底部滑上來的全寬 Sheet(inset-x-0),320px 下就是 320px 整,
+  // 不會撐出捲軸。(改動前是 Popover 的 w-[calc(100vw-1.5rem)] max-w-sm ⇒ 296px。)
   expect(metrics.panelWidth!).toBeLessThanOrEqual(metrics.innerWidth);
   expect(metrics.docScrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 1);
 });

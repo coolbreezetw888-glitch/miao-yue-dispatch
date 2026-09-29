@@ -10,13 +10,24 @@
 //
 // 2026-09-24(頁首吸頂 + 顯示功能頁名稱)新增 `variant` prop:
 //   ・"full"(預設,維持原本外觀):LOGO + 商家名稱 + 下拉箭頭。
-//   ・"compact":**只有 LOGO**。用在 AppLayout.tsx 的頁首 —— 那一列現在要同時塞 LOGO、目前功能頁
-//     名稱、登出按鈕三樣東西,商家名稱佔掉的寬度必須讓給功能頁名稱(320px 手機上沒有那麼多空間,
-//     見 e2e/mobile-overflow.spec.ts 守的那顆地雷)。點下去展開的下拉選單內容完全一樣(切換商家、
-//     雙重身分切換入口),商家名稱在選單打開後照樣看得到。
+//   ・"compact":**只有 LOGO**。用在 AppLayout.tsx 的頁首 —— 那一列要同時塞 LOGO、目前功能頁
+//     名稱、鈴鐺(2026-09-29 之前還有一顆登出按鈕),商家名稱佔掉的寬度必須讓給功能頁名稱
+//     (320px 手機上沒有那麼多空間,見 e2e/mobile-overflow.spec.ts 守的那顆地雷)。點下去展開的
+//     下拉選單內容完全一樣(切換商家、雙重身分切換入口、登出),商家名稱在選單打開後照樣看得到。
 // 為什麼加 prop 而不是直接把名稱拔掉:預設值維持 "full",既有的 5 條測試(MerchantSwitcher.test.tsx,
 // 2026-09-24 為線上故障補的)不需要改任何斷言就能繼續守住原本的行為;之後若有別的地方要用完整版
 // (例如桌面版側邊欄),也不用再把名稱加回來。目前唯一的使用端是 AppLayout.tsx 的頁首。
+//
+// 2026-09-29(ui-v1-small,SPECS-INDEX #834,規範見 .claude/skills/ui-overlay-patterns/SKILL.md 第四節)
+// 新增 `onSignOut` prop:**「登出」從頁首右側搬進這個下拉選單的最底部**(紅字、上面一條分隔線)。
+// 使用者巡檢回報「鈴鐺跟登出挨在一起容易誤觸」,而 320px 頁首沒有空間把兩顆拉開(見 AppLayout.tsx
+// 頁首註解),所以把「很少按、按錯後果嚴重」的登出收進選單,頁首右側只剩鈴鐺。
+//
+// ⚠️ 連帶影響「只有一間商家、也沒有雙重身分」那個原本**不做下拉選單**的分支:
+//   有 onSignOut 的時候,這種使用者也**必須**有下拉選單,否則他們會完全沒有地方可以登出
+//   (這是最常見的使用者類型:一間店的老闆)。所以「要不要做成下拉選單」的判斷從
+//   `hasMultipleMerchants || canSwitchToStaffView` 變成再多一個 `|| onSignOut`。
+//   沒傳 onSignOut 的使用端(例如測試裡的 full 版)行為完全不變。
 
 import { ChevronDown } from "lucide-react";
 
@@ -67,6 +78,10 @@ interface MerchantSwitcherProps {
   /** 2026-09-24:觸發按鈕的外觀。"full" = LOGO + 商家名稱 + 箭頭(預設,原本的樣子);
    * "compact" = 只有 LOGO(頁首用,把橫向空間讓給功能頁名稱)。下拉選單內容兩者完全相同。 */
   variant?: "full" | "compact";
+  /** 2026-09-29(#834):有傳就在下拉選單最底部多一個紅字「登出」(上方一條分隔線),而且
+   * **不論商家數量/有沒有雙重身分,都一定會長出下拉選單**(不然單一商家的使用者沒地方登出)。
+   * 登出的實際行為由呼叫端(AppLayout.tsx 的 handleSignOut)決定,這裡只是觸發位置。 */
+  onSignOut?: () => void;
 }
 
 export function MerchantSwitcher({
@@ -74,6 +89,7 @@ export function MerchantSwitcher({
   isStaffView = false,
   onToggleView,
   variant = "full",
+  onSignOut,
 }: MerchantSwitcherProps) {
   const { merchants, currentMerchantId, setCurrentMerchantId, isLoading } =
     useMerchantSwitcherState();
@@ -102,8 +118,26 @@ export function MerchantSwitcher({
     </>
   ) : null;
 
-  // 只有一間可管理的商家、也沒有雙重身份可切換時，不需要顯示下拉選單，直接顯示店名即可。
-  if (!hasMultipleMerchants && !canSwitchToStaffView) {
+  /** 2026-09-29(#834):登出項目。紅字用專案的危險色 token `text-destructive`(不寫死色碼,
+   * 配色要跟著商家主題走);Radix 的選單項目在鍵盤/滑鼠聚焦時會套 `focus:text-accent-foreground`
+   * 把文字換色,所以 focus 狀態也要明確指定回 destructive,紅色才不會在移上去的那一刻消失。
+   * 上方一條分隔線,跟「切換商家 / 切換視角」這些日常操作隔開。 */
+  const signOutItem = onSignOut ? (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onSelect={() => onSignOut()}
+        className="text-destructive focus:text-destructive"
+        data-testid="merchant-switcher-sign-out"
+      >
+        登出
+      </DropdownMenuItem>
+    </>
+  ) : null;
+
+  // 只有一間可管理的商家、沒有雙重身份可切換、也沒有登出項目要放時,不需要顯示下拉選單,
+  // 直接顯示店名即可。(有 onSignOut 就一定要有選單,原因見檔頭 2026-09-29 的說明。)
+  if (!hasMultipleMerchants && !canSwitchToStaffView && !onSignOut) {
     const onlyMerchant = merchants[0]!;
     // compact(頁首)只留 LOGO。這裡沒有下拉選單可以打開,所以商家名稱改放 title 屬性,
     // 滑鼠移上去/長按還是看得到是哪一間店;LOGO 的 alt 本來就是「{店名} LOGO」,讀螢幕的人
@@ -190,13 +224,14 @@ export function MerchantSwitcher({
             );
           })
         ) : (
-          // 只有一間商家、但有雙重身份可切換時：下拉選單只是為了裝下面的切換選項,
+          // 只有一間商家、但有雙重身份可切換(或有登出項目)時：下拉選單只是為了裝下面的選項,
           // 商家名稱純粹當標籤顯示,不需要可點選。
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             {currentMerchant?.name ?? "目前商家"}
           </DropdownMenuLabel>
         )}
         {viewToggleItem}
+        {signOutItem}
       </DropdownMenuContent>
     </DropdownMenu>
   );

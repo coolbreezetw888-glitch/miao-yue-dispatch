@@ -64,9 +64,12 @@
 // .project/specs/手機推播擴及三種角色.md §13.5/§13.6/§13.7):
 //   1. 頁首右側改成「鈴鐺 + 登出」一個群組(§13.6),鈴鐺在登出**左邊**(使用者原話:
 //      「登出的左側要有一個鈴鐺圖示(通知)」)。
+//      ⚠️ 2026-09-29 已改:登出**不在頁首上了**,收進左上角商家切換器的下拉選單(#834,見下方
+//      「2026-09-29 ui-v1-small」段落)。右側現在只剩鈴鐺一顆。
 //   2. 為了在 320px 下塞得進去,版面做了四件事,全部是算過的,不是隨手調的(§13.6):
 //        ・容器水平內距 `px-5` → `px-3 sm:px-5`(手機省 16px,640px 以上完全不變)
 //        ・鈴鐺與登出之間用 `gap-1`(4px),整組當成**一個** flex 子項 → 不會多一道 `gap-2`
+//          (2026-09-29 起登出已搬走,這條不再有作用,右側只剩鈴鐺)
 //        ・鈴鐺尺寸 `h-8 w-8`(32px),不是 Button 預設的 `size="icon"`(36px) → 省 4px
 //        ・拿掉左右兩格的 `min-w-[3.25rem]` 底線(`shrink-0` 保留)→ 省 20px
 //   3. 🔴 **使用者 2026-09-25 對 Q9 的裁決(A)**:手機上放棄「標題幾何置中」,換取「標題完整
@@ -79,12 +82,21 @@
 //      (§13.5 第 3 個觸發點)。判斷邏輯在 src/modules/notifications/serviceWorkerBridge.ts,
 //      這裡只負責掛上/拆掉監聽器。
 // =========================================================================
+// 2026-09-29 ui-v1-small(SPECS-INDEX #834/#835,規範:.claude/skills/ui-overlay-patterns/SKILL.md
+// 第四、五節,使用者定案的方案 D;git tag `ui-v1-small`):
+//   ・#834 「登出」按鈕從頁首右側**移除**,改放在左上角商家切換器(MerchantSwitcher)下拉選單的
+//     最底部(紅字 + 分隔線)。登出的行為沒有變,仍然是下面的 handleSignOut,只是換了觸發位置
+//     (透過 onSignOut prop 傳進去)。使用者巡檢原話:「通知跟登出距離太近,容易誤觸登出」;
+//     而 320px 下標題只剩 160px,沒有空間把兩顆按鈕拉開,所以走「搬走」而不是「拉開」。
+//   ・頁首右側現在**只剩鈴鐺**(NotificationBell),右側那格從「約 86px 的群組」縮成 32px,
+//     320px 下標題可用寬度因此**多出約 54px**(從 160px 變成約 214px)。
+//   ・#835 通知面板的容器改法見 NotificationBell.tsx 檔頭。
+// =========================================================================
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import InstallPwaHint from "@/components/InstallPwaHint";
 import UpdateAvailableHint from "@/components/UpdateAvailableHint";
 import { cn } from "@/lib/utils";
@@ -331,37 +343,48 @@ export default function AppLayout() {
 
           ⚠️ 新版本提示條(UpdateAvailableHint)刻意放在**這個 sticky 容器裡面、頁首正下方**:
           它原本是 `fixed inset-x-0 top-0 z-40`,頁首一旦吸頂,兩個東西就會搶同一塊位置 ——
-          而這個提示條刻意沒有「稍後再說」的關閉選項,一旦蓋住頁首,使用者就再也按不到「登出」跟
-          「切換商家」,直到他願意按下重新整理為止,那正是上述事故的同一類問題。放進文件流裡
+          而這個提示條刻意沒有「稍後再說」的關閉選項,一旦蓋住頁首,使用者就再也按不到「切換商家」
+          (登出也在那個選單裡)跟鈴鐺,直到他願意按下重新整理為止,那正是上述事故的同一類問題。放進文件流裡
           (排在頁首下面、跟著頁首一起吸頂)就從根本上不可能蓋住任何東西,也不必再挑 z-index。 */}
       <div className={TOP_LAYER_HEADER}>
         {/* 對應規格書「首頁外殼與主題色優化」一、1.1:商家切換器(含商家 LOGO)取代秒約 LOGO,
-            常駐在頂端列左側;登出按鈕搬到同一列右側。不管切到哪一個分頁籤,頂端都能直接切換商家、
-            直接登出。2026-09-23:雙重身份(管理員/客服同時也是服務人員)的切換入口也掛在這個
-            下拉選單裡(見 MerchantSwitcher.tsx),不是另外的按鈕。
+            常駐在頂端列左側。2026-09-23:雙重身份(管理員/客服同時也是服務人員)的切換入口也掛在
+            這個下拉選單裡(見 MerchantSwitcher.tsx),不是另外的按鈕。
 
             2026-09-24 使用者回報「頁首應該要顯示目前在哪個功能頁」:商家切換器縮成只剩 LOGO
             (variant="compact",點下去照樣展開原本的下拉選單),原本商家名稱的位置改放目前功能頁
             的名稱。使用者原話:「置中的部分不是說一定要在中間,只是盡可能在中間(logo 與登出的
-            中間置中)。」
+            中間置中)。」(當時右側是登出按鈕;2026-09-29 起右側是鈴鐺,「盡量置中」的意思不變。)
+
+            🔴 2026-09-29 ui-v1-small(#834):**登出按鈕已從頁首移除**,改放進左邊商家切換器的
+            下拉選單最底部(onSignOut prop → handleSignOut,行為不變)。目前的版面結構是:
+
+                [商家切換器 LOGO 32px] ── [標題 min-w-0 flex-1 truncate 置中] ── [鈴鐺 32px]
+
+            三格 flex,gap-2(8px)兩道;左右兩格 shrink-0、各 32px,**左右現在天生一樣寬**,
+            所以中間那格自然就落在畫面正中央,不需要任何 min-w 去撐。320px 下中間可用寬度 =
+            320 − 12×2(px-3)− 32×2 − 8×2 = **216px**(算式值;之前「鈴鐺 + 登出」版是 160px,
+            多出約 56px)。最長的標題「月薪人員假別設定」16px 下實測 128px,餘裕充足。
+            守門員仍然是 e2e/app-header-320.spec.ts(該 spec 的 console 輸出會印實測值)。
+
+            以下是搬走登出**之前**的歷史脈絡,保留下來是讓之後的人知道為什麼不能再往頁首塞東西:
 
             版面怎麼做到「盡量置中」又不撐出橫向捲軸(e2e/mobile-overflow.spec.ts 在守這件事,
-            320px 下溢出就會失敗):三格 flex —— 左右兩格 shrink-0(LOGO 32px、右側群組約 86px),
-            中間那格 min-w-0 flex-1 text-center + truncate(長標題自己截斷,絕對不會把登出按鈕
-            推出畫面)。刻意不用 absolute 定位去做「數學上完美置中」——那種做法一旦標題變長就會
-            疊到按鈕上,而使用者已經明講不要求絕對置中。
+            320px 下溢出就會失敗):三格 flex —— 左右兩格 shrink-0,中間那格 min-w-0 flex-1
+            text-center + truncate(長標題自己截斷,絕對不會把右側的按鈕推出畫面)。刻意不用
+            absolute 定位去做「數學上完美置中」——那種做法一旦標題變長就會疊到按鈕上,而使用者
+            已經明講不要求絕對置中。
 
-            🔴 2026-09-25(鈴鐺批次 §13.6 + 使用者對 Q9 的裁決 A):原本左右兩格各有一個
+            2026-09-25(鈴鐺批次 §13.6 + 使用者對 Q9 的裁決 A):原本左右兩格各有一個
             `min-w-[3.25rem]`(52px),用途是「把版位撐成一樣寬,中間那格才會落在畫面正中央」。
-            右側多了一顆鈴鐺之後,「左右一樣寬」在 320px 下**已經不可能跟「標題完整顯示」同時
-            成立**(要讓左邊也撐到 86px,中間就只剩 108px,而最長的標題「月薪人員假別設定」
-            實測 128px,一定被截成省略號)。使用者裁決:**選標題完整顯示**,所以這兩個 min-w 被
-            拿掉了(`shrink-0` 保留)。截斷的標題會讓使用者讀不到自己在哪一頁(實質功能損失),
-            偏左的標題只是不夠漂亮(美觀問題)。**不要為了「看起來比較正」把 min-w 加回來。**
-            守門員:e2e/app-header-320.spec.ts。 */}
+            當時右側是「鈴鐺 + 登出」約 86px 的群組,「左右一樣寬」在 320px 下不可能跟「標題完整
+            顯示」同時成立,使用者裁決**選標題完整顯示**,min-w 因此被拿掉(`shrink-0` 保留)。
+            2026-09-29 登出搬走後左右本來就等寬,這個取捨已經不存在,但**還是不要把 min-w 加回來**
+            ——它沒有任何用處,只會在之後右側再多東西時重新製造同一個問題。 */}
         <header className="border-b border-border bg-background">
-          {/* px-3 sm:px-5:手機 12px(比原本的 20px 省下 16px,鈴鐺的空間就是這樣賺回來的),
-              640px 以上維持原本的 20px,大螢幕視覺完全不變。 */}
+          {/* px-3 sm:px-5:手機 12px(2026-09-25 為了塞鈴鐺從 20px 省下來的),640px 以上維持
+              原本的 20px。登出搬走後手機其實有空間放回 20px,但刻意不改:這次(ui-v1-small)
+              只做使用者點名的兩件事,版面內距留給全站統一那一輪(ui-v1-full)一起看。 */}
           <div className="mx-auto flex h-14 max-w-5xl items-center gap-2 px-3 sm:px-5">
             <div className="flex shrink-0 items-center justify-start">
               <MerchantSwitcher
@@ -369,6 +392,7 @@ export default function AppLayout() {
                 canSwitchToStaffView={isDualRoleEligible}
                 isStaffView={isStaffView}
                 onToggleView={handleToggleStaffView}
+                onSignOut={handleSignOut}
               />
             </div>
             {/* 刻意用 <p> 而不是 <h1>:每一個子頁面自己已經有一個 <h1> 寫著同一個標題
@@ -376,30 +400,29 @@ export default function AppLayout() {
                 <h1> 會讓同一頁出現兩個第一級標題、把標題大綱弄亂。
                 2026-09-24 使用者反映頁首標題字太小,從 text-sm(14px)放大。手機跟寬螢幕刻意用不同尺寸,
                 `sm:text-lg` 不是多餘的:這個 <p> 是 flex-1 truncate,左邊是商家切換器、右邊是
-                「鈴鐺 + 登出」群組;目前最長的標題「月薪人員假別設定」8 個字實測 16px 下 128px、
-                18px 下 144px——18px 在 320px 手機上餘裕太小,之後標題再長一個字就會被截成省略號,
-                所以手機維持 text-base(16px),640px 以上才放到 text-lg(18px)。
+                鈴鐺;目前最長的標題「月薪人員假別設定」8 個字實測 16px 下 128px、18px 下 144px。
+                2026-09-29 登出搬走之前,320px 下中間只有 160px,18px 餘裕太小,所以手機維持
+                text-base(16px),640px 以上才放到 text-lg(18px)。搬走之後空間變多了,但字級
+                刻意不動(同上,這一輪只做使用者點名的兩件事)。
 
-                📌 320px 下中間這一格的**實測**寬度(2026-09-25 鈴鐺批次改完之後,Chromium
-                320×568 + isMobile,量測與斷言見 e2e/app-header-320.spec.ts 的 console 輸出):
-                **160px**(規格書 §13.6 的算式估 162px,實測少 2px —— 跟 §〇.9 當初「算式 160 vs
-                實測 158」一樣有 2px 誤差,算式不等於實測)。改動前是 158px。
-                也就是說**多塞了一顆鈴鐺之後,標題可用寬度反而比以前多 2px**,而最長的標題
-                「月薪人員假別設定」實測 scrollWidth = clientWidth = 160,沒有被截斷。 */}
+                📌 320px 下中間這一格的寬度紀錄(Chromium 320×568 + isMobile,量測與斷言見
+                e2e/app-header-320.spec.ts 的 console 輸出):
+                  ・2026-09-25 鈴鐺批次後(右側 = 鈴鐺 + 登出):**實測 160px**(算式 162px,
+                    算式跟實測固定差 2px)。
+                  ・2026-09-29 登出搬走後(右側 = 鈴鐺):算式 216px,依同樣誤差**預估實測約 214px**
+                    (待 e2e 跑過後以 console 輸出為準)。
+                最長標題實測 128px,兩個版本都沒有被截斷。 */}
             <p
               data-testid="app-header-title"
               className="min-w-0 flex-1 truncate text-center text-base font-semibold text-foreground sm:text-lg"
             >
               {headerTitle}
             </p>
-            {/* §13.6 第 2 點:鈴鐺與登出合併成「右側群組」,兩者之間 gap-1(4px),整個群組當成
-                **一個** flex 子項 —— 這樣整體仍然是三個 flex 子項,不會多一道 gap-2(8px)。
-                DOM 順序即視覺順序:鈴鐺在登出**左邊**(使用者明講的位置)。 */}
-            <div className="flex shrink-0 items-center justify-end gap-1">
+            {/* 右側只有鈴鐺(2026-09-29 #834:登出已收進左邊商家切換器的下拉選單)。
+                外面這層 div 保留,跟左邊那格對稱(都是 shrink-0 的 32px 格子),讓標題自然置中;
+                之後如果真的要再往右側加東西,先回去讀上面關於 320px 寬度預算的說明。 */}
+            <div className="flex shrink-0 items-center justify-end">
               <NotificationBell />
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                登出
-              </Button>
             </div>
           </div>
         </header>

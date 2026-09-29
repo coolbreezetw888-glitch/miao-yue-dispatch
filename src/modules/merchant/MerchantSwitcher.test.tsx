@@ -206,6 +206,53 @@ describe('MerchantSwitcher variant="compact"(頁首用:只顯示 LOGO)', () => {
     expect(screen.getByText("涼")).toBeTruthy();
   });
 
+  // 2026-09-29 ui-v1-small(SPECS-INDEX #834):登出從頁首右側搬進這個下拉選單。
+  it("有 onSignOut:選單最底部有紅字「登出」,點了會呼叫 onSignOut", () => {
+    setState([makeMerchant("m1", "涼風工匠"), makeMerchant("m2", "美甲")], "m1");
+    const onSignOut = vi.fn();
+
+    render(
+      <MerchantSwitcher variant="compact" canSwitchToStaffView={false} onSignOut={onSignOut} />,
+    );
+    openDropdown();
+
+    const item = screen.getByRole("menuitem", { name: "登出" });
+    // 危險色 token,不是寫死的色碼(配色要跟著商家主題走)。
+    expect(item.className).toContain("text-destructive");
+    // 「登出」要是選單裡**最後一個**項目(規範:在切換商家 / 切換視角的下面、隔一條分隔線)。
+    const items = screen.getAllByRole("menuitem");
+    expect(items[items.length - 1]).toBe(item);
+
+    // Radix 的 onSelect 是 click 觸發(pointerup 之後),這裡用 click 模擬選取。
+    fireEvent.click(item);
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("只有一間商家、沒有雙重身分、但有 onSignOut:仍然要有下拉選單(不然沒地方登出)", () => {
+    // 這是最常見的使用者(一間店的老闆)。2026-09-29 之前這種情況不做下拉選單、頁首上有獨立的
+    // 登出按鈕;登出搬進選單之後,選單就必須存在,否則他們會完全登不出去。
+    setState([makeMerchant("m1", "涼風工匠")], "m1");
+
+    render(
+      <MerchantSwitcher variant="compact" canSwitchToStaffView={false} onSignOut={() => {}} />,
+    );
+
+    expect(screen.getByRole("button", { name: "切換商家(目前:涼風工匠)" })).toBeTruthy();
+    openDropdown();
+    expect(screen.getByRole("menuitem", { name: "登出" })).toBeTruthy();
+    // 店名在選單裡以純標籤顯示(既有行為:單一商家時名稱不可點選)。
+    expect(screen.getByText("涼風工匠")).toBeTruthy();
+  });
+
+  it("沒有 onSignOut:單一商家、沒雙重身分時維持既有行為(純 LOGO,沒有按鈕、沒有登出)", () => {
+    setState([makeMerchant("m1", "涼風工匠")], "m1");
+
+    render(<MerchantSwitcher variant="compact" canSwitchToStaffView={false} />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByText("登出")).toBeNull();
+  });
+
   it("有 logo_url 時顯示圖片,alt 帶店名;沒有時 fallback 成店名首字", () => {
     const withLogo = makeMerchant("m1", "涼風工匠");
     (withLogo as { logo_url: string | null }).logo_url = "https://example.test/logo.png";
