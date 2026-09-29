@@ -1,33 +1,57 @@
 // 模組 12 §4.1:匯入精靈(新路由 /app/data-import，僅商家管理員可見)。
 // 上傳 CSV → 欄位對應 → 數值對應(僅歷史訂單需要) → 預覽 → 確認匯入 → 結果報告。
 // 涵蓋會員匯入(3.1)跟歷史訂單匯入(3.4)兩種類型，共用同一套精靈骨架(名詞對照「匯入精靈」)。
+//
+// ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
+//   - 頁首改 PageHeader;「匯入紀錄」不是這一頁的主要動作、而是去另一個頁面 ⇒ ② 次要(二之三)。
+//   - 所有欄位改 FormField + 共用欄位元件(FieldInput / FieldSelect);必填用紅色 `*`。
+//   - 🔴 欄位對應的下拉與「選擇既有服務人員」的下拉,選項都來自使用者上傳的 CSV 表頭 / 資料庫的
+//     服務人員清單(動態值)⇒ 一律套 guardPhantomEmptyChange。這一頁踩到幽靈空值的風險最高:
+//     CSV 解析完成之後才會有表頭可選(值是在掛載之後才灌進來的),正是 radixSelectGuard.ts 開頭
+//     描述的那個時序。欄位對應被洗成空字串 = 商家對好的欄位突然不見了,而且完全不知道為什麼。
+//   - 每個步驟只有一顆 ① 主要按鈕(下一步 / 確認匯入 / 查看匯入紀錄),「上一步」是 ② 次要。
+//     步驟一的「會員資料 / 歷史訂單」是**兩個地位相同的選項**,所以兩顆都用 ② 次要 ——
+//     沒有哪一個是「你最可能要做的那件事」,硬把其中一顆做成主要反而是誤導。
+//   - 確認匯入窗改小卡窗殼 CardAlertDialog;🔴 **不標紅**:匯入不刪任何資料,而且「匯入紀錄」
+//     頁面可以復原(有條件)。「送出後會立即寫入資料庫」「復原有時效與條件限制」屬於
+//     「按下去會發生什麼不可逆的事」⇒ 用 🟡 常駐 `!`(二)。
+//   - 🔴 兩處寫死的 text-emerald-600 改用語意色 token text-success-strong(skill 一:不要在
+//     元件裡寫死顏色;寫死的色碼在深色模式下對比會不夠)。
+//   - 🔴 用語:歷史訂單 CSS 模板的示範服務人員姓名從「王師傅」改成「陳美美」。skill 二之二明寫
+//     「畫面文字、通知訊息、錯誤訊息、示範資料、CSV 範本一律用『服務人員』」,不可以用「師傅」
+//     (那是冷氣產業的講法,這套系統要給美甲 / 美容 / 寵物美容 / 到府清潔各行各業用)。
+//
+// 📌 步驟四「預覽」刻意**維持多欄表格**,沒有改成卡片(skill 一「列表一律卡片式」的例外):
+//    這張表的用途是「檢查我的 CSS 欄位有沒有對到正確的秒約欄位」,必須讓同一欄的值上下對齊才
+//    看得出對錯 —— 換成一張卡一筆就失去這個功能。它不是「一筆資料一張卡、可以操作」的名單。
+//    這是 skill 沒有寫到的情境,已列入回報請主腦裁決。
+//
+// **只動外觀,不動行為**:六個步驟的流程與可否前進的判斷(canGoToPreview)、CSV 解析與筆數上限、
+// 欄位對應、建立新服務人員的驗證、匯入 API 呼叫、失敗清單下載、所有 data-testid 全部照舊。
 
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import {
+  AlertNote,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+  FieldInput,
+  FieldSelect,
+  FormField,
+  PageHeader,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -45,6 +69,7 @@ import {
   type ParsedCsv,
 } from "@/lib/csv";
 import { supabase } from "@/integrations/supabase/client";
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -100,7 +125,9 @@ function buildHistoricalBookingImportTemplate(): { filename: string; csv: string
   const example = [
     "陳小華",
     "0933222111",
-    "王師傅",
+    // 🔴 skill 二之二:示範資料與 CSV 範本一律用「服務人員」的用語,不可以出現「師傅」
+    //    (那是冷氣產業的講法,這套系統要給美甲 / 美容 / 寵物美容 / 到府清潔各行各業用)。
+    "陳美美",
     "2024-01-15 14:00",
     "90",
     "已完成",
@@ -310,26 +337,20 @@ function ImportWizardPageInner() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-5 py-10">
-      <div>
-        {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟精靈本身每個步驟裡的「上一步」按鈕
-            是兩件不同的事——「上一步」留在匯入流程內、回到前一個步驟；這顆「← 返回功能」是離開
-            整個匯入流程。比照既有頁面(例如付款方式管理)的統一寫法與文案。 */}
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">資料匯入</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            上傳 CSV，把舊系統的資料匯入到秒約——這是一個通用欄位對應工具，不是一鍵搬家，商家需要
-            自己先把舊系統資料匯出成 CSV。
-          </p>
-        </div>
-        <Button variant="outline" size="sm" asChild>
-          <Link to="/app/data-import/history">匯入紀錄</Link>
-        </Button>
-      </div>
+      {/* SPECS-INDEX #600(§10.1):固定導回「功能」主頁，跟精靈本身每個步驟裡的「上一步」按鈕
+          是兩件不同的事——「上一步」留在匯入流程內、回到前一個步驟；這顆「← 返回功能」是離開
+          整個匯入流程。比照既有頁面(例如付款方式管理)的統一寫法與文案。 */}
+      <PageHeader
+        backTo="/app/manage"
+        title="資料匯入"
+        description="上傳 CSV，把舊系統的資料匯入到秒約——這是一個通用欄位對應工具，不是一鍵搬家，商家需要自己先把舊系統資料匯出成 CSV。"
+        action={
+          // 去另一個頁面,不是這一頁的主要動作 ⇒ ② 次要(skill 二之三)。
+          <Button asChild variant="neutral" size="touch">
+            <Link to="/app/data-import/history">匯入紀錄</Link>
+          </Button>
+        }
+      />
 
       {/* 步驟一:選擇匯入類型 */}
       {step === "type" && (
@@ -341,9 +362,13 @@ function ImportWizardPageInner() {
               UTF-8(逗號分隔)」格式。 單批匯入上限 {MAX_ROWS} 筆，筆數過多請分批匯入。
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row">
+          {/* 兩個地位相同的選項 ⇒ 兩顆都用 ② 次要、等寬(skill 二之三:沒有哪一個是「你最可能
+              要做的那件事」,硬把其中一顆做成主要反而是誤導)。 */}
+          <CardContent className="flex flex-col gap-2 sm:flex-row">
             <Button
-              variant={importKind === "members" ? "default" : "outline"}
+              type="button"
+              variant="neutral"
+              size="touch"
               className="flex-1"
               onClick={() => {
                 setImportKind("members");
@@ -353,7 +378,9 @@ function ImportWizardPageInner() {
               會員資料
             </Button>
             <Button
-              variant={importKind === "historical_bookings" ? "default" : "outline"}
+              type="button"
+              variant="neutral"
+              size="touch"
               className="flex-1"
               onClick={() => {
                 setImportKind("historical_bookings");
@@ -375,10 +402,10 @@ function ImportWizardPageInner() {
               上傳檔案後，把 CSV 欄位對應到秒約的欄位，必填欄位有星號標示。
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
             {/* SPECS-INDEX #603(§10.4):會員/歷史訂單各自提供專屬模板,不是通用單一模板。 */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border p-3">
-              <p className="text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-dashed border-border bg-muted/30 p-3">
+              <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
                 {importKind === "members" ? (
                   <>
                     還沒整理好 CSV?可以先下載範例模板對照欄位。這個商家目前
@@ -391,91 +418,113 @@ function ImportWizardPageInner() {
                   </>
                 )}
               </p>
-              <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate}>
+              <Button type="button" variant="neutral" size="card" onClick={handleDownloadTemplate}>
                 下載 CSV 模板
               </Button>
             </div>
 
-            <div>
-              <Label htmlFor="csv-file">CSV 檔案</Label>
-              <Input
+            <FormField label="CSV 檔案" htmlFor="csv-file" required>
+              <FieldInput
                 id="csv-file"
                 type="file"
                 accept=".csv,text/csv"
-                className="mt-2"
+                className="file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-[13px] file:font-semibold"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) void handleFileUpload(file);
                 }}
               />
-            </div>
+            </FormField>
 
             {parsed && (
               <>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm tabular-nums text-muted-foreground">
                   已解析 {parsed.rows.length} 筆資料，共 {parsed.headers.length} 欄。
                 </p>
 
                 {importKind === "members" && (
-                  <div>
-                    <Label>寫入模式</Label>
-                    <Select
+                  <FormField
+                    label="寫入模式"
+                    htmlFor="import-write-mode"
+                    help={
+                      <>
+                        <strong>只新增</strong>:CSV 裡的電話如果系統已經有了,就整列跳過不動,
+                        既有資料一定不會被改到(不確定時選這個)。
+                        <br />
+                        <strong>電話重複時更新</strong>:CSV 會蓋掉系統既有那一筆會員的資料。
+                      </>
+                    }
+                    helpLabel="說明:兩種寫入模式的差別是什麼"
+                  >
+                    <FieldSelect<MemberImportWriteMode>
+                      id="import-write-mode"
                       value={writeMode}
-                      onValueChange={(v) => setWriteMode(v as MemberImportWriteMode)}
-                    >
-                      <SelectTrigger className="mt-2">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="insert_only">
-                          只新增，電話重複則略過(較安全，預設)
-                        </SelectItem>
-                        <SelectItem value="upsert_by_phone">電話重複時更新既有會員資料</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                      // 固定白名單 ⇒ 最嚴格的那一種 guard 用法。
+                      onValueChange={guardPhantomEmptyChange<MemberImportWriteMode>(
+                        setWriteMode,
+                        (v) => v === "insert_only" || v === "upsert_by_phone",
+                      )}
+                      options={[
+                        { value: "insert_only", label: "只新增，電話重複則略過(較安全，預設)" },
+                        { value: "upsert_by_phone", label: "電話重複時更新既有會員資料" },
+                      ]}
+                    />
+                  </FormField>
                 )}
 
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   {targetFields
                     .filter((f) => f.key !== "staff_name" || importKind === "historical_bookings")
                     .map((field) => (
+                      // 320px 下「秒約欄位名稱 + 下拉」並排會把下拉擠爆 ⇒ 手機直向堆疊、電腦並排
+                      // (skill 一:同一份設計靠 CSS 換行,不做兩份)。
                       <div
                         key={field.key}
-                        className="flex items-center gap-3"
+                        className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3"
                         data-testid={`mapping-row-${field.key}`}
                       >
-                        <Label className="w-56 shrink-0 text-sm">
-                          {field.label}
-                          {field.required && <span className="text-destructive"> *</span>}
-                        </Label>
-                        <Select
-                          value={mapping[field.key] || "__none__"}
-                          onValueChange={(v) => handleMappingChange(field.key, v)}
+                        <Label
+                          htmlFor={`mapping-select-${field.key}`}
+                          className="text-[13px] font-semibold text-foreground sm:w-56 sm:shrink-0"
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder="不對應" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">不對應</SelectItem>
-                            {parsed.headers.map((h) => (
-                              <SelectItem key={h} value={h}>
-                                {h}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          {field.label}
+                          {field.required && (
+                            <span className="text-destructive" aria-hidden="true">
+                              {" "}
+                              *
+                            </span>
+                          )}
+                        </Label>
+                        <div className="min-w-0 flex-1">
+                          <FieldSelect
+                            id={`mapping-select-${field.key}`}
+                            value={mapping[field.key] || "__none__"}
+                            // 選項是使用者上傳的 CSV 表頭(解析完才灌進來的動態值)⇒ 一定要 guard。
+                            onValueChange={guardPhantomEmptyChange((v) =>
+                              handleMappingChange(field.key, v),
+                            )}
+                            placeholder="不對應"
+                            options={[
+                              { value: "__none__", label: "不對應" },
+                              ...parsed.headers.map((h) => ({ value: h, label: h })),
+                            ]}
+                          />
+                        </div>
                       </div>
                     ))}
                 </div>
               </>
             )}
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("type")}>
+            <div className="flex justify-between gap-2 pt-1">
+              <Button type="button" variant="neutral" size="touch" onClick={() => setStep("type")}>
                 上一步
               </Button>
+              {/* 這個步驟唯一的 ① 主要按鈕(skill 二之三)。 */}
               <Button
+                type="button"
+                variant="primary"
+                size="touch"
                 disabled={!parsed || !mapping[importKind === "members" ? "name" : "customer_name"]}
                 onClick={() =>
                   setStep(importKind === "historical_bookings" ? "value-mapping" : "preview")
@@ -498,72 +547,86 @@ function ImportWizardPageInner() {
               (姓名+手機號碼)。如果中途離開沒完成匯入，已建立的新服務人員不會被自動刪除。
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
             {distinctStaffNames.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                請先回到上一步，把「服務人員」欄位對應到 CSV 裡的一欄。
-              </p>
+              // 🟡 常駐 `!`:為什麼這一步是空的 / 為什麼不能往下(skill 二)。
+              <AlertNote>請先回到上一步，把「服務人員」欄位對應到 CSV 裡的一欄。</AlertNote>
             )}
             {distinctStaffNames.map((name) => (
+              // 一列有「CSV 裡的名字 + 下拉 + 手機 + 按鈕」四個東西,320px 下絕對排不進一列
+              // ⇒ 手機直向堆疊、電腦並排(skill 一)。
               <div
                 key={name}
-                className="flex items-center gap-3"
+                className="flex flex-col gap-2 rounded-lg border border-border px-3.5 py-3"
                 data-testid={`staff-mapping-${name}`}
               >
-                <span className="w-40 shrink-0 truncate text-sm font-medium">{name}</span>
+                <span className="min-w-0 break-words text-sm font-semibold text-foreground">
+                  {name}
+                </span>
                 {staffValueMapping[name] ? (
-                  <span className="text-sm text-muted-foreground">
+                  <span className="text-[13px] text-muted-foreground">
                     已對應:
                     {staffList?.find((s) => s.id === staffValueMapping[name])?.name ??
                       "(新建立的服務人員)"}
                   </span>
                 ) : (
                   <>
-                    <Select
-                      onValueChange={(v) =>
-                        setStaffValueMapping((prev) => ({ ...prev, [name]: v }))
-                      }
-                    >
-                      <SelectTrigger className="max-w-xs">
-                        <SelectValue placeholder="選擇既有服務人員" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(staffList ?? []).map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {/* SPECS-INDEX #632:建立新服務人員現在需要手機號碼(09 開頭共 10 碼),
-                        跟既有服務人員管理頁的新增表單套用同一套必填+格式驗證規則。 */}
-                    <Input
-                      type="tel"
-                      placeholder="手機號碼,例如 0912345678"
-                      className="w-44 shrink-0"
-                      data-testid={`staff-new-phone-${name}`}
-                      value={newStaffPhoneDrafts[name] ?? ""}
-                      onChange={(e) =>
-                        setNewStaffPhoneDrafts((prev) => ({ ...prev, [name]: e.target.value }))
-                      }
+                    <FieldSelect
+                      aria-label={`「${name}」要對應到哪一位既有服務人員`}
+                      // 選項來自資料庫(動態清單)⇒ 只擋空字串的那一種 guard 用法。
+                      onValueChange={guardPhantomEmptyChange((v) =>
+                        setStaffValueMapping((prev) => ({ ...prev, [name]: v })),
+                      )}
+                      placeholder="選擇既有服務人員"
+                      options={(staffList ?? []).map((s) => ({ value: s.id, label: s.name }))}
                     />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleCreateNewStaff(name)}
-                    >
-                      建立新服務人員
-                    </Button>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      {/* SPECS-INDEX #632:建立新服務人員現在需要手機號碼(09 開頭共 10 碼),
+                          跟既有服務人員管理頁的新增表單套用同一套必填+格式驗證規則。 */}
+                      <FieldInput
+                        type="tel"
+                        inputMode="numeric"
+                        aria-label={`「${name}」如果要建立成新服務人員,他的手機號碼`}
+                        placeholder="手機號碼,例如 0912345678"
+                        className="min-w-0 flex-1 tabular-nums"
+                        data-testid={`staff-new-phone-${name}`}
+                        value={newStaffPhoneDrafts[name] ?? ""}
+                        onChange={(e) =>
+                          setNewStaffPhoneDrafts((prev) => ({ ...prev, [name]: e.target.value }))
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="neutral"
+                        size="touch"
+                        className="shrink-0"
+                        onClick={() => void handleCreateNewStaff(name)}
+                      >
+                        建立新服務人員
+                      </Button>
+                    </div>
                   </>
                 )}
               </div>
             ))}
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("upload")}>
+            <div className="flex justify-between gap-2 pt-1">
+              <Button
+                type="button"
+                variant="neutral"
+                size="touch"
+                onClick={() => setStep("upload")}
+              >
                 上一步
               </Button>
-              <Button disabled={!canGoToPreview()} onClick={() => setStep("preview")}>
+              {/* 這個步驟唯一的 ① 主要按鈕。 */}
+              <Button
+                type="button"
+                variant="primary"
+                size="touch"
+                disabled={!canGoToPreview()}
+                onClick={() => setStep("preview")}
+              >
                 下一步
               </Button>
             </div>
@@ -578,7 +641,10 @@ function ImportWizardPageInner() {
             <CardTitle>步驟四:預覽</CardTitle>
             <CardDescription>顯示前 20 筆解析結果，確認沒問題後再正式匯入。</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="flex flex-col gap-4">
+            {/* 📌 這裡刻意維持多欄表格(skill 一「列表一律卡片式」的例外,理由見檔頭說明):
+                這張表的用途是「檢查我的 CSV 欄位有沒有對到正確的秒約欄位」,同一欄的值必須上下
+                對齊才看得出對錯。放不下就整塊橫向捲(比照 skill 六行事曆的服務人員欄做法)。 */}
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -598,9 +664,12 @@ function ImportWizardPageInner() {
                       <TableRow key={idx}>
                         <TableCell>
                           {validity.ok ? (
-                            <span className="text-emerald-600">看起來會成功</span>
+                            // 語意色 token,不寫死 emerald(深色模式下寫死的色碼對比會不夠)。
+                            <span className="font-semibold text-success-strong">看起來會成功</span>
                           ) : (
-                            <span className="text-destructive">{validity.reason}</span>
+                            <span className="font-semibold text-destructive-strong">
+                              {validity.reason}
+                            </span>
                           )}
                         </TableCell>
                         {targetFields
@@ -615,21 +684,32 @@ function ImportWizardPageInner() {
               </Table>
             </div>
             {importKind === "historical_bookings" && (
-              <p className="text-xs text-muted-foreground">
+              // 🟡 常駐 `!`:匯進去的結果跟商家以為的不一樣(他會以為工時是空的)(skill 二)。
+              <AlertNote>
                 沒有填服務時長的資料列，會使用系統預設工時(60 分鐘)，非精確歷史資料。
-              </p>
+              </AlertNote>
             )}
 
-            <div className="flex justify-between pt-2">
+            <div className="flex justify-between gap-2 pt-1">
               <Button
-                variant="outline"
+                type="button"
+                variant="neutral"
+                size="touch"
                 onClick={() =>
                   setStep(importKind === "historical_bookings" ? "value-mapping" : "upload")
                 }
               >
                 上一步
               </Button>
-              <Button onClick={() => setStep("confirm")}>下一步</Button>
+              {/* 這個步驟唯一的 ① 主要按鈕。 */}
+              <Button
+                type="button"
+                variant="primary"
+                size="touch"
+                onClick={() => setStep("confirm")}
+              >
+                下一步
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -641,34 +721,49 @@ function ImportWizardPageInner() {
           <CardHeader>
             <CardTitle>步驟五:確認匯入</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-foreground">
-              即將匯入 {mappedRows.length} 筆資料，匯入後可以在「匯入紀錄」頁面復原，但復原有時效與
-              條件限制(如果這筆資料之後被使用或編輯過，就無法自動復原)。
+          <CardContent className="flex flex-col gap-4">
+            <p className="text-sm leading-relaxed tabular-nums text-foreground">
+              即將匯入 {mappedRows.length} 筆資料。
             </p>
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => setStep("preview")}>
+            {/* 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。 */}
+            <AlertNote>
+              匯入後可以在「匯入紀錄」頁面復原，但
+              <strong>復原有時效與條件限制</strong>
+              ——如果這筆資料之後被使用或編輯過，就無法自動復原。
+            </AlertNote>
+            <div className="flex justify-between gap-2 pt-1">
+              <Button
+                type="button"
+                variant="neutral"
+                size="touch"
+                onClick={() => setStep("preview")}
+              >
                 上一步
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button disabled={submitting}>{submitting ? "匯入中⋯" : "確認匯入"}</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>確定要匯入這 {mappedRows.length} 筆資料嗎?</AlertDialogTitle>
-                    <AlertDialogDescription>
+              <CardAlertDialog>
+                <CardAlertDialogTrigger asChild>
+                  {/* 這個步驟唯一的 ① 主要按鈕。🔴 不標紅:匯入不刪任何資料。 */}
+                  <Button type="button" variant="primary" size="touch" disabled={submitting}>
+                    {submitting ? "匯入中⋯" : "確認匯入"}
+                  </Button>
+                </CardAlertDialogTrigger>
+                <CardAlertDialogContent>
+                  <CardAlertDialogHeader>
+                    <CardAlertDialogTitle>
+                      確定要匯入這 {mappedRows.length} 筆資料嗎?
+                    </CardAlertDialogTitle>
+                    <CardAlertDialogDescription>
                       送出後會立即寫入資料庫，之後可以在「匯入紀錄」頁面查看結果並視情況復原。
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>取消</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => void handleConfirmImport()}>
+                    </CardAlertDialogDescription>
+                  </CardAlertDialogHeader>
+                  <CardAlertDialogFooter>
+                    <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                    <CardAlertDialogAction onClick={() => void handleConfirmImport()}>
                       確認匯入
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                    </CardAlertDialogAction>
+                  </CardAlertDialogFooter>
+                </CardAlertDialogContent>
+              </CardAlertDialog>
             </div>
           </CardContent>
         </Card>
@@ -680,39 +775,53 @@ function ImportWizardPageInner() {
           <CardHeader>
             <CardTitle>步驟六:結果報告</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <CardContent className="flex flex-col gap-4">
+            {/* ⚠️ 這四塊統計方塊的 `rounded-md border` 與 `text-2xl` 是 e2e 的選擇器
+                (e2e/data-import-members.spec.ts 的 readStat 用
+                `.rounded-md.border` + `p.text-2xl` 取值),改 class 會讓 e2e 抓不到,
+                所以這次刻意不動這兩個 class(#849 要統一處理 e2e 選擇器時再一起改)。 */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="rounded-md border border-border p-3 text-center">
-                <p className="text-2xl font-bold">{result.total}</p>
+                <p className="text-2xl font-bold tabular-nums">{result.total}</p>
                 <p className="text-xs text-muted-foreground">總筆數</p>
               </div>
               <div className="rounded-md border border-border p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-600">{result.success}</p>
+                <p className="text-2xl font-bold tabular-nums text-success-strong">
+                  {result.success}
+                </p>
                 <p className="text-xs text-muted-foreground">成功</p>
               </div>
               <div className="rounded-md border border-border p-3 text-center">
-                <p className="text-2xl font-bold text-destructive">{result.failed}</p>
+                <p className="text-2xl font-bold tabular-nums text-destructive-strong">
+                  {result.failed}
+                </p>
                 <p className="text-xs text-muted-foreground">失敗</p>
               </div>
               <div className="rounded-md border border-border p-3 text-center">
-                <p className="text-2xl font-bold">{result.skipped}</p>
+                <p className="text-2xl font-bold tabular-nums">{result.skipped}</p>
                 <p className="text-xs text-muted-foreground">略過(重複)</p>
               </div>
             </div>
 
             {result.errors.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">失敗清單</p>
-                  <Button variant="outline" size="sm" onClick={handleDownloadFailedRows}>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[13px] font-semibold text-foreground">失敗清單</p>
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    size="card"
+                    onClick={handleDownloadFailedRows}
+                  >
                     下載失敗清單 CSV
                   </Button>
                 </div>
-                <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+                <div className="max-h-64 divide-y divide-border overflow-y-auto rounded-md border border-border">
                   {result.errors.map((e, i) => (
-                    <div key={i} className="border-b border-border p-2 text-sm last:border-b-0">
-                      <p className="font-medium">
-                        第 {e.row_number} 列:{e.error_message}
+                    <div key={i} className="px-3 py-2 text-[13px] leading-relaxed">
+                      <p className="break-words">
+                        <span className="font-semibold tabular-nums">第 {e.row_number} 列</span>:
+                        {e.error_message}
                       </p>
                     </div>
                   ))}
@@ -720,11 +829,12 @@ function ImportWizardPageInner() {
               </div>
             )}
 
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={resetWizard}>
+            <div className="flex justify-between gap-2 pt-1">
+              <Button type="button" variant="neutral" size="touch" onClick={resetWizard}>
                 再匯入一次
               </Button>
-              <Button asChild>
+              {/* 這個步驟唯一的 ① 主要按鈕。 */}
+              <Button asChild variant="primary" size="touch">
                 <Link to="/app/data-import/history">查看匯入紀錄</Link>
               </Button>
             </div>

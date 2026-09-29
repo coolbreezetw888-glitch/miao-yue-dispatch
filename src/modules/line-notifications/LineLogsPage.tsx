@@ -9,9 +9,10 @@
 //     主要動作就是「查看詳情 / 收合詳情」,展開的內容放在卡片內(ListCard 的 children)。
 //   - 狀態徽章改 StatusTag(二之四):成功 = success、失敗 = danger、跳過 = neutral。
 //   - 展開後的詳情改用明細列 DetailRow(二之六:左邊淡標籤、右邊粗值,兩側都能折行)。
-//   - 事件類型篩選改 FieldSelect(二之七的統一下拉樣式)。
-//     📌 這裡**沒有**加 guardPhantomEmptyChange:選項是寫死的白名單("all" + 固定的事件類型
-//     標籤表),不是來自資料庫的動態值,FieldSelect 的 JSDoc 說明的就是這個判斷標準。
+//   - 事件類型篩選改 FieldSelect(二之七的統一下拉樣式),並套上 guardPhantomEmptyChange
+//     (src/lib/radixSelectGuard.ts 自己就寫「新加 Select 時建議直接套,一律套上沒有副作用」)。
+//     選項是寫死的白名單("all" + 固定的事件類型標籤表),所以用最嚴格的白名單那一種用法 ——
+//     萬一被幽靈空值洗掉,篩選會變成空字串、查詢直接查不到東西,防起來成本是一行。
 //   - 上一頁 / 下一頁改 ② 次要按鈕;頁碼加 tabular-nums。
 //
 // **只動外觀,不動行為**:查詢參數(篩選 / 分頁 / PAGE_SIZE)、換篩選時回到第一頁、
@@ -34,6 +35,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
 import { useLineNotificationLog } from "./api";
@@ -89,11 +91,14 @@ function LineLogsPageInner() {
       <Card>
         <CardHeader className="gap-3">
           <CardTitle>記錄</CardTitle>
-          {/* 選項是寫死的白名單,不需要 guardPhantomEmptyChange(見檔頭說明)。 */}
+          {/* 選項是寫死的白名單 ⇒ 用最嚴格的那一種 guard 用法(見檔頭說明)。 */}
           <FieldSelect
             aria-label="篩選事件類型"
             value={eventFilter}
-            onValueChange={handleFilterChange}
+            onValueChange={guardPhantomEmptyChange(
+              handleFilterChange,
+              (v) => v === "all" || v in LINE_LOG_EVENT_TYPE_LABELS,
+            )}
             placeholder="篩選事件類型"
             options={[
               { value: "all", label: "全部事件" },

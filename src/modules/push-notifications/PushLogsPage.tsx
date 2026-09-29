@@ -15,8 +15,9 @@
 //     這是這一頁存在的理由(老闆要一眼看出「有人沒收到」)。
 //   - 「結果」篩選只有兩個選項 ⇒ 改成底線式**篩選列**(variant="filter",一眼全部看到,
 //     不捲不換行);事件類型有五個選項且會再增加 ⇒ 維持下拉,改用 FieldSelect 的統一樣式。
-//     📌 兩個篩選都**沒有**加 guardPhantomEmptyChange:選項是寫死的白名單,不是資料庫的動態值
-//     (FieldSelect 的 JSDoc 說明的就是這個判斷標準)。
+//     📌 下拉那一個套上 guardPhantomEmptyChange + 白名單判斷(src/lib/radixSelectGuard.ts
+//     自己就寫「新加 Select 時建議直接套,一律套上沒有副作用」);萬一被幽靈空值洗掉,篩選會
+//     變成空字串、查詢直接查不到東西。底線式篩選列是 Radix Tabs、不是 Select,沒有這個問題。
 //   - 展開 / 收合、上一頁 / 下一頁改 ② 次要按鈕;時間與頁碼加 tabular-nums。
 //
 // **只動外觀,不動行為**:查詢參數、群組邏輯(pushLogView.ts)、白話原因不收進「查看詳情」、
@@ -40,6 +41,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
 import { usePushLogRecipientDirectory, usePushNotificationLog } from "./api";
@@ -249,11 +251,14 @@ function PushLogsPageInner() {
               <UnderlineTabsTrigger value="problems">只看沒發成功的</UnderlineTabsTrigger>
             </UnderlineTabsList>
           </Tabs>
-          {/* 事件類型有五個且會再增加 ⇒ 維持下拉。選項是寫死白名單,不需要 guard。 */}
+          {/* 事件類型有五個且會再增加 ⇒ 維持下拉。選項是寫死白名單 ⇒ 最嚴格的那一種 guard 用法。 */}
           <FieldSelect
             aria-label="篩選事件類型"
             value={eventFilter}
-            onValueChange={handleEventFilterChange}
+            onValueChange={guardPhantomEmptyChange(
+              handleEventFilterChange,
+              (v) => v === "all" || v in PUSH_NOTIFICATION_EVENT_LABELS,
+            )}
             placeholder="篩選事件類型"
             options={[
               { value: "all", label: "全部事件" },
