@@ -35,11 +35,10 @@
 //     (旁邊就有「解除黑名單」),而且它不刪任何資料。紅色只留給真正不可逆的刪除
 //     (第 1 / 2 批已定案的裁決);實心紅還會讓最危險的動作變成視覺上最好按的那一顆(二之三)。
 //     「解除黑名單」同理維持次要。
-//   - 相關訂單改 ListCard(二之五)。
-//   - 推薦名單改 DetailLinkRow + `to`(二之六 第 6 點:「去別的地方看」做成可點的列 + `›`)。
-//     ui-v1-full 收尾批(SPECS-INDEX #832):第 3 批因為 DetailLinkRow 當時沒有 `to`、
-//     只吃 onClick(做出來是 <button>,中鍵開不了新分頁)才先用 ListCard + <Link> 繞過;
-//     現在 DetailLinkRow 補了 `to`,改回 skill 指定的做法。
+//   - 相關訂單 / 推薦名單改 ListCard(二之五),推薦名單的「查看」做成真正的 <Link>(可右鍵開新分頁)。
+//     🔴 2026-09-30 主腦裁決:推薦名單**維持 ListCard**,不要改成 DetailLinkRow —— 它是一整份
+//     名單(二之五),不是「相關訂單 / 操作記錄」那種去別的地方看的入口列(二之六 第 6 點);
+//     改成可點的列還會失去「已移除會員整列變灰」的處理。收尾批一度改過,已經改回來。
 //   - 載入中改灰色骨架;找不到會員改 ErrorState(講什麼壞了 / 可能原因 / 下一步 +「資料沒有遺失」)。
 //
 // 📌 相關訂單 / 推薦名單的空狀態刻意**不放下一步按鈕**(EmptyState.action 的例外條款):
@@ -50,7 +49,7 @@
 // points_feature_enabled 關閉時整張點數卡片隱藏、推薦人唯讀、複製推薦碼的 1.5 秒回饋全部照舊。
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -65,8 +64,6 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   CardDialogTrigger,
-  DetailLinkRow,
-  DetailLinkRows,
   DetailPhoneRow,
   DetailRow,
   DetailSection,
@@ -376,6 +373,7 @@ function BlacklistDialog({ member, onSaved }: { member: Member; onSaved: () => v
 
 function MemberDetailInner() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { merchant } = useCurrentMerchant();
   const { data: memberSettings } = useMerchantMemberSettings(merchant?.id ?? null);
@@ -656,37 +654,42 @@ function MemberDetailInner() {
               description="把他的推薦碼給新客戶,新客戶建立會員時填上,就會出現在這裡並自動核發推薦獎勵。"
             />
           ) : (
-            // skill 二之六 第 6 點:「去別的地方看」的項目做成可點的列 + `›`。
-            // 收尾批(SPECS-INDEX #832):第 3 批因為 DetailLinkRow 當時沒有 `to`(只吃 onClick,
-            // 做出來會是 <button>,中鍵開不了新分頁)才先用 ListCard + <Link> 繞過;現在
-            // DetailLinkRow 補了 `to`(真正的 <a href>),改回 skill 指定的做法。
-            <DetailLinkRows>
+            // 🔴 這裡是 ListCard(skill 二之五「一張卡片 = 一筆資料」),**不是** DetailLinkRow。
+            // 2026-09-30 主腦裁決(推翻收尾批一度改成 DetailLinkRow 的做法,不要再改回去):
+            //   推薦名單的每一列是「一位會員 + 狀態 + 獎勵標籤」,是**一整份名單**,適用二之五;
+            //   二之六 第 6 點那條「可點的列 + ›」講的是「相關訂單 / 操作記錄」那種
+            //   **去別的地方看的入口列**(一兩條、通往另一塊內容),不是名單。
+            //   而且做成可點的列會失去「已移除的會員整列變灰」(state="inactive")的處理 ——
+            //   用 text-muted-foreground 把名字變淡補不回同樣的視覺份量。
+            <ul className="flex flex-col gap-2.5">
               {referrals.map((r) => (
-                <DetailLinkRow
-                  key={r.id}
-                  to={`/app/members/${r.id}`}
-                  label={
-                    <>
-                      <span
-                        className={
-                          r.status === "active" ? "font-semibold" : "text-muted-foreground"
-                        }
-                      >
-                        {r.name}
-                      </span>
-                      {r.status === "active" ? (
-                        <StatusTag tone="success">{MEMBER_STATUS_LABELS.active}</StatusTag>
-                      ) : (
-                        <StatusTag tone="neutral">{MEMBER_STATUS_LABELS.removed}</StatusTag>
-                      )}
-                      <AttributeTag wrap>
-                        {r.referralRewardedAt ? "已核發推薦獎勵" : "尚未核發推薦獎勵"}
-                      </AttributeTag>
-                    </>
-                  }
-                />
+                <li key={r.id}>
+                  <ListCard
+                    state={r.status === "active" ? "default" : "inactive"}
+                    title={r.name}
+                    tags={
+                      <>
+                        {r.status === "active" ? (
+                          <StatusTag tone="success">{MEMBER_STATUS_LABELS.active}</StatusTag>
+                        ) : (
+                          <StatusTag tone="neutral">{MEMBER_STATUS_LABELS.removed}</StatusTag>
+                        )}
+                        <AttributeTag wrap>
+                          {r.referralRewardedAt ? "已核發推薦獎勵" : "尚未核發推薦獎勵"}
+                        </AttributeTag>
+                      </>
+                    }
+                    onClick={() => navigate(`/app/members/${r.id}`)}
+                    primaryAction={
+                      // 會跳頁 ⇒ 真正的 <a href>,可以右鍵 / 中鍵開新分頁(第 1 / 2 批已定案的裁決)。
+                      <Button asChild variant="neutral" size="card">
+                        <Link to={`/app/members/${r.id}`}>查看</Link>
+                      </Button>
+                    }
+                  />
+                </li>
               ))}
-            </DetailLinkRows>
+            </ul>
           )}
         </CardContent>
       </Card>
