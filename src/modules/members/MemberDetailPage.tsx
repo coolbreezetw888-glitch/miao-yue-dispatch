@@ -11,11 +11,15 @@
 // 總覽」被移除,而它是那頁唯一的選人入口,所以「異動歷史 / 手動調整 / 登記兌換」整組搬回這頁的
 // 「點數」卡片(元件抽在 MemberPointsPanel.tsx,權限邊界逐項對照見該檔案開頭)。這頁不再有
 // 「查看完整點數紀錄」連結,/app/member-points 也不再支援 ?member= 深連結。
-// ⚠️ 連帶調整:「點數」卡片改成 points_feature_enabled 關閉時**仍然顯示**(卡片內多一條「功能已
-//    關閉」提示)。理由:2026-09-24 的開關語意升級刻意讓後端在關閉後仍放行「手動調整 / 登記兌換」,
-//    好讓商家把會員剩餘點數結清;那兩個入口現在只剩這裡一處,如果沿用 #617「關閉就整張卡片隱藏」,
-//    商家關掉功能後就再也找不到地方結清餘額,跟後端刻意放行的設計互相矛盾。這是 engineer 的判斷,
-//    已在 #830 回報裡標明待主腦/使用者確認。
+// ⚠️ #830 第一版曾把「點數」卡片改成 points_feature_enabled 關閉時仍然顯示(卡片內多一條「功能已
+//    關閉」提示),理由是後端關閉後仍放行「手動調整 / 登記兌換」、要留一條結清餘額的路。
+//    **2026-09-29 第三輪使用者裁決推翻這個判斷**,恢復 #617 原本的行為:關閉時整張卡片隱藏。
+//    使用者原話:「關閉後其實隱藏也可以,因為開啟功能時才可以使用,隱藏後紅利也不再計點,而且也
+//    不再能使用折抵,所以隱藏沒問題。」
+//    連帶結果(使用者已知悉並接受):功能關閉期間前端沒有任何結清點數的入口;商家要結清某位會員的
+//    剩餘點數,必須先到「紅利點數管理」把功能重新開啟 → 到這裡結清 → 再關閉。後端在關閉時仍放行
+//    adjust/redeem(migration 20260924030000)刻意不動,只是前端不再提供入口。
+//    ⚠️ 下一個人若又覺得「這樣沒辦法結清」而想改回顯示,請先看上面那句使用者原話,不要再改回去。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -492,22 +496,20 @@ function MemberDetailInner() {
       </Card>
 
       {/* SPECS-INDEX #830:點數卡片改成完整的操作面板(餘額 + 登記兌換 / 手動調整 + 異動歷史),
-          從 MemberPointsPage.tsx 搬回來,見檔案開頭說明。points_feature_enabled 關閉時卡片不再隱藏
-          (理由同見檔案開頭),改成在卡片內提示「功能已關閉」,讓商家仍能在這裡結清既有點數。 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>點數</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!pointsFeatureEnabled ? (
-            <div className="rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-foreground">
-              目前紅利點數功能已關閉,系統不會再自動給這位會員任何新點數(消費、推薦、生日都不發)。
-              你仍然可以在這裡查看、手動調整、登記兌換既有的點數,把剩餘餘額結清。
-            </div>
-          ) : null}
-          <MemberPointsPanel member={member} />
-        </CardContent>
-      </Card>
+          從 MemberPointsPage.tsx 搬回來,見檔案開頭說明。
+          points_feature_enabled 關閉時整張卡片隱藏(#617 原行為;#830 第一版改成仍顯示,
+          2026-09-29 使用者裁決推翻、改回隱藏,原話與連帶結果見檔案開頭)。連帶:關閉期間要結清點數
+          必須先重新開啟功能 → 結清 → 再關閉,這是使用者知悉並接受的,不要為了「沒地方結清」再改回顯示。 */}
+      {pointsFeatureEnabled ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>點數</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MemberPointsPanel member={member} />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

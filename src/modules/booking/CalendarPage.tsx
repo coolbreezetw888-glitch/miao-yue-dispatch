@@ -370,6 +370,13 @@ export function BookingFormDialog({
   // 送出時再轉數字)。key 是 service_item_id。
   const [itemQuantities, setItemQuantities] = useState<Record<string, string>>({});
   const [itemUnitPrices, setItemUnitPrices] = useState<Record<string, string>>({});
+  // SPECS-INDEX #829 使用者裁決修正(2026-09-29 第三輪):編輯既有訂單時,「單價有沒有被個別調整」的
+  // 比對基準。開啟表單、editingDetail 載入時,把每個服務項目的 unit_price_snapshot(以及名稱,下架
+  // 項目不在 serviceItems 清單裡時要靠這裡的名稱顯示)另存一份,之後 adjustedUnitPriceItemNames
+  // 就拿目前輸入值跟這份基準比,而不是跟 service_items.price 現價比。新增預約模式這份永遠是空的。
+  const [loadedUnitPriceSnapshots, setLoadedUnitPriceSnapshots] = useState<
+    Record<string, { price: number; name: string }>
+  >({});
 
   // §4.3 自訂工時開關(裁決 Q3 方向一):開啟後 end_at 直接改用這裡輸入的總服務時長計算,
   // 會真的影響排程佔用與衝突檢查邊界(含第五節單日例外第三層),不是只影響前端顯示。
@@ -424,6 +431,15 @@ export function BookingFormDialog({
       setItemUnitPrices(
         Object.fromEntries(
           editingDetail.serviceItems.map((i) => [i.id, String(i.unitPriceSnapshot)]),
+        ),
+      );
+      // #829 使用者裁決修正:同一份快照另存成「已調整判定」的基準,見 loadedUnitPriceSnapshots 說明。
+      setLoadedUnitPriceSnapshots(
+        Object.fromEntries(
+          editingDetail.serviceItems.map((i) => [
+            i.id,
+            { price: Number(i.unitPriceSnapshot), name: i.name },
+          ]),
         ),
       );
       setAssistantStaffIds(editingDetail.assistants.map((a) => a.staffId));
@@ -481,6 +497,7 @@ export function BookingFormDialog({
       setServiceItemIds([]);
       setItemQuantities({});
       setItemUnitPrices({});
+      setLoadedUnitPriceSnapshots({});
       setAssistantStaffIds([]);
       setMaterialCostItemIds([]);
       setDateKey(prefill.dateKey ?? toDateKey(getTaipeiNow()));
@@ -538,21 +555,34 @@ export function BookingFormDialog({
 
   // SPECS-INDEX #829(2026-09-29 使用者巡檢回報第 5 項,裁決 Q1 採 (B) 方案):「自訂總金額」跟
   // 「逐項改單價」是兩套會互相打架的算法——已經手動改過任一個服務項目的單價之後,再用一個總金額
-  // 蓋掉它,對帳時看不出哪個才是本意。判定基準照裁決:任一個已勾選項目目前填的單價 ≠ 該項目
-  // service_items.price 當下的值,就算「已個別調整金額」。單價欄位的解析方式刻意跟 handleSubmit
-  // 實際送出的公式(Number(x) || 0)一致,欄位被清空時等同送出 0,也算已調整。
-  // 邊界:(1) 編輯既有訂單時,單價是從訂單快照 unit_price_snapshot 帶入的,如果商家事後改過該項目
-  // 的定價,快照自然 ≠ 現價,也會被算成「已調整」——這是照裁決字面(比對「當下值」)的結果,已在
-  // 回報裡標明。(2) 已經下架、不在 serviceItems 清單裡的項目沒有「當下值」可比,不列入判定。
+  // 蓋掉它,對帳時看不出哪個才是本意。任一個已勾選項目目前填的單價 ≠ 它的「基準值」,就算
+  // 「已個別調整金額」。單價欄位的解析方式刻意跟 handleSubmit 實際送出的公式(Number(x) || 0)
+  // 一致,欄位被清空時等同送出 0,也算已調整(新增/編輯兩種模式都一樣)。
+  //
+  // 「基準值」依模式不同(2026-09-29 第三輪使用者裁決修正,推翻第一版「一律比對現價」的做法):
+  //   ・新增預約:基準 = service_items.price 當下的值(維持第一版行為)。
+  //   ・編輯既有訂單:基準 = 開啟這張訂單時載入進來的 unit_price_snapshot(loadedUnitPriceSnapshots)。
+  //     使用者原話:「歷史訂單就留當時的快照,不要因為未來的價格調整去有所改變。」第一版拿快照去比
+  //     現價,商家事後調漲定價後,打開任何一張舊訂單都會被誤判成「已手動調整」、自訂總金額被鎖住
+  //     ——使用者明確不接受。所以編輯模式只有「這次編輯過程中真的動了單價」才算已調整;一打開還沒動
+  //     任何東西時,不管快照跟現價差多少,都不能被判成已調整。⚠️ 不要再改回比對現價。
+  //     - 快照裡有的項目(含已下架、不在 serviceItems 清單裡的):一律用快照比,名稱也從快照取,
+  //       不因為項目下架就跳過判定(否則改了下架項目的單價卻不會被鎖住,是漏洞)。
+  //     - 這次編輯才「新勾選」、快照裡沒有的項目:沒有快照可比,退回比對 service_items.price;
+  //       取消勾選再重新勾選的項目也算這一類(toggleServiceItem 會把它的快照基準拿掉,重新勾選時
+  //       單價會被填回現價,跟新勾選一樣)。
+  //   ・兩種模式共通:不在快照裡、也不在 serviceItems 清單裡的項目沒有任何基準可比,不列入判定。
   const adjustedUnitPriceItemNames = useMemo(() => {
     return serviceItemIds.flatMap((id) => {
+      const snapshot = isEdit ? loadedUnitPriceSnapshots[id] : undefined;
       const item = (serviceItems ?? []).find((s) => s.id === id);
-      if (!item) return [];
-      const currentPrice = Number(item.price);
-      const enteredPrice = Number(itemUnitPrices[id] ?? String(currentPrice)) || 0;
-      return enteredPrice === currentPrice ? [] : [item.name];
+      const baseline: { price: number; name: string } | undefined =
+        snapshot ?? (item ? { price: Number(item.price), name: item.name } : undefined);
+      if (!baseline) return [];
+      const enteredPrice = Number(itemUnitPrices[id] ?? String(baseline.price)) || 0;
+      return enteredPrice === baseline.price ? [] : [baseline.name];
     });
-  }, [serviceItemIds, serviceItems, itemUnitPrices]);
+  }, [serviceItemIds, serviceItems, itemUnitPrices, isEdit, loadedUnitPriceSnapshots]);
   const hasAdjustedUnitPrice = adjustedUnitPriceItemNames.length > 0;
   // #829 裁決:「不自動把已經開啟的開關關掉」。所以 disabled 只擋「從關 → 開」這個方向;如果客服
   // 先開了自訂總金額、之後才去改單價,開關維持開啟、仍然可以自己關掉(不然會卡死在開啟狀態,
@@ -618,6 +648,15 @@ export function BookingFormDialog({
         return next;
       }
       return { ...prev, [itemId]: String(defaultPrice) };
+    });
+    // #829 使用者裁決修正:編輯模式下取消勾選一個項目,同時把它的快照基準拿掉——之後若再重新勾選,
+    // 單價會被填回 service_items.price 現價,此時應該跟「新勾選」一樣拿現價當基準,不能還拿舊快照
+    // 來比(否則重新勾選後畫面顯示的就是預設值,卻被判成「已調整」,提示叫人「改回預設值」會無所適從)。
+    setLoadedUnitPriceSnapshots((prev) => {
+      if (!(itemId in prev)) return prev;
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
     });
   }
 
