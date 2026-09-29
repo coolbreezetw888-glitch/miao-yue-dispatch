@@ -103,7 +103,7 @@ const COMMISSION_MODE_OPTIONS = (Object.keys(COMMISSION_MODE_LABELS) as Commissi
 // =========================================================================
 function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useMerchantPayrollSettings(merchantId);
+  const { data: settings, isLoading, isError, refetch } = useMerchantPayrollSettings(merchantId);
 
   const [basisType, setBasisType] = useState<CommissionBasisType>("gross");
   const [saving, setSaving] = useState(false);
@@ -140,6 +140,14 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
       <CardContent className="flex flex-col gap-5">
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={3} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:讀不到時原本會顯示元件的預設值(抽成基準 = 全額),使用者以為那是
+          // 自己存過的設定,一按儲存就覆寫掉真實設定。出錯就不給表單。
+          <ErrorState
+            title="讀不到商家層級的抽成設定"
+            reason="可能是網路斷了;現在先不顯示欄位,避免你把預設值當成自己的設定存回去"
+            onRetry={() => void refetch()}
+          />
         ) : (
           <>
             <FormField label="【抽成制】抽成基準" required>
@@ -367,9 +375,12 @@ function StaffServiceCommissionDialog({
   // 決策4/§2.8.2:逐一列出這間商家所有 status='active' 的服務項目(對外介面
   // useMerchantServiceItems),不是只列這位服務人員已經接的項目——商家可能想直接在這裡新增
   // 這位服務人員可以接的項目。
-  const { data: activeServiceItems, isLoading: itemsLoading } = useMerchantServiceItems(
-    open ? merchantId : null,
-  );
+  const {
+    data: activeServiceItems,
+    isLoading: itemsLoading,
+    isError: itemsError,
+    refetch: refetchItems,
+  } = useMerchantServiceItems(open ? merchantId : null);
   const { data: ratesMap } = useStaffServiceCommissionRates(open ? staff.id : null);
 
   const [batchMode, setBatchMode] = useState<CommissionMode>("percentage");
@@ -504,6 +515,13 @@ function StaffServiceCommissionDialog({
             <p className="text-sm font-semibold text-foreground">可接服務 & 抽成設定</p>
             {itemsLoading ? (
               <LoadingSkeleton variant="cards" rows={3} />
+            ) : itemsError ? (
+              // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「沒有上架中的服務項目」。
+              <ErrorState
+                title="讀不到服務項目"
+                reason="可能是網路斷了,或你沒有查看服務項目的權限"
+                onRetry={() => void refetchItems()}
+              />
             ) : !activeServiceItems || activeServiceItems.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的服務項目"
@@ -861,7 +879,12 @@ function MonthlySalaryStaffSection({
   payDaysPerMonth: number;
 }) {
   const queryClient = useQueryClient();
-  const { data: staffList, isLoading } = useMerchantStaffList(merchantId);
+  const {
+    data: staffList,
+    isLoading,
+    isError,
+    refetch: refetchStaffList,
+  } = useMerchantStaffList(merchantId);
   const monthlySalaryStaff = (staffList ?? []).filter(
     (s) => s.compensation_type === "monthly_salary",
   );
@@ -879,6 +902,13 @@ function MonthlySalaryStaffSection({
       <CardContent>
         {isLoading ? (
           <LoadingSkeleton variant="cards" rows={2} />
+        ) : isError ? (
+          // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有月薪制的服務人員」。
+          <ErrorState
+            title="讀不到服務人員名單"
+            reason="可能是網路斷了,或你沒有查看服務人員的權限"
+            onRetry={() => void refetchStaffList()}
+          />
         ) : monthlySalaryStaff.length === 0 ? (
           <EmptyState
             title="目前沒有月薪制的服務人員"
