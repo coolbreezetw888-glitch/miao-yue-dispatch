@@ -50,6 +50,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   ChoiceChipGroup,
   EmptyState,
+  ErrorState,
   FieldDate,
   FieldInput,
   FieldNativeSelect,
@@ -203,7 +204,16 @@ function OrdersPageInner() {
     setPage(1);
   }
 
-  const { data: bookingsData, isLoading } = useMerchantBookings(merchantId, {
+  // 🔴 2026-09-30(品管第二次打回,必修-3):原本只解構 isLoading,查詢失敗時 bookingsData 是
+  // undefined ⇒ 整頁畫成「沒有符合篩選條件的訂單」+ 統計列「共 0 筆訂單、總業績 $0」。
+  // 商家看到的是「我的訂單不見了」,而不是「現在讀不到」——這跟上一輪 BusinessHoursPage
+  // 把讀取失敗畫成「七天全公休」是完全同型的假警報。所以這裡一定要拿 isError 出來分支。
+  const {
+    data: bookingsData,
+    isLoading,
+    isError,
+    refetch: refetchBookings,
+  } = useMerchantBookings(merchantId, {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(filters.staffId ? { staffId: filters.staffId } : {}),
     dateField: filters.dateFieldMode,
@@ -382,14 +392,18 @@ function OrdersPageInner() {
           深夜巡檢問題 1 修好的重點,金額不能少報);「本頁業績」只算目前這一頁畫出來的那些訂單,
           所以刻意把「第幾筆到第幾筆」寫在同一行,避免使用者把它誤讀成全部訂單的業績。
           用半形斜線+括號,避免全形符號跟金額數字(formatAmount 產出的是半形字元)混排時不對齊。 */}
+      {/* 🔴 2026-09-30:查詢失敗時整條統計列不顯示。「共 0 筆訂單、總業績 $0」在讀不到資料的
+          情況下是一句假話,比空白更糟——商家會以為業績真的是 0。 */}
       <div className="space-y-0.5 text-sm tabular-nums text-muted-foreground">
-        <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-          <span>共 {totalCount} 筆訂單</span>
-          <span>
-            總業績 {formatAmount(revenueTotal)}(全部 {totalCount} 筆合計)
-          </span>
-        </p>
-        {totalCount > 0 ? (
+        {isError ? null : (
+          <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+            <span>共 {totalCount} 筆訂單</span>
+            <span>
+              總業績 {formatAmount(revenueTotal)}(全部 {totalCount} 筆合計)
+            </span>
+          </p>
+        )}
+        {!isError && totalCount > 0 ? (
           <p className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
             <span>
               本頁業績 {formatAmount(visibleRevenue)}(僅本頁第 {pageSlice.rangeStart}–
@@ -407,7 +421,7 @@ function OrdersPageInner() {
           bottom-16 的元件互相蓋住),這裡不再往那堆裡加第三個。清單前後各放一組,使用者在頂端
           或看完整頁到底部都能直接翻頁,不必先捲動一長串卡片。 */}
       <div ref={listTopRef} className="scroll-mt-4">
-        {totalCount > 0 ? (
+        {!isError && totalCount > 0 ? (
           <OrdersPager
             page={pageSlice.page}
             totalPages={pageSlice.totalPages}
@@ -421,6 +435,14 @@ function OrdersPageInner() {
       {/* §7.5:依日期分組的訂單卡片列表。 */}
       {isLoading ? (
         <LoadingSkeleton variant="cards" rows={4} />
+      ) : isError ? (
+        // 🔴 2026-09-30(必修-3):isError 分支一定要排在空狀態之前,否則查詢失敗會被下面那句
+        // 「沒有符合篩選條件的訂單」吃掉,商家以為訂單不見了。照 A 批三頁已經做對的寫法。
+        <ErrorState
+          title="讀不到訂單清單"
+          reason="可能是網路斷了,或你沒有查看訂單的權限;現在先不顯示清單,避免你把空白當成「訂單不見了」"
+          onRetry={() => void refetchBookings()}
+        />
       ) : dateGroups.length === 0 ? (
         // 下一步(調整篩選)就在同一個畫面上、一眼看得到,用一句話指路即可(PageScaffold EmptyState 的唯一例外)。
         <EmptyState
@@ -455,7 +477,7 @@ function OrdersPageInner() {
       )}
 
       {/* 分頁控制項(下):看完這一頁的卡片之後,不用捲回頁首就能翻下一頁。 */}
-      {totalCount > 0 ? (
+      {!isError && totalCount > 0 ? (
         <OrdersPager
           page={pageSlice.page}
           totalPages={pageSlice.totalPages}

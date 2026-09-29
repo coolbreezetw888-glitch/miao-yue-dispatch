@@ -53,6 +53,7 @@ import {
   ChoiceChip,
   ChoiceChipGroup,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldNativeSelect,
   FieldTextarea,
@@ -930,7 +931,16 @@ function StaffListInner() {
   const isAdmin = merchantRole === "admin";
   const [listFilter, setListFilter] = useState<StaffListFilter>("all");
 
-  const { data: staffList, isLoading } = useQuery({
+  // 🔴 2026-09-30(品管第二次打回,必修-3):原本只解構 isLoading,查詢失敗時 staffList 是
+  // undefined ⇒ 畫成「還沒有任何服務人員」+ 一顆「新增第一位服務人員」,商家以為人員名單
+  // 被清空了(而且還會照著那顆按鈕重新建一次已經存在的人)。跟上一輪 BusinessHoursPage 的
+  // 假警報同型,一律要有 isError 分支且排在空狀態之前。
+  const {
+    data: staffList,
+    isLoading,
+    isError,
+    refetch: refetchStaffList,
+  } = useQuery({
     queryKey: staffListQueryKey(merchantId),
     queryFn: () => fetchMerchantStaff(merchantId),
   });
@@ -1040,6 +1050,14 @@ function StaffListInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={3} />
+          ) : isError ? (
+            // 🔴 2026-09-30(必修-3):isError 一定要排在空狀態之前。讀不到卻畫成「還沒有任何
+            // 服務人員」加一顆「新增第一位」,不只是讓人以為名單不見了,還會誘導他重複建立。
+            <ErrorState
+              title="讀不到服務人員名單"
+              reason="可能是網路斷了,或你沒有查看服務人員的權限;現在先不顯示名單,避免你把空白當成「人員不見了」而重複新增"
+              onRetry={() => void refetchStaffList()}
+            />
           ) : !staffList || staffList.length === 0 ? (
             <EmptyState
               title="還沒有任何服務人員"

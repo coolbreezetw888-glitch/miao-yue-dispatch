@@ -44,6 +44,7 @@ import {
   CardAlertDialogHeader,
   CardAlertDialogTitle,
   EmptyState,
+  ErrorState,
   FieldDate,
   FieldInput,
   FieldSelect,
@@ -347,7 +348,15 @@ function MembersListInner() {
   // ui-v1-full:「下架」搬進 ⋯ 選單之後,確認窗改成整頁一顆的受控實例(比照第 1 批服務人員頁的做法)。
   const [deactivatingMember, setDeactivatingMember] = useState<MemberSummary | null>(null);
 
-  const { data: members, isLoading } = useQuery({
+  // 🔴 2026-09-30(品管第二次打回,必修-3):原本只解構 isLoading,查詢失敗時 members 是
+  // undefined ⇒ 畫成「沒有符合條件的會員」,商家以為會員名單不見了。跟上一輪
+  // BusinessHoursPage 的假警報同型,一律要有 isError 分支(排在空狀態之前)。
+  const {
+    data: members,
+    isLoading,
+    isError,
+    refetch: refetchMembers,
+  } = useQuery({
     queryKey: membersListQueryKey(merchantId, search),
     queryFn: () => fetchMerchantMembersList(merchantId, search),
   });
@@ -483,6 +492,14 @@ function MembersListInner() {
         <CardContent>
           {isLoading ? (
             <LoadingSkeleton variant="cards" rows={4} />
+          ) : isError ? (
+            // 🔴 2026-09-30(必修-3):isError 一定要排在空狀態之前,否則「讀不到」會被畫成
+            // 「沒有符合條件的會員」,商家以為會員被刪掉了。
+            <ErrorState
+              title="讀不到會員名單"
+              reason="可能是網路斷了,或你沒有查看會員的權限;現在先不顯示名單,避免你把空白當成「會員不見了」"
+              onRetry={() => void refetchMembers()}
+            />
           ) : visibleMembers.length === 0 ? (
             <EmptyState
               icon={<Users className="h-6 w-6" aria-hidden="true" />}
