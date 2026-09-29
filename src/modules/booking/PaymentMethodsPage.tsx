@@ -2,37 +2,40 @@
 // 比照 MaterialCostsPage.tsx 的既有樣式:清單(名稱/說明文字/狀態)+ 新增/編輯/下架/重新上架。
 // 取代 v1 塞在 BusinessHoursPage.tsx 裡的 PaymentMethodSettingsCard——這次的資料結構已經升級成
 // 「有名稱+說明文字+上架/下架狀態」的完整清單管理,跟料錢成本管理頁是同一等級的功能。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29,盤點 #11 / #12):
+//   - 新增 / 編輯付款方式(2 欄)→ 小卡窗殼(CardDialog),受控開關;欄位改 FormField / FieldInput /
+//     FieldTextarea。
+//   - 付款方式列改 ListCard(下架收進 ⋯、可逆不標紅;已下架整張變灰、主要動作換「重新上架」)。
+//   - 稅金設定:模式二選一改 ChoiceChipGroup(skill 二之七 單選)、數字改 FormField / FieldInput。
+//   - 頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕。
+// **只動外觀與版面,不動任何行為**。
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  ChoiceChipGroup,
+  EmptyState,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
-// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
-import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
@@ -108,49 +111,66 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
           改變模式)。模式要改成別種,只能在這裡改。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex flex-col gap-4">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="lines" rows={2} />
         ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            {/* 2026-09-24 稽核修正(問題 3):taxMode 是在 useEffect 裡等
-                merchant_tax_settings 查回來之後才灌進去的,正是會觸發幽靈空值事件的時序
-                (被洗成空字串的話,商家的稅金模式會顯示成空白,存檔還可能存進不合法的值)。
-                合法值是固定常數清單,用白名單判斷,白名單直接取 AMOUNT_ADJUSTMENT_MODE_LABELS
-                的 key,之後常數增減會自動跟著變。 */}
-            <Select
-              value={taxMode}
-              onValueChange={guardPhantomEmptyChange<AmountAdjustmentMode>(
-                setTaxMode,
-                (v) => v in AMOUNT_ADJUSTMENT_MODE_LABELS,
-              )}
+          <>
+            <FormField label="稅金模式" required>
+              {/* skill 二之七:單選用 ChoiceChipGroup(role="radiogroup")。值直接來自常數白名單
+                  (AMOUNT_ADJUSTMENT_MODE_LABELS 的 key),不是 Radix Select,沒有幽靈空值事件,
+                  所以原本包在 Select 上的 guardPhantomEmptyChange 這裡不再需要。 */}
+              <ChoiceChipGroup
+                aria-label="稅金模式"
+                value={taxMode}
+                onValueChange={setTaxMode}
+                options={(Object.keys(AMOUNT_ADJUSTMENT_MODE_LABELS) as AmountAdjustmentMode[]).map(
+                  (mode) => ({ value: mode, label: AMOUNT_ADJUSTMENT_MODE_LABELS[mode] }),
+                )}
+              />
+            </FormField>
+            <FormField
+              label={taxMode === "percentage" ? "稅率(%)" : "稅額(元)"}
+              htmlFor="merchant-tax-value"
+              required
+              helpLabel="說明:稅金數字怎麼填"
+              help={
+                taxMode === "percentage"
+                  ? "填 0~100 的數字,例如 5 代表 5%。"
+                  : "填固定金額(元),每筆開啟稅金的訂單都會加上這個數字。"
+              }
             >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fixed">{AMOUNT_ADJUSTMENT_MODE_LABELS.fixed}</SelectItem>
-                <SelectItem value="percentage">
-                  {AMOUNT_ADJUSTMENT_MODE_LABELS.percentage}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              min={0}
-              max={taxMode === "percentage" ? 100 : undefined}
-              step="0.01"
-              className="w-32"
-              value={taxValue}
-              onChange={(e) => setTaxValue(e.target.value)}
-            />
-            <span className="text-sm text-muted-foreground">
-              {taxMode === "percentage" ? "%(0~100 的數字)" : "元(固定金額)"}
-            </span>
-            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </div>
+              <div className="flex items-center gap-2">
+                <FieldInput
+                  id="merchant-tax-value"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={taxMode === "percentage" ? 100 : undefined}
+                  step="0.01"
+                  className="max-w-[160px] tabular-nums"
+                  value={taxValue}
+                  onChange={(e) => setTaxValue(e.target.value)}
+                />
+                <span className="text-sm text-muted-foreground">
+                  {taxMode === "percentage" ? "%" : "元"}
+                </span>
+              </div>
+            </FormField>
+            {/* 這一頁唯一的主要動作是頁首的「新增付款方式」,所以這顆儲存用次要樣式(skill 二之三:
+                一個畫面只能有一顆主要按鈕)。 */}
+            <div>
+              <Button
+                type="button"
+                variant="neutral"
+                size="touch"
+                disabled={saving}
+                onClick={handleSave}
+              >
+                {saving ? "儲存中⋯" : "儲存稅金設定"}
+              </Button>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
@@ -171,19 +191,23 @@ function methodToFormState(method: PaymentMethod): MethodFormState {
   return { name: method.name, description: method.description ?? "" };
 }
 
+const METHOD_FORM_ID = "payment-method-form";
+
+// 小卡窗(盤點 #11 / #12):受控開關,新增與編輯共用同一個元件,只差 method 是不是 null。
 function PaymentMethodFormDialog({
   merchantId,
   method,
-  trigger,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   merchantId: string;
   method: PaymentMethod | null;
-  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
   const isEdit = Boolean(method);
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<MethodFormState>(
     method ? methodToFormState(method) : EMPTY_METHOD_FORM,
   );
@@ -220,7 +244,7 @@ function PaymentMethodFormDialog({
         await addPaymentMethod(merchantId, input);
         toast.success("已新增付款方式");
       }
-      setOpen(false);
+      onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.error(isEdit ? "更新失敗" : "新增失敗", { description: getErrorMessage(err) });
@@ -230,48 +254,54 @@ function PaymentMethodFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "編輯付款方式" : "新增付款方式"}</DialogTitle>
-          <DialogDescription>
+    <CardDialog open={open} onOpenChange={onOpenChange}>
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>{isEdit ? "編輯付款方式" : "新增付款方式"}</CardDialogTitle>
+          <CardDialogDescription>
             商家自己命名的付款方式項目,建單時可選用。想叫什麼名字、新增幾筆都可以。
-          </DialogDescription>
-        </DialogHeader>
+          </CardDialogDescription>
+        </CardDialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="payment-method-name">名稱 *</Label>
-            <Input
+        <form id={METHOD_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FormField label="名稱" htmlFor="payment-method-name" required>
+            <FieldInput
               id="payment-method-name"
-              className="mt-2"
               value={form.name}
               onChange={(e) => setField("name", e.target.value)}
               required
             />
-          </div>
+          </FormField>
 
-          <div>
-            <Label htmlFor="payment-method-description">說明文字</Label>
-            <Textarea
+          <FormField label="說明文字" htmlFor="payment-method-description">
+            <FieldTextarea
               id="payment-method-description"
-              className="mt-2"
               rows={3}
               placeholder="例如:收款銀行帳號,或這個項目代表的情境說明"
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
-          </div>
-
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={METHOD_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={saving}
+          >
+            {saving ? "儲存中⋯" : "儲存"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -287,6 +317,10 @@ function PaymentMethodsPageInner() {
     queryKey: methodsQueryKey(merchantId),
     queryFn: () => fetchMerchantPaymentMethodsAll(merchantId),
   });
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   function refetchMethods() {
     return queryClient.invalidateQueries({ queryKey: methodsQueryKey(merchantId) });
@@ -314,90 +348,86 @@ function PaymentMethodsPageInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">付款方式管理</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」自訂的付款方式清單,建單時可選用。這裡只是標記客戶用什麼方式付款,
-          不會真的串接金流,不會自動收款或對帳。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="付款方式管理"
+        description={`「${merchant!.name}」自訂的付款方式清單,建單時可選用。這裡只是標記客戶用什麼方式付款,不會真的串接金流,不會自動收款或對帳。`}
+        action={
+          <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
+            新增付款方式
+          </Button>
+        }
+      />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>付款方式</CardTitle>
-            <CardDescription>包含已上架與已下架的項目</CardDescription>
-          </div>
-          <PaymentMethodFormDialog
-            merchantId={merchantId}
-            method={null}
-            trigger={<Button variant="cta">新增付款方式</Button>}
-            onSaved={refetchMethods}
-          />
+        <CardHeader>
+          <CardTitle>付款方式</CardTitle>
+          <CardDescription>包含已上架與已下架的項目</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="cards" rows={3} />
           ) : !methods || methods.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              目前還沒有任何付款方式,點右上角新增一項。
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {methods.map((method) => (
-                <li
-                  key={method.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+            <EmptyState
+              title="還沒有任何付款方式"
+              description="建立付款方式後,建單時就能標記客戶是怎麼付款的,方便之後對帳。"
+              action={
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="touch"
+                  onClick={() => setCreateOpen(true)}
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{method.name}</p>
-                    {method.description ? (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {method.description}
-                      </p>
-                    ) : null}
-                    <div className="mt-1">
-                      <Badge variant={method.status === "active" ? "default" : "secondary"}>
-                        {method.status === "active" ? "上架中" : "已下架"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    {method.status === "active" ? (
-                      <>
-                        <PaymentMethodFormDialog
-                          merchantId={merchantId}
-                          method={method}
-                          trigger={
-                            <Button variant="outline" size="sm">
-                              編輯
-                            </Button>
-                          }
-                          onSaved={refetchMethods}
-                        />
+                  新增第一個付款方式
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {methods.map((method) => (
+                <li key={method.id}>
+                  {/* skill 二之五:名稱 + 狀態標籤 → 說明文字(商家自填、可折行)→ 右側主要動作 + ⋯。 */}
+                  <ListCard
+                    title={method.name}
+                    state={method.status === "active" ? "default" : "inactive"}
+                    tags={
+                      method.status === "active" ? (
+                        <StatusTag tone="success">上架中</StatusTag>
+                      ) : (
+                        <StatusTag tone="neutral">已下架</StatusTag>
+                      )
+                    }
+                    meta={method.description ? method.description : undefined}
+                    primaryAction={
+                      method.status === "active" ? (
                         <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemoveMethod(method.id)}
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          onClick={() => {
+                            setEditingMethod(method);
+                            setEditOpen(true);
+                          }}
                         >
-                          下架
+                          編輯
                         </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleReactivateMethod(method.id)}
-                      >
-                        重新上架
-                      </Button>
-                    )}
-                  </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          onClick={() => handleReactivateMethod(method.id)}
+                        >
+                          重新上架
+                        </Button>
+                      )
+                    }
+                    menuItems={
+                      method.status === "active"
+                        ? [{ label: "下架", onSelect: () => void handleRemoveMethod(method.id) }]
+                        : undefined
+                    }
+                  />
                 </li>
               ))}
             </ul>
@@ -406,6 +436,21 @@ function PaymentMethodsPageInner() {
       </Card>
 
       <TaxSettingsCard merchantId={merchantId} />
+
+      <PaymentMethodFormDialog
+        merchantId={merchantId}
+        method={null}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={refetchMethods}
+      />
+      <PaymentMethodFormDialog
+        merchantId={merchantId}
+        method={editingMethod}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={refetchMethods}
+      />
     </main>
   );
 }

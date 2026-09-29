@@ -1,27 +1,41 @@
 // 對應模組 7(排班與休假管理)規格書 §4.2:假別設定頁(新路由 /app/leave-types)。
 // 完全比照 PaymentMethodsPage.tsx/MaterialCostsPage.tsx 的既有寫法:清單(名稱/說明/狀態)+
-// 新增/編輯 Dialog 表單(名稱必填、說明選填)+ 下架/重新上架按鈕。
+// 新增/編輯表單(名稱必填、說明選填)+ 下架/重新上架。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29,盤點 #13 / #14 / #15):
+//   - 新增 / 編輯假別(2 欄)→ 小卡窗殼(CardDialog),受控開關;欄位改 FormField / FieldInput /
+//     FieldTextarea。
+//   - 假別列改 ListCard:主要動作永遠是「編輯」(已下架換「重新上架」),「扣款規則」(依 commission_settings
+//     權限顯示)與「下架」收進 ⋯;下架可逆 ⇒ 不標紅。扣款規則小卡窗(LeaveDeductionRuleDialog)因此改成
+//     受控開關,由這一頁記住「現在在設定哪一個假別」。
+//   - 頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕。
+// **只動外觀與版面,不動任何行為**:權限判斷、驗證、送出、下架 / 重新上架照舊。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  EmptyState,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+  type ListCardMenuItem,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -56,19 +70,23 @@ function leaveTypeToFormState(leaveType: MerchantLeaveType): LeaveTypeFormState 
   return { name: leaveType.name, description: leaveType.description ?? "" };
 }
 
+const LEAVE_TYPE_FORM_ID = "leave-type-form";
+
+// 小卡窗(盤點 #13 / #14):受控開關,新增與編輯共用同一個元件,只差 leaveType 是不是 null。
 function LeaveTypeFormDialog({
   merchantId,
   leaveType,
-  trigger,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   merchantId: string;
   leaveType: MerchantLeaveType | null;
-  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
   const isEdit = Boolean(leaveType);
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<LeaveTypeFormState>(
     leaveType ? leaveTypeToFormState(leaveType) : EMPTY_FORM,
   );
@@ -105,7 +123,7 @@ function LeaveTypeFormDialog({
         await addLeaveType(merchantId, input);
         toast.success("已新增假別");
       }
-      setOpen(false);
+      onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.error(isEdit ? "更新失敗" : "新增失敗", { description: getErrorMessage(err) });
@@ -115,48 +133,54 @@ function LeaveTypeFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "編輯假別" : "新增假別"}</DialogTitle>
-          <DialogDescription>
+    <CardDialog open={open} onOpenChange={onOpenChange}>
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>{isEdit ? "編輯假別" : "新增假別"}</CardDialogTitle>
+          <CardDialogDescription>
             商家自己命名的請假分類,登記請假時可選用。想叫什麼名字、新增幾筆都可以。
-          </DialogDescription>
-        </DialogHeader>
+          </CardDialogDescription>
+        </CardDialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="leave-type-name">名稱 *</Label>
-            <Input
+        <form id={LEAVE_TYPE_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <FormField label="名稱" htmlFor="leave-type-name" required>
+            <FieldInput
               id="leave-type-name"
-              className="mt-2"
               value={form.name}
               onChange={(e) => setField("name", e.target.value)}
               required
             />
-          </div>
+          </FormField>
 
-          <div>
-            <Label htmlFor="leave-type-description">說明文字</Label>
-            <Textarea
+          <FormField label="說明文字" htmlFor="leave-type-description">
+            <FieldTextarea
               id="leave-type-description"
-              className="mt-2"
               rows={3}
               placeholder="例如:這個假別適用的情境說明"
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
-          </div>
-
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={LEAVE_TYPE_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={saving}
+          >
+            {saving ? "儲存中⋯" : "儲存"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -179,6 +203,14 @@ function LeaveTypesPageInner() {
     queryKey: leaveTypesQueryKey(merchantId),
     queryFn: () => fetchMerchantLeaveTypesAll(merchantId),
   });
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingLeaveType, setEditingLeaveType] = useState<MerchantLeaveType | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  // 扣款規則小卡窗(盤點 #15):記住目前在設定哪一個假別;關閉時只關 open、不清掉 target,避免關閉
+  // 動畫期間標題閃成空字串。
+  const [deductionRuleTarget, setDeductionRuleTarget] = useState<MerchantLeaveType | null>(null);
+  const [deductionRuleOpen, setDeductionRuleOpen] = useState(false);
 
   function refetchLeaveTypes() {
     return queryClient.invalidateQueries({ queryKey: leaveTypesQueryKey(merchantId) });
@@ -204,123 +236,152 @@ function LeaveTypesPageInner() {
     }
   }
 
+  function menuItemsFor(leaveType: MerchantLeaveType): ListCardMenuItem[] | undefined {
+    const items: ListCardMenuItem[] = [];
+    if (showDeductionRuleButton) {
+      items.push({
+        label: "扣款規則",
+        onSelect: () => {
+          setDeductionRuleTarget(leaveType);
+          setDeductionRuleOpen(true);
+        },
+      });
+    }
+    if (leaveType.status === "active") {
+      // 「下架」可逆(有「重新上架」)⇒ 一般項目,不標紅(2026-09-29 主腦裁決)。
+      items.push({ label: "下架", onSelect: () => void handleRemove(leaveType.id) });
+    }
+    return items.length > 0 ? items : undefined;
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        {/* 2026-09-24 使用者指定:標題加上「月薪人員」前綴,讓商家一眼看出這份假別清單只跟月薪制
-            服務人員有關(抽成制服務人員不走請假登記,走的是自己的可預約時段設定)。
-            2026-09-24 主腦裁決:三處(這個 <h1> / src/routes/appLayoutLogic.ts 的 /app/leave-types
-            頁首標題 / src/routes/ManagePage.tsx 的功能卡片 label)已統一成「月薪人員假別設定」。
-            ⚠️ 之後改任一處,另外兩處要同步改——appLayoutLogic.ts 的規則是「頁首標題一律取各頁面
-               <h1> 現在顯示的文字」,只改這裡不改那邊,頁首跟內文就會對不起來。 */}
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">月薪人員假別設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」自訂的請假分類清單,登記月薪制服務人員請假時可選用。這一頁只負責
-          「有哪些假別可以選」,實際的請假登記不在這裡——要幫某位月薪制服務人員登記或取消請假,
-          請到「請假紀錄」那一頁操作,而且只有客服或商家管理員可以登記,服務人員本人沒有辦法自己登記。
-        </p>
-        {/* 頁內導向照 MemberDetailPage.tsx「查看完整點數紀錄 →」那條既有慣例
-            (react-router <Link> + text-sm text-brand hover:underline + 箭頭結尾),不另創寫法。 */}
-        <Link
-          to="/app/leave-records"
-          className="mt-2 inline-block text-sm text-brand hover:underline"
-        >
-          前往「請假紀錄」登記請假 →
-        </Link>
-      </div>
+      {/* 2026-09-24 使用者指定:標題加上「月薪人員」前綴,讓商家一眼看出這份假別清單只跟月薪制
+          服務人員有關(抽成制服務人員不走請假登記,走的是自己的可預約時段設定)。
+          2026-09-24 主腦裁決:三處(這裡的頁面標題 <h1> / src/routes/appLayoutLogic.ts 的
+          /app/leave-types 頁首標題 / src/routes/ManagePage.tsx 的功能卡片 label)已統一成
+          「月薪人員假別設定」。
+          ⚠️ 之後改任一處,另外兩處要同步改——appLayoutLogic.ts 的規則是「頁首標題一律取各頁面
+             <h1> 現在顯示的文字」(PageHeader 的 title 就是渲染成 <h1>),只改這裡不改那邊,
+             頁首跟內文就會對不起來。 */}
+      <PageHeader
+        backTo="/app/manage"
+        title="月薪人員假別設定"
+        description={
+          <>
+            「{merchant!.name}」自訂的請假分類清單,登記月薪制服務人員請假時可選用。這一頁只負責
+            「有哪些假別可以選」,實際的請假登記不在這裡——要幫某位月薪制服務人員登記或取消請假,
+            請到「請假紀錄」那一頁操作,而且只有客服或商家管理員可以登記,服務人員本人沒有辦法自己登記。
+            {/* 頁內導向照 MemberDetailPage.tsx「查看完整點數紀錄 →」那條既有慣例
+                (react-router <Link> + text-brand hover:underline + 箭頭結尾),不另創寫法。 */}
+            <Link to="/app/leave-records" className="mt-1.5 block text-brand hover:underline">
+              前往「請假紀錄」登記請假 →
+            </Link>
+          </>
+        }
+        action={
+          <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
+            新增假別
+          </Button>
+        }
+      />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle>假別</CardTitle>
-            <CardDescription>包含已上架與已下架的項目</CardDescription>
-          </div>
-          <LeaveTypeFormDialog
-            merchantId={merchantId}
-            leaveType={null}
-            trigger={<Button variant="cta">新增假別</Button>}
-            onSaved={refetchLeaveTypes}
-          />
+        <CardHeader>
+          <CardTitle>假別</CardTitle>
+          <CardDescription>包含已上架與已下架的項目</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="cards" rows={3} />
           ) : !leaveTypes || leaveTypes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">目前還沒有任何假別,點右上角新增一項。</p>
-          ) : (
-            <ul className="space-y-2">
-              {leaveTypes.map((leaveType) => (
-                <li
-                  key={leaveType.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+            <EmptyState
+              title="還沒有任何假別"
+              description="建立假別後,在「請假紀錄」幫月薪制服務人員登記請假時就能選用。"
+              action={
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="touch"
+                  onClick={() => setCreateOpen(true)}
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">{leaveType.name}</p>
-                    {leaveType.description ? (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {leaveType.description}
-                      </p>
-                    ) : null}
-                    <div className="mt-1">
-                      <Badge variant={leaveType.status === "active" ? "default" : "secondary"}>
-                        {leaveType.status === "active" ? "上架中" : "已下架"}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
-                    {showDeductionRuleButton ? (
-                      <LeaveDeductionRuleDialog
-                        merchantId={merchantId}
-                        leaveTypeId={leaveType.id}
-                        leaveTypeName={leaveType.name}
-                        trigger={
-                          <Button variant="outline" size="sm">
-                            扣款規則
-                          </Button>
-                        }
-                      />
-                    ) : null}
-                    {leaveType.status === "active" ? (
-                      <>
-                        <LeaveTypeFormDialog
-                          merchantId={merchantId}
-                          leaveType={leaveType}
-                          trigger={
-                            <Button variant="outline" size="sm">
-                              編輯
-                            </Button>
-                          }
-                          onSaved={refetchLeaveTypes}
-                        />
+                  新增第一個假別
+                </Button>
+              }
+            />
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {leaveTypes.map((leaveType) => (
+                <li key={leaveType.id}>
+                  {/* skill 二之五:名稱 + 狀態標籤 → 說明文字 → 右側「編輯」+ ⋯(扣款規則 / 下架)。
+                      「編輯」永遠是主要動作;已下架那一筆才換成「重新上架」。 */}
+                  <ListCard
+                    title={leaveType.name}
+                    state={leaveType.status === "active" ? "default" : "inactive"}
+                    tags={
+                      leaveType.status === "active" ? (
+                        <StatusTag tone="success">上架中</StatusTag>
+                      ) : (
+                        <StatusTag tone="neutral">已下架</StatusTag>
+                      )
+                    }
+                    meta={leaveType.description ? leaveType.description : undefined}
+                    primaryAction={
+                      leaveType.status === "active" ? (
                         <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRemove(leaveType.id)}
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          onClick={() => {
+                            setEditingLeaveType(leaveType);
+                            setEditOpen(true);
+                          }}
                         >
-                          下架
+                          編輯
                         </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleReactivate(leaveType.id)}
-                      >
-                        重新上架
-                      </Button>
-                    )}
-                  </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          onClick={() => handleReactivate(leaveType.id)}
+                        >
+                          重新上架
+                        </Button>
+                      )
+                    }
+                    menuItems={menuItemsFor(leaveType)}
+                  />
                 </li>
               ))}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      <LeaveTypeFormDialog
+        merchantId={merchantId}
+        leaveType={null}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={refetchLeaveTypes}
+      />
+      <LeaveTypeFormDialog
+        merchantId={merchantId}
+        leaveType={editingLeaveType}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={refetchLeaveTypes}
+      />
+      {deductionRuleTarget ? (
+        <LeaveDeductionRuleDialog
+          merchantId={merchantId}
+          leaveTypeId={deductionRuleTarget.id}
+          leaveTypeName={deductionRuleTarget.name}
+          open={deductionRuleOpen}
+          onOpenChange={setDeductionRuleOpen}
+        />
+      ) : null}
     </main>
   );
 }
