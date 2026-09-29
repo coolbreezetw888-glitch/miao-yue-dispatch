@@ -10,12 +10,21 @@
 //
 // 商家管理員視角的師傅報表頁(StaffReportPage.tsx)這次不在範圍內,繼續用既有的 YearMonthPicker,
 // 不受影響。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29):「按日期 / 按月份」二選一改 ChoiceChipGroup(skill 二之七 單選),
+// 起訖欄位改 FormField + FieldDate / FieldMonth,錯誤訊息改 FieldError(`!` 一行說明)。
+// **只動外觀**:顆粒度切換、月份 → 起訖日期換算、一年上限檢查都照舊。這個元件同時被服務人員端
+// MyPayrollPage.tsx 共用,兩邊會一起換新外觀。
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  ChoiceChipGroup,
+  FieldDate,
+  FieldError,
+  FieldMonth,
+  FormField,
+} from "@/components/patterns";
 
 import {
   defaultDateRange,
@@ -25,6 +34,11 @@ import {
 } from "./dateRangeUtils";
 
 export type DateRangeGranularity = "day" | "month";
+
+const GRANULARITY_OPTIONS: ReadonlyArray<{ value: DateRangeGranularity; label: string }> = [
+  { value: "day", label: "按日期" },
+  { value: "month", label: "按月份" },
+];
 
 export function useDateRangeState(initial?: { startDate?: string; endDate?: string }): {
   startDate: string;
@@ -53,62 +67,64 @@ export function DateRangePicker({
   const error = validateDateRange(startDate, endDate);
 
   return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant={granularity === "day" ? "default" : "outline"}
-          onClick={() => setGranularity("day")}
-        >
-          按日期
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={granularity === "month" ? "default" : "outline"}
-          onClick={() => setGranularity("month")}
-        >
-          按月份
-        </Button>
+    <div className="flex flex-col gap-3">
+      <ChoiceChipGroup
+        aria-label="區間顆粒度"
+        value={granularity}
+        onValueChange={setGranularity}
+        options={GRANULARITY_OPTIONS}
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <FormField label="起" htmlFor="date-range-start">
+          {granularity === "day" ? (
+            <FieldDate
+              id="date-range-start"
+              value={startDate}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) return;
+                onStartDateChange(raw);
+              }}
+            />
+          ) : (
+            <FieldMonth
+              id="date-range-start"
+              value={startDate.slice(0, 7)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) return;
+                onStartDateChange(firstDayOfMonth(raw));
+              }}
+            />
+          )}
+        </FormField>
+        <FormField label="訖" htmlFor="date-range-end">
+          {granularity === "day" ? (
+            <FieldDate
+              id="date-range-end"
+              value={endDate}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) return;
+                onEndDateChange(raw);
+              }}
+            />
+          ) : (
+            <FieldMonth
+              id="date-range-end"
+              value={endDate.slice(0, 7)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) return;
+                onEndDateChange(lastDayOfMonth(raw));
+              }}
+            />
+          )}
+        </FormField>
       </div>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <Label htmlFor="date-range-start" className="text-xs">
-            起
-          </Label>
-          <Input
-            id="date-range-start"
-            className="mt-1"
-            type={granularity === "day" ? "date" : "month"}
-            value={granularity === "day" ? startDate : startDate.slice(0, 7)}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (!raw) return;
-              onStartDateChange(granularity === "day" ? raw : firstDayOfMonth(raw));
-            }}
-          />
-        </div>
-        <div>
-          <Label htmlFor="date-range-end" className="text-xs">
-            訖
-          </Label>
-          <Input
-            id="date-range-end"
-            className="mt-1"
-            type={granularity === "day" ? "date" : "month"}
-            value={granularity === "day" ? endDate : endDate.slice(0, 7)}
-            onChange={(e) => {
-              const raw = e.target.value;
-              if (!raw) return;
-              onEndDateChange(granularity === "day" ? raw : lastDayOfMonth(raw));
-            }}
-          />
-        </div>
-      </div>
-
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </div>
   );
 }

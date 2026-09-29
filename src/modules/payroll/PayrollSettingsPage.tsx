@@ -9,37 +9,44 @@
 // StaffCommissionRateDialog。可接服務開關直接複用模組 3 既有的 addStaffServiceItem/
 // removeStaffServiceItem/fetchStaffServiceItemIds(src/modules/staff-agent/api.ts,決策4——
 // 複用既有介面,不重新發明)。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29,盤點 A6 / Q1):
+//   - 抽成制 > 編輯(A6,每個服務項目一列)→ 全頁層 FullPageLayer size="wide";每一列改 SwitchRow
+//     (開關開著才展開「模式 / 數值」),模式二選一改 ChoiceChipGroup;「尚未設定,目前抽成 0 元」改 `!` 常駐。
+//   - 月薪制 > 編輯(Q1,只有 2 欄)→ **全頁層**(2026-09-29 使用者裁決:跟並排的抽成制編輯保持一致,
+//     不要照「3 欄以內」規則改回小卡窗)。
+//   - 商家層級設定:抽成基準二選一改 ChoiceChipGroup(每個選項含一行說明,直向排列);月折算天數的長說明
+//     收進 `?`,常駐只留一句結論。
+//   - 兩份服務人員清單改 ListCard:「編輯」是唯一主要動作;抽成制人員有尚未設定抽成的項目時整張變黃 +
+//     待辦標籤(skill 二之五「需要處理的卡片整張變黃」)。
+//   - 頁首改 PageHeader、載入中改骨架、空狀態改 EmptyState(+ 前往服務人員管理)。
+// **只動外觀與版面,不動任何行為**:驗證、寫入時機(下拉切換立即存、數值 onBlur 存)、批量套用照舊。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import {
+  ActionBar,
+  AlertNote,
+  ChoiceChipGroup,
+  EmptyState,
+  FieldAmountInput,
+  FieldInput,
+  FormField,
+  FullPageLayer,
+  FullPageLayerClose,
+  FullPageLayerContent,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  SwitchRow,
+  TodoTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 
-// 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
-import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
@@ -76,6 +83,11 @@ const payrollSettingsQueryKey = (merchantId: string) =>
 
 const staffServiceItemIdsQueryKey = (staffId: string) =>
   ["payroll-module", "staff-service-item-ids", staffId] as const;
+
+/** 抽成模式二選一的選項(比例 / 固定金額),白名單直接取 COMMISSION_MODE_LABELS 的 key。 */
+const COMMISSION_MODE_OPTIONS = (Object.keys(COMMISSION_MODE_LABELS) as CommissionMode[]).map(
+  (mode) => ({ value: mode, label: COMMISSION_MODE_LABELS[mode] }),
+);
 
 // =========================================================================
 // 區塊一:商家層級設定。
@@ -116,63 +128,73 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
           逐一設定。
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="flex flex-col gap-5">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="lines" rows={3} />
         ) : (
           <>
-            <div>
-              <Label>【抽成制】抽成基準</Label>
-              {/* 2026-09-24 稽核修正(問題 3)的防禦性套用:這是 RadioGroup 不是 Select,
-                  Radix RadioGroup 內部用的是隱藏的 <input type="radio">,**沒有**那個會補發
-                  空字串的隱藏原生 <select>,所以嚴格說沒有幽靈空值事件的問題。
-                  這裡仍然一併套上同一支防護,理由是:(1) basisType 一樣是 useEffect 等資料
-                  回來才灌進去的,套上零風險;(2) 全專案的「值變更入口」寫法一致,之後有人把
-                  RadioGroup 改成 Select 時不會漏掉防護。判斷條件用白名單。 */}
-              <RadioGroup
-                className="mt-2 space-y-2"
+            <FormField label="【抽成制】抽成基準" required>
+              {/* skill 二之七:單選用 ChoiceChipGroup(radiogroup 語意)。兩個選項各帶一行說明,所以直向
+                  排列、每顆佔滿一行。值來自常數白名單,不是 Radix Select,沒有幽靈空值事件,原本
+                  「為了寫法一致」套在 RadioGroup 上的 guardPhantomEmptyChange 這裡不再需要。 */}
+              <ChoiceChipGroup
+                aria-label="抽成基準"
+                className="flex-col items-stretch"
                 value={basisType}
-                onValueChange={guardPhantomEmptyChange<CommissionBasisType>(
-                  setBasisType,
-                  (v) => v in COMMISSION_BASIS_TYPE_LABELS,
-                )}
-              >
-                <div className="flex items-start gap-2">
-                  <RadioGroupItem value="gross" id="basis-gross" className="mt-0.5" />
-                  <Label htmlFor="basis-gross" className="font-normal">
-                    {COMMISSION_BASIS_TYPE_LABELS.gross}
-                    <span className="block text-xs text-muted-foreground">
-                      以訂單金額(已扣折扣、排除稅金)全額當作抽成基準,不扣除料錢成本。
-                    </span>
-                  </Label>
-                </div>
-                <div className="flex items-start gap-2">
-                  <RadioGroupItem value="net_of_material_cost" id="basis-net" className="mt-0.5" />
-                  <Label htmlFor="basis-net" className="font-normal">
-                    {COMMISSION_BASIS_TYPE_LABELS.net_of_material_cost}
-                    <span className="block text-xs text-muted-foreground">
-                      再扣除這筆訂單登記的料錢成本後,剩下的金額才當作抽成基準。到府派工這類會用到
-                      料錢成本的商家可以考慮這個選項。
-                    </span>
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
+                onValueChange={setBasisType}
+                options={[
+                  {
+                    value: "gross",
+                    label: (
+                      <span className="flex flex-col items-start gap-0.5 text-left">
+                        <span>{COMMISSION_BASIS_TYPE_LABELS.gross}</span>
+                        <span className="text-xs font-normal leading-snug text-muted-foreground">
+                          以訂單金額(已扣折扣、排除稅金)全額當作抽成基準,不扣除料錢成本。
+                        </span>
+                      </span>
+                    ),
+                  },
+                  {
+                    value: "net_of_material_cost",
+                    label: (
+                      <span className="flex flex-col items-start gap-0.5 text-left">
+                        <span>{COMMISSION_BASIS_TYPE_LABELS.net_of_material_cost}</span>
+                        <span className="text-xs font-normal leading-snug text-muted-foreground">
+                          再扣除這筆訂單登記的料錢成本後,剩下的金額才當作抽成基準。到府派工這類會用到
+                          料錢成本的商家可以考慮這個選項。
+                        </span>
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </FormField>
+
+            {/* §十 10.1:這次拿掉商家手動填寫的固定天數,改成系統依「當月實際天數」自動計算
+                (28~31 天),不需要另外設定,也不再是這裡可以編輯的欄位。
+                skill 二:「規則怎麼算」屬於看過一次就懂的說明 ⇒ 收進 `?`,常駐只留一句結論。 */}
+            <FormField
+              label="【月薪制】月折算天數"
+              helpLabel="說明:月折算天數怎麼算"
+              help="假別扣款的「扣一天全薪」「扣一天薪水的某個百分比」兩種模式會用到這個數字,每個月會依那個月的實際天數自動換算,不是固定的一個數字。"
+            >
+              <p className="text-sm text-muted-foreground">
+                系統依當月實際天數自動計算(28~31 天),不需要另外設定。
+              </p>
+            </FormField>
 
             <div>
-              <Label>【月薪制】月折算天數</Label>
-              {/* §十 10.1:這次拿掉商家手動填寫的固定天數,改成系統依「當月實際天數」自動計算
-                  (28~31 天),不需要另外設定,也不再是這裡可以編輯的欄位。 */}
-              <p className="mt-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                月折算天數依系統自動依當月實際天數計算(28~31 天),不需要另外設定。假別扣款的「扣
-                一天全薪」「扣一天薪水的某個百分比」兩種模式會用到這個數字,每個月會依那個月的實際
-                天數自動換算,不是固定的一個數字。
-              </p>
+              {/* 這一頁唯一的主要按鈕(skill 二之三:一個畫面只能有一顆)。 */}
+              <Button
+                type="button"
+                variant="primary"
+                size="touch"
+                disabled={saving}
+                onClick={handleSave}
+              >
+                {saving ? "儲存中⋯" : "儲存"}
+              </Button>
             </div>
-
-            <Button type="button" size="sm" disabled={saving} onClick={handleSave}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
           </>
         )}
       </CardContent>
@@ -184,7 +206,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
 // 區塊二:抽成制服務人員清單(服務項目層級抽成設定)。
 // =========================================================================
 
-/** 單一服務項目那一列:開關(可接服務)+ 開關=開時顯示模式下拉選單/數值輸入框(決策6:
+/** 單一服務項目那一列:開關(可接服務)+ 開關=開時顯示模式選擇/數值輸入框(決策6:
  * 開關=關時直接不渲染這兩個欄位,不是顯示但 disable)。 */
 function ServiceCommissionRow({
   staffId,
@@ -246,78 +268,84 @@ function ServiceCommissionRow({
     }
   }
 
-  return (
-    <li className="space-y-2 rounded-md border border-border px-3 py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-          <p className="text-xs text-muted-foreground">原價 {Number(item.price)} 元</p>
-        </div>
-        <Switch checked={checked} onCheckedChange={onToggle} />
-      </div>
+  const valueInputId = `commission-value-${item.id}`;
 
-      {checked ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 2026-09-24 稽核修正(問題 3):這個 Select 特別危險——onValueChange 裡會**立刻
-              呼叫 API 存檔**(void persist(...)),所以一次幽靈空值事件不只是畫面變空白,
-              而是直接把一筆不合法的抽成模式寫進資料庫。
-              合法值是固定常數清單,用白名單判斷(取 COMMISSION_MODE_LABELS 的 key)。 */}
-          <Select
-            value={mode}
-            disabled={saving}
-            onValueChange={guardPhantomEmptyChange<CommissionMode>(
-              (nextMode) => {
-                setMode(nextMode);
-                void persist(nextMode, value);
-              },
-              (v) => v in COMMISSION_MODE_LABELS,
+  return (
+    <li>
+      {/* skill 二之七:開關做成一整列(左邊「項目名稱 + 原價」、右邊開關),開著才展開底下的設定。 */}
+      <SwitchRow
+        title={item.name}
+        description={`原價 ${Number(item.price)} 元`}
+        checked={checked}
+        onCheckedChange={onToggle}
+      >
+        {checked ? (
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="抽成模式">
+                {/* 2026-09-24 稽核修正(問題 3)當時的 Select 特別危險——onValueChange 裡會**立刻
+                    呼叫 API 存檔**,一次幽靈空值事件就會把不合法的模式寫進資料庫。現在改成
+                    ChoiceChipGroup(只有真的點擊 / 鍵盤切換才會觸發),沒有幽靈事件的問題,
+                    所以不再需要 guardPhantomEmptyChange;「切換立即存檔」的行為照舊。 */}
+                <ChoiceChipGroup
+                  aria-label={`${item.name} 的抽成模式`}
+                  value={mode}
+                  disabled={saving}
+                  onValueChange={(nextMode) => {
+                    setMode(nextMode);
+                    void persist(nextMode, value);
+                  }}
+                  options={COMMISSION_MODE_OPTIONS}
+                />
+              </FormField>
+              <FormField
+                label={mode === "percentage" ? "抽成比例(%)" : "每件抽成(元)"}
+                htmlFor={valueInputId}
+              >
+                <FieldInput
+                  id={valueInputId}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={mode === "percentage" ? 100 : undefined}
+                  step="0.01"
+                  className="tabular-nums"
+                  disabled={saving}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onBlur={() => void persist(mode, value)}
+                />
+              </FormField>
+            </div>
+            {!hasRate ? (
+              // skill 二:「現在的狀態跟使用者以為的不一樣」(開關開了,但抽成其實是 0)⇒ `!` 常駐。
+              <AlertNote>尚未設定抽成,這個項目目前抽成 0 元。</AlertNote>
+            ) : (
+              <p className="text-xs tabular-nums text-muted-foreground">
+                試算:1 件約 {previewAmount} 元
+              </p>
             )}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="percentage">{COMMISSION_MODE_LABELS.percentage}</SelectItem>
-              <SelectItem value="fixed_amount">{COMMISSION_MODE_LABELS.fixed_amount}</SelectItem>
-            </SelectContent>
-          </Select>
-          <Input
-            type="number"
-            min={0}
-            max={mode === "percentage" ? 100 : undefined}
-            step="0.01"
-            className="w-28"
-            disabled={saving}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onBlur={() => void persist(mode, value)}
-          />
-          <span className="text-xs text-muted-foreground">
-            {mode === "percentage" ? "%" : "元/件"}
-          </span>
-          {!hasRate ? (
-            <span className="text-xs text-warn">尚未設定,目前抽成 0 元</span>
-          ) : (
-            <span className="text-xs text-muted-foreground">試算:1 件約 {previewAmount} 元</span>
-          )}
-        </div>
-      ) : null}
+          </div>
+        ) : null}
+      </SwitchRow>
     </li>
   );
 }
 
+// 全頁層(盤點 A6):受控開關,由 StaffCommissionRateRow 的「編輯」開啟。
 function StaffServiceCommissionDialog({
   merchantId,
   staff,
-  trigger,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   merchantId: string;
   staff: MerchantStaff;
-  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const serviceItemIdsKey = staffServiceItemIdsQueryKey(staff.id);
@@ -400,74 +428,85 @@ function StaffServiceCommissionDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{staff.name} 的抽成設定</DialogTitle>
-          <DialogDescription>
-            逐一設定「可接服務」開關與每個服務項目的抽成,或先用下方批量套用一個統一的比例/金額,
-            再個別調整成不同的比例或金額。
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5">
-          <div className="space-y-3 rounded-md border border-border p-4">
-            <p className="text-sm font-medium text-foreground">整體抽成(批量套用)</p>
-            {/* 同上:RadioGroup 本身沒有幽靈空值事件的問題,這裡是為了寫法一致而一併套上。 */}
-            <RadioGroup
-              className="flex flex-wrap gap-4"
-              value={batchMode}
-              onValueChange={guardPhantomEmptyChange<CommissionMode>(
-                setBatchMode,
-                (v) => v in COMMISSION_MODE_LABELS,
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="percentage" id="batch-mode-percentage" />
-                <Label htmlFor="batch-mode-percentage" className="font-normal">
-                  {COMMISSION_MODE_LABELS.percentage}
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="fixed_amount" id="batch-mode-fixed" />
-                <Label htmlFor="batch-mode-fixed" className="font-normal">
-                  {COMMISSION_MODE_LABELS.fixed_amount}
-                </Label>
-              </div>
-            </RadioGroup>
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                max={batchMode === "percentage" ? 100 : undefined}
-                step="0.01"
-                className="w-32"
-                value={batchValue}
-                onChange={(e) => setBatchValue(e.target.value)}
-              />
-              <span className="text-sm text-muted-foreground">
-                {batchMode === "percentage" ? "%" : "元/件"}
-              </span>
-              <Button type="button" size="sm" disabled={batchApplying} onClick={handleBatchApply}>
-                {batchApplying ? "套用中⋯" : "批量套用"}
+    <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      {/* size="wide":每個服務項目一列(開關 + 模式 + 數值),560px 的電腦面板會太擠。 */}
+      <FullPageLayerContent
+        size="wide"
+        title={`${staff.name} 的抽成設定`}
+        subtitle="逐一設定「可接服務」開關與每個服務項目的抽成,或先用批量套用一個統一的比例/金額,再個別調整。每一格改完會立刻存檔。"
+        footer={
+          <ActionBar>
+            <FullPageLayerClose asChild>
+              <Button type="button" variant="primary" size="touch">
+                完成
+              </Button>
+            </FullPageLayerClose>
+          </ActionBar>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          <section className="flex flex-col gap-3 rounded-lg border border-border p-4">
+            <p className="text-sm font-semibold text-foreground">整體抽成(批量套用)</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FormField label="模式">
+                <ChoiceChipGroup
+                  aria-label="批量套用的抽成模式"
+                  value={batchMode}
+                  onValueChange={setBatchMode}
+                  options={COMMISSION_MODE_OPTIONS}
+                />
+              </FormField>
+              <FormField
+                label={batchMode === "percentage" ? "抽成比例(%)" : "每件抽成(元)"}
+                htmlFor="batch-commission-value"
+              >
+                <FieldInput
+                  id="batch-commission-value"
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  max={batchMode === "percentage" ? 100 : undefined}
+                  step="0.01"
+                  className="tabular-nums"
+                  value={batchValue}
+                  onChange={(e) => setBatchValue(e.target.value)}
+                />
+              </FormField>
+            </div>
+            <div>
+              <Button
+                type="button"
+                variant="neutral"
+                size="touch"
+                disabled={batchApplying}
+                onClick={handleBatchApply}
+              >
+                {batchApplying ? "套用中⋯" : "批量套用到已開啟的項目"}
               </Button>
             </div>
-            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
               範例:一筆原價 1000 元、1 件的服務,套用這個設定可以拿到{" "}
               <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考;只會套用到目前開關=開的
               項目,關掉的項目不受影響)。
             </p>
-          </div>
+          </section>
 
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">可接服務 & 抽成設定</p>
+          <section className="flex flex-col gap-2.5">
+            <p className="text-sm font-semibold text-foreground">可接服務 & 抽成設定</p>
             {itemsLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
+              <LoadingSkeleton variant="cards" rows={3} />
             ) : !activeServiceItems || activeServiceItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">這間商家目前沒有上架中的服務項目。</p>
+              <EmptyState
+                title="這間商家目前沒有上架中的服務項目"
+                description="先到服務項目管理新增並上架服務項目,回來這裡才有東西可以設定抽成。"
+                action={
+                  <Button asChild variant="neutral" size="touch">
+                    <Link to="/app/service-items">前往服務項目管理</Link>
+                  </Button>
+                }
+              />
             ) : (
-              <ul className="space-y-2">
+              <ul className="flex flex-col gap-2.5">
                 {activeServiceItems.map((item) => (
                   <ServiceCommissionRow
                     key={item.id}
@@ -481,16 +520,10 @@ function StaffServiceCommissionDialog({
                 ))}
               </ul>
             )}
-          </div>
+          </section>
         </div>
-
-        <DialogFooter>
-          <Button type="button" size="sm" onClick={() => setOpen(false)}>
-            完成
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </FullPageLayerContent>
+    </FullPageLayer>
   );
 }
 
@@ -518,11 +551,19 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="cards" rows={2} />
         ) : pieceRateStaff.length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前沒有抽成制的服務人員。</p>
+          <EmptyState
+            title="目前沒有抽成制的服務人員"
+            description="服務人員的計酬類型在服務人員管理裡設定,設成抽成制之後會列在這裡。"
+            action={
+              <Button asChild variant="neutral" size="touch">
+                <Link to="/app/staff">前往服務人員管理</Link>
+              </Button>
+            }
+          />
         ) : (
-          <ul className="space-y-2">
+          <ul className="flex flex-col gap-2.5">
             {pieceRateStaff.map((staff) => (
               <StaffCommissionRateRow
                 key={staff.id}
@@ -552,29 +593,43 @@ function StaffCommissionRateRow({
     queryFn: () => fetchStaffServiceItemIds(staff.id),
   });
   const { data: ratesMap } = useStaffServiceCommissionRates(staff.id);
+  const [editOpen, setEditOpen] = useState(false);
 
   const total = serviceItemIds?.length ?? 0;
   const configured = (serviceItemIds ?? []).filter((id) => ratesMap?.has(id)).length;
   const unconfigured = total - configured;
+  // skill 二之五:需要處理的卡片整張變黃(+ 待辦標籤)——沒有可接服務、或有項目還沒設抽成,
+  // 都是「這個人的抽成算出來會是 0」的狀態,商家要去處理。
+  const needsAttention = total === 0 || unconfigured > 0;
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-foreground">{staff.name}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {total === 0
+    <li>
+      <ListCard
+        title={staff.name}
+        state={needsAttention ? "attention" : "default"}
+        tags={
+          total === 0 ? (
+            <TodoTag>尚未設定可接服務</TodoTag>
+          ) : unconfigured > 0 ? (
+            <TodoTag>{unconfigured} 項尚未設定抽成</TodoTag>
+          ) : undefined
+        }
+        meta={
+          total === 0
             ? "尚未設定任何可接服務項目"
-            : `已設定 ${configured} 項服務的抽成,${unconfigured} 項尚未設定`}
-        </p>
-      </div>
-      <StaffServiceCommissionDialog
-        merchantId={merchantId}
-        staff={staff}
-        trigger={
-          <Button variant="outline" size="sm">
+            : `已設定 ${configured} 項服務的抽成,${unconfigured} 項尚未設定`
+        }
+        primaryAction={
+          <Button type="button" variant="neutral" size="card" onClick={() => setEditOpen(true)}>
             編輯
           </Button>
         }
+      />
+      <StaffServiceCommissionDialog
+        merchantId={merchantId}
+        staff={staff}
+        open={editOpen}
+        onOpenChange={setEditOpen}
         onSaved={onSaved}
       />
     </li>
@@ -584,18 +639,22 @@ function StaffCommissionRateRow({
 // =========================================================================
 // 區塊三:月薪制服務人員清單(月薪/月休天數參考)。
 // =========================================================================
+const SALARY_FORM_ID = "staff-salary-form";
+
+// 全頁層(盤點 Q1,2026-09-29 使用者裁決:雖然只有 2 欄,跟並排的抽成制編輯一致 ⇒ 全頁層,不要改回小卡窗)。
 function StaffSalarySettingsDialog({
   staff,
   payDaysPerMonth,
-  trigger,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   staff: MerchantStaff;
   payDaysPerMonth: number;
-  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const { data: settings, isLoading } = useStaffSalarySettings(open ? staff.id : null);
   const [baseSalary, setBaseSalary] = useState("0");
   const [quotaDays, setQuotaDays] = useState("");
@@ -633,7 +692,7 @@ function StaffSalarySettingsDialog({
         monthlyLeaveQuotaDays: numericQuota,
       });
       toast.success("已更新薪資設定");
-      setOpen(false);
+      onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.error("更新失敗", { description: getErrorMessage(err) });
@@ -643,64 +702,69 @@ function StaffSalarySettingsDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{staff.name} 的薪資設定</DialogTitle>
-          <DialogDescription>月薪金額 + 月休天數(僅供參考,不影響扣款計算)。</DialogDescription>
-        </DialogHeader>
-
+    <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      <FullPageLayerContent
+        title={`${staff.name} 的薪資設定`}
+        subtitle="月薪金額 + 月休天數(僅供參考,不影響扣款計算)。"
+        footer={
+          <ActionBar>
+            <FullPageLayerClose asChild>
+              <Button type="button" variant="neutral" size="touch">
+                取消
+              </Button>
+            </FullPageLayerClose>
+            <Button
+              type="submit"
+              form={SALARY_FORM_ID}
+              variant="primary"
+              size="touch"
+              disabled={saving || isLoading}
+            >
+              {saving ? "儲存中⋯" : "儲存"}
+            </Button>
+          </ActionBar>
+        }
+      >
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="lines" rows={3} />
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="base-salary">月薪金額(元)</Label>
-              <Input
+          <form id={SALARY_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <FormField label="月薪金額" htmlFor="base-salary" required>
+              <FieldAmountInput
                 id="base-salary"
-                className="mt-2 w-40"
-                type="number"
-                min={0}
-                step="1"
                 value={baseSalary}
                 onChange={(e) => setBaseSalary(e.target.value)}
               />
-            </div>
-            <div>
-              <Label htmlFor="quota-days">月休天數(參考,選填)</Label>
-              <Input
+            </FormField>
+            <FormField
+              label="月休天數(參考,選填)"
+              htmlFor="quota-days"
+              helpLabel="說明:月休天數會用在哪裡"
+              help="只是顯示在服務人員報表旁邊當作參考,不會牽動請假扣款計算(假別扣款請到「月薪人員假別設定」頁面個別調整)。"
+            >
+              <FieldInput
                 id="quota-days"
-                className="mt-2 w-40"
                 type="number"
+                inputMode="decimal"
                 min={0}
                 step="0.5"
+                className="tabular-nums"
                 value={quotaDays}
                 onChange={(e) => setQuotaDays(e.target.value)}
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                只是顯示在服務人員報表旁邊當作參考,不會牽動請假扣款計算(假別扣款請到「月薪人員假別設定」
-                頁面個別調整)。
-              </p>
-            </div>
+            </FormField>
 
             {!Number.isNaN(numericBaseSalary) ? (
-              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
                 試算:以本月 {payDaysPerMonth} 天換算,一天薪水約{" "}
                 <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」;
                 天數由系統依請假當月自動換算,不用另外設定(詳見上方「【月薪制】月折算天數」)。
               </p>
             ) : null}
-
-            <DialogFooter>
-              <Button type="submit" disabled={saving}>
-                {saving ? "儲存中⋯" : "儲存"}
-              </Button>
-            </DialogFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+      </FullPageLayerContent>
+    </FullPageLayer>
   );
 }
 
@@ -729,11 +793,19 @@ function MonthlySalaryStaffSection({
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          <LoadingSkeleton variant="cards" rows={2} />
         ) : monthlySalaryStaff.length === 0 ? (
-          <p className="text-sm text-muted-foreground">目前沒有月薪制的服務人員。</p>
+          <EmptyState
+            title="目前沒有月薪制的服務人員"
+            description="服務人員的計酬類型在服務人員管理裡設定,設成月薪制之後會列在這裡。"
+            action={
+              <Button asChild variant="neutral" size="touch">
+                <Link to="/app/staff">前往服務人員管理</Link>
+              </Button>
+            }
+          />
         ) : (
-          <ul className="space-y-2">
+          <ul className="flex flex-col gap-2.5">
             {monthlySalaryStaff.map((staff) => (
               <MonthlySalaryStaffRow
                 key={staff.id}
@@ -759,27 +831,32 @@ function MonthlySalaryStaffRow({
   onSaved: () => void;
 }) {
   const { data: settings } = useStaffSalarySettings(staff.id);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
-    <li className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-foreground">{staff.name}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          月薪 {settings ? Number(settings.monthly_base_salary) : 0} 元
-          {settings?.monthly_leave_quota_days !== undefined &&
-          settings?.monthly_leave_quota_days !== null
-            ? `,月休 ${settings.monthly_leave_quota_days} 天(參考)`
-            : ""}
-        </p>
-      </div>
-      <StaffSalarySettingsDialog
-        staff={staff}
-        payDaysPerMonth={payDaysPerMonth}
-        trigger={
-          <Button variant="outline" size="sm">
+    <li>
+      <ListCard
+        title={staff.name}
+        meta={
+          <>
+            月薪 {settings ? Number(settings.monthly_base_salary) : 0} 元
+            {settings?.monthly_leave_quota_days !== undefined &&
+            settings?.monthly_leave_quota_days !== null
+              ? `,月休 ${settings.monthly_leave_quota_days} 天(參考)`
+              : ""}
+          </>
+        }
+        primaryAction={
+          <Button type="button" variant="neutral" size="card" onClick={() => setEditOpen(true)}>
             編輯
           </Button>
         }
+      />
+      <StaffSalarySettingsDialog
+        staff={staff}
+        payDaysPerMonth={payDaysPerMonth}
+        open={editOpen}
+        onOpenChange={setEditOpen}
         onSaved={onSaved}
       />
     </li>
@@ -802,18 +879,11 @@ function PayrollSettingsPageInner() {
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">抽成與薪資設定</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪制服務人員薪資
-          設定。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="抽成與薪資設定"
+        description={`「${merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪制服務人員薪資設定。`}
+      />
 
       <MerchantPayrollSettingsCard merchantId={merchantId} />
       <PieceRateStaffSection merchantId={merchantId} />

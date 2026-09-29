@@ -1,5 +1,5 @@
 // 對應模組 8(薪資與帳務)規格書 §4.3:店家端帳務報表頁(新路由 /app/billing-report)。
-// 頂部摘要卡片 + 服務人員明細表格 + CSV 匯出按鈕(判斷 10,前端直接把畫面上已經抓到的資料轉成
+// 頂部摘要卡片 + 服務人員明細 + CSV 匯出按鈕(判斷 10,前端直接把畫面上已經抓到的資料轉成
 // CSV,不呼叫額外的匯出 API)。
 //
 // 商家端三項調整規格書 §3.6:時間篩選這次從單一年/月改成可選區間(起訖日期或起訖月份,最長一年),
@@ -14,20 +14,30 @@
 //      營收/稅金/料錢/抽成/訂單數不受影響,照常顯示。
 //      順帶修掉一個真 bug:查 2/15~3/15(29 天)原本會收到**兩個月的整月月薪**,而扣款那一邊卻
 //      有按區間裁切,兩邊算法不一致;現在這種區間直接不給月薪數字,不再編一個算不準的數字出來。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29):這一頁沒有彈窗,套用頁面層級規範。
+//   - 服務人員明細從多欄表格改成 ListCard(skill 一:列表一律卡片式,不做多欄表格):姓名 + 計酬類型
+//     (屬性標籤)+ 已離職(狀態標籤);訂單筆數與金額放在次要資訊;「查看明細」是真正的 <Link>
+//     (可右鍵 / 中鍵開新分頁),放在卡片右側主要動作位置。
+//   - 「月薪算不出來」「回推估算」兩段提醒改 `!` 常駐(AlertNote);載入中改骨架、出錯改 ErrorState。
+//   - 頁首改 PageHeader、匯出按鈕改次要樣式。
+// **只動外觀與版面,不動任何行為**:所有「該顯示數字還是說明文字」的判斷仍走 billingReportDisplay.ts,
+// CSV 匯出的內容與格式完全不變。
 
 import { Link } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
+import {
+  AlertNote,
+  AttributeTag,
+  EmptyState,
+  ErrorState,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
 
@@ -67,6 +77,7 @@ function BillingReportPageInner() {
     data: summary,
     isLoading,
     error,
+    refetch,
   } = useMerchantBillingSummaryByRange(merchantId, startDate, endDate);
 
   // ✅ 2026-09-24:資料庫端的 salary_applicable 已經上線,summary 一旦拿到就一定有這個欄位,
@@ -127,7 +138,7 @@ function BillingReportPageInner() {
       // 結構上不可能只改一邊。
       commissionCsvValue(row),
       // 月薪算不出來時寫進說明文字,不留空白格——CSV 的空白格在 Excel 裡看起來跟 0 很像,
-      // 會重演「商家以為這段期間沒有月薪成本」這個誤會。判斷條件跟下面表格那一欄走同一支純函式,
+      // 會重演「商家以為這段期間沒有月薪成本」這個誤會。判斷條件跟下面明細那一欄走同一支純函式,
       // 讓畫面跟匯出檔永遠一致。
       monthlySalaryCsvCell(salaryApplicable, row),
     ]);
@@ -140,39 +151,46 @@ function BillingReportPageInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">店家報表</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」的營收與成本彙整。預設依月份查詢(月薪要有完整月份才算得出來),
-          需要任意天數的區間時可切到「自訂區間」,最長查詢一年範圍。
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="店家報表"
+        description={`「${merchant!.name}」的營收與成本彙整。預設依月份查詢(月薪要有完整月份才算得出來),需要任意天數的區間時可切到「自訂區間」,最長查詢一年範圍。`}
+      />
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <ReportPeriodPicker
-          mode={mode}
-          onModeChange={setMode}
-          month={month}
-          onMonthChange={setMonth}
-          startDate={startDate}
-          endDate={endDate}
-          onStartDateChange={setStartDate}
-          onEndDateChange={setEndDate}
-        />
-        <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!summary}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <ReportPeriodPicker
+            mode={mode}
+            onModeChange={setMode}
+            month={month}
+            onMonthChange={setMonth}
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={setStartDate}
+            onEndDateChange={setEndDate}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="neutral"
+          size="touch"
+          className="shrink-0"
+          onClick={handleExportCsv}
+          disabled={!summary}
+        >
           匯出這份報表為 CSV
         </Button>
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="cards" rows={3} />
       ) : error ? (
-        <p className="text-sm text-destructive">載入失敗,請確認你有查看帳務報表的權限。</p>
+        // skill 二之八 出錯:什麼壞了 / 可能原因 / 下一步(+「你的資料沒有遺失」由元件固定加上)。
+        <ErrorState
+          title="讀不到帳務報表"
+          reason="可能是網路斷了,或你沒有查看帳務報表的權限"
+          onRetry={() => void refetch()}
+        />
       ) : summary ? (
         <>
           {/* 2026-09-24:這幾張卡的標題文字改成從 BILLING_SUMMARY_LABELS 取,不再寫死在 JSX ——
@@ -212,23 +230,23 @@ function BillingReportPageInner() {
           </div>
 
           {/* 月薪算不出來時,額外解釋「為什麼」跟「怎麼做才看得到」——只顯示「需選擇完整月份才能
-              計算」這幾個字,使用者不一定知道要去點哪裡才算完整月份。 */}
+              計算」這幾個字,使用者不一定知道要去點哪裡才算完整月份。
+              skill 二:「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐。 */}
           {shouldShowSalaryUnavailableNotice(salaryApplicable) ? (
-            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <AlertNote>
               月薪是以「一整個月」為單位計算的,目前選的期間不是完整的月份(月初到月底),所以月薪
               基本額、月薪扣款、月薪實發與商家總淨利這幾個數字沒辦法算。營收、料錢、抽成、訂單筆數
               不受影響,照常顯示。想看月薪與商家總淨利,請改點上面的「本月」「上個月」或「指定月份」。
-            </p>
+            </AlertNote>
           ) : null}
 
           {/* 模組 8 §11.10:查詢區間涵蓋機制上線前的月份時,「月薪基本額合計」是用最早的已知薪資
               回推估算,提醒使用者僅供參考。只在 salary_estimation_applied=true 時顯示,不是每次
-              查詢都出現(避免嚇到使用者)。樣式比照既有 over_deduction_warning 警示區塊的既有寫法。 */}
+              查詢都出現(避免嚇到使用者)。 */}
           {summary.salary_estimation_applied ? (
-            <p className="rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm text-warn">
-              ⚠️
+            <AlertNote>
               查詢區間內有部分月份早於系統開始記錄薪資歷史的時間,這些月份的金額是用最早的已知薪資回推估算,僅供參考。
-            </p>
+            </AlertNote>
           ) : null}
 
           {/* 商家端調整批次(2026-09-22)§3.5:「稅金小計」搬到「商家總淨利」正上方,尺寸比照
@@ -242,7 +260,7 @@ function BillingReportPageInner() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold text-foreground">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">
                 {summary.total_tax_amount.toLocaleString()} 元
               </p>
             </CardContent>
@@ -260,7 +278,7 @@ function BillingReportPageInner() {
               {/* 這個數字的計算式含月薪成本,所以月薪算不出來時它也算不出來。刻意不退化成
                   「不扣月薪的淨利」——那個數字會比真實淨利高很多,比顯示不出來更危險。 */}
               {netMarginDisplay.kind === "value" ? (
-                <p className="text-2xl font-semibold text-foreground">
+                <p className="text-2xl font-semibold tabular-nums text-foreground">
                   {netMarginDisplay.value.toLocaleString()} 元
                 </p>
               ) : (
@@ -281,66 +299,62 @@ function BillingReportPageInner() {
             </CardHeader>
             <CardContent>
               {summary.per_staff_breakdown.length === 0 ? (
-                <p className="text-sm text-muted-foreground">目前沒有在職的服務人員。</p>
+                <EmptyState
+                  title="這段期間沒有在職的服務人員"
+                  description="換一個查詢期間,或先到服務人員管理新增服務人員。"
+                  action={
+                    <Button asChild variant="neutral" size="touch">
+                      <Link to="/app/staff">前往服務人員管理</Link>
+                    </Button>
+                  }
+                />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>姓名</TableHead>
-                      <TableHead>計酬類型</TableHead>
-                      <TableHead className="text-right">訂單筆數</TableHead>
-                      <TableHead className="text-right">抽成金額 / 月薪淨額</TableHead>
-                      <TableHead className="text-right">明細</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {summary.per_staff_breakdown.map((row) => (
-                      <TableRow key={row.staff_id}>
-                        {/* 2026-09-24 使用者裁決:查過去月份時,「當時在職、現在已離職」的人會出現
-                            在這張表裡(留歷史紀錄,明細加總才跟上方卡片對得起來),所以要標「已離職」。
-                            樣式沿用專案既有慣例:非啟用狀態一律用 variant="secondary"(比照
-                            MaterialCostsPage 的「已下架」、MembersListPage 的會員停用狀態),
-                            不自創顏色。
-                            手機版:用 flex-wrap + 名字 min-w-0,窄畫面時標籤自己換到名字下一行,
-                            不會把這一欄撐寬、也不會溢出(明細表本來就窄)。 */}
-                        <TableCell>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="min-w-0">{row.staff_name}</span>
+                <ul className="flex flex-col gap-2.5">
+                  {summary.per_staff_breakdown.map((row) => (
+                    <li key={row.staff_id}>
+                      {/* skill 二之五 列表卡片(取代多欄表格):姓名 + 屬性標籤(計酬類型)+ 狀態標籤
+                          (已離職)→ 次要資訊(訂單筆數・抽成金額 / 月薪淨額)→ 右側「查看明細」。
+                          2026-09-24 使用者裁決:查過去月份時,「當時在職、現在已離職」的人會出現在這裡
+                          (留歷史紀錄,明細加總才跟上方卡片對得起來),所以要標「已離職」,整張變灰。
+                          月薪制那一格的文字仍走 monthlySalaryCellText(區間不是完整月份時顯示說明文字,
+                          不顯示 0);抽成制走 commissionCellText(null 一律當 0)——跟 CSV 同一條路徑。 */}
+                      <ListCard
+                        title={row.staff_name}
+                        state={shouldShowResignedBadge(row) ? "inactive" : "default"}
+                        tags={
+                          <>
+                            <AttributeTag>{compensationTypeText(row)}</AttributeTag>
                             {shouldShowResignedBadge(row) ? (
-                              <Badge variant="secondary" className="shrink-0">
-                                {RESIGNED_LABEL}
-                              </Badge>
+                              <StatusTag tone="neutral">{RESIGNED_LABEL}</StatusTag>
                             ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell>{compensationTypeText(row)}</TableCell>
-                        <TableCell className="text-right">{row.order_count}</TableCell>
-                        {/* 2026-09-24 使用者裁決:月薪制那一欄原本寫 `row.net_pay ?? 0`,
-                            區間不是完整月份時會顯示「0 元(淨額)」——這正是要避免的誤導。
-                            改成顯示說明文字。抽成制的抽成裁決是「null 一律當 0」(沒接單的抽成
-                            確實就是 0),顯示格式跟以前完全一樣,只是把「怎麼算出那個數字」搬進
-                            commissionCellText() —— CSV 那一欄也是呼叫同一條路徑,不會再漂移。 */}
-                        <TableCell className="text-right">
-                          {row.compensation_type === "monthly_salary"
-                            ? monthlySalaryCellText(salaryApplicable, row.net_pay)
-                            : commissionCellText(row)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {/* SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):
-                              兩個報表維持分開頁面,但這裡加一個捷徑連結,點下去直接帶著這位服務
-                              人員導到「服務人員報表」頁面(該頁面 §3.6 不在區間篩選範圍內,繼續用
-                              單一年月,這裡用區間結束日期所在的年月當作連結目標)。 */}
-                          <Link
-                            to={`/app/staff-report?staffId=${encodeURIComponent(row.staff_id)}&year=${linkYear}&month=${linkMonth}`}
-                            className="text-sm text-primary hover:underline"
-                          >
-                            查看明細 →
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </>
+                        }
+                        meta={
+                          <>
+                            訂單 {row.order_count} 筆 ・{" "}
+                            {row.compensation_type === "monthly_salary"
+                              ? monthlySalaryCellText(salaryApplicable, row.net_pay)
+                              : commissionCellText(row)}
+                          </>
+                        }
+                        primaryAction={
+                          /* SPECS-INDEX 編號 567(規格書「商家端三項調整.md」§三 3.3 折衷方案):
+                             兩個報表維持分開頁面,但這裡加一個捷徑連結,點下去直接帶著這位服務
+                             人員導到「服務人員報表」頁面(該頁面 §3.6 不在區間篩選範圍內,繼續用
+                             單一年月,這裡用區間結束日期所在的年月當作連結目標)。
+                             2026-09-29 裁決:會跳頁的動作要是真正的 <Link>,才能右鍵 / 中鍵開新分頁。 */
+                          <Button asChild variant="neutral" size="card">
+                            <Link
+                              to={`/app/staff-report?staffId=${encodeURIComponent(row.staff_id)}&year=${linkYear}&month=${linkMonth}`}
+                            >
+                              查看明細
+                            </Link>
+                          </Button>
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardContent>
           </Card>
@@ -370,7 +384,9 @@ function SummaryCard({
         {value === null || value === undefined ? (
           <p className="text-sm text-muted-foreground">{unavailableText}</p>
         ) : (
-          <p className="text-lg font-semibold text-foreground">{value.toLocaleString()} 元</p>
+          <p className="text-lg font-semibold tabular-nums text-foreground">
+            {value.toLocaleString()} 元
+          </p>
         )}
       </CardContent>
     </Card>

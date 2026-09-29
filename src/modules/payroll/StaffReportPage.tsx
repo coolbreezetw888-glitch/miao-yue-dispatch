@@ -1,27 +1,35 @@
 // 對應模組 8(薪資與帳務)規格書 §4.4:服務人員報表頁(原名「師傅報表」,2026-09-24 改名;路由 /app/staff-report 不變)。服務人員選擇 +
 // 年月選擇器,依選中服務人員的計酬類型顯示不同版面(抽成制:訂單明細+總計;月薪制:扣款明細+
 // 淨額)+ CSV 匯出按鈕。
+//
+// ui-v1-full 第二階段第 2 批(2026-09-29):這一頁沒有彈窗,套用頁面層級規範。
+//   - 抽成制訂單明細從多欄表格改成 ListCard(skill 一:列表一律卡片式):客戶名 + 完成日期,金額用明細列
+//     (DetailRow)放在卡片裡,「展開 / 收合」維持原本的切換邏輯、展開後的逐項抽成明細也用 DetailRow。
+//   - 月薪制假別扣款明細改成明細列(DetailSection + DetailRow,標籤 = 假別(天數)、值 = 扣款金額)。
+//   - 「扣款超過月薪」「回推估算」兩段提醒改 `!` 常駐;載入中改骨架、出錯改 ErrorState、空狀態改 EmptyState。
+//   - 服務人員下拉改 FieldSelect(保留 guardPhantomEmptyChange)、頁首改 PageHeader、匯出按鈕改次要樣式。
+// PieceRateStaffReport / MonthlySalaryStaffReport 同時被服務人員端 MyPayrollPage.tsx 複用,兩邊會一起換新外觀。
+// **只動外觀與版面,不動任何行為**:查詢、CSV 匯出內容、金額格式化(formatAmount)照舊。
 
 import { Fragment, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
+import {
+  AlertNote,
+  AttributeTag,
+  DetailDivider,
+  DetailRow,
+  DetailSection,
+  EmptyState,
+  ErrorState,
+  FieldSelect,
+  FormField,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 // 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
@@ -42,6 +50,20 @@ import { buildCsvContent, downloadCsv } from "./csvExport";
 import { formatStaffCommissionItemBreakdown } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
+
+/** 摘要統計卡(完成訂單 / 我的抽成 / 月薪基本額 …)。 */
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardDescription>{label}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-lg font-semibold tabular-nums text-foreground">{value}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 // 模組 14(服務人員端)規格書 4.5:這兩個版面元件直接被 MyPayrollPage.tsx 複用(export 出去),
 // 介面設計上 staffId 本來就是外部傳入的 prop,不耦合「怎麼決定 staffId」這件事本身——管理員版本
@@ -85,7 +107,7 @@ export function PieceRateStaffReport({
     dateRange ? dateRange.startDate : null,
     dateRange ? dateRange.endDate : null,
   );
-  const { data: summary, isLoading, error } = dateRange ? rangeQuery : monthQuery;
+  const { data: summary, isLoading, error, refetch } = dateRange ? rangeQuery : monthQuery;
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   function toggleExpanded(bookingId: string) {
@@ -120,72 +142,50 @@ export function PieceRateStaffReport({
     downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
+  if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
-    return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
+    return (
+      <ErrorState
+        title="讀不到這份報表"
+        reason={getErrorMessage(error)}
+        onRetry={() => void refetch()}
+      />
+    );
+
+  const assistantLine = (
+    <p className="text-sm text-muted-foreground">
+      以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
+    </p>
+  );
+  const csvButton = showCsvExport ? (
+    <Button
+      type="button"
+      variant="neutral"
+      size="card"
+      className="shrink-0"
+      onClick={handleExportCsv}
+    >
+      匯出這份報表為 CSV
+    </Button>
+  ) : null;
 
   return (
-    <div className="space-y-4">
-      {!showSummaryCards ? (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
-          </p>
-          {showCsvExport ? (
-            <Button variant="outline" size="sm" onClick={handleExportCsv}>
-              匯出這份報表為 CSV
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
+    <div className="flex flex-col gap-4">
       {/* 模組 14(服務人員端)v2 §10.4.4:服務人員自助頁面新增三張摘要卡片(完成訂單/我的抽成/
           訂單總額),取代下面 Card 標題底下原本的 CardDescription 文字(避免同一個數字在畫面上
           出現兩次)。「以助手身份參與...」這行參考文字保留,移到摘要卡片下方,不刪除。 */}
       {showSummaryCards ? (
-        <>
-          <div className="grid grid-cols-3 gap-3">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>完成訂單</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold text-foreground">{summary.total_orders} 筆</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>我的抽成</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold text-foreground">
-                  {formatAmount(summary.total_commission_amount)}
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>訂單總額</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold text-foreground">
-                  {formatAmount(summary.total_amount)}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
-            </p>
-            {showCsvExport ? (
-              <Button variant="outline" size="sm" onClick={handleExportCsv}>
-                匯出這份報表為 CSV
-              </Button>
-            ) : null}
-          </div>
-        </>
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label="完成訂單" value={`${summary.total_orders} 筆`} />
+          <StatCard label="我的抽成" value={formatAmount(summary.total_commission_amount)} />
+          <StatCard label="訂單總額" value={formatAmount(summary.total_amount)} />
+        </div>
       ) : null}
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {assistantLine}
+        {csvButton}
+      </div>
 
       <Card>
         <CardHeader>
@@ -202,93 +202,75 @@ export function PieceRateStaffReport({
         </CardHeader>
         <CardContent>
           {summary.details.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {dateRange ? "這段期間沒有已完成的訂單。" : "這個月沒有已完成的訂單。"}
-            </p>
+            <EmptyState
+              title={dateRange ? "這段期間沒有已完成的訂單" : "這個月沒有已完成的訂單"}
+              description="訂單要按下「標記完成」之後才會列進抽成報表,可以換一個期間再查。"
+            />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {/* #781:見上面 CSV headers 的說明,畫面與 CSV 兩邊標題要一致。 */}
-                  <TableHead>完成日期</TableHead>
-                  <TableHead>客戶</TableHead>
-                  <TableHead className="text-right">抽成基準</TableHead>
-                  <TableHead className="text-right">抽成金額</TableHead>
-                  <TableHead className="text-right">明細</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.details.map((d) => {
-                  const expanded = expandedIds.has(d.booking_id);
-                  return (
-                    <Fragment key={d.booking_id}>
-                      <TableRow>
-                        <TableCell>
-                          {new Date(d.completion_date).toLocaleDateString("zh-TW")}
-                        </TableCell>
-                        <TableCell>{d.customer_name}</TableCell>
-                        {/* 2026-09-24 稽核修正(問題 4):明細列原本直接印原始值(例如 99.5),
-                            摘要卡片卻走 formatAmount(四捨五入成 $100),同一頁兩種格式,
-                            服務人員拿計算機加明細會跟卡片對不上,產生「是不是被扣了」的信任問題。
-                            這裡改成一律走同一支 formatAmount,格式統一。 */}
-                        <TableCell className="text-right">
+            <ul className="flex flex-col gap-2.5">
+              {summary.details.map((d) => {
+                const expanded = expandedIds.has(d.booking_id);
+                return (
+                  <li key={d.booking_id}>
+                    {/* skill 二之五 列表卡片(取代多欄表格):客戶名 + 完成日期,金額用明細列放在卡片裡
+                        (skill 二之六:標籤淡、值粗、tabular-nums),右側「展開 / 收合」切換逐項抽成明細。
+                        #781:「完成日期」跟 CSV 標題一致。 */}
+                    <ListCard
+                      title={d.customer_name}
+                      tags={d.recalculated ? <AttributeTag>已人工重算</AttributeTag> : undefined}
+                      meta={<>完成日期 {new Date(d.completion_date).toLocaleDateString("zh-TW")}</>}
+                      primaryAction={
+                        <Button
+                          type="button"
+                          variant="neutral"
+                          size="card"
+                          aria-expanded={expanded}
+                          onClick={() => toggleExpanded(d.booking_id)}
+                        >
+                          {expanded ? "收合" : "展開"}
+                        </Button>
+                      }
+                    >
+                      <div className="mt-2 flex flex-col gap-1">
+                        {/* 2026-09-24 稽核修正(問題 4):明細一律走同一支 formatAmount,格式統一。 */}
+                        <DetailRow label="抽成基準" size="sm">
                           {formatAmount(d.commission_base_amount)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(d.commission_amount)}
-                          {d.recalculated ? (
-                            <span className="ml-1 text-xs text-warn">(已重算)</span>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleExpanded(d.booking_id)}
-                          >
-                            {expanded ? "收合" : "展開"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                      {expanded ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="bg-muted/30">
+                        </DetailRow>
+                        <DetailRow label="抽成金額">{formatAmount(d.commission_amount)}</DetailRow>
+                        {expanded ? (
+                          <Fragment>
+                            <DetailDivider className="my-1" />
                             {d.item_breakdown.length === 0 && d.legacy_rate_percentage !== null ? (
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-[13px] text-muted-foreground">
                                 這筆是改版前的舊制紀錄,抽成比例 {d.legacy_rate_percentage}%
                               </p>
                             ) : d.item_breakdown.length === 0 ? (
-                              <p className="text-sm text-muted-foreground">沒有抽成明細</p>
+                              <p className="text-[13px] text-muted-foreground">沒有抽成明細</p>
                             ) : (
-                              <ul className="space-y-1 text-sm text-foreground">
-                                {d.item_breakdown.map((item, idx) => (
-                                  <li
-                                    key={idx}
-                                    className="flex flex-wrap items-center justify-between gap-2"
-                                  >
-                                    <span>
-                                      {item.service_item_name} × {item.quantity}(
-                                      {item.commission_mode === "percentage"
-                                        ? `${item.commission_value}%`
-                                        : `${item.commission_value} 元/件`}
-                                      )
-                                    </span>
-                                    {/* 問題 4:展開後的逐項抽成明細一樣統一走 formatAmount。 */}
-                                    <span className="font-medium">
-                                      {formatAmount(item.commission_amount)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
+                              d.item_breakdown.map((item, idx) => (
+                                // 標籤是「服務項目名稱 × 數量(抽成規則)」,名稱是商家自填的動態文字;
+                                // DetailRow 兩側都不 shrink-0,長名稱會折行、金額不會被壓成直排。
+                                <DetailRow
+                                  key={idx}
+                                  size="sm"
+                                  label={`${item.service_item_name} × ${item.quantity}(${
+                                    item.commission_mode === "percentage"
+                                      ? `${item.commission_value}%`
+                                      : `${item.commission_value} 元/件`
+                                  })`}
+                                >
+                                  {formatAmount(item.commission_amount)}
+                                </DetailRow>
+                              ))
                             )}
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                          </Fragment>
+                        ) : null}
+                      </div>
+                    </ListCard>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </CardContent>
       </Card>
@@ -327,7 +309,7 @@ export function MonthlySalaryStaffReport({
     dateRange ? dateRange.startDate : null,
     dateRange ? dateRange.endDate : null,
   );
-  const { data: summary, isLoading, error } = dateRange ? rangeQuery : monthQuery;
+  const { data: summary, isLoading, error, refetch } = dateRange ? rangeQuery : monthQuery;
 
   function handleExportCsv() {
     if (!summary) return;
@@ -344,59 +326,45 @@ export function MonthlySalaryStaffReport({
     downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
-  if (isLoading) return <p className="text-sm text-muted-foreground">載入中⋯</p>;
+  if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
-    return <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>;
+    return (
+      <ErrorState
+        title="讀不到這份報表"
+        reason={getErrorMessage(error)}
+        onRetry={() => void refetch()}
+      />
+    );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm tabular-nums text-muted-foreground">
           {dateRange ? "月休假額度" : "本月休假額度"} {summary.monthly_leave_quota_days ?? "未設定"}{" "}
           天(僅供參考,不影響薪資計算),這段期間實際請假 {summary.total_leave_days} 天
         </p>
         {showCsvExport ? (
-          <Button variant="outline" size="sm" onClick={handleExportCsv}>
+          <Button
+            type="button"
+            variant="neutral"
+            size="card"
+            className="shrink-0"
+            onClick={handleExportCsv}
+          >
             匯出這份報表為 CSV
           </Button>
         ) : null}
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>月薪基本額</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold text-foreground">
-              {summary.monthly_base_salary} 元
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>總扣款</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold text-foreground">
-              {summary.total_deduction_amount} 元
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>實發淨額</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-lg font-semibold text-foreground">{summary.net_pay} 元</p>
-          </CardContent>
-        </Card>
+        <StatCard label="月薪基本額" value={`${summary.monthly_base_salary} 元`} />
+        <StatCard label="總扣款" value={`${summary.total_deduction_amount} 元`} />
+        <StatCard label="實發淨額" value={`${summary.net_pay} 元`} />
       </div>
 
+      {/* skill 二:「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐。 */}
       {summary.over_deduction_warning ? (
-        <p className="rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm text-warn">
-          扣款金額已超過月薪基本額,請留意這個月的請假紀錄或薪資設定是否正確。
-        </p>
+        <AlertNote>扣款金額已超過月薪基本額,請留意這個月的請假紀錄或薪資設定是否正確。</AlertNote>
       ) : null}
 
       {/* 模組 8 §11.10:這個月(或查詢區間內有部分月份)早於系統開始記錄薪資歷史的時間,「月薪
@@ -404,9 +372,9 @@ export function MonthlySalaryStaffReport({
           (商家管理員視角)跟 MyPayrollPage.tsx(服務人員自助視角)共用,兩邊都會自動套用這個提示,
           不需要各自重複實作。 */}
       {summary.salary_history_estimated ? (
-        <p className="rounded-md border border-warn/50 bg-warn/10 px-3 py-2 text-sm text-warn">
-          ⚠️ 這段期間早於系統開始記錄薪資歷史的時間,月薪基本額是用最早的已知薪資回推估算,僅供參考。
-        </p>
+        <AlertNote>
+          這段期間早於系統開始記錄薪資歷史的時間,月薪基本額是用最早的已知薪資回推估算,僅供參考。
+        </AlertNote>
       ) : null}
 
       <Card>
@@ -415,28 +383,20 @@ export function MonthlySalaryStaffReport({
         </CardHeader>
         <CardContent>
           {summary.details.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {dateRange ? "這段期間沒有需要扣款的請假紀錄。" : "這個月沒有需要扣款的請假紀錄。"}
-            </p>
+            <EmptyState
+              title={dateRange ? "這段期間沒有需要扣款的請假紀錄" : "這個月沒有需要扣款的請假紀錄"}
+              description="只有扣款規則不是「不扣款」的假別會列在這裡。"
+            />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>假別</TableHead>
-                  <TableHead className="text-right">天數</TableHead>
-                  <TableHead className="text-right">扣款金額</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.details.map((d) => (
-                  <TableRow key={d.leave_type_id}>
-                    <TableCell>{d.leave_type_name}</TableCell>
-                    <TableCell className="text-right">{d.days}</TableCell>
-                    <TableCell className="text-right">{d.deduction_amount}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            // skill 二之六 明細列:標籤 = 假別(天數)、值 = 扣款金額;假別名稱是商家自填的動態文字,
+            // DetailRow 兩側都能折行。
+            <DetailSection>
+              {summary.details.map((d) => (
+                <DetailRow key={d.leave_type_id} label={`${d.leave_type_name}(${d.days} 天)`}>
+                  {d.deduction_amount} 元
+                </DetailRow>
+              ))}
+            </DetailSection>
           )}
         </CardContent>
       </Card>
@@ -481,45 +441,28 @@ function StaffReportPageInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員報表</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          「{merchant!.name}」個別服務人員的抽成/薪資報表
-        </p>
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="服務人員報表"
+        description={`「${merchant!.name}」個別服務人員的抽成/薪資報表`}
+      />
 
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <label className="text-xs text-muted-foreground" htmlFor="staff-select">
-            服務人員
-          </label>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <FormField label="服務人員" htmlFor="staff-select" className="sm:w-64">
           {/* 2026-09-24 稽核修正(問題 3):稽核清單沒有列到這一站,但它其實是全專案最典型的
               受害情境——selectedStaffId 是在上面的 useEffect 裡「等 staffList 載入完才退回
               選名單第一位」灌進去的,而且從「服務人員明細」點「查看明細」過來時還會再帶一次
               網址參數,兩種都是掛載之後才改 value 的時序。被洗成空字串的話,畫面會卡在
               「請選擇服務人員」,使用者明明是從連結點過來的卻看不到任何報表。
               合法值是資料庫來的動態清單(服務人員 id),判斷條件是「不是空字串」。 */}
-          <Select
+          <FieldSelect
+            id="staff-select"
             value={selectedStaffId}
             onValueChange={guardPhantomEmptyChange(setSelectedStaffId)}
-          >
-            <SelectTrigger id="staff-select" className="mt-1 w-56">
-              <SelectValue placeholder="選擇服務人員" />
-            </SelectTrigger>
-            <SelectContent>
-              {(staffList ?? []).map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+            placeholder="選擇服務人員"
+            options={(staffList ?? []).map((s) => ({ value: s.id, label: s.name }))}
+          />
+        </FormField>
         <YearMonthPicker
           year={year}
           month={month}
@@ -529,9 +472,12 @@ function StaffReportPageInner() {
       </div>
 
       {!staffList || staffList.length === 0 ? (
-        <p className="text-sm text-muted-foreground">目前沒有在職的服務人員。</p>
+        <EmptyState
+          title="目前沒有在職的服務人員"
+          description="新增服務人員並完成訂單之後,這裡才會有報表可以看。"
+        />
       ) : !selectedStaff ? (
-        <p className="text-sm text-muted-foreground">請選擇服務人員。</p>
+        <EmptyState title="請選擇服務人員" description="從上方的下拉選單挑一位服務人員。" />
       ) : selectedStaff.compensation_type === "monthly_salary" ? (
         <MonthlySalaryStaffReport
           staffId={selectedStaff.id}

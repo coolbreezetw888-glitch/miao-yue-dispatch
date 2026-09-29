@@ -15,13 +15,12 @@
 //      salary_applicable 也是 true),後者只選單一個月,兩者是不同用途。
 //   2. 月份 → 起訖日期的換算一律走 dateRangeUtils.ts 的 monthRange/currentMonthRange/
 //      previousMonthRange,不在這個元件裡自己算月底(月底邏輯只能有一份)。
-//   3. 按鈕外觀比照 DateRangePicker 既有的 variant={選中 ? "default" : "outline"} 慣例。
+//   3. ui-v1-full 第 2 批(2026-09-29):四種模式的切換改 ChoiceChipGroup(skill 二之七 單選、
+//      radiogroup 語意),月份欄改 FormField + FieldMonth。只動外觀,模式切換與換算照舊。
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ChoiceChipGroup, FieldMonth, FormField } from "@/components/patterns";
 
 import { DateRangePicker } from "./DateRangePicker";
 import { currentMonthRange, monthRange, previousMonthRange, toMonthString } from "./dateRangeUtils";
@@ -117,30 +116,18 @@ export function ReportPeriodPicker({
   onEndDateChange: (v: string) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-2">
-        {MODE_ORDER.map((m) => (
-          <Button
-            key={m}
-            type="button"
-            size="sm"
-            variant={mode === m ? "default" : "outline"}
-            onClick={() => onModeChange(m)}
-          >
-            {MODE_LABELS[m]}
-          </Button>
-        ))}
-      </div>
+    <div className="flex flex-col gap-3">
+      <ChoiceChipGroup
+        aria-label="查詢期間"
+        value={mode}
+        onValueChange={onModeChange}
+        options={MODE_ORDER.map((m) => ({ value: m, label: MODE_LABELS[m] }))}
+      />
 
       {mode === "pick_month" ? (
-        <div>
-          <Label htmlFor="report-period-month" className="text-xs">
-            月份
-          </Label>
-          <Input
+        <FormField label="月份" htmlFor="report-period-month" className="sm:max-w-xs">
+          <FieldMonth
             id="report-period-month"
-            className="mt-1"
-            type="month"
             value={month}
             onChange={(e) => {
               const raw = e.target.value;
@@ -150,7 +137,7 @@ export function ReportPeriodPicker({
               onMonthChange(raw);
             }}
           />
-        </div>
+        </FormField>
       ) : null}
 
       {mode === "custom_range" ? (
@@ -161,7 +148,7 @@ export function ReportPeriodPicker({
           onEndDateChange={onEndDateChange}
         />
       ) : (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs tabular-nums text-muted-foreground">
           查詢範圍:{startDate} ~ {endDate}
         </p>
       )}

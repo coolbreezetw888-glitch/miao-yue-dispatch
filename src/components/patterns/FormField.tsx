@@ -370,6 +370,26 @@ export const FieldDate = React.forwardRef<
 ));
 FieldDate.displayName = "FieldDate";
 
+/** 原生月份欄位 <input type="month">(報表的「指定月份 / 按月份區間」用)。className 只給版面用(寬度),
+ *  不要改高度 / 圓角 / 字級。ui-v1-full 第 2 批補上:跟 FieldDate 同一套外觀,少了它報表頁就得自己刻。 */
+export const FieldMonth = React.forwardRef<
+  HTMLInputElement,
+  Omit<React.ComponentProps<"input">, "type">
+>(({ className, ...props }, ref) => (
+  <input
+    ref={ref}
+    type="month"
+    className={cn(
+      NATIVE_CONTROL_CLASS,
+      PICKER_INDICATOR_CLASS,
+      "appearance-none tabular-nums",
+      className,
+    )}
+    {...props}
+  />
+));
+FieldMonth.displayName = "FieldMonth";
+
 // ---------------------------------------------------------------------------
 // 可點的方塊:多選(ChoiceChip)/ 單選群組(ChoiceChipGroup)
 // ---------------------------------------------------------------------------
