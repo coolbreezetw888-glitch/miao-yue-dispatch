@@ -1004,9 +1004,11 @@ function StaffListInner() {
               onValueChange={(v) => setListFilter(v as StaffListFilter)}
               className="pt-2"
             >
-              {/* ui-v1-full:篩選分頁籤改成底線式切換列(skill 二之四末段),數量用 count 顯示在文字
-                  後面;手機放不下整條橫向捲動、不換行(原本 flex-wrap 換行的做法會讓下面的內容跳)。 */}
-              <UnderlineTabsList>
+              {/* ui-v1-full:篩選分頁籤改成底線式切換列(skill 二之四),數量用 count 顯示在文字後面。
+                  🔴 variant="filter":四顆篩選必須在 320px 一眼全部看到——不橫向捲、不換行、不截字
+                  (2026-09-29 使用者裁決;第 1 批做成橫向捲動時第四顆「已移除」要滑才看得到)。
+                  換行也不行,會讓下面的內容整個往下跳。 */}
+              <UnderlineTabsList variant="filter">
                 {STAFF_LIST_FILTER_TABS.map((tab) => (
                   <UnderlineTabsTrigger
                     key={tab.value}

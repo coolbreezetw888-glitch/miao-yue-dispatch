@@ -499,15 +499,15 @@ function AgentListInner() {
           {/* #797:三顆分頁籤「全部 / 在職 (n) / 已移除 (n)」。只有名單非空才顯示(比照服務人員頁),
               空名單顯示分頁籤沒有意義。
               ⚠️ 客服只有三顆、沒有服務人員頁的「未上架 / 已上架」——客服沒有 is_listed(#792)。
-              ui-v1-full:改成底線式切換列(skill 二之四末段),數量用 count 顯示在文字後面;
-              手機放不下整條橫向捲動,不換行。 */}
+              ui-v1-full:改成底線式切換列(skill 二之四),數量用 count 顯示在文字後面。
+              🔴 variant="filter":篩選列必須一眼全部看到,不橫向捲、不換行、不截字(2026-09-29 使用者裁決)。 */}
           {agents && agents.length > 0 ? (
             <Tabs
               value={listFilter}
               onValueChange={(v) => setListFilter(v as AgentListFilter)}
               className="pt-2"
             >
-              <UnderlineTabsList>
+              <UnderlineTabsList variant="filter">
                 {AGENT_LIST_FILTER_TABS.map((tab) => (
                   <UnderlineTabsTrigger
                     key={tab.value}

@@ -12,8 +12,9 @@
 //     開關(open / onOpenChange),不再各自包一顆 Trigger。
 //   - 頁首改用 PageHeader 骨架、載入中改灰色骨架、空狀態補下一步按鈕(skill 二之八)。
 // ui-v1-full 第二階段回填(2026-09-29):類型單選改 ChoiceChipGroup(radiogroup 語意)、所屬分類改
-//   共用 FieldSelect(頁面不再自己寫 className 調樣式)、表單副標「金額、類型、工時皆為必填」用
-//   FullPageLayer 的 subtitle 接回來;「下架」是可逆動作 ⇒ ⋯ 選單一般項目、不再標紅
+//   共用 FieldSelect(頁面不再自己寫 className 調樣式)、表單副標「名稱、金額、類型、工時皆為必填」用
+//   FullPageLayer 的 subtitle 接回來(2026-09-29 主腦裁決補上「名稱」——名稱本來就是必填,副標漏掉
+//   一項等於騙人);「下架」是可逆動作 ⇒ ⋯ 選單一般項目、不再標紅
 //   (分類「刪除」是真的刪、不可逆 ⇒ 維持紅字)。
 // **只動外觀與版面,不動任何行為**:驗證、送出、下架 / 重新上架、刪除分類的邏輯全部照舊。
 
@@ -392,7 +393,7 @@ function ServiceItemFormDialog({
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
         title={isEdit ? "編輯服務項目" : "新增服務項目"}
-        subtitle="金額、類型、工時皆為必填。"
+        subtitle="名稱、金額、類型、工時皆為必填。"
         footer={
           // skill 二之三:底部動作列等寬,階層靠顏色(取消白底 / 儲存實心)。儲存鈕在 <form> 外面,
           // 用 form 屬性指回表單,Enter 鍵與按鈕送出走同一個 handleSubmit。
