@@ -7,17 +7,20 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+// ui-v1-full 第二階段第 1 批(盤點 P2):刪除確認窗改用 ui-overlay-patterns 的小卡窗殼
+// (CardAlertDialog)。只換外殼與按鈕階層(確認鈕白底紅字,skill 二之三:危險動作不做實心紅),
+// 觸發條件、handleDelete 的行為完全沒動。
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -166,32 +169,35 @@ export default function IndustryPresetsPage() {
                                 disabled={togglingId === preset.id}
                                 onCheckedChange={(checked) => handleToggle(preset.id, checked)}
                               />
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                              <CardAlertDialog>
+                                <CardAlertDialogTrigger asChild>
                                   <Button
-                                    variant="outline"
-                                    size="sm"
+                                    variant="danger"
+                                    size="card"
                                     disabled={deletingId === preset.id}
                                   >
                                     刪除
                                   </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>確定要刪除這一項嗎?</AlertDialogTitle>
-                                    <AlertDialogDescription>
+                                </CardAlertDialogTrigger>
+                                <CardAlertDialogContent>
+                                  <CardAlertDialogHeader>
+                                    <CardAlertDialogTitle>確定要刪除這一項嗎?</CardAlertDialogTitle>
+                                    <CardAlertDialogDescription className="break-all">
                                       刪除「{preset.feature_key}」不會影響已經建立的商家目前的功能
                                       開關，只影響之後新建商家的預設值。
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>取消</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => handleDelete(preset.id)}>
+                                    </CardAlertDialogDescription>
+                                  </CardAlertDialogHeader>
+                                  <CardAlertDialogFooter>
+                                    <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                                    <CardAlertDialogAction
+                                      tone="danger"
+                                      onClick={() => handleDelete(preset.id)}
+                                    >
                                       確定刪除
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                                    </CardAlertDialogAction>
+                                  </CardAlertDialogFooter>
+                                </CardAlertDialogContent>
+                              </CardAlertDialog>
                             </div>
                           </li>
                         ))}

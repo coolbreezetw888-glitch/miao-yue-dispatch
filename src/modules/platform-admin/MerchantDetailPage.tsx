@@ -9,17 +9,20 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+// ui-v1-full 第二階段第 1 批(盤點 P1):管理員名單「移除」確認窗改用 ui-overlay-patterns 的
+// 小卡窗殼(CardAlertDialog)。只換外殼與按鈕階層(確認鈕白底紅字,skill 二之三:危險動作不做
+// 實心紅),觸發條件、handleRemoveAdmin 的行為完全沒動。
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+} from "@/components/patterns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -427,37 +430,41 @@ export default function MerchantDetailPage() {
                         <span className="break-all">Email:{admin.email}</span>
                       </div>
                     </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+                    <CardAlertDialog>
+                      <CardAlertDialogTrigger asChild>
                         <Button
-                          variant="outline"
-                          size="sm"
+                          variant="danger"
+                          size="card"
                           className="self-start sm:self-auto"
                           disabled={removingAdminId === admin.user_id}
                         >
                           移除
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>確定要移除這位管理員嗎?</AlertDialogTitle>
+                      </CardAlertDialogTrigger>
+                      <CardAlertDialogContent>
+                        <CardAlertDialogHeader>
+                          <CardAlertDialogTitle>確定要移除這位管理員嗎?</CardAlertDialogTitle>
                           {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在以暱稱為主要辨識資訊,
                               確認視窗只講 email 會讓人要自己回頭對照是哪一位,而移除是不可逆的
-                              操作。比照商家端 MerchantAdminList.tsx 的同一個處理。 */}
-                          <AlertDialogDescription>
+                              操作。比照商家端 MerchantAdminList.tsx 的同一個處理。
+                              break-words:email 與商家名稱都是使用者自填的長文字,320px 要能折行。 */}
+                          <CardAlertDialogDescription className="break-words">
                             {adminDisplayName(admin)}({admin.email})將無法再登入管理「
                             {merchant.name}」。如果這是最後一位管理員(且集團也沒有設定集團
                             管理者),系統會擋下這個操作並提示。
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>取消</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleRemoveAdmin(admin.user_id)}>
+                          </CardAlertDialogDescription>
+                        </CardAlertDialogHeader>
+                        <CardAlertDialogFooter>
+                          <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                          <CardAlertDialogAction
+                            tone="danger"
+                            onClick={() => handleRemoveAdmin(admin.user_id)}
+                          >
                             確定移除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                          </CardAlertDialogAction>
+                        </CardAlertDialogFooter>
+                      </CardAlertDialogContent>
+                    </CardAlertDialog>
                   </li>
                 ))}
                 {(admins ?? []).length === 0 ? (

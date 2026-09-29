@@ -2,42 +2,65 @@
 // 清單 + 新增/編輯表單(姓名/暱稱/電話/Email/頭像上傳/簡介/上架開關)+ 服務項目勾選區塊
 // (目前系統沒有任何服務項目,顯示空狀態文字,不報錯,見規格書 1.2 邊界情況)+
 // 權限功能區塊(1.1.1 的 11 個欄位逐一列出,附白話說明)。
+//
+// ui-v1-full 第二階段第 1 批(2026-09-29,盤點 A3 / A4 / #4 / #5 / #6):
+//   - 「新增 / 編輯服務人員」(10+ 欄)改用全頁層殼 FullPageLayer,底部固定「取消 / 儲存」等寬兩顆;
+//     欄位改用 FormField / FieldInput / FieldTextarea / SwitchRow / ChoiceChip(skill 二之七),
+//     服務項目多選從打勾方框改成可點的方塊。
+//   - 「邀請登入」(1 欄)改用小卡窗 CardDialog;「移除」「真正刪除」確認窗改用 CardAlertDialog。
+//   - 服務人員列改成 ListCard:右側只放「一顆主要動作(邀請登入 / 編輯 / 恢復,隨狀態換字、位置固定)
+//     + 一個 ⋯」,其餘動作收進 ⋯(危險項紅字、分隔線下方)。尚未開通登入的整張變黃 + 待辦標籤,
+//     已移除整張變灰。因為觸發點變成選單項目,五個對話框改成受控開關、整頁各只有一顆實例。
+//   - 篩選分頁籤改底線式、頁首改 PageHeader、載入中改骨架、空狀態補下一步按鈕(skill 二之八)。
+// **只動外觀與版面,不動任何行為**:按鈕顯示條件(isAdmin / login_status / status)、驗證、送出、
+// 服務項目勾選即存、頭像上傳即存、可預約時段增刪,全部照舊。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
+  ActionBar,
+  AlertNote,
+  AttributeTag,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  ChoiceChip,
+  EmptyState,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+  FullPageLayer,
+  FullPageLayerClose,
+  FullPageLayerContent,
+  ListCard,
+  LoadingSkeleton,
+  PageHeader,
+  StatusTag,
+  SwitchRow,
+  TodoTag,
+  UnderlineTabsList,
+  UnderlineTabsTrigger,
+  type ListCardMenuItem,
+} from "@/components/patterns";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs } from "@/components/ui/tabs";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
@@ -93,9 +116,11 @@ import {
   MIN_ADVANCE_BOOKING_DAYS_LIMIT,
   MIN_BOOKING_DAYS_AHEAD_LIMIT,
   STAFF_BOOLEAN_PERMISSION_FIELDS,
+  STAFF_COMPENSATION_TYPE_LABELS,
   STAFF_LOGIN_STATUS_LABELS,
   STAFF_NUMBER_PERMISSION_FIELDS,
   type MerchantStaff,
+  type StaffCompensationType,
   type StaffLoginStatus,
 } from "./types";
 
@@ -152,6 +177,25 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
   };
 }
 
+/** 全頁層表單裡每一個區塊的小標題(跟 FormField 的標籤同一套 13px 粗體)。 */
+function FormSectionTitle({ children }: { children: React.ReactNode }) {
+  return <p className="text-[13px] font-semibold leading-none text-foreground">{children}</p>;
+}
+
+/** 表單裡「目前還沒有 / 請先儲存」這類提示的虛線框。 */
+function FormPlaceholder({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
+// 可預約時段編輯器裡的原生 <select> / <input type="time">:共用元件目前沒有 FieldSelect / FieldTime,
+// 這裡只把高度 / 圓角 / 字級對齊 skill 二之七的 44px / 10px,已在回報裡提請主腦補共用版本。
+const NATIVE_CONTROL_CLASS =
+  "h-11 rounded-md border border-input bg-background px-3 text-[15px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+
 // 模組 5 規格書 4.2:比照模組 4 4.4 節先例,新增一週可預約時段設定區塊。允許同一天多組時段
 // (規格書 1.2)。空狀態(規則 2.5):完全沒設定任何時段、且 no_time_slot_limit=false 時,
 // 這位服務人員這次還不可預約,這裡用提示文字說明,不做任何攔阻(攔阻邏輯在 create_booking 裡)。
@@ -207,43 +251,47 @@ function AvailabilityWindowsEditor({
   }
 
   return (
-    <div>
-      <Label className="text-sm font-semibold">可預約時段</Label>
-      <p className="mt-1 text-xs text-muted-foreground">
+    <div className="flex flex-col gap-2">
+      <FormSectionTitle>可預約時段</FormSectionTitle>
+      <p className="text-xs leading-relaxed text-muted-foreground">
         這位服務人員自己願意接單的時段,不必等於商家整體營業時間。
+      </p>
+      {/* skill 二:「現在的狀態跟使用者以為的不一樣」用 `!` 常駐——開了無時段限制,底下的設定會被忽略;
+          或是完全沒設定時段,這個人其實還約不到。 */}
+      <AlertNote>
         {noTimeSlotLimit
           ? "目前已開啟「無時段限制」,以下設定會被忽略,只受商家整體營業時間限制。"
           : "完全沒有設定任何時段時,這位服務人員這次還不可預約,除非開啟「無時段限制」。"}
-      </p>
+      </AlertNote>
 
       {isLoading ? (
-        <p className="mt-2 text-sm text-muted-foreground">載入中⋯</p>
+        <LoadingSkeleton variant="lines" rows={2} />
       ) : !windows || windows.length === 0 ? (
-        <p className="mt-2 rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
-          尚未設定任何可預約時段
-        </p>
+        <FormPlaceholder>尚未設定任何可預約時段</FormPlaceholder>
       ) : (
-        <ul className="mt-2 space-y-1.5">
+        <ul className="flex flex-col gap-2">
           {windows.map((w) => (
-            <li
-              key={w.id}
-              className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm"
-            >
-              <span>
-                星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
-                {w.end_time.slice(0, 5)}
-              </span>
-              <Button type="button" variant="outline" size="sm" onClick={() => handleRemove(w.id)}>
-                刪除
-              </Button>
+            <li key={w.id}>
+              <ListCard
+                title={
+                  <span className="text-sm font-medium tabular-nums">
+                    星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
+                    {w.end_time.slice(0, 5)}
+                  </span>
+                }
+                menuItems={[
+                  { label: "刪除", danger: true, onSelect: () => void handleRemove(w.id) },
+                ]}
+              />
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="mt-1 flex flex-wrap items-center gap-2">
         <select
-          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          aria-label="星期"
+          className={NATIVE_CONTROL_CLASS}
           value={dayOfWeek}
           onChange={(e) => setDayOfWeek(e.target.value)}
         >
@@ -255,18 +303,20 @@ function AvailabilityWindowsEditor({
         </select>
         <input
           type="time"
-          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          aria-label="開始時間"
+          className={NATIVE_CONTROL_CLASS}
           value={startTime}
           onChange={(e) => setStartTime(e.target.value)}
         />
         <span className="text-sm text-muted-foreground">至</span>
         <input
           type="time"
-          className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+          aria-label="結束時間"
+          className={NATIVE_CONTROL_CLASS}
           value={endTime}
           onChange={(e) => setEndTime(e.target.value)}
         />
-        <Button type="button" variant="outline" size="sm" disabled={adding} onClick={handleAdd}>
+        <Button type="button" variant="neutral" size="touch" disabled={adding} onClick={handleAdd}>
           新增時段
         </Button>
       </div>
@@ -274,19 +324,23 @@ function AvailabilityWindowsEditor({
   );
 }
 
+const STAFF_FORM_ID = "staff-form";
+
+// 全頁層(盤點 A3 / A4):受控開關,新增與編輯共用同一個元件,只差 staff 是不是 null。
 function StaffFormDialog({
   merchantId,
   staff,
-  trigger,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   merchantId: string;
   staff: MerchantStaff | null;
-  trigger: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
   const isEdit = Boolean(staff);
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState<StaffFormState>(staff ? staffToFormState(staff) : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
@@ -300,7 +354,7 @@ function StaffFormDialog({
   });
 
   // 模組 4 規格書 4.4:讀取這間商家目前 status='active' 的服務項目清單(對外介面 5.1),
-  // 用來判斷「商家是否有任何服務項目可選」跟渲染真正的 checkbox 清單,不是只讀已勾選數量。
+  // 用來判斷「商家是否有任何服務項目可選」跟渲染真正的多選清單,不是只讀已勾選數量。
   const { data: activeServiceItems, isLoading: activeServiceItemsLoading } =
     useMerchantServiceItems(open ? merchantId : null);
   const { data: categories } = useMerchantServiceCategories(open ? merchantId : null);
@@ -406,7 +460,7 @@ function StaffFormDialog({
         await addMerchantStaff(merchantId, form);
         toast.success("已新增服務人員");
       }
-      setOpen(false);
+      onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.error(isEdit ? "更新失敗" : "新增失敗", { description: getErrorMessage(err) });
@@ -416,60 +470,78 @@ function StaffFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "編輯服務人員" : "新增服務人員"}</DialogTitle>
-          <DialogDescription>
-            {/* 模組 14(服務人員端)上線後,原本這裡「服務人員這次不開放登入帳號」的說明文字已經過時
-                (服務人員現在可以自己登入)——2026-09-21 使用者人工測試回報問題 1 修正:這裡只負責
-                建立/編輯基本資料,登入帳號要等這裡儲存完成後,回到人員清單按「邀請登入」才會真的
-                開通(見 4.7 第 2 點的 InviteStaffLoginDialog)。 */}
+    <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      <FullPageLayerContent
+        title={isEdit ? "編輯服務人員" : "新增服務人員"}
+        footer={
+          // skill 二之三:底部動作列等寬,階層靠顏色(取消白底 / 儲存實心)。儲存鈕在 <form> 外面,
+          // 用 form 屬性指回表單,Enter 鍵與按鈕送出走同一個 handleSubmit。
+          <ActionBar>
+            <FullPageLayerClose asChild>
+              <Button type="button" variant="neutral" size="touch">
+                取消
+              </Button>
+            </FullPageLayerClose>
+            <Button
+              type="submit"
+              form={STAFF_FORM_ID}
+              variant="primary"
+              size="touch"
+              disabled={saving}
+            >
+              {saving ? "儲存中⋯" : "儲存"}
+            </Button>
+          </ActionBar>
+        }
+      >
+        <form id={STAFF_FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-6">
+          {/* 模組 14(服務人員端)上線後,原本這裡「服務人員這次不開放登入帳號」的說明文字已經過時
+              (服務人員現在可以自己登入)——2026-09-21 使用者人工測試回報問題 1 修正:這裡只負責
+              建立/編輯基本資料,登入帳號要等這裡儲存完成後,回到人員清單按「邀請登入」才會真的
+              開通(見 4.7 第 2 點的 InviteStaffLoginDialog)。
+              skill 二:這是「現在的狀態跟使用者以為的不一樣」(存了不等於能登入)→ `!` 常駐。 */}
+          <AlertNote>
             {isEdit
               ? "這裡只會更新基本資料,不會影響登入帳號——登入帳號的開通/權限,請到人員清單使用「邀請登入」或「服務人員權限」。"
               : "這裡先建立基本資料,登入帳號要在儲存完成後,回到人員清單裡按「邀請登入」才會真的開通。"}
-          </DialogDescription>
-        </DialogHeader>
+          </AlertNote>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
+          <div className="flex flex-col gap-4">
             <StaffAvatarUploader currentAvatarUrl={form.avatarUrl} onUpload={handleAvatarUpload} />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="staff-name">姓名 *</Label>
-                <Input
+              <FormField label="姓名" htmlFor="staff-name" required>
+                <FieldInput
                   id="staff-name"
-                  className="mt-2"
                   value={form.name}
                   onChange={(e) => setField("name", e.target.value)}
                   required
                 />
-              </div>
-              <div>
-                <Label htmlFor="staff-nickname">暱稱(對客戶顯示)</Label>
-                <Input
+              </FormField>
+              <FormField label="暱稱(對客戶顯示)" htmlFor="staff-nickname">
+                <FieldInput
                   id="staff-nickname"
-                  className="mt-2"
                   value={form.nickname ?? ""}
                   onChange={(e) => setField("nickname", e.target.value)}
                 />
-              </div>
-              <div>
-                <Label htmlFor="staff-phone">電話 *</Label>
-                <Input
+              </FormField>
+              <FormField
+                label="電話"
+                htmlFor="staff-phone"
+                required
+                helpLabel="說明:電話要怎麼填"
+                help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+              >
+                <FieldInput
                   id="staff-phone"
-                  className="mt-2"
+                  type="tel"
+                  inputMode="numeric"
                   value={form.phone ?? ""}
                   onChange={(e) => setField("phone", e.target.value)}
                   placeholder="0912345678"
                   required
                 />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。
-                </p>
-              </div>
+              </FormField>
               {/* ⚠️ 這裡原本有一個「對外聯絡 Email」欄位(merchant_staff.contact_email)。
                   2026-09-24 使用者裁決把它整個廢除了(欄位本身也 drop 了,見 migration
                   20260924040800):
@@ -481,120 +553,101 @@ function StaffFormDialog({
                   不要把這個欄位加回來。 */}
             </div>
 
-            <div>
-              <Label htmlFor="staff-intro">簡介</Label>
-              <Textarea
+            <FormField label="簡介" htmlFor="staff-intro">
+              <FieldTextarea
                 id="staff-intro"
-                className="mt-2"
                 rows={3}
                 value={form.intro ?? ""}
                 onChange={(e) => setField("intro", e.target.value)}
               />
-            </div>
+            </FormField>
 
-            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-              <div>
-                <p className="text-sm font-medium text-foreground">上架</p>
-                <p className="text-xs text-muted-foreground">
-                  開啟後客戶或客服可以選擇預約這位服務人員。
-                </p>
-              </div>
-              <Switch
-                checked={form.isListed ?? false}
-                onCheckedChange={(v) => setField("isListed", v)}
-              />
-            </div>
+            <SwitchRow
+              title="上架"
+              description="開啟後客戶或客服可以選擇預約這位服務人員。"
+              checked={form.isListed ?? false}
+              onCheckedChange={(v) => setField("isListed", v)}
+            />
 
             {/* 模組 7(排班與休假管理)§4.1:計酬類型單選,預設選取「抽成制」(第〇節判斷 1)。
                 只有月薪制的服務人員才能登記請假紀錄(規則 2.2),抽成制對應的是「調整可預約
                 時段」(既有的 staff_availability_windows/unlimited_backend_edit 機制)。
                 ⚠️ 2026-09-24:選項的中文從「按件計酬」改成「抽成制」,底層的值 'piece_rate'
-                   完全不動(資料庫存的是英文,中文只在這一層顯示)。 */}
-            <div className="rounded-md border border-border px-3 py-2">
-              <p className="text-sm font-medium text-foreground">計酬類型</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能)。
-              </p>
-              <RadioGroup
-                className="mt-2 grid-flow-col justify-start gap-6"
-                value={form.compensationType ?? "piece_rate"}
-                onValueChange={(v) =>
-                  setField("compensationType", v as "monthly_salary" | "piece_rate")
-                }
-              >
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <RadioGroupItem value="piece_rate" id="staff-compensation-piece-rate" />
-                  抽成制
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground">
-                  <RadioGroupItem value="monthly_salary" id="staff-compensation-monthly-salary" />
-                  月薪制
-                </label>
-              </RadioGroup>
-            </div>
+                   完全不動(資料庫存的是英文,中文只在這一層顯示)。
+                ui-v1-full:單選改成可點的方塊(skill 二之七),值直接來自常數白名單。 */}
+            <FormField
+              label="計酬類型"
+              helpLabel="說明:計酬類型會影響什麼"
+              help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能);抽成制則是用「可預約時段」調整接單時間。"
+            >
+              <div className="flex flex-wrap gap-2">
+                {(["piece_rate", "monthly_salary"] as StaffCompensationType[]).map((type) => (
+                  <ChoiceChip
+                    key={type}
+                    selected={(form.compensationType ?? "piece_rate") === type}
+                    onClick={() => setField("compensationType", type)}
+                  >
+                    {STAFF_COMPENSATION_TYPE_LABELS[type]}
+                  </ChoiceChip>
+                ))}
+              </div>
+            </FormField>
           </div>
 
-          <div>
-            <Label className="text-sm font-semibold">服務項目</Label>
+          <div className="flex flex-col gap-2">
+            <FormSectionTitle>服務項目</FormSectionTitle>
             {/* 模組 4 規格書 4.4:先判斷「商家是否有任何 status='active' 的服務項目」,
                 不是只看「這位服務人員目前已勾選幾項」——避免把「商家根本沒有服務項目可選」
-                跟「有服務項目、只是這位人員還沒被勾選任何一項」這兩種情況搞混。 */}
+                跟「有服務項目、只是這位人員還沒被勾選任何一項」這兩種情況搞混。
+                ui-v1-full:多選改成可點的方塊(skill 二之七:選中 = 主題色框 + 勾,手機好按),
+                點一下就立刻寫入 / 移除關聯(行為跟原本的打勾方框一模一樣)。 */}
             {activeServiceItemsLoading ? (
-              <p className="mt-2 text-sm text-muted-foreground">載入中⋯</p>
+              <LoadingSkeleton variant="lines" rows={2} />
             ) : !merchantHasAnyServiceItems ? (
-              <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                目前尚無服務項目可選,請先到服務項目管理設定
-              </p>
+              <FormPlaceholder>目前尚無服務項目可選,請先到服務項目管理設定</FormPlaceholder>
             ) : !staff ? (
-              <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+              <FormPlaceholder>
                 請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可勾選服務項目。
-              </p>
+              </FormPlaceholder>
             ) : (
-              <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-2">
                 {activeServiceItems!.map((item) => {
                   const checked = serviceItemIds?.includes(item.id) ?? false;
                   return (
-                    <label
+                    <ChoiceChip
                       key={item.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                      selected={checked}
+                      onClick={() => handleToggleServiceItem(item.id, !checked)}
+                      className="max-w-full"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-foreground">{item.name}</p>
-                        {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):分類名稱是商家自訂
-                            文字、長度不固定,加 break-words 讓這行願意換行,不會撐開容器。 */}
-                        <p className="break-words text-xs text-muted-foreground">
+                      <span className="min-w-0 break-words text-left">
+                        {item.name}
+                        {/* 分類名稱是商家自訂文字、長度不固定,放在名稱後面用淡字帶過。 */}
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                           {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
-                        </p>
-                      </div>
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => handleToggleServiceItem(item.id, v === true)}
-                      />
-                    </label>
+                        </span>
+                      </span>
+                    </ChoiceChip>
                   );
                 })}
                 {removedSelectedItems && removedSelectedItems.length > 0
                   ? removedSelectedItems.map((item) => (
-                      <label
+                      <ChoiceChip
                         key={item.id}
-                        className="flex items-center justify-between gap-3 rounded-md border border-dashed border-border px-3 py-2 opacity-70"
+                        selected
+                        onClick={() => handleToggleServiceItem(item.id, false)}
+                        className="max-w-full border-dashed opacity-70"
                       >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm text-foreground">
-                            {item.name}
-                            <span className="ml-1 text-xs text-muted-foreground">(已下架)</span>
-                          </p>
-                          {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):同上,分類名稱
-                              長度不固定,加 break-words 避免撐開容器。 */}
-                          <p className="break-words text-xs text-muted-foreground">
+                        <span className="min-w-0 break-words text-left">
+                          {item.name}
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            (已下架)
+                          </span>
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                             {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
-                          </p>
-                        </div>
-                        <Checkbox
-                          checked
-                          onCheckedChange={(v) => handleToggleServiceItem(item.id, v === true)}
-                        />
-                      </label>
+                          </span>
+                        </span>
+                      </ChoiceChip>
                     ))
                   : null}
               </div>
@@ -607,25 +660,22 @@ function StaffFormDialog({
               noTimeSlotLimit={form.noTimeSlotLimit ?? false}
             />
           ) : (
-            <div>
-              <Label className="text-sm font-semibold">可預約時段</Label>
-              <p className="mt-2 rounded-md border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+            <div className="flex flex-col gap-2">
+              <FormSectionTitle>可預約時段</FormSectionTitle>
+              <FormPlaceholder>
                 請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可設定可預約時段。
-              </p>
+              </FormPlaceholder>
             </div>
           )}
 
-          <div>
-            <div className="flex items-baseline justify-between">
-              <Label className="text-sm font-semibold">權限功能</Label>
-              <span className="text-xs text-muted-foreground">
-                這些開關目前先存值,對應的功能上線後才會實際生效
-              </span>
-            </div>
+          <div className="flex flex-col gap-3">
+            <FormSectionTitle>權限功能</FormSectionTitle>
+            {/* skill 二:「現在的狀態跟使用者以為的不一樣」(開了不等於生效)→ `!` 常駐,不收進 `?`。 */}
+            <AlertNote>這些開關目前先存值,對應的功能上線後才會實際生效。</AlertNote>
             {/* 2026-09-24 使用者裁決:三個「預約天數」欄位收斂成兩個(見 types.ts
                 STAFF_NUMBER_PERMISSION_FIELDS 上方的完整裁決註解)。欄位數從 3 變 2,所以格線
                 也從 sm:grid-cols-3 改成 sm:grid-cols-2,兩欄才不會留下一格空白。 */}
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               {STAFF_NUMBER_PERMISSION_FIELDS.map((field) => {
                 // 明確窄化成兩個具體欄位(而不是用泛型 toCamel),避免 form[key] 的型別被推成
                 // StaffFormState 全部欄位型別的聯集(含 boolean),導致 <input value> 型別檢查出錯。
@@ -634,10 +684,13 @@ function StaffFormDialog({
                     ? "advanceBookingDays"
                     : "bookingWindowMaxDays";
                 return (
-                  <div key={field.key}>
-                    <Label htmlFor={`staff-${field.key}`} className="text-xs">
-                      {field.label}
-                    </Label>
+                  <FormField
+                    key={field.key}
+                    label={field.label}
+                    htmlFor={`staff-${field.key}`}
+                    helpLabel={`說明:${field.label}怎麼填`}
+                    help={field.description}
+                  >
                     {/* min/max:刻意跟資料庫端的 CHECK 約束對齊(常數都在 types.ts,兩邊共用同一份)。
                         ・「最少要提前幾天」:min=0,對應資料庫的 advance_booking_days >= 0。
                           這條約束是 2026-09-24 資料庫工程師主動補的——原本這欄完全沒有約束,
@@ -653,9 +706,11 @@ function StaffFormDialog({
                         placeholder:兩個欄位留空時會套用的預設值不一樣(0 天 vs 180 天),光靠下方
                         說明文字容易被略過,所以直接把留空時會用的數字顯示在空白輸入框裡。文案句型
                         跟說明文字統一成「留空 = N 天」(2026-09-24 主腦裁決),兩欄一致。 */}
-                    <Input
+                    <FieldInput
                       id={`staff-${field.key}`}
                       type="number"
+                      inputMode="numeric"
+                      className="tabular-nums"
                       min={
                         field.key === "advance_booking_days"
                           ? MIN_ADVANCE_BOOKING_DAYS_LIMIT
@@ -671,32 +726,24 @@ function StaffFormDialog({
                           ? `留空 = ${DEFAULT_MIN_ADVANCE_BOOKING_DAYS} 天`
                           : `留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天`
                       }
-                      className="mt-1"
                       value={form[numberKey] ?? ""}
                       onChange={(e) =>
                         setField(numberKey, e.target.value === "" ? null : Number(e.target.value))
                       }
                     />
-                    <p className="mt-1 text-[11px] text-muted-foreground">{field.description}</p>
-                  </div>
+                  </FormField>
                 );
               })}
             </div>
-            <div className="mt-4 space-y-2">
+            <div className="flex flex-col gap-2">
               {STAFF_BOOLEAN_PERMISSION_FIELDS.map((field) => (
-                <div
+                <SwitchRow
                   key={field.key}
-                  className="flex items-center justify-between rounded-md border border-border px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm text-foreground">{field.label}</p>
-                    <p className="text-xs text-muted-foreground">{field.description}</p>
-                  </div>
-                  <Switch
-                    checked={Boolean(form[toCamel(field.key)])}
-                    onCheckedChange={(v) => setField(toCamel(field.key), v)}
-                  />
-                </div>
+                  title={field.label}
+                  description={field.description}
+                  checked={Boolean(form[toCamel(field.key)])}
+                  onCheckedChange={(v) => setField(toCamel(field.key), v)}
+                />
               ))}
             </div>
           </div>
@@ -706,15 +753,9 @@ function StaffFormDialog({
           {isEdit && staff ? <StaffLineBindingSection staffId={staff.id} /> : null}
           {/* 模組 15(服務人員推播通知)§7.5(選配):同樣只在編輯既有服務人員時顯示。 */}
           {isEdit && staff ? <StaffPushSubscriptionSummary staffId={staff.id} /> : null}
-
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </FullPageLayerContent>
+    </FullPageLayer>
   );
 }
 
@@ -723,15 +764,9 @@ function toCamel<K extends keyof StaffFormState>(key: string): K {
   return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase()) as K;
 }
 
-function loginStatusBadgeVariant(
-  loginStatus: StaffLoginStatus,
-): "default" | "secondary" | "outline" {
-  if (loginStatus === "active") return "default";
-  if (loginStatus === "invited") return "secondary";
-  return "outline";
-}
+const INVITE_FORM_ID = "invite-staff-login-form";
 
-// 模組 14(服務人員端)規格書 4.7 第 2 點:邀請服務人員登入的小 Dialog。
+// 模組 14(服務人員端)規格書 4.7 第 2 點:邀請服務人員登入的小卡窗(盤點 #4,1 欄)。
 // ⚠️ 2026-09-24 使用者裁決之後,這個欄位**沒有預設值**,一律由管理員手動輸入。
 //    原本規格書寫「可以預先帶入既有的 contact_email 當預設值」,但 contact_email 這個欄位已經
 //    整個廢除了(「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」
@@ -743,13 +778,16 @@ function loginStatusBadgeVariant(
 function InviteStaffLoginDialog({
   merchantId,
   staff,
+  open,
+  onOpenChange,
   onInvited,
 }: {
   merchantId: string;
-  staff: MerchantStaff;
+  staff: MerchantStaff | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onInvited: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [inviting, setInviting] = useState(false);
 
@@ -763,6 +801,7 @@ function InviteStaffLoginDialog({
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
+    if (!staff) return;
     if (!loginEmail.trim()) return;
     setInviting(true);
     try {
@@ -771,7 +810,7 @@ function InviteStaffLoginDialog({
         staffId: staff.id,
         loginEmail,
       });
-      setOpen(false);
+      onOpenChange(false);
       onInvited();
       if (result.alreadyHadAccount) {
         toast.success("已直接開通登入", {
@@ -790,40 +829,44 @@ function InviteStaffLoginDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          邀請登入
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>邀請「{staff.name}」開通登入</DialogTitle>
-          <DialogDescription>
+    <CardDialog open={open} onOpenChange={onOpenChange}>
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle className="break-words">邀請「{staff?.name}」開通登入</CardDialogTitle>
+          <CardDialogDescription>
             對方會收到一封邀請信,點連結設定密碼後即可用手機登入;如果這個 email
             已經有秒約帳號,會直接開通登入。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleInvite} className="space-y-4">
-          <div>
-            <Label htmlFor={`staff-login-email-${staff.id}`}>登入 Email *</Label>
-            <Input
-              id={`staff-login-email-${staff.id}`}
+          </CardDialogDescription>
+        </CardDialogHeader>
+        <form id={INVITE_FORM_ID} onSubmit={handleInvite}>
+          <FormField label="登入 Email" htmlFor="staff-login-email" required>
+            <FieldInput
+              id="staff-login-email"
               type="email"
-              className="mt-2"
               value={loginEmail}
               onChange={(e) => setLoginEmail(e.target.value)}
               required
             />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={inviting || !loginEmail.trim()}>
-              {inviting ? "送出中⋯" : "送出邀請"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={INVITE_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={inviting || !loginEmail.trim()}
+          >
+            {inviting ? "送出中⋯" : "送出邀請"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
 
@@ -850,7 +893,7 @@ function StaffLoginEmailManagement({ staff }: { staff: MerchantStaff }) {
   }
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-2">
+    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       <LoginEmailStatusDisplay statusQuery={statusQuery} />
       <AdminSuggestLoginEmailDialog
         personLabel={staff.name}
@@ -866,6 +909,7 @@ function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   // 使用者決策(2026-09-23):「服務人員管理」開放給有 staff_management 權限的客服使用,但邀請
   // 服務人員登入(帳號/密碼授權)、指派服務人員權限、真正刪除這三項比照「客服管理」同一類的
   // 帳號/敏感操作,維持永遠只給商家管理員(見下方各自的 isAdmin 判斷)——底層 Edge Function
@@ -886,6 +930,16 @@ function StaffListInner() {
     () => (staffList ?? []).filter((staff) => matchesStaffListFilter(staff, listFilter)),
     [staffList, listFilter],
   );
+
+  // ui-v1-full:五個對話框的受控開關(觸發點在 ListCard 的按鈕 / ⋯ 選單裡)。編輯 / 邀請用
+  // 「記住是哪一位 + 開關」兩個 state,關閉時只關開關、不清掉人,避免關閉動畫期間內容閃動。
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<MerchantStaff | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [invitingStaff, setInvitingStaff] = useState<MerchantStaff | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [removingStaff, setRemovingStaff] = useState<MerchantStaff | null>(null);
+  const [hardDeletingStaff, setHardDeletingStaff] = useState<MerchantStaff | null>(null);
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: staffListQueryKey(merchantId) });
@@ -926,23 +980,16 @@ function StaffListInner() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
-      <div>
-        <Link to="/app/manage" className="text-sm text-muted-foreground hover:underline">
-          ← 返回功能
-        </Link>
-      </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">服務人員管理</h1>
-          <p className="mt-1 text-sm text-muted-foreground">「{merchant!.name}」的服務人員名錄</p>
-        </div>
-        <StaffFormDialog
-          merchantId={merchantId}
-          staff={null}
-          trigger={<Button variant="cta">新增服務人員</Button>}
-          onSaved={refetch}
-        />
-      </div>
+      <PageHeader
+        backTo="/app/manage"
+        title="服務人員管理"
+        description={`「${merchant!.name}」的服務人員名錄`}
+        action={
+          <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
+            新增服務人員
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -954,201 +1001,284 @@ function StaffListInner() {
               onValueChange={(v) => setListFilter(v as StaffListFilter)}
               className="pt-2"
             >
-              {/* 手機版容器寬度溢出回歸(e2e/mobile-overflow.spec.ts「人員管理頁 /app/staff」):
-                  四顆分頁籤「全部/未上架 (n)/已上架 (n)/已移除 (n)」在 375px 寬的手機上總寬
-                  327px、放不進 285px 的卡片內寬,原本的預設 TabsList 既不換行也沒有橫向捲動,
-                  後面兩顆會直接被裁掉看不到。沿用 OrdersPage.tsx §7.1 已經驗證過的同一組解法
-                  (h-auto + w-full + flex-wrap 自動換行),不另外發明新寫法、也不改成橫向捲動
-                  ——這是篩選器,四個選項應該一眼全部看到,不該要求使用者左右滑才發現還有選項。 */}
-              <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted p-1">
+              {/* ui-v1-full:篩選分頁籤改成底線式切換列(skill 二之四末段),數量用 count 顯示在文字
+                  後面;手機放不下整條橫向捲動、不換行(原本 flex-wrap 換行的做法會讓下面的內容跳)。 */}
+              <UnderlineTabsList>
                 {STAFF_LIST_FILTER_TABS.map((tab) => (
-                  <TabsTrigger key={tab.value} value={tab.value}>
+                  <UnderlineTabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    count={tab.value === "all" ? undefined : filterCounts[tab.value]}
+                  >
                     {tab.label}
-                    {tab.value === "all" ? "" : ` (${filterCounts[tab.value]})`}
-                  </TabsTrigger>
+                  </UnderlineTabsTrigger>
                 ))}
-              </TabsList>
+              </UnderlineTabsList>
             </Tabs>
           ) : null}
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            <LoadingSkeleton variant="cards" rows={3} />
           ) : !staffList || staffList.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              目前還沒有任何服務人員,點右上角新增一位。
-            </p>
+            <EmptyState
+              title="還沒有任何服務人員"
+              description="新增服務人員後,就能為他們排預約、設定可預約時段與服務項目。"
+              action={
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="touch"
+                  onClick={() => setCreateOpen(true)}
+                >
+                  新增第一位服務人員
+                </Button>
+              }
+            />
           ) : filteredStaffList.length === 0 ? (
             <p className="text-sm text-muted-foreground">這個分類目前沒有服務人員。</p>
           ) : (
-            /* 手機版容器寬度溢出回歸(e2e/mobile-overflow.spec.ts「人員管理頁 /app/staff」):
-               每一列原本固定是 `flex items-center justify-between`,右側按鈕群組又是 `shrink-0`,
-               所以在 375px 的手機上「在職 + 尚未開通 + 管理員」這種會同時出現邀請登入/編輯/移除
-               三顆按鈕的情況下,左半邊的資訊區被壓到只剩 57px、姓名與狀態徽章區塊只剩 5px
-               (內容需要 114px)——實際畫面上只看得到頭像跟三顆按鈕,服務人員叫什麼名字、是不是
-               已上架、有沒有開通登入,全部看不到。
-               版面優先權:姓名與狀態徽章比按鈕重要,所以窄螢幕改成上下兩段式(資訊一段、按鈕一段),
-               sm 以上維持原本的左右排列。沿用 MerchantAdminList.tsx / MerchantDetailPage.tsx
-               管理員名單同一組已驗證過的寫法(`flex flex-col gap-2 ... sm:flex-row sm:items-center
-               sm:justify-between`),不是在外層補 `overflow-x-auto` 讓它可以橫向捲——那只是把
-               「看不到」換成「要左右滑才看得到」,沒有解決資訊被擠掉的問題。 */
-            <ul className="space-y-2">
-              {filteredStaffList.map((staff) => (
-                <li
-                  key={staff.id}
-                  className="flex flex-col gap-2 rounded-md border border-border px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
-                      {staff.avatar_url ? (
-                        <img
-                          src={staff.avatar_url}
-                          alt={staff.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">無</span>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      {/* break-words(不是 truncate):姓名是這一列最重要的資訊,窄螢幕上寧可
-                          換行多佔一行,也不要把長姓名切掉只剩前半段。比照 MerchantAdminList.tsx
-                          管理員 email 的處理方式。 */}
-                      <p className="break-words text-sm font-medium text-foreground">
-                        {staff.name}
-                        {staff.nickname ? `(${staff.nickname})` : ""}
-                      </p>
-                      {/* flex-wrap:最多會同時出現「已上架/抽成制/尚未開通/已移除」四顆徽章,
-                          窄螢幕放不下就換行,不要撐開容器。 */}
-                      <div className="mt-0.5 flex flex-wrap gap-1.5">
-                        <Badge variant={staff.is_listed ? "default" : "secondary"}>
-                          {staff.is_listed ? "已上架" : "未上架"}
-                        </Badge>
-                        <Badge variant="outline">
-                          {/* 2026-09-24:徽章文字「按件計酬」→「抽成制」,判斷用的欄位值不變。 */}
-                          {staff.compensation_type === "monthly_salary" ? "月薪制" : "抽成制"}
-                        </Badge>
-                        {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態徽章。 */}
-                        <Badge
-                          variant={loginStatusBadgeVariant(staff.login_status as StaffLoginStatus)}
-                        >
-                          {STAFF_LOGIN_STATUS_LABELS[staff.login_status as StaffLoginStatus]}
-                        </Badge>
-                        {staff.status === "removed" ? (
-                          <Badge variant="destructive">已移除</Badge>
-                        ) : null}
-                      </div>
-                      {/* 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
-                          狀態與修改入口。 */}
-                      {staff.login_status === "active" ? (
-                        <StaffLoginEmailManagement staff={staff} />
-                      ) : null}
-                    </div>
-                  </div>
-                  {/* 窄螢幕:按鈕自己獨立一行、放不下就換行(flex-wrap),不再擠壓上面的資訊區。
-                      sm 以上:維持 shrink-0,不讓按鈕文字被壓到換行。 */}
-                  <div className="flex flex-wrap gap-2 sm:shrink-0">
-                    {staff.status === "active" ? (
-                      <>
-                        {/* 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請按鈕。
-                            第 3 點(服務人員權限入口)留待該模組後續階段實作,這裡先不加。 */}
-                        {isAdmin && staff.login_status === "not_invited" ? (
-                          <InviteStaffLoginDialog
-                            merchantId={merchantId}
-                            staff={staff}
-                            onInvited={refetch}
-                          />
-                        ) : null}
-                        {isAdmin && staff.login_status === "active" ? (
-                          <Button variant="outline" size="sm" asChild>
-                            <Link to={`/app/staff/${staff.id}/permissions`}>服務人員權限</Link>
+            <ul className="flex flex-col gap-2.5">
+              {filteredStaffList.map((staff) => {
+                const loginStatus = staff.login_status as StaffLoginStatus;
+                const isRemoved = staff.status !== "active";
+                // 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請入口(只給管理員)。
+                const canInvite = isAdmin && !isRemoved && loginStatus === "not_invited";
+                // 主要動作隨狀態換字、位置固定:恢復(已移除)/ 邀請登入(尚未開通且是管理員)/ 編輯。
+                // 其餘動作收進 ⋯:編輯(當主要動作被邀請登入佔走時)、服務人員權限、移除 / 真正刪除。
+                const menuItems: ListCardMenuItem[] | undefined = isRemoved
+                  ? isAdmin
+                    ? [
+                        // 對應規格書「服務人員管理優化與硬刪除」§3.4:只在「已移除」狀態出現。
+                        // 2026-09-23:「真正刪除」不在服務人員管理開放給客服的範圍內,永遠只給商家
+                        // 管理員(底層 hard_delete_merchant_staff 也是同一個限制)。
+                        {
+                          label: "真正刪除",
+                          danger: true,
+                          onSelect: () => setHardDeletingStaff(staff),
+                        },
+                      ]
+                    : undefined
+                  : [
+                      ...(canInvite
+                        ? [
+                            {
+                              label: "編輯",
+                              onSelect: () => {
+                                setEditingStaff(staff);
+                                setEditOpen(true);
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(isAdmin && loginStatus === "active"
+                        ? [
+                            {
+                              label: "服務人員權限",
+                              onSelect: () => navigate(`/app/staff/${staff.id}/permissions`),
+                            },
+                          ]
+                        : []),
+                      { label: "移除", danger: true, onSelect: () => setRemovingStaff(staff) },
+                    ];
+
+                return (
+                  <li key={staff.id}>
+                    {/* skill 二之五 列表卡片:頭像 → 姓名 + 狀態標籤 + 屬性標籤 + 待辦標籤 → 次要資訊
+                        (登入信箱狀態)→ 右側「一顆主要動作 + ⋯」。🔴 尚未開通登入的整張變黃(要處理),
+                        已移除整張變灰、名稱變淡。 */}
+                    <ListCard
+                      state={
+                        isRemoved
+                          ? "inactive"
+                          : loginStatus === "not_invited"
+                            ? "attention"
+                            : "default"
+                      }
+                      leading={
+                        <Avatar className="h-10 w-10">
+                          {staff.avatar_url ? (
+                            <AvatarImage src={staff.avatar_url} alt={staff.name} />
+                          ) : null}
+                          <AvatarFallback className="bg-brand-soft text-sm font-semibold text-brand">
+                            {staff.name.slice(0, 1)}
+                          </AvatarFallback>
+                        </Avatar>
+                      }
+                      title={
+                        <>
+                          {staff.name}
+                          {staff.nickname ? `(${staff.nickname})` : ""}
+                        </>
+                      }
+                      tags={
+                        <>
+                          {/* 狀態標籤一個人只有一個:已移除優先;否則看上架與否。 */}
+                          {isRemoved ? (
+                            <StatusTag tone="danger">已移除</StatusTag>
+                          ) : staff.is_listed ? (
+                            <StatusTag tone="success">已上架</StatusTag>
+                          ) : (
+                            <StatusTag tone="neutral">未上架</StatusTag>
+                          )}
+                          {/* 2026-09-24:標籤文字「按件計酬」→「抽成制」,判斷用的欄位值不變。 */}
+                          <AttributeTag>
+                            {
+                              STAFF_COMPENSATION_TYPE_LABELS[
+                                staff.compensation_type as StaffCompensationType
+                              ]
+                            }
+                          </AttributeTag>
+                          {/* 模組 14(服務人員端)規格書 4.7 第 1 點:登入狀態。尚未開通 = 待辦標籤;
+                              邀請信已寄出 = 等對方動作的黃色狀態;已開通則由下方「登入信箱:…」那行
+                              表達,不再多一顆標籤。已移除的人不顯示登入標籤(沒有動作可做)。 */}
+                          {!isRemoved && loginStatus === "not_invited" ? (
+                            <TodoTag>尚未開通登入</TodoTag>
+                          ) : null}
+                          {!isRemoved && loginStatus === "invited" ? (
+                            <StatusTag tone="warning">
+                              {STAFF_LOGIN_STATUS_LABELS.invited}
+                            </StatusTag>
+                          ) : null}
+                        </>
+                      }
+                      meta={
+                        // 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
+                        // 狀態與修改入口。
+                        loginStatus === "active" ? (
+                          <StaffLoginEmailManagement staff={staff} />
+                        ) : null
+                      }
+                      primaryAction={
+                        isRemoved ? (
+                          <Button
+                            type="button"
+                            variant="neutral"
+                            size="card"
+                            onClick={() => handleReactivate(staff.id)}
+                          >
+                            恢復
                           </Button>
-                        ) : null}
-                        <StaffFormDialog
-                          merchantId={merchantId}
-                          staff={staff}
-                          trigger={
-                            <Button variant="outline" size="sm">
-                              編輯
-                            </Button>
-                          }
-                          onSaved={refetch}
-                        />
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              移除
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>確定要移除這位服務人員嗎?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>取消</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleRemove(staff.id)}>
-                                確定移除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </>
-                    ) : (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleReactivate(staff.id)}
-                        >
-                          恢復
-                        </Button>
-                        {/* 對應規格書「服務人員管理優化與硬刪除」§3.4:只在「已移除」狀態旁顯示,
-                            用 variant="destructive" 讓視覺上明顯跟「恢復」不同,避免手滑點錯。
-                            2026-09-23:「真正刪除」不在服務人員管理開放給客服的範圍內,永遠只給
-                            商家管理員(見上方 isAdmin 判斷,底層 hard_delete_merchant_staff 也是
-                            同一個限制)。 */}
-                        {isAdmin ? (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="sm">
-                                真正刪除
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  確定要真正刪除「{staff.name}」嗎?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
-                                  抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
-                                  並告訴你原因,這個人會維持「已移除」狀態。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>取消</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleHardDelete(staff.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  確定真正刪除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                </li>
-              ))}
+                        ) : canInvite ? (
+                          <Button
+                            type="button"
+                            variant="neutral"
+                            size="card"
+                            onClick={() => {
+                              setInvitingStaff(staff);
+                              setInviteOpen(true);
+                            }}
+                          >
+                            邀請登入
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="neutral"
+                            size="card"
+                            onClick={() => {
+                              setEditingStaff(staff);
+                              setEditOpen(true);
+                            }}
+                          >
+                            編輯
+                          </Button>
+                        )
+                      }
+                      menuItems={menuItems}
+                    />
+                  </li>
+                );
+              })}
             </ul>
           )}
         </CardContent>
       </Card>
+
+      {/* 全頁層(盤點 A3):新增。 */}
+      <StaffFormDialog
+        merchantId={merchantId}
+        staff={null}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSaved={refetch}
+      />
+      {/* 全頁層(盤點 A4):編輯。 */}
+      <StaffFormDialog
+        merchantId={merchantId}
+        staff={editingStaff}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSaved={refetch}
+      />
+      {/* 小卡窗(盤點 #4):邀請登入。 */}
+      <InviteStaffLoginDialog
+        merchantId={merchantId}
+        staff={invitingStaff}
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        onInvited={refetch}
+      />
+
+      {/* 小卡窗(盤點 #5):移除(軟刪除)確認。 */}
+      <CardAlertDialog
+        open={removingStaff !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemovingStaff(null);
+        }}
+      >
+        <CardAlertDialogContent>
+          <CardAlertDialogHeader>
+            <CardAlertDialogTitle>確定要移除這位服務人員嗎?</CardAlertDialogTitle>
+            <CardAlertDialogDescription>
+              這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
+            </CardAlertDialogDescription>
+          </CardAlertDialogHeader>
+          <CardAlertDialogFooter>
+            <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+            <CardAlertDialogAction
+              tone="danger"
+              onClick={() => {
+                if (removingStaff) void handleRemove(removingStaff.id);
+              }}
+            >
+              確定移除
+            </CardAlertDialogAction>
+          </CardAlertDialogFooter>
+        </CardAlertDialogContent>
+      </CardAlertDialog>
+
+      {/* 小卡窗(盤點 #6):真正刪除(不可逆)確認,文案照舊。 */}
+      <CardAlertDialog
+        open={hardDeletingStaff !== null}
+        onOpenChange={(open) => {
+          if (!open) setHardDeletingStaff(null);
+        }}
+      >
+        <CardAlertDialogContent>
+          <CardAlertDialogHeader>
+            <CardAlertDialogTitle className="break-words">
+              確定要真正刪除「{hardDeletingStaff?.name}」嗎?
+            </CardAlertDialogTitle>
+            <CardAlertDialogDescription>
+              這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
+              抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
+              並告訴你原因,這個人會維持「已移除」狀態。
+            </CardAlertDialogDescription>
+          </CardAlertDialogHeader>
+          <CardAlertDialogFooter>
+            <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+            <CardAlertDialogAction
+              tone="danger"
+              onClick={() => {
+                if (hardDeletingStaff) void handleHardDelete(hardDeletingStaff.id);
+              }}
+            >
+              確定真正刪除
+            </CardAlertDialogAction>
+          </CardAlertDialogFooter>
+        </CardAlertDialogContent>
+      </CardAlertDialog>
     </main>
   );
 }

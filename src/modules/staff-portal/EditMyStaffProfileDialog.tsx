@@ -14,23 +14,30 @@
 // 那個元件本來就只吃 currentAvatarUrl/onUpload 兩個 prop,完全不耦合「上傳到哪個路徑」這件事,
 // 路徑差異(self/<staff_id>/ vs 管理員路徑)已經在 uploadMyStaffAvatar()(api.ts)裡處理好,
 // 元件本身不需要重新複製一份只是路徑不同的版本(工程師實作時的判斷,已在回報中向主腦說明)。
+//
+// ui-v1-full 第二階段第 1 批(盤點 S1,使用者已裁決「4 欄 + 頭像歸小卡窗」):外殼改用
+// ui-overlay-patterns 的小卡窗殼(CardDialog),欄位改用 FormField / FieldInput / FieldTextarea
+// 單欄直排(小卡窗 400px 寬不再分兩欄),底部改成「取消 / 儲存」兩顆。電話格式說明收進 `?`
+// (skill 二:欄位怎麼填屬於看過一次就懂的內容)。**只動外觀,不動行為**:驗證、送出、頭像上傳
+// 即存檔的邏輯全部照舊。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  CardDialogTrigger,
+  FieldInput,
+  FieldTextarea,
+  FormField,
+} from "@/components/patterns";
+import { Button } from "@/components/ui/button";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { StaffAvatarUploader } from "@/modules/staff-agent/StaffAvatarUploader";
@@ -45,6 +52,8 @@ interface EditMyStaffProfileDialogProps {
   trigger: React.ReactNode;
   onSaved: () => void;
 }
+
+const FORM_ID = "edit-my-staff-profile-form";
 
 export function EditMyStaffProfileDialog({
   merchantId,
@@ -134,66 +143,68 @@ export function EditMyStaffProfileDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>編輯個人資料</DialogTitle>
-          <DialogDescription>只能修改姓名/暱稱/電話/頭像/簡介這幾項。</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <CardDialog open={open} onOpenChange={setOpen}>
+      <CardDialogTrigger asChild>{trigger}</CardDialogTrigger>
+      <CardDialogContent>
+        <CardDialogHeader>
+          <CardDialogTitle>編輯個人資料</CardDialogTitle>
+          <CardDialogDescription>只能修改姓名/暱稱/電話/頭像/簡介這幾項。</CardDialogDescription>
+        </CardDialogHeader>
+        {/* 底部按鈕列在 <form> 外面(小卡窗的 Footer 是獨立區塊),儲存鈕用 form 屬性指回這張表單。 */}
+        <form id={FORM_ID} onSubmit={handleSubmit} className="flex flex-col gap-4">
           <StaffAvatarUploader currentAvatarUrl={avatarUrl} onUpload={handleAvatarUpload} />
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor="my-staff-name">姓名 *</Label>
-              <Input
-                id="my-staff-name"
-                className="mt-2"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="my-staff-nickname">暱稱(對客戶顯示)</Label>
-              <Input
-                id="my-staff-nickname"
-                className="mt-2"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="my-staff-phone">電話 *</Label>
-              <Input
-                id="my-staff-phone"
-                className="mt-2"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="my-staff-intro">簡介</Label>
-            <Textarea
+          <FormField label="姓名" htmlFor="my-staff-name" required>
+            <FieldInput
+              id="my-staff-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </FormField>
+          <FormField label="暱稱(對客戶顯示)" htmlFor="my-staff-nickname">
+            <FieldInput
+              id="my-staff-nickname"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+            />
+          </FormField>
+          <FormField
+            label="電話"
+            htmlFor="my-staff-phone"
+            required
+            helpLabel="說明:電話要怎麼填"
+            help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+          >
+            <FieldInput
+              id="my-staff-phone"
+              type="tel"
+              inputMode="numeric"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              required
+            />
+          </FormField>
+          <FormField label="簡介" htmlFor="my-staff-intro">
+            <FieldTextarea
               id="my-staff-intro"
-              className="mt-2"
               rows={3}
               value={intro}
               onChange={(e) => setIntro(e.target.value)}
             />
-          </div>
-
-          <DialogFooter>
-            <Button type="submit" disabled={saving}>
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button type="submit" form={FORM_ID} variant="primary" size="touch" disabled={saving}>
+            {saving ? "儲存中⋯" : "儲存"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }
