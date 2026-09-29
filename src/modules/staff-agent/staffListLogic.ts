@@ -11,6 +11,7 @@ import {
   MIN_ADVANCE_BOOKING_DAYS_LIMIT,
   MIN_BOOKING_DAYS_AHEAD_LIMIT,
   type MerchantStaff,
+  type StaffLoginStatus,
 } from "./types";
 
 export type StaffListFilter = "all" | "unlisted" | "listed" | "removed";
@@ -58,6 +59,63 @@ export function countStaffByFilter(
     if (matchesStaffListFilter(staff, "removed")) counts.removed += 1;
   }
   return counts;
+}
+
+// =========================================================================
+// 🔴 2026-09-30 使用者裁決(SPECS-INDEX #846,規範寫在
+//    .claude/skills/ui-overlay-patterns/SKILL.md 二之八末段的紅字段落):
+//    「尚未開通登入」什麼時候才算「要你去處理的待辦」(= 整張卡片變黃)。
+//
+// 【原本的做法與它的問題】
+// 原本只要 login_status === 'not_invited' 就一律整張卡變黃。但**服務人員登入是選配功能**——
+// 不打算讓服務人員自己登入的商家,名單上每一個人永遠都是 'not_invited',於是名單永遠整頁黃
+// (320px 實測:每張卡 154px,連續 5 張 = 770px,整個第一屏全黃)。全部都黃的時候,
+// 「哪一張要處理」的對比就消失了,黃色等於白做。
+//
+// 【定案規則】
+// 只有當這家商家**已經有至少一位在職服務人員開通登入(login_status === 'active')**時,
+// 其他「尚未開通登入」的人才標黃卡;一位都沒開通 = 這家根本沒在用這個功能 ⇒ 完全不標黃,
+// 「尚未開通登入」的標籤本身仍然要顯示(它是事實資訊,而且「邀請登入」就在 ⋯ 選單裡,
+// 使用者需要知道現在是什麼狀態),但要從待辦樣式(黃底 + ⚠)降級成中性的屬性標籤。
+//
+// 【為什麼判斷基準是整份名單,不是篩選出來的那一批】
+// 使用者切到「已上架」分頁時,黃不黃的結果不可以跟著變 —— 「這家有沒有在用登入功能」是商家層級
+// 的事實,跟目前正在看哪一批人無關。若拿篩選後的清單去算,會出現「在『全部』裡不黃、切到
+// 『未上架』就變黃」這種跳動,使用者只會覺得畫面壞了。
+// 已移除的人不算進「有沒有人開通」的判斷 —— 他們已經不在職了,不能代表這家現在還在用這個功能。
+//
+// 抽成純函式的理由同這個檔案開頭:可以直接用 Vitest 釘住「給定名單 → 該不該標黃」,
+// 不用渲染整個頁面元件。
+// =========================================================================
+
+/** 判斷這家商家「有沒有真的在用服務人員登入功能」:整份名單裡是否存在至少一位
+ *  **在職(status = 'active')且已開通登入(login_status = 'active')** 的服務人員。
+ *
+ *  🔴 呼叫端一定要傳**整份未篩選的名單**(不是當前分頁篩選後的那一批),否則切分頁時
+ *     黃卡結果會跟著跳動。已移除的人不算(他們已經不在職)。 */
+export function merchantUsesStaffLogin(
+  staffList: ReadonlyArray<Pick<MerchantStaff, "status" | "login_status">>,
+): boolean {
+  return staffList.some(
+    (staff) => staff.status === "active" && (staff.login_status as StaffLoginStatus) === "active",
+  );
+}
+
+/** 這一位「尚未開通登入」要不要標成待辦(整張卡變黃 + 待辦標籤)。
+ *
+ *  三個條件同時成立才標黃:
+ *    1. 這個人還在職(已移除的人整張卡是灰的,沒有動作可做,也不顯示登入標籤)
+ *    2. 這個人的登入狀態是 'not_invited'(「邀請信已寄出」維持原本的 warning 狀態標籤,不走這條)
+ *    3. 這家商家已經有至少一位在職服務人員開通登入 —— 由 merchantUsesStaffLogin() 用整份名單算出來
+ *
+ *  回傳 false 不代表「不顯示標籤」,只代表「標籤要用中性樣式、卡片不變黃」。 */
+export function shouldMarkPendingLoginAsTodo(
+  staff: Pick<MerchantStaff, "status" | "login_status">,
+  merchantUsesLogin: boolean,
+): boolean {
+  if (staff.status !== "active") return false;
+  if ((staff.login_status as StaffLoginStatus) !== "not_invited") return false;
+  return merchantUsesLogin;
 }
 
 // =========================================================================
