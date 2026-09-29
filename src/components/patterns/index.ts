@@ -1,0 +1,28 @@
+// 秒約全站 UI/UX 規範(方案 D)的共用元件 —— 規格書是 .claude/skills/ui-overlay-patterns/SKILL.md。
+// 每個檔案開頭都寫了對應 skill 的哪一節;改任何一個都會影響全站,改之前先讀 skill。
+//
+// | 元件 | 檔案 | skill 節次 |
+// |---|---|---|
+// | 小卡窗殼(表單版 / 純確認版) | CardDialog.tsx / CardAlertDialog.tsx | 三、兩種窗 → 小卡窗 |
+// | 全頁層殼 | FullPageLayer.tsx | 三、兩種窗 → 全頁層 |
+// | 底部動作列(等寬) | ActionBar.tsx | 二之三 |
+// | 按鈕四階層 | components/ui/button.tsx 的 primary / neutral / danger / text variant | 二之三 |
+// | 標籤三類 | Tags.tsx(底層 components/ui/badge.tsx 的新 variant) | 二之四 |
+// | 列表卡片 | ListCard.tsx | 二之五 |
+// | 明細列 | DetailRows.tsx | 二之六 |
+// | 表單欄位 | FormField.tsx | 二之七 |
+// | 頁面骨架 + 三種狀態 | PageScaffold.tsx | 二之八 |
+// | 底線式切換列 | UnderlineTabs.tsx | 二之四末段 + 二之八 |
+// | `?` 說明鈕 / `!` 提醒條 | HelpHint.tsx | 二 |
+
+export * from "./ActionBar";
+export * from "./CardAlertDialog";
+export * from "./CardDialog";
+export * from "./DetailRows";
+export * from "./FormField";
+export * from "./FullPageLayer";
+export * from "./HelpHint";
+export * from "./ListCard";
+export * from "./PageScaffold";
+export * from "./Tags";
+export * from "./UnderlineTabs";

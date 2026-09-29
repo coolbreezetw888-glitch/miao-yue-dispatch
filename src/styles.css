@@ -30,6 +30,24 @@
   --color-cta-soft: var(--cta-soft);
   --color-warn: var(--warn);
   --color-surface: var(--surface);
+  /*
+   * ui-overlay-patterns skill(2026-09-29 方案 D)新增的「語意色」——狀態標籤(二之四)、
+   * `?` 說明鈕 / `!` 提醒條(二)、明細列備註(二之六)、表單錯誤(二之七)共用。
+   * 三段式命名:<tone> = 圓點 / 圖示 / 邊框用的飽和色;<tone>-soft = 淺色底;<tone>-strong = 深色字。
+   * 這些是「語意」不是「品牌」:商家主題色只覆寫 --brand / --cta / --ring(見 modules/merchant/theme.ts),
+   * 綠 = 正常、黃 = 要處理、紅 = 出事、藍 = 說明 這四組不跟著商家主題色跑,不然紅色主題的商家會分不出
+   * 「危險」跟「主要」。元件裡一律用這些 token,不要寫死 hex。
+   */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-strong: var(--success-strong);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-strong: var(--warn-strong);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-strong: var(--info-strong);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-strong: var(--destructive-strong);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -96,6 +114,18 @@
 
   --warn: oklch(0.78 0.15 78);
 
+  /* ui-overlay-patterns 語意色(說明見上方 @theme 區塊) */
+  --success: oklch(0.62 0.13 160);
+  --success-soft: oklch(0.955 0.035 160);
+  --success-strong: oklch(0.38 0.08 165);
+  --warn-soft: oklch(0.97 0.035 85);
+  --warn-strong: oklch(0.42 0.09 70);
+  --info: oklch(0.5 0.13 250);
+  --info-soft: oklch(0.945 0.03 250);
+  --info-strong: oklch(0.38 0.1 255);
+  --destructive-soft: oklch(0.955 0.03 25);
+  --destructive-strong: oklch(0.4 0.14 27);
+
   --secondary: oklch(0.968 0.007 247.896);
   --secondary-foreground: oklch(0.28 0.04 260);
   --muted: oklch(0.968 0.007 247.896);
@@ -139,6 +169,16 @@
   --accent-foreground: oklch(0.984 0.003 247.858);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
+  --success: oklch(0.7 0.13 160);
+  --success-soft: oklch(0.3 0.05 160);
+  --success-strong: oklch(0.88 0.08 160);
+  --warn-soft: oklch(0.32 0.06 80);
+  --warn-strong: oklch(0.9 0.1 85);
+  --info: oklch(0.65 0.13 250);
+  --info-soft: oklch(0.3 0.05 250);
+  --info-strong: oklch(0.88 0.06 250);
+  --destructive-soft: oklch(0.3 0.07 25);
+  --destructive-strong: oklch(0.88 0.08 25);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);

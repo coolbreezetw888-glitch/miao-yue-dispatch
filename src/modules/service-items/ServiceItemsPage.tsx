@@ -7,17 +7,20 @@ import { Link } from "react-router-dom";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+// ui-v1-full 階段一(2026-09-29):服務分類「刪除」確認窗改用 ui-overlay-patterns 的小卡窗殼
+// (CardAlertDialog),作為全站 55 個彈窗統一改版的「小卡窗」範本。只換外殼與按鈕階層,
+// 觸發條件、handleDelete 的行為完全沒動。
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  CardAlertDialogTrigger,
+} from "@/components/patterns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -194,29 +197,34 @@ function CategoryManager({
                       >
                         重新命名
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      {/* 小卡窗範本(盤點 #1):純確認 → CardAlertDialog。確認鈕用 tone="danger"
+                          (白底紅字淡紅框,skill 二之三:危險動作不做實心紅);取消鈕自動是次要樣式。 */}
+                      <CardAlertDialog>
+                        <CardAlertDialogTrigger asChild>
                           <Button size="sm" variant="outline">
                             刪除
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
+                        </CardAlertDialogTrigger>
+                        <CardAlertDialogContent>
+                          <CardAlertDialogHeader>
+                            <CardAlertDialogTitle>
                               確定要刪除「{category.name}」這個分類嗎?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
+                            </CardAlertDialogTitle>
+                            <CardAlertDialogDescription>
                               刪除後,底下的服務項目會變回未分類,不會被刪除。
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>取消</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(category.id)}>
+                            </CardAlertDialogDescription>
+                          </CardAlertDialogHeader>
+                          <CardAlertDialogFooter>
+                            <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                            <CardAlertDialogAction
+                              tone="danger"
+                              onClick={() => handleDelete(category.id)}
+                            >
                               確定刪除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                            </CardAlertDialogAction>
+                          </CardAlertDialogFooter>
+                        </CardAlertDialogContent>
+                      </CardAlertDialog>
                     </div>
                   </>
                 )}

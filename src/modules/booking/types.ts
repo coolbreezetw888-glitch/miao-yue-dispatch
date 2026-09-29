@@ -121,6 +121,28 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
  * (1.2)、行事曆色塊(1.3)都要把這兩種狀態算進「這天有預約」。 */
 export const ACTIVE_BOOKING_STATUSES: BookingStatus[] = ["pending_confirmation", "accepted"];
 
+/**
+ * ui-overlay-patterns skill 二之四:訂單狀態 → 狀態標籤色調(StatusTag 的 tone)。
+ * 正常 = 綠系 / 要處理 = 黃系 / 結束或停用 = 灰系 / 出事 = 紅系。
+ * 集中在這裡是為了讓預約詳情、訂單管理、行事曆、服務人員端的同一個狀態永遠同一個顏色。
+ */
+export function bookingStatusTone(
+  status: BookingStatus,
+): "success" | "warning" | "neutral" | "danger" {
+  switch (status) {
+    case "accepted":
+      return "success";
+    case "pending_reply":
+    case "pending_confirmation":
+    case "dispatching":
+      return "warning";
+    case "completed":
+      return "neutral";
+    case "cancelled":
+      return "danger";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 1.3:排程色塊視覺(CalendarPage.tsx)/建單與訂單管理介面優化 §7.5:訂單卡片色條
 // (OrdersPage.tsx)共用的「狀態 -> 樣式」純函式。放在這支純型別/純函式檔案(不含 React 元件),
