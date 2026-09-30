@@ -360,6 +360,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -403,6 +404,7 @@ export type Database = {
           discount_value?: number | null
           end_at: string
           final_amount_snapshot?: number
+          hide_notes_from_staff?: boolean
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
@@ -446,6 +448,7 @@ export type Database = {
           discount_value?: number | null
           end_at?: string
           final_amount_snapshot?: number
+          hide_notes_from_staff?: boolean
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
@@ -2729,6 +2732,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -2821,6 +2825,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -2881,6 +2886,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -2932,6 +2938,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
+          p_hide_notes_from_staff?: boolean
           p_material_cost_item_ids?: string[]
           p_member_id?: string
           p_merchant_id: string
@@ -2966,6 +2973,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -3205,6 +3213,7 @@ export type Database = {
         Returns: {
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           service_item_names: string[]
           start_at: string
@@ -3272,6 +3281,7 @@ export type Database = {
         Returns: {
           earned_points: number
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           service_item_names: string[]
           start_at: string
@@ -3356,6 +3366,10 @@ export type Database = {
       }
       get_my_booking_schedule: {
         Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: Json
+      }
+      get_my_booking_status_colors: {
+        Args: { p_staff_id: string }
         Returns: Json
       }
       get_my_calendar_state_styles: {
@@ -3937,6 +3951,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
+          p_hide_notes_from_staff?: boolean
           p_material_cost_item_ids?: string[]
           p_member_id?: string
           p_notes?: string
@@ -3970,6 +3985,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
@@ -4022,6 +4038,7 @@ export type Database = {
           discount_value: number | null
           end_at: string
           final_amount_snapshot: number
+          hide_notes_from_staff: boolean
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null

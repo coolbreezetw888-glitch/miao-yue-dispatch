@@ -414,6 +414,11 @@ export function BookingFormDialog({
   // 預約詳情資訊擴充與建單備註分類第一節:客戶備註(客戶看得到),跟上面的 notes(內部備註,
   // 商家內部看、客戶看不到)分開存放,對應 bookings.customer_notes。
   const [customerNotes, setCustomerNotes] = useState("");
+  // SPECS-INDEX #850~#853/#857(2026-09-30 使用者需求):這一筆訂單的內部備註要不要對服務人員隱藏。
+  // 🔴 編輯模式一定要把既有值帶入(下面 useEffect),送出時一定要無條件帶出去(handleSubmit)——
+  //    漏掉任何一邊,客服只要編輯一次訂單,原本藏起來的備註就自動公開給服務人員了,而且不報錯、
+  //    畫面上也看不出來(跟 member 那個既有陷阱同一個形狀,見 api.ts 的 ⚠️ 註解)。
+  const [hideNotesFromStaff, setHideNotesFromStaff] = useState(false);
   // SPECS-INDEX #614(會員與紅利.md §10.2):選填的會員連結,不選就是訪客訂單。編輯模式下用既有的
   // member_id/member_name_snapshot 帶入初始值,避免正常編輯流程意外清空既有連結(判斷 9)。
   const [member, setMember] = useState<SelectedMember | null>(null);
@@ -505,6 +510,10 @@ export function BookingFormDialog({
       setCustomerAddress(editingDetail.customer_address ?? "");
       setNotes(editingDetail.notes ?? "");
       setCustomerNotes(editingDetail.customer_notes ?? "");
+      // SPECS-INDEX #857:帶入既有的隱藏設定。**這一行跟 handleSubmit 無條件帶值是同一件事的
+      // 兩面,不要只做一半** —— 少了它,客服編輯一筆已經藏起來的訂單、完全沒碰那個開關,
+      // 送出後旗標就被送成 false,備註靜默公開。
+      setHideNotesFromStaff(editingDetail.hide_notes_from_staff);
       setMember(
         editingDetail.member_id && editingDetail.member_name_snapshot
           ? { id: editingDetail.member_id, name: editingDetail.member_name_snapshot }
@@ -561,6 +570,9 @@ export function BookingFormDialog({
       setCustomerAddress("");
       setNotes("");
       setCustomerNotes("");
+      // SPECS-INDEX #850:新建訂單一律從「不隱藏」開始(= 使用者要的「預設服務人員看得到」),
+      // 跟資料庫 default false 一致。
+      setHideNotesFromStaff(false);
       setMember(null);
       setCustomTotalAmountEnabled(false);
       setCustomTotalAmount("");
@@ -862,6 +874,10 @@ export function BookingFormDialog({
         customerAddress: customerAddress.trim() ? customerAddress.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
         customerNotes: customerNotes.trim() ? customerNotes.trim() : null,
+        // 🔴 SPECS-INDEX #857:無條件帶值(不是 `hideNotesFromStaff ? … : undefined`)。
+        // 編輯模式下這個值是開啟表單時從 editingDetail 帶進來的現值,所以「使用者沒碰開關」
+        // 送出的就是原值,不會把藏起來的備註靜默公開。有 Vitest 測試鎖住這條(#857)。
+        hideNotesFromStaff,
         memberId: member?.id ?? null,
         assistantStaffIds,
         materialCostItemIds,
@@ -1526,16 +1542,18 @@ export function BookingFormDialog({
           {/* 預約詳情資訊擴充與建單備註分類第一節:備註分成「內部備註」(既有 notes 欄位,
               商家內部看、客戶看不到,欄位本身不改名)跟「客戶備註」(customer_notes,客戶看得到),
               兩個欄位並排顯示。建單與訂單管理介面優化 §4:兩個備註欄位的高度都是 5 列。
-              skill 二之六:誰看得到要寫清楚(服務人員端看得到內部備註,2026-09-29 使用者確認)。 */}
+              skill 二之六:誰看得到要寫清楚 —— **預設**服務人員看得到內部備註
+              (2026-09-29 使用者確認),客服可以用下面那個開關逐單關閉(SPECS-INDEX #853)。 */}
           <DetailSection label="備註" className="gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <FormField
                 label={
                   <>
                     內部備註{" "}
-                    <span className="font-normal text-muted-foreground">
-                      (客戶看不到,服務人員看得到)
-                    </span>
+                    {/* SPECS-INDEX #859:這裡刻意只寫「客戶看不到」。「服務人員看不看得到」交給
+                        下面那個開關自己的說明文字去講 —— 旁邊就有一個可以改變這件事的開關,
+                        這裡再寫死「服務人員看得到」會變成同一個畫面上兩句話互相矛盾。 */}
+                    <span className="font-normal text-muted-foreground">(客戶看不到)</span>
                   </>
                 }
                 htmlFor="booking-notes"
@@ -1563,6 +1581,24 @@ export function BookingFormDialog({
                 />
               </FormField>
             </div>
+
+            {/* SPECS-INDEX #853(2026-09-30 使用者需求):逐單關閉「服務人員看得到內部備註」。
+                🔴 用 SwitchRow 不是打勾方框 —— skill 二之七 同時寫了「開關做成一整列」與
+                   「不用打勾方框(手機好按)」,而且這顆表單的自訂總金額/折扣/稅金三個設定都是
+                   SwitchRow,一致性最好。使用者原話說的「勾選」是在描述行為,不是在指定元件
+                   (主腦裁決 T3)。
+                🔴 位置在兩欄格線的**下方、整條寬**,不是塞進左邊那半欄(主腦裁決 T6)——
+                   SwitchRow 本身就是一個有邊框的整列元件,塞進半寬欄位裡手機上標題會被擠到換行、
+                   開關被推到很窄的地方;放在下面整條寬,視覺上也很清楚它是「備註這一組」的設定。
+                🔴 說明文字一定要講「只影響這一筆」—— 使用者的需求原話是「當次如果勾選」,
+                   這是逐單設定不是全店設定,不講清楚會有客服以為勾一次以後每一單都藏。 */}
+            <SwitchRow
+              id="booking-hide-notes-from-staff"
+              title="不讓服務人員看到這則內部備註"
+              description="開啟後,這一筆訂單的內部備註只有商家內部看得到,指派的服務人員在自己的手機上不會看到。只影響這一筆,不影響其他訂單。"
+              checked={hideNotesFromStaff}
+              onCheckedChange={setHideNotesFromStaff}
+            />
           </DetailSection>
         </div>
       </FullPageLayerContent>

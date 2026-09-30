@@ -14,8 +14,16 @@
  * 🔴 電話與地址做成可點擊(DetailPhoneRow / DetailAddressRow):tel: 直接撥號、開地圖導航;
  *    **各佔一行,不要並排**,地址那行要能折行。
  * 🔴 兩種備註要分開:CustomerNote 黃底黃框(客人交代的事,服務人員到現場一定要看到);
- *    InternalNote 灰底 + 🔒 標記「客戶看不到,服務人員看得到」(2026-09-29 使用者確認服務人員端看得到內部備註,
- *    不講清楚商家會把不該給服務人員知道的事寫進去)。
+ *    InternalNote 灰底 + 🔒 標記寫清楚誰看得到(不講清楚,商家會把不該給服務人員知道的事寫進去)。
+ *    🔴 那個標記有**兩種狀態**,由 `audience` prop 決定(SPECS-INDEX #854,2026-09-30):
+ *      - `"staff-visible"`(預設)→「客戶看不到,服務人員看得到」。這是**預設行為**,
+ *        2026-09-29 使用者確認服務人員端看得到內部備註。
+ *      - `"staff-hidden"` →「客戶與服務人員都看不到」。客服在建單/編輯表單勾了
+ *        「不讓服務人員看到這則內部備註」的那一筆訂單用這個。
+ *    ⚠️ **不可以把那句話改回寫死**:勾起來之後「服務人員看得到」就是謊話,客服會看著詳情頁
+ *       以為自己明明藏起來的備註服務人員還是看得到,然後跑來問。UI 說謊比 UI 難看嚴重。
+ *    ⚠️ `audience` 刻意是**可選、預設維持現狀**:同一顆元件還被 members/MemberDetailPage.tsx
+ *       的「會員備註」共用(那是 members.notes,沒有這個旗標),預設值要維持原樣才不會連帶改壞。
  */
 
 import * as React from "react";
@@ -184,10 +192,22 @@ export function CustomerNote({
   );
 }
 
+/** 🔒 標記要說實話:誰看得到這則內部備註。見本檔開頭說明與 SPECS-INDEX #854。 */
+export type InternalNoteAudience = "staff-visible" | "staff-hidden";
+
+const INTERNAL_NOTE_AUDIENCE_LABEL: Record<InternalNoteAudience, string> = {
+  "staff-visible": "客戶看不到,服務人員看得到",
+  "staff-hidden": "客戶與服務人員都看不到",
+};
+
 export function InternalNote({
+  audience = "staff-visible",
   className,
   children,
 }: {
+  /** 預設 "staff-visible"(維持 2026-09-30 之前的行為,會員備註等沒有這個概念的場景不用傳)。
+   *  訂單的內部備註被勾了「不讓服務人員看到」時傳 "staff-hidden"。 */
+  audience?: InternalNoteAudience | undefined;
   className?: string | undefined;
   children: React.ReactNode;
 }) {
@@ -197,7 +217,7 @@ export function InternalNote({
         <p className="text-[11px] font-bold text-muted-foreground">內部備註</p>
         <span className="inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-px text-[10px] font-semibold text-muted-foreground">
           <Lock className="h-2.5 w-2.5" aria-hidden="true" />
-          客戶看不到,服務人員看得到
+          {INTERNAL_NOTE_AUDIENCE_LABEL[audience]}
         </span>
       </div>
       <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-muted-foreground">

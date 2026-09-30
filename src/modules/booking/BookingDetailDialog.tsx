@@ -636,7 +636,16 @@ export function BookingDetailDialog({
                   {booking.customer_notes ? (
                     <CustomerNote>{booking.customer_notes}</CustomerNote>
                   ) : null}
-                  {booking.notes ? <InternalNote>{booking.notes}</InternalNote> : null}
+                  {/* SPECS-INDEX #854:🔒 標記要說實話 —— 這一筆勾了「不讓服務人員看到」時,
+                      標記文字要從「客戶看不到,服務人員看得到」改成「客戶與服務人員都看不到」。
+                      不改的話客服會看著詳情頁以為自己明明藏起來的備註服務人員還是看得到。 */}
+                  {booking.notes ? (
+                    <InternalNote
+                      audience={booking.hide_notes_from_staff ? "staff-hidden" : "staff-visible"}
+                    >
+                      {booking.notes}
+                    </InternalNote>
+                  ) : null}
                 </DetailSection>
               ) : null}
 

@@ -13,7 +13,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DetailLinkRow, DetailLinkRows } from "./DetailRows";
+import { DetailLinkRow, DetailLinkRows, InternalNote } from "./DetailRows";
 
 function renderInRouter(ui: React.ReactNode) {
   return render(<MemoryRouter initialEntries={["/app/members/abc"]}>{ui}</MemoryRouter>);
@@ -65,5 +65,43 @@ describe("DetailLinkRow", () => {
   it("extra 文字會顯示出來(例:「2 筆」)", () => {
     renderInRouter(<DetailLinkRow label="相關訂單" extra="2 筆" onClick={() => {}} />);
     expect(screen.getByText("2 筆")).toBeInTheDocument();
+  });
+});
+
+// SPECS-INDEX #854:InternalNote 的 🔒 標記要說實話。
+//
+// 🔴 為什麼這一組非測不可:那句「客戶看不到,服務人員看得到」原本是**寫死在元件裡**的。
+// #850~#853 之後,客服可以逐單勾「不讓服務人員看到這則內部備註」,那句話在勾起來的訂單上
+// 就是**謊話** —— 客服會看著詳情頁以為自己明明藏起來的備註服務人員還是看得到,然後跑來問。
+// 同時這顆元件還被 members/MemberDetailPage.tsx 的「會員備註」共用(那是 members.notes,
+// 沒有這個旗標),所以新的 audience prop **必須可選、而且預設維持原樣**,否則會連帶改壞會員備註。
+//
+// 【故障注入驗證(2026-09-30 實際跑過並還原)】
+//   DetailRows.tsx 把 audience 的預設值從 "staff-visible" 改成 "staff-hidden"
+//   → 這一組 3 條裡**只有「不給 audience 時維持原本那句」轉紅**(會員備註那個共用場景就是
+//     靠這條保護的);另外兩條明確傳值的仍綠 —— 證明三條測的是不同方向,不是同一條寫三次。
+describe("InternalNote 的 🔒 標記(#854)", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("不給 audience 時維持原本那句「客戶看不到,服務人員看得到」(會員備註等既有使用點不受影響)", () => {
+    render(<InternalNote>上次尾款沒收</InternalNote>);
+    expect(screen.getByText("客戶看不到,服務人員看得到")).toBeInTheDocument();
+    expect(screen.queryByText("客戶與服務人員都看不到")).not.toBeInTheDocument();
+    expect(screen.getByText("上次尾款沒收")).toBeInTheDocument();
+  });
+
+  it('audience="staff-visible" 跟不給是同一句', () => {
+    render(<InternalNote audience="staff-visible">上次尾款沒收</InternalNote>);
+    expect(screen.getByText("客戶看不到,服務人員看得到")).toBeInTheDocument();
+  });
+
+  it('🔴 audience="staff-hidden" 時改成「客戶與服務人員都看不到」,不再說謊', () => {
+    render(<InternalNote audience="staff-hidden">上次尾款沒收</InternalNote>);
+    expect(screen.getByText("客戶與服務人員都看不到")).toBeInTheDocument();
+    expect(screen.queryByText("客戶看不到,服務人員看得到")).not.toBeInTheDocument();
+    // 備註內容本身照樣顯示 —— 商家自己永遠看得到,否則他沒辦法取消勾選。
+    expect(screen.getByText("上次尾款沒收")).toBeInTheDocument();
   });
 });

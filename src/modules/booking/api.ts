@@ -206,6 +206,11 @@ export interface CreateBookingInput extends BookingAmountAdjustmentInput {
   /** 模組 10(會員與紅利)§3.6/§4.4:選填,連結這筆訂單到哪位會員。null/undefined 代表訪客
    * 訂單,不做任何電話比對或自動連結(判斷 8)。 */
   memberId?: string | null;
+  /** SPECS-INDEX #850~#853:這一筆訂單的內部備註(notes)要不要對服務人員隱藏。
+   * true = 隱藏(服務人員端完全看不到備註區塊);不帶或 false = 服務人員看得到(預設行為)。
+   * ⚠️ 下面 createBooking 送出時**一律無條件帶值**,不可以用這個檔案裡
+   *    `...(input.x ? { p_x: input.x } : {})` 的既有慣用寫法 —— `false` 是 falsy,會被整個省略掉。 */
+  hideNotesFromStaff?: boolean;
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -243,6 +248,11 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
       ? { p_custom_duration_minutes: input.customDurationMinutes }
       : {}),
     ...(input.memberId ? { p_member_id: input.memberId } : {}),
+    // 🔴 SPECS-INDEX #852:布林**一律無條件帶值**,不套用上面那些 `...(x ? {…} : {})` 的寫法
+    // —— `false` 是 falsy,用那個寫法會讓「明確關閉」變成「沒有帶這個 key」。
+    // (`?? false` 而不是直接 `input.hideNotesFromStaff`:exactOptionalPropertyTypes:true 下
+    //  可選欄位不能明確給 undefined。)
+    p_hide_notes_from_staff: input.hideNotesFromStaff ?? false,
   });
   if (error) throw error;
   const booking = data as Booking;
@@ -299,6 +309,15 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
    * 為什麼要在前端處理:訂單沒有編輯歷史表,RPC 一跑完舊值就查不到了(見 push-notifications/api.ts)。
    */
   previousStaffId?: string | null;
+  /**
+   * SPECS-INDEX #850~#853/#857:這一筆訂單的內部備註要不要對服務人員隱藏。
+   * ⚠️ 呼叫端每次都要帶入目前的值(即使不變更),否則後端會把它清成 false ——
+   *    也就是**原本藏起來的內部備註,被編輯一次就自動公開給服務人員了**。這跟上面 memberId
+   *    是同一個陷阱(update_booking 對這些欄位是無條件覆寫,不是「有帶才更新」),而且這一個
+   *    踩下去是資安後果:不報錯、畫面上也看不出來。編輯表單已在開啟時把既有值帶入初始狀態,
+   *    下面 updateBooking 也一律無條件帶值,兩邊都有 Vitest / pgTAP 測試鎖住(#857)。
+   */
+  hideNotesFromStaff?: boolean;
 }
 
 /**
@@ -371,6 +390,11 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     // exactOptionalPropertyTypes,所以要斷言成 `string`(不含 undefined),不是 `string | undefined`,
     // 否則會多一個「屬性存在但值是 undefined」跟宣告型別衝突的新錯誤。
     p_member_id: (input.memberId ?? null) as string,
+    // 🔴 SPECS-INDEX #852/#857:跟上面 p_member_id 完全同一個理由,而且這一個踩下去是資安後果
+    // ——沒帶這個參數,後端會拿 default false,**原本藏起來的內部備註就自動公開給服務人員了**,
+    // 不報錯、畫面上也看不出來。所以這裡一律無條件帶值,絕對不要改成
+    // `...(input.hideNotesFromStaff ? {…} : {})`(那個寫法會把明確的 false 整個吃掉)。
+    p_hide_notes_from_staff: input.hideNotesFromStaff ?? false,
   });
   if (error) throw error;
   const booking = data as Booking;
@@ -601,10 +625,10 @@ export interface MerchantBookingsFilters {
    * 問題。實際比對邏輯抽在 ordersPageLogic.ts 的 bookingMatchesKeyword(純函式,方便 Vitest
    * 測試,也刻意不依賴這支檔案建立的 supabase client)。 */
   keyword?: string;
-  /** 模組 12(資料匯入與報表匯出)§3.9/§6:報表匯出中心需要「這段期間全部資料、不分頁」，但
-   * PostgREST 有 db.max_rows 上限(這個專案設定 1000，見 supabase/config.toml)，單一查詢即使不
-   * 帶 .range() 也只會回傳最多 1000 筆。這個選填參數為 true 時，改成用 .range() 分頁迴圈把所有
-   * 符合條件的資料抓完再合併回傳；不帶這個參數(既有呼叫端)完全不受影響，行為維持一次查詢、
+  /** 模組 12(資料匯入與報表匯出)§3.9/§6:報表匯出中心需要「這段期間全部資料、不分頁」,但
+   * PostgREST 有 db.max_rows 上限(這個專案設定 1000,見 supabase/config.toml),單一查詢即使不
+   * 帶 .range() 也只會回傳最多 1000 筆。這個選填參數為 true 時,改成用 .range() 分頁迴圈把所有
+   * 符合條件的資料抓完再合併回傳;不帶這個參數(既有呼叫端)完全不受影響,行為維持一次查詢、
    * 最多 1000 筆的既有上限。 */
   unpaged?: boolean;
 }
