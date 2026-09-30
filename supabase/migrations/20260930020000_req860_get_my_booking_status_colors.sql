@@ -49,7 +49,19 @@
 --   and status='active' and login_status='active',= 派工說的「自己是這間商家在職服務人員」)。
 -- 傳別人的 staff_id → 直接 42501;傳自己的 → merchant_id 由
 -- private.staff_merchant_id(p_staff_id) 在函式內部查出來,**呼叫端無法指定 merchant_id**,
--- 所以「讀到別家商家的顏色」沒有任何輸入可以構造出來。pgTAP 另外正/反各釘一條。
+-- 所以「讀到別家商家的顏色」沒有任何輸入可以構造出來。
+--
+-- 📌 這幾句話由 pgTAP 實際釘住,不是只寫在註解裡:
+--    `supabase/tests/database/module6_09_booking_status_colors.sql` 的 ⑤(共 8 條,
+--     檔案裡搜「⑤-」就找得到):
+--      ・⑤-1~4 正向:一店在職服務人員 X 傳自己的 staff_id → 四個色碼逐一等於商家剛設定的值
+--      ・⑤-5   形狀:回傳只含那 4 個 key(沒有 merchant_id / created_at / updated_at)
+--      ・⑤-6   跨商家:X 傳二店服務人員 Y 的 staff_id → 42501
+--      ・⑤-7   離職:status='removed' 的人傳自己的 staff_id → 42501
+--      ・⑤-8   未開通登入:login_status='invited' 的人傳自己的 staff_id → 42501
+--    (⑤-7/⑤-8 分成兩條,因為 is_own_staff_row 的 status 與 login_status 是兩個獨立條件。)
+--    測試放在「表本身」那一支檔案,而不是 module14_*,是跟著姊妹表的先例
+--    `supabase/tests/database/module6_10_calendar_state_styles.sql` 的 ⑥ 走。
 --
 -- 本檔沒有任何 UPDATE / DELETE / INSERT,不動一筆資料。
 
