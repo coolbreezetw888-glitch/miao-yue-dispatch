@@ -1051,8 +1051,8 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000002');
 
 select throws_ok(
   $$select get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12)$$,
-  '42501', '沒有權限查詢這間商家的師傅報表',
-  '§3.9 跨商家隔離:B 店管理員不能查詢 A 店服務人員的師傅報表(函式是 SECURITY DEFINER,查得到 merchant_id,但權限檢查正確擋下)'
+  '42501', '沒有權限查詢這間商家的服務人員報表',
+  '§3.9 跨商家隔離:B 店管理員不能查詢 A 店服務人員的薪資報表(函式是 SECURITY DEFINER,查得到 merchant_id,但權限檢查正確擋下)'
 );
 
 select throws_ok(
