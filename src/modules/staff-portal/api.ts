@@ -13,7 +13,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import {
+  DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
+  type BookingStatusColorMap,
   type CalendarStateStyleMap,
   type DayScheduleAvailabilityOverride,
   type DayScheduleForeignBooking,
@@ -219,6 +221,36 @@ export async function fetchMyCalendarStateStyles(staffId: string): Promise<Calen
     partialLeave: raw["partial_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.partialLeave,
     crossStoreOccupied:
       raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
+  };
+}
+
+/** SPECS-INDEX #860:服務人員自助讀取自己所屬商家的「訂單狀態顏色設定」(待確認/已確認/
+ * 已完成/已取消四個色碼),讓服務人員端行事曆的預約色塊跟商家端 CalendarPage.tsx 完全一致
+ * (在此之前服務人員端用的是寫死的 Tailwind class,商家把顏色改成什麼都不會反映到服務人員手機上)。
+ *
+ * 🔴 為什麼不是 supabase.from("merchant_booking_status_colors")直接查表:
+ *    那張表只有一條 SELECT 政策,條件是 private.can_manage_bookings(merchant_id),而
+ *    can_manage_bookings 只認商家管理員與客服,**不認服務人員** ⇒ 純服務人員身分直接查表一定是
+ *    0 筆(2026-09-30 用正式庫的真實服務人員帳號實測確認過)。所以改呼叫 SECURITY DEFINER 的
+ *    get_my_booking_status_colors(只檢查 is_own_staff_row、merchant_id 由函式內部解出來,
+ *    呼叫端無法指定 ⇒ 讀不到別家商家的顏色)。
+ *    寫法刻意逐字比照下面 fetchMyCalendarStateStyles 的既有先例(同一個問題、姊妹表、同一種解法),
+ *    不是另外發明一套。
+ *
+ * 查無資料的 key 一律 fallback 成 DEFAULT_BOOKING_STATUS_COLORS,跟商家端
+ * fetchMerchantBookingStatusColors 同一套 fallback 慣例,兩邊看到的顏色最終一致。 */
+export async function fetchMyBookingStatusColors(staffId: string): Promise<BookingStatusColorMap> {
+  const { data, error } = await supabase.rpc("get_my_booking_status_colors", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+  const raw = (data ?? {}) as unknown as Record<string, string>;
+  return {
+    pendingConfirmation:
+      raw["pending_confirmation_color"] ?? DEFAULT_BOOKING_STATUS_COLORS.pendingConfirmation,
+    accepted: raw["accepted_color"] ?? DEFAULT_BOOKING_STATUS_COLORS.accepted,
+    completed: raw["completed_color"] ?? DEFAULT_BOOKING_STATUS_COLORS.completed,
+    cancelled: raw["cancelled_color"] ?? DEFAULT_BOOKING_STATUS_COLORS.cancelled,
   };
 }
 

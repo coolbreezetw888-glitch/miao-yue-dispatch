@@ -16,7 +16,11 @@ import {
   type AddStaffAvailabilityWindowInput,
 } from "@/modules/booking/api";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
-import type { CalendarStateStyleMap, StaffAvailabilityWindow } from "@/modules/booking/types";
+import type {
+  BookingStatusColorMap,
+  CalendarStateStyleMap,
+  StaffAvailabilityWindow,
+} from "@/modules/booking/types";
 import { fetchMyStaffRow } from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
 import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "@/modules/payroll/api";
@@ -25,6 +29,7 @@ import type { StaffCommissionSummary, StaffMonthlyPayrollSummary } from "@/modul
 import {
   fetchMyAvailabilityOverrides,
   fetchMyBookingSchedule,
+  fetchMyBookingStatusColors,
   fetchMyCalendarStateStyles,
   fetchMyDayBusinessHours,
   fetchMyDayScheduleState,
@@ -272,6 +277,21 @@ export function useMyDayScheduleState(
     queryKey: ["staff-portal-module", "my-day-schedule-state", staffId, date],
     queryFn: () => fetchMyDayScheduleState(staffId as string, date as string),
     enabled: Boolean(staffId) && Boolean(date),
+  });
+}
+
+/** SPECS-INDEX #860:服務人員端行事曆的預約色塊,改讀商家自訂的訂單狀態顏色(跟商家端
+ * CalendarPage.tsx 的 useMerchantBookingStatusColors 對應同一張表)。走 SECURITY DEFINER 的
+ * get_my_booking_status_colors,理由見 api.ts 的 fetchMyBookingStatusColors 說明。
+ * 參數刻意是 staffId(不是 merchantId),跟同檔 useMyCalendarStateStyles / useMyDayBusinessHours
+ * 的既有慣例一致 —— 呼叫端本來就已經從父層拿到 staffId。 */
+export function useMyBookingStatusColors(
+  staffId: string | null | undefined,
+): UseQueryResult<BookingStatusColorMap> {
+  return useQuery({
+    queryKey: ["staff-portal-module", "my-booking-status-colors", staffId],
+    queryFn: () => fetchMyBookingStatusColors(staffId as string),
+    enabled: Boolean(staffId),
   });
 }
 

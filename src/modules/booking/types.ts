@@ -164,13 +164,16 @@ export function bookingBlockClasses(status: BookingStatus): string {
  * bookingBlockClasses 沿用同一套狀態配色邏輯,只是套用在 border-l(色條)而不是整塊背景色。
  * cancelled 這次額外選用既有的灰階 token(muted-foreground),不新增自訂顏色。
  *
- * ⚠️ 這兩支「Tailwind class」版本(bookingBlockClasses/bookingCardAccentBorderClass)保留給
- * 目前唯一還在用它們的呼叫端:src/modules/staff-portal/MyCalendarTimelineView.tsx(服務人員自助
- * 行事曆,模組 14)。建單與訂單管理介面優化 §10.5(SPECS-INDEX #621)明確只要求 CalendarPage.tsx/
- * OrdersPage.tsx 這兩處改成讀 merchant_booking_status_colors 動態顏色表,MyCalendarTimelineView.tsx
- * 不在這次規格範圍內,所以刻意不刪除/不改動這兩支既有函式,下面另外新增一組
- * bookingBlockStyle/bookingCardAccentBorderStyle 給 CalendarPage.tsx/OrdersPage.tsx 改用
- * (詳見下方「§10.5 動態顏色」區塊的說明)。 */
+ * 🔴 2026-09-30(SPECS-INDEX #860):這兩支「Tailwind class」版本**已經沒有任何呼叫端了**。
+ * 最後一個呼叫端是 src/modules/staff-portal/MyCalendarTimelineView.tsx(服務人員自助行事曆,
+ * 模組 14),它原本用 bookingBlockClasses 寫死顏色,導致商家在「訂單狀態顏色設定」改的顏色
+ * 完全不會反映到服務人員的手機上(當初寫死的原因是服務人員讀不到 merchant_booking_status_colors
+ * 那張表;#860 已用 SECURITY DEFINER 的 get_my_booking_status_colors 解掉),現在它跟商家端
+ * CalendarPage.tsx 一樣用下面的 bookingBlockStyle。
+ * ⚠️ 所以**不要再拿這兩支來寫新畫面** —— 新畫面一律用下面那組讀商家自訂顏色的
+ * bookingBlockStyle / bookingCardAccentBorderStyle。這兩支刻意先留著不刪(刪除不在 #860 的
+ * 範圍內,已在回報中向主腦提出當作後續清理的候選),但它們的顏色是寫死的,用了就會再製造一次
+ * 「兩端顏色不一致」。 */
 export function bookingCardAccentBorderClass(status: BookingStatus): string {
   if (status === "completed") return "border-l-cta";
   if (status === "pending_confirmation") return "border-l-warn";

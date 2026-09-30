@@ -16,6 +16,14 @@
 // calendarStateBlockStyle 純函式,兩邊顯示結果一致。這裡仍然是純唯讀顯示,不掛任何互動
 // (跟上面第 2 點的既有原則一致,新增的只是視覺呈現,不是操作能力)。
 //
+// 🔴 SPECS-INDEX #860(2026-09-30 使用者實機巡檢):**預約色塊的顏色**這次也改成讀商家自訂的
+// 訂單狀態顏色表(merchant_booking_status_colors),跟商家端 CalendarPage.tsx 套用完全同一支
+// bookingBlockStyle。改版前這裡用的是 bookingBlockClasses(status)——寫死的 Tailwind class,
+// 所以商家把「已確認」改成粉紅色,商家端變了、服務人員的手機上還是原來的藍色,同一筆預約兩種顏色。
+// 當初寫死的原因是服務人員讀不到那張表(SELECT 政策條件是 private.can_manage_bookings,
+// 純服務人員身分讀到 0 筆),#860 用 SECURITY DEFINER 的 get_my_booking_status_colors 解掉了
+// (做法比照下面已經在用的 get_my_calendar_state_styles,沒有放寬任何 RLS 政策)。
+//
 // 跟規格書 10.2.4「傳入 merchantId」的描述有一個小幅偏離:這個元件實際只需要 staffId(拿去查
 // 10.2.1 的營業時間、SPECS-INDEX #644 的排程狀態/顏色設定),不需要 merchantId 本身,所以介面
 // 設計上直接改成接受 staffId,由呼叫端(已經透過 useActiveMyStaffRecord 拿到 staffId)傳入,
@@ -27,13 +35,19 @@ import { LoadingSkeleton } from "@/components/patterns";
 import { cn } from "@/lib/utils";
 import { isoToTaipeiTime, minutesToTime, timeToMinutes } from "@/modules/booking/dateUtils";
 import {
-  bookingBlockClasses,
+  bookingBlockStyle,
   calendarStateBlockStyle,
+  DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
   type BookingStatus,
 } from "@/modules/booking/types";
 
-import { useMyCalendarStateStyles, useMyDayBusinessHours, useMyDayScheduleState } from "./context";
+import {
+  useMyBookingStatusColors,
+  useMyCalendarStateStyles,
+  useMyDayBusinessHours,
+  useMyDayScheduleState,
+} from "./context";
 import type { MyBookingScheduleItem } from "./api";
 
 const SLOT_MINUTES = 30;
@@ -55,6 +69,11 @@ export function MyCalendarTimelineView({
   const { data: dayState } = useMyDayScheduleState(staffId, selectedDateKey);
   const { data: calendarStateStyles } = useMyCalendarStateStyles(staffId);
   const effectiveCalendarStateStyles = calendarStateStyles ?? DEFAULT_CALENDAR_STATE_STYLES;
+  // SPECS-INDEX #860:預約色塊的顏色改讀商家自訂的訂單狀態顏色表,跟商家端 CalendarPage.tsx
+  // 完全同一支 bookingBlockStyle。載入中/查無資料時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS
+  // (= 商家沒自訂過時的色碼,肉眼跟改版前的寫死配色一致),所以不會有「先閃一下錯的顏色」。
+  const { data: bookingStatusColors } = useMyBookingStatusColors(staffId);
+  const effectiveStatusColors = bookingStatusColors ?? DEFAULT_BOOKING_STATUS_COLORS;
 
   const slots = useMemo(() => {
     if (!businessHours || !businessHours.has_setting || businessHours.is_closed) return [];
@@ -165,11 +184,17 @@ export function MyCalendarTimelineView({
               key={`${b.id}-${b.role_in_booking}`}
               type="button"
               onClick={() => onSelectBooking(b.id)}
-              className={cn(
-                "absolute left-16 right-1 z-10 overflow-hidden rounded-sm p-1 text-left text-[11px] leading-tight shadow-sm",
-                bookingBlockClasses(b.status as BookingStatus),
-              )}
-              style={{ top, height }}
+              // SPECS-INDEX #860:原本這裡是 bookingBlockClasses(status)——寫死的 Tailwind class,
+              // 所以商家在「訂單狀態顏色設定」改的顏色完全不會反映到服務人員的手機上,兩端看到的
+              // 同一筆預約是不同顏色。改成跟商家端 CalendarPage.tsx:2448 同一支 bookingBlockStyle
+              // (背景 16% 透明 + 實色文字/邊框),兩端的色塊從此一致。
+              // 動態顏色沒辦法寫成 Tailwind class(build 時就固定了),所以是 inline style。
+              className="absolute left-16 right-1 z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
+              style={{
+                top,
+                height,
+                ...bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
+              }}
             >
               <p className="truncate font-medium">
                 {b.customer_name}
