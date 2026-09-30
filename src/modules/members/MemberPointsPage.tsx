@@ -85,6 +85,15 @@
 //   - 核發獎勵資格條件的下拉改 FieldSelect,guardPhantomEmptyChange 白名單版**原樣保留**。
 //   - 「儲存」是這一頁唯一的 ① 主要按鈕;沒有規則權限時的說明改 EmptyState(二之八)。
 //
+// 🔴 2026-09-30(使用者實機巡檢批,QA D-2「假成功」):這頁原本只取 useMerchantMemberSettings 的
+// data + isLoading,**沒有 isError**。查詢失敗時三個欄位停在初始值「0」、開關顯示成「已啟用」,
+// 按儲存實際上什麼都沒寫(saveSettingsRow 的 `if (!settings) return`),但外層照樣跳
+// toast.success("已更新紅利點數設定") ⇒ **畫面說已更新,其實一個字都沒存**。
+// 兩處一起修:① 讀不到設定時不顯示表單,改 ErrorState;② saveSettingsRow 沒有 settings 時丟錯
+// 而不是靜默 return(不寫入這件事本身是對的,要保留;錯的是「沒寫卻報成功」)。
+// 📌 教訓:**只取 data + isLoading 的查詢,等於把「失敗」偽裝成「成功但是空的」**。
+//    只要那份 data 之後會被拿去當表單初始值或當成「目前設定」顯示,就一定要接 isError。
+//
 // **只動外觀,不動行為**:兩段權限的判斷(canManagePointsRules)、整列 upsert 的 saveSettingsRow、
 // 選了就直接存的核發資格條件、三個數字欄位的驗證與儲存、所有文案的意思全部照舊。
 
@@ -96,6 +105,7 @@ import { toast } from "sonner";
 import {
   AlertNote,
   EmptyState,
+  ErrorState,
   FieldInput,
   FieldSelect,
   FormField,
@@ -171,7 +181,24 @@ function MemberPointsPageInner() {
   const canManagePointsRules =
     merchantRole === "admin" || (merchantRole === "agent" && canManageMemberPointsRules === true);
 
-  const { data: settings, isLoading: settingsLoading } = useMerchantMemberSettings(merchantId);
+  // 🔴 2026-09-30(使用者實機巡檢批,QA D-2「假成功」):原本只取 data + isLoading,**沒有取
+  // isError**。查詢失敗時的實際後果是:
+  //   ・三個數字欄位停在 useState("0") 的初始值、開關因為 `settings ? … : true` 顯示成「已啟用」
+  //     ⇒ 商家以為那就是自己存過的設定。
+  //   ・按儲存會走到 saveSettingsRow 的 `if (!settings) return`,**什麼都沒寫**(這一點是安全的,
+  //     不會覆寫真實設定,不要改壞它)——但外層照樣跑 toast.success("已更新紅利點數設定"),
+  //     ⇒ **畫面說已更新,其實一個字都沒存**。開關那條(「已啟用紅利點數功能」)是同一個寫法。
+  // 修法兩件事一起做,缺一不可:
+  //   ① 讀不到設定時**不顯示表單**,改顯示 ErrorState(跟 MemberSettingsPage / PaymentMethodsPage
+  //      稅金卡同一個處理方式,理由也一樣:顯示預設值會讓商家以為那就是自己的設定)。
+  //   ② saveSettingsRow 沒有 settings 時**改成丟錯**,不要靜默 return ——
+  //      這樣呼叫端的 catch 會跳「更新失敗」,假成功的 toast 從根上不可能再出現。
+  const {
+    data: settings,
+    isLoading: settingsLoading,
+    isError: isSettingsError,
+    refetch: refetchSettings,
+  } = useMerchantMemberSettings(merchantId);
 
   useEffect(() => {
     if (!settings) return;
@@ -191,9 +218,18 @@ function MemberPointsPageInner() {
   // 推薦獎勵 / 生日贈點是**點數**,一定是整數 ⇒ 傳 integerOnly;消費點數比例是「幾元換 1 點」,
   // 本來就允許小數(原本用的是 Number.isNaN 而不是 Number.isInteger),所以不傳。
   // 錯誤訊息從目前輸入內容即時算出來 ⇒ 改成正確的數字就會自己消失。
+  // 🔴 2026-09-30:兩個**點數**欄位傳 noun: "點數",訊息才會是「請輸入點數」「點數不能是負數」——
+  // 原本沿用預設的「金額」,點數欄位下面出現「請輸入金額」,讀起來像系統搞錯在驗哪一格。
+  // 「消費點數比例(元/點)」那一欄填的**確實是金額**(幾元換 1 點),所以維持預設值,不要一起改。
   const parsedRate = parseAmountInput(pointsEarnRate);
-  const parsedReferral = parseAmountInput(referralBonusPoints, { integerOnly: true });
-  const parsedBirthday = parseAmountInput(birthdayBonusPoints, { integerOnly: true });
+  const parsedReferral = parseAmountInput(referralBonusPoints, {
+    integerOnly: true,
+    noun: "點數",
+  });
+  const parsedBirthday = parseAmountInput(birthdayBonusPoints, {
+    integerOnly: true,
+    noun: "點數",
+  });
   const hasPointsFieldError = !parsedRate.ok || !parsedReferral.ok || !parsedBirthday.ok;
 
   // #639/#642(.project/specs/會員與紅利.md §10.5):「點數設定」卡片現在一次管理 4 個欄位(啟用
@@ -201,7 +237,15 @@ function MemberPointsPageInner() {
   // 局部更新——不管改的是哪一格,都要把 settings 目前其他欄位(含核發資格條件/會員政策)原樣
   // 帶回去,只換有異動的那幾格,否則會把其他設定值覆蓋掉。
   async function saveSettingsRow(overrides: Partial<UpsertMerchantMemberSettingsInput>) {
-    if (!settings) return;
+    // 🔴 沒有 settings 就**不能寫**(整列 upsert,少帶任何一欄都會把別的設定覆寫掉),
+    // 但也**不能靜默 return** —— 那會讓呼叫端以為存成功、跳出「已更新」的假成功 toast
+    // (2026-09-30 QA D-2)。丟錯才會走到呼叫端的 catch,顯示「更新失敗」。
+    // 正常情況下走不到這裡(讀不到設定時整組表單根本不渲染),這是最後一道防線。
+    if (!settings) {
+      throw new Error(
+        "目前讀不到這間商家的會員設定,為了不覆寫原本的設定,這次沒有儲存。請重新載入再試一次。",
+      );
+    }
     await upsertMerchantMemberSettings(merchantId, {
       pointsEarnRate: settings.points_earn_rate,
       referralBonusPoints: settings.referral_bonus_points,
@@ -316,7 +360,22 @@ function MemberPointsPageInner() {
           「關掉的區塊會直接看不到對應的入口」,全部都是條件式不渲染,專案裡沒有任何一處是把
           沒權限的區塊留在畫面上灰掉。一致性之外也比較不會誤導:灰掉的欄位會讓客服以為「這個值
           就是目前設定」而據此回答客人,不渲染則不會產生這種誤解。 */}
-      {canManagePointsRules ? (
+      {canManagePointsRules && isSettingsError ? (
+        /* 🔴 2026-09-30(QA D-2):讀不到設定時**整組表單都不給**,只顯示一個出錯區塊。
+           為什麼不是「兩張卡各自顯示 ErrorState」:同一個查詢壞掉、同一個重試動作,講兩次只是變吵;
+           而且使用者要的資訊是「這一頁的設定現在讀不到」,不是「這兩張卡各自讀不到」。
+           為什麼不顯示表單(這是重點,不只是美觀問題):三個數字欄位會停在 useState("0")、
+           開關會顯示成「已啟用」,商家會把那些預設值當成自己存過的設定,據此回答客人或決定要不要改。 */
+        <Card>
+          <CardContent className="pt-6">
+            <ErrorState
+              title="讀不到紅利點數的設定"
+              reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值(0 點、功能已啟用)當成自己的設定存回去"
+              onRetry={() => void refetchSettings()}
+            />
+          </CardContent>
+        </Card>
+      ) : canManagePointsRules ? (
         <>
           {/* 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 整塊搬過來,放在
           「點數設定」卡片上方——這個欄位決定的是「什麼樣的會員才拿得到點數」,本質上屬於點數

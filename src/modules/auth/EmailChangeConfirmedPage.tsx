@@ -16,7 +16,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { AuthShell } from "@/components/AuthShell";
+import { AuthShell, AuthShellLoading } from "@/components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { getVerifiedUser } from "@/lib/auth-guard";
 
@@ -52,11 +52,9 @@ export default function EmailChangeConfirmedPage() {
   }, []);
 
   if (state.kind === "checking") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。
+    // 骨架長得跟驗證完之後那張 AuthShell 小卡一樣,真內容進來時版面不會跳。
+    return <AuthShellLoading />;
   }
 
   if (state.kind === "invalid") {

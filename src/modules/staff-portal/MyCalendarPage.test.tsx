@@ -137,7 +137,10 @@ describe("MyCalendarPage", () => {
 
     render(<MyCalendarPage />);
 
-    expect(screen.getByText("載入中⋯")).toBeInTheDocument();
+    // 🔴 2026-09-30(skill 二之八):等待畫面從「載入中⋯」四個字改成灰色骨架(GuardLoading),
+    // 骨架沒有文字,所以改查它外層的 aria-label="載入中"。**不要把它改回查那四個字**
+    // —— 那等於要求程式碼退回被 skill 明文禁止的做法。
+    expect(screen.getByLabelText("載入中")).toBeInTheDocument();
     expect(screen.queryByText(/尚未開放此功能/)).not.toBeInTheDocument();
   });
 
@@ -149,7 +152,10 @@ describe("MyCalendarPage", () => {
 
     render(<MyCalendarPage />);
 
-    expect(screen.getByText("載入中⋯")).toBeInTheDocument();
+    // 🔴 2026-09-30(skill 二之八):等待畫面從「載入中⋯」四個字改成灰色骨架(GuardLoading),
+    // 骨架沒有文字,所以改查它外層的 aria-label="載入中"。**不要把它改回查那四個字**
+    // —— 那等於要求程式碼退回被 skill 明文禁止的做法。
+    expect(screen.getByLabelText("載入中")).toBeInTheDocument();
     expect(screen.queryByText(/尚未開放此功能/)).not.toBeInTheDocument();
   });
 

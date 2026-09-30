@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { GuardLoading, LoadingSkeleton } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -84,7 +85,8 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+          <LoadingSkeleton variant="lines" rows={3} />
         ) : !windows || windows.length === 0 ? (
           <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
             尚未設定任何可預約時段
@@ -153,7 +155,9 @@ function MyAvailabilityPageInner() {
   const { data: staffRow } = useActiveMyStaffRecord(merchantId);
 
   if (!staffRow) {
-    return <p className="text-sm text-muted-foreground">載入中⋯</p>;
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這裡等的是整頁的前提資料
+    // (自己的服務人員紀錄),後面接的是一整頁,所以用守衛共用的那支。
+    return <GuardLoading />;
   }
 
   return (

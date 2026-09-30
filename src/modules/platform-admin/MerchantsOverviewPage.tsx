@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { LoadingSkeleton } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -117,7 +118,8 @@ export default function MerchantsOverviewPage() {
         </div>
 
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+          <LoadingSkeleton variant="lines" rows={5} />
         ) : error ? (
           <p className="text-sm text-destructive">載入失敗:{(error as Error).message}</p>
         ) : (

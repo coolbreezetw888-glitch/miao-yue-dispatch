@@ -2145,29 +2145,68 @@ function CalendarPageInner() {
             )}
           >
             {/* 🔴 這一層是時間欄 sticky 的 containing block,所以**必須真的長到內容寬**。
-                原本寫 min-w-[640px]:flex 子項溢出時不會把 flex 容器撐大,父層永遠只有 640px(或容器寬),
-                時間欄最多跟著捲 640−72=568px,超過就被丟在後面整條捲出畫面——320px 螢幕 7 位服務人員
-                以上、390px 8 位、1280px 14 位就會壞(2026-09-30 QA 實測)。
+                原本寫 min-w-[640px]:flex 子項溢出時不會把 flex 容器撐大,父層寬度永遠停在
+                max(640, 捲動容器寬),時間欄最多只能跟著捲「父層寬 − 72」,超過就被丟在後面整條捲出
+                畫面(捲到右邊之後完全看不到時間,色塊是幾點的認不出來)。
                 w-max = width: max-content(跟著內容成長),min-w-full 保證螢幕夠寬時仍然鋪滿容器。
+
+                🔴 **舊寫法的壞掉門檻:用公式自己算,不要抄下面的數字。**
+                   這個數字已經被抄錯兩次(skill 一度寫「1280px 14 位就壞」、一度寫「1278px 19 位」,
+                   兩個都是錯的),所以**引用時一律重算一次**:
+
+                     父層寬 P = max(640, W)    ← 640 是舊寫法的 min-w,W = **捲動容器**寬(不是螢幕寬)
+                     內容寬   = 72 + 120N       ← 時間欄 72px + 每位服務人員 120px
+                     壞掉條件:內容寬 − W > P − 72   即   **72 + 120N > W + P − 72**
+                     (左邊是可捲距離,右邊是 sticky 能跟著位移的上限;可捲距離超過上限就被丟在後面)
+
+                   W ≥ 640 時 P = W,化簡成 `72 + 120N > 2W − 72`;
+                   W < 640 時 P = 640,是 `72 + 120N > W + 568` ——
+                   🔴 **小螢幕不能用化簡版**,320px 用化簡版會算出 4 位,實際是 7 位。
+                   代進去的結果(W 是捲動容器寬,不是螢幕寬):
+                     W = 278px(320px 螢幕)→ **7 位**起壞     W = 350px(390px 螢幕)→ **8 位**起壞
+                     W = 1110px(1280px 螢幕)→ **18 位**起壞  W = 1278px → **21 位**起壞
+                   ⇒ 所以「1280px 14 位就壞」是錯的:QA 用舊寫法做負向對照,1280px × 14 位量到
+                     掉出 0px、根本沒壞(14 < 18)。
+
                 ⚠️ jsdom 測不出這一條(它不做版面計算),改這裡一定要回 320px 真瀏覽器用 8 位以上重測。
                 真瀏覽器實測(2026-09-30,headless chromium)。判斷標準是**「捲到最右端時,時間欄有沒有
                 被推出容器左緣」**,不是某一個絕對 x 座標——座標會隨容器位置、頁面邊距、瀏覽器捲軸寬度
                 而變,寫死數字會讓下一個人量到別的數字就以為壞了。以「掉出容器左緣幾 px」記錄:
                   320px: 7 人 / 8 人 / 12 人  舊:掉出 66 / 186 / 666px  →  新:全部掉出 0px ✅
                   390px: 8 人 / 14 人         舊:掉出 116 / 836px       →  新:全部掉出 0px ✅
-                  1280px:14 人               舊:父層寬卡在 1110(內容 1752) → 新:父層寬 1752、時間欄不動 ✅
-                  ⇒ 人數門檻(舊寫法開始壞掉的位置):**320px 7 位、390px 8 位、1280px 14 位**。
+                  1280px:14 人               舊:父層寬 1110、內容 1752,掉出 0px(**沒壞,門檻是 18 位**)
+                                             新:父層寬 1752、時間欄不動 ✅
                   欄寬:320px 12 人 = 120px(下限),1280px 6 人 = 173px(有空間就均分,行為不變) */}
             <div className="flex w-max min-w-full">
-              {/* 時間欄:sticky 固定在左邊,橫向捲時不跟著跑(skill 六)。 */}
-              <div className="sticky left-0 z-20 flex w-[72px] shrink-0 flex-col bg-background">
+              {/* 時間欄:sticky 固定在左邊,橫向捲時不跟著跑(skill 六)。
+                  🔴 **層級階梯**(2026-09-30 使用者實機巡檢抓到:往下捲時訂單色塊畫在服務人員名字列
+                  上面、把名字蓋掉)。根因是名字列跟色塊**都是 z-10**,同一級 ⇒ DOM 順序後畫的
+                  (色塊)蓋住先畫的(名字列)。這四個元素必須是**四個不同的層級**,不可以有兩個同級:
+
+                    | 元素 | 層級 | 為什麼 |
+                    |---|---|---|
+                    | 訂單色塊(calendarBookingDrag.tsx 的 DraggableBookingBlock) | **z-10** 最低 | 兩個固定欄都要蓋得住它 |
+                    | 服務人員名字列(sticky top) | **z-20** | 直向捲時要蓋住色塊 |
+                    | 時間欄(sticky left,就是這一層) | **z-30** | 橫向捲時要蓋住色塊**與名字列** |
+                    | 左上角那一格(兩邊都 sticky) | **z-40** | 最上層 |
+
+                  🔴 **時間欄一定要比名字列高,不能兩個都 z-20。** 橫向捲到右邊時,時間欄會蓋在
+                  服務人員欄上面(**包含它們的表頭格**);兩者同級的話 DOM 順序(名字列在後)會讓
+                  名字列畫在時間欄上面 —— 那就是同一個 bug 換一個方向再發生一次。
+                  📌 為什麼直接比大小就對:服務人員欄是 `relative` 但**沒有** z-index(= z-index auto),
+                  所以它不建立 stacking context,裡面的名字列/色塊的 z 值是跟時間欄放在**同一個**
+                  stacking context 比的。反過來說,這一層有了 z-30 就**變成** stacking context,
+                  所以裡面那格「左上角」的 z-40 只跟時間欄自己的子元素比,不會跟外面搶。
+                  🔴 jsdom 測不出層級遮擋(不做版面計算與繪製),改完一定要用真瀏覽器
+                  `document.elementFromPoint()` 在「往下捲」與「往右捲」兩種狀態下各驗一次。 */}
+              <div className="sticky left-0 z-30 flex w-[72px] shrink-0 flex-col bg-background">
                 <div
                   // 左上角那一格:同時 sticky left(跟著時間欄)與 sticky top(跟著名字列),
-                  // z 要比名字列高,不然橫捲時名字會蓋過「時間」兩個字。
+                  // 層級階梯最上層 z-40(見上面那張表)——它必須同時蓋住名字列與時間格。
                   // data-drag-time-gutter:#846 拖拉落點要知道「被固定欄視覺蓋住的那一段 x」是哪裡,
                   // 讀的就是這個元素的右邊界(見 calendarBookingDrag 的 readColumnGeometry)。
                   data-drag-time-gutter="true"
-                  className="sticky top-0 z-30 flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground"
+                  className="sticky top-0 z-40 flex h-9 items-center border-b border-r border-border bg-surface p-2 text-xs font-medium text-muted-foreground"
                 >
                   時間
                 </div>
@@ -2205,8 +2244,12 @@ function CalendarPageInner() {
                   )}
                 >
                   {/* skill 六:服務人員名字列固定在上面,直向捲時不跟著跑。bg-surface 不能省
-                      (透明的話色塊會從底下透出來);z 比色塊高、比左上角那一格低。 */}
-                  <div className="sticky top-0 z-10 flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
+                      (透明的話色塊會從底下透出來)。
+                      🔴 z-20:必須**嚴格大於**訂單色塊的 z-10(2026-09-30 使用者實機巡檢:兩邊都是
+                      z-10 時,DOM 順序讓後畫的色塊蓋住名字列,往下捲名字就消失),並且**嚴格小於**
+                      時間欄的 z-30(橫向捲時時間欄要蓋住名字列,含這個表頭格)。完整的四層階梯表
+                      寫在上面時間欄那一段的註解裡,改任何一層之前先讀那張表。 */}
+                  <div className="sticky top-0 z-20 flex h-9 flex-col items-center justify-center border-b border-border bg-surface p-1 text-center text-xs font-medium text-foreground">
                     <span className="max-w-full truncate">{s.staff_name}</span>
                     {/* 模組 7(排班與休假管理)§4.5:請假整欄灰底顯示假別名稱。主腦裁示:請假一律擋下
                         建單,不論 unlimited_backend_edit 是否開啟都沒有覆寫例外,所以這裡不需要規格書

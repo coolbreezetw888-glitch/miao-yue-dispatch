@@ -22,6 +22,7 @@ import {
   CardAlertDialogHeader,
   CardAlertDialogTitle,
   CardAlertDialogTrigger,
+  LoadingSkeleton,
 } from "@/components/patterns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -280,7 +281,8 @@ export default function MerchantDetailPage() {
   if (merchantLoading) {
     return (
       <PlatformAdminShell>
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        {/* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這一頁載進來是一疊卡片,所以用 cards。 */}
+        <LoadingSkeleton variant="cards" rows={3} />
       </PlatformAdminShell>
     );
   }
@@ -389,7 +391,8 @@ export default function MerchantDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {adminsLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
+              /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+              <LoadingSkeleton variant="lines" rows={2} />
             ) : (
               <ul className="space-y-2">
                 {(admins ?? []).map((admin) => (
@@ -502,7 +505,8 @@ export default function MerchantDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {groupLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
+              /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+              <LoadingSkeleton variant="lines" rows={2} />
             ) : (
               <>
                 {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):email 沒有空白字元,
@@ -572,7 +576,8 @@ export default function MerchantDetailPage() {
                 ⚠️ 用 getErrorMessage(err),不要用 `err instanceof Error ? …`——Supabase 回傳的
                    error 不是 Error 子類別(見 getErrorMessage.ts 檔頭)。 */}
             {staffLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
+              /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+              <LoadingSkeleton variant="lines" rows={3} />
             ) : staffError ? (
               <p className="text-sm text-destructive">載入失敗:{getErrorMessage(staffError)}</p>
             ) : (staffList ?? []).length === 0 ? (
@@ -641,7 +646,8 @@ export default function MerchantDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {agentsLoading ? (
-              <p className="text-sm text-muted-foreground">載入中⋯</p>
+              /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+              <LoadingSkeleton variant="lines" rows={2} />
             ) : agentsError ? (
               <p className="text-sm text-destructive">載入失敗:{getErrorMessage(agentsError)}</p>
             ) : (agentList ?? []).length === 0 ? (

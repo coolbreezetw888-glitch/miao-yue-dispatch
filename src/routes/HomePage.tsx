@@ -32,6 +32,7 @@
 import { Navigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { GuardLoading } from "@/components/patterns";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 
@@ -81,11 +82,9 @@ export default function HomePage() {
   const outcome = resolveHomePageOutcome({ isViewResolved, isStaffView });
 
   if (outcome === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這裡等的是「角色還沒解出來」,
+    // 後面接的是 App 內的頁面,所以用守衛共用的那支(GuardLoading),不要另外做一份。
+    return <GuardLoading />;
   }
 
   if (outcome === "redirect-to-manage") {
@@ -93,11 +92,9 @@ export default function HomePage() {
   }
 
   if (!staffRow) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這裡等的是「角色還沒解出來」,
+    // 後面接的是 App 內的頁面,所以用守衛共用的那支(GuardLoading),不要另外做一份。
+    return <GuardLoading />;
   }
 
   return (

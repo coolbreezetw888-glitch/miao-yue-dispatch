@@ -593,6 +593,12 @@ export function DraggableBookingBlock({
       data-drag-source={isSource ? "true" : undefined}
       className={cn(
         // 坑 6:select-none + -webkit-touch-callout:none 是靜態 CSS,不影響捲動,無條件設。
+        // 🔴 z-10 是行事曆層級階梯的**最低**一層,不要往上調(2026-09-30 使用者實機巡檢修正):
+        //      訂單色塊 z-10 < 服務人員名字列 z-20 < 時間欄 z-30 < 左上角那一格 z-40
+        //    色塊只需要蓋住它底下的背景格線(那些格子沒有 z-index),但**必須被兩個 sticky 固定欄
+        //    蓋住** —— 往下捲時名字列要蓋住它,往右捲時時間欄要蓋住它。原本名字列也是 z-10,
+        //    同級 ⇒ DOM 順序後畫的色塊蓋住名字列,把服務人員名字整排蓋掉。
+        //    完整的階梯表寫在 CalendarPage.tsx 時間欄那一段的註解裡(搜 "層級階梯")。
         "absolute inset-x-0 z-10 select-none overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm [-webkit-touch-callout:none]",
         draggable ? "cursor-grab" : "cursor-default",
         // §5.4:dragging 期間原色塊 opacity-40 留在原位當佔位。

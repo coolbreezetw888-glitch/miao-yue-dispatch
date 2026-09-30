@@ -126,3 +126,38 @@ describe("min / max", () => {
     });
   });
 });
+
+// 🔴 2026-09-30(使用者實機巡檢):這支函式也被拿去驗點數欄位,結果點數欄位下面出現
+// 「請輸入金額」「金額不能是負數」。加了可選的 noun。
+describe("noun(訊息裡的名詞)", () => {
+  it("預設是「金額」—— 既有呼叫端的訊息一個字都沒變", () => {
+    expect((parseAmountInput("") as { error: string }).error).toBe("請輸入金額");
+    expect((parseAmountInput("-1") as { error: string }).error).toBe("金額不能是負數");
+    expect((parseAmountInput("1e3") as { error: string }).error).toBe(
+      "請輸入數字金額,只能填數字和小數點",
+    );
+  });
+
+  it("傳「點數」之後三種訊息都換成點數", () => {
+    const opts = { noun: "點數" };
+    expect((parseAmountInput("", opts) as { error: string }).error).toBe("請輸入點數");
+    expect((parseAmountInput("-1", opts) as { error: string }).error).toBe("點數不能是負數");
+    expect((parseAmountInput("1e3", opts) as { error: string }).error).toBe(
+      "請輸入數字點數,只能填數字和小數點",
+    );
+  });
+
+  it("noun 不影響 ok 的判斷結果,只影響訊息", () => {
+    expect(parseAmountInput("100", { noun: "點數" })).toEqual({ ok: true, value: 100 });
+    expect(parseAmountInput("0", { noun: "點數" })).toEqual({ ok: true, value: 0 });
+  });
+
+  it("整數規則 / min / max 的訊息本來就沒有名詞,不受影響", () => {
+    expect(
+      (parseAmountInput("1.5", { integerOnly: true, noun: "點數" }) as { error: string }).error,
+    ).toBe("這個欄位只能填整數,不能有小數點");
+    expect((parseAmountInput("101", { max: 100, noun: "點數" }) as { error: string }).error).toBe(
+      "不能大於 100",
+    );
+  });
+});

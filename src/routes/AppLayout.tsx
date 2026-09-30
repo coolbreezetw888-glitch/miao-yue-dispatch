@@ -97,6 +97,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 
+import { GuardLoading } from "@/components/patterns";
 import InstallPwaHint from "@/components/InstallPwaHint";
 import UpdateAvailableHint from "@/components/UpdateAvailableHint";
 import { cn } from "@/lib/utils";
@@ -315,11 +316,9 @@ export default function AppLayout() {
   }
 
   if (!authChecked || merchantsLoading || (merchants.length === 0 && authChecked)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface">
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
-      </div>
-    );
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。App 外殼還在確認登入狀態/商家清單,
+    // 後面接的就是 App 內的頁面,所以直接用守衛共用的那支(GuardLoading)。
+    return <GuardLoading />;
   }
 
   const outletContext: AppLayoutContext = {

@@ -26,6 +26,7 @@ import {
   TodoTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -33,7 +34,11 @@ import type { LoginEmailStatus } from "./api";
 
 /**
  * 對應規格書 2.5.3 第 1 點/規則 2.3.3:顯示目前實際的登入信箱,以及兩種待驗證狀態徽章
- * (分開顯示,不合併成一句混淆的文字)。只在 statusQuery 有資料時渲染,載入中顯示「載入中⋯」。
+ * (分開顯示,不合併成一句混淆的文字)。只在 statusQuery 有資料時渲染。
+ *
+ * 載入中(2026-09-30,skill 二之八):原本顯示「登入信箱:載入中⋯」。改成**只有值那一段**是灰色骨架
+ * 條、「登入信箱:」這幾個字照樣顯示 —— 標籤本身不是在載入的東西,把它一起藏掉只會讓人看不懂
+ * 這一行是什麼。骨架高度/寬度配合這一行 text-xs 的尺寸,不套頁面骨架(這是卡片裡的一行小字)。
  *
  * 標籤改用 skill 二之四的三類:「已建議新信箱,待本人確認套用」是要人去處理的 → 待辦標籤(TodoTag);
  * 「待驗證變更中,尚未生效」是進行中的狀態 → 狀態標籤(StatusTag warning)。
@@ -46,7 +51,14 @@ export function LoginEmailStatusDisplay({
   statusQuery: UseQueryResult<LoginEmailStatus>;
 }) {
   if (statusQuery.isLoading) {
-    return <p className="text-xs text-muted-foreground">登入信箱:載入中⋯</p>;
+    return (
+      /* 用 <span className="flex"> 而不是 <p>:Skeleton 本身是 <div>,包在 <p> 裡是不合法的
+         HTML 嵌套(React 會在 dev console 噴 validateDOMNesting 警告)。 */
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-busy="true">
+        登入信箱:
+        <Skeleton className="h-2.5 w-36 rounded-sm bg-muted" />
+      </span>
+    );
   }
   const status = statusQuery.data;
   if (!status) return null;

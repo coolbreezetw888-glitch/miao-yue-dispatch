@@ -5,6 +5,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { LoadingSkeleton } from "@/components/patterns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
@@ -71,7 +72,8 @@ function AgentPermissionsInner() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+            <LoadingSkeleton variant="lines" rows={5} />
           ) : (
             <ul className="space-y-2">
               {visibleAgentPermissionSections().map((section) => (

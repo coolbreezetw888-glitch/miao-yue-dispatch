@@ -8,6 +8,7 @@
 // 同一套 DateRangePicker 元件跟同一套一年上限規則——原本的 MyYearMonthSwitcher.tsx 已經被這次
 // 的區間篩選取代並移除,不留下死掉的舊元件。
 
+import { LoadingSkeleton } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MonthlySalaryStaffReport, PieceRateStaffReport } from "@/modules/payroll/StaffReportPage";
 import { DateRangePicker, useDateRangeState } from "@/modules/payroll/DateRangePicker";
@@ -42,7 +43,8 @@ function MyPayrollPageInner() {
       />
 
       {!staffRow ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+        <LoadingSkeleton variant="lines" rows={3} />
       ) : staffRow.compensation_type === "monthly_salary" ? (
         <MonthlySalaryStaffReport
           staffId={staffRow.id}

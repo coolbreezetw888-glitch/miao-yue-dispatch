@@ -48,6 +48,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { TAILWIND_SM_MEDIA_QUERY, useMediaQuery } from "@/hooks/use-media-query";
@@ -175,7 +176,27 @@ export function NotificationBell() {
 
       <div className="max-h-[60vh] overflow-y-auto">
         {listQuery.isLoading ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">載入中⋯</p>
+          /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。
+             🔴 這裡**不能套頁面骨架**(LoadingSkeleton 的 cards/lines 是給頁面內容用的):
+             這是頁首鈴鐺的通知面板,一列通知是「未讀圓點 + 事件名 + 時間 + 內文」,
+             所以骨架照那個形狀做,列高與 px-4 py-3 的內距跟真正的通知列一致
+             —— 資料進來時版面才不會跳(這就是骨架比四個字好的理由之一)。 */
+          <ul className="divide-y divide-border" aria-busy="true" aria-live="polite">
+            {[0, 1, 2].map((i) => (
+              <li key={i} className="flex items-start gap-2 px-4 py-3">
+                <div className="mt-1.5 flex w-2 shrink-0 justify-center">
+                  <Skeleton className="h-2 w-2 rounded-full bg-muted" />
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <Skeleton className="h-2.5 w-24 rounded-sm bg-muted/70" />
+                    <Skeleton className="h-2.5 w-16 shrink-0 rounded-sm bg-muted/70" />
+                  </div>
+                  <Skeleton className="h-3 w-[80%] rounded-sm bg-muted" />
+                </div>
+              </li>
+            ))}
+          </ul>
         ) : listQuery.isError ? (
           <p className="px-4 py-6 text-sm text-muted-foreground" data-testid="notification-error">
             通知載入失敗,請稍後再試。

@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from "react";
 
+import { GuardLoading, LoadingSkeleton } from "@/components/patterns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -158,7 +159,11 @@ export default function MyCalendarPage() {
   // 正常。這裡把 useActiveMyStaffRecord 的載入狀態(以及它依賴的 merchant 載入狀態)一起算進
   // loading,寫法直接比照同資料夾已經正確的 RequireStaffAvailabilityAccess.tsx,保持一致。
   if (merchantLoading || staffLoading || permissionLoading) {
-    return <p className="text-sm text-muted-foreground">載入中⋯</p>;
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這裡等的是整頁的前提(商家 / 自己的
+    // 服務人員紀錄 / 權限),後面接的是一整頁,所以用守衛共用的那支(GuardLoading)。
+    // ⚠️ 對應的測試(MyCalendarPage.test.tsx「問題 6」兩條)改成查 GuardLoading 的
+    //    aria-label="載入中",不是查那四個字 —— 骨架沒有文字。
+    return <GuardLoading />;
   }
 
   if (hasCalendarAccess !== true) {
@@ -276,7 +281,8 @@ export default function MyCalendarPage() {
         </CardHeader>
         <CardContent>
           {scheduleLoading ? (
-            <p className="text-sm text-muted-foreground">載入中⋯</p>
+            /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+            <LoadingSkeleton variant="lines" rows={4} />
           ) : viewMode === "timeline" ? (
             <MyCalendarTimelineView
               staffId={staffRow?.id ?? null}

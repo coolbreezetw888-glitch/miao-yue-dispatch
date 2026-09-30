@@ -20,6 +20,7 @@ import {
   CardAlertDialogHeader,
   CardAlertDialogTitle,
   CardAlertDialogTrigger,
+  LoadingSkeleton,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,7 +153,8 @@ export default function IndustryPresetsPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {isLoading ? (
-                      <p className="text-sm text-muted-foreground">載入中⋯</p>
+                      /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+                      <LoadingSkeleton variant="lines" rows={3} />
                     ) : (
                       <ul className="space-y-2">
                         {presetsForActiveTab.map((preset) => (

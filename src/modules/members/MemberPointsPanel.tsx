@@ -91,7 +91,8 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
     // `Number.isInteger` 確實擋掉了 Infinity 跟小數,但 `1e3` → 1000 點、`0x10` → 16 點仍然過關
     // ——商家打 `1e3` 是打錯字,系統卻當成他真的要兌換 1000 點。改走 parseAmountInput
     // (integerOnly,最小 1 點)。
-    const parsed = parseAmountInput(points, { integerOnly: true, min: 1 });
+    // 🔴 2026-09-30:noun: "點數" —— 不傳的話留空會顯示「請輸入金額」(這一格填的是點數)。
+    const parsed = parseAmountInput(points, { integerOnly: true, min: 1, noun: "點數" });
     if (!parsed.ok) {
       setPointsError(parsed.error);
       return;
@@ -207,11 +208,13 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
     // 🔴 2026-09-30(品管第二次打回,🟡 第 2 項):原本是 `Number(delta)` + `Number.isInteger`,
     // Infinity 擋掉了,但 `1e3` → 1000 點、`0x10` → 16 點仍然過關。改走 parseAmountInput。
     // ⚠️ 這一格**可以是負數**(扣點),所以 min 要放到負無限 —— parseAmountInput 的 min 預設是 0
-    //    (它本來是給金額用的),不覆寫的話 `-5` 會被當成「金額不能是負數」擋掉。
+    //    (它本來是給金額用的),不覆寫的話 `-5` 會被當成「點數不能是負數」擋掉。
     //    「不為 0」這條是這一格特有的規則,parseAmountInput 沒有這個選項,留在下面自己判。
+    // 🔴 2026-09-30:noun: "點數" —— 不傳的話留空會顯示「請輸入金額」(這一格填的是點數)。
     const parsed = parseAmountInput(delta, {
       integerOnly: true,
       min: Number.NEGATIVE_INFINITY,
+      noun: "點數",
     });
     if (!parsed.ok) {
       setDeltaError(parsed.error);

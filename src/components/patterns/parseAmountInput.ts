@@ -21,6 +21,8 @@
  *   - 🔴 明確拒絕:空字串 / 只有空白 / `1e3` 科學記號 / `0x10` 十六進位 / `Infinity` / `NaN` /
  *     千分位逗號 `1,000` / 全形數字 / `12.` / `.5` / 兩個小數點
  *   - `integerOnly: true` 給原本 `step="1"` 的欄位用(每天扣固定金額、月薪):有小數點就擋下
+ *   - `noun`(預設 `"金額"`)換掉訊息裡的名詞:**點數欄位要傳 `"點數"`**,否則點數欄位下面會
+ *     出現「請輸入金額」「金額不能是負數」(2026-09-30 使用者實機巡檢抓到)
  *   - 回傳的錯誤訊息是**給非工程師看的白話**,呼叫端直接丟進 `FormField error=` / `FieldError`,
  *     不要自己再組字串,也不要把原始錯誤吐出去
  *
@@ -34,6 +36,17 @@ export interface ParseAmountInputOptions {
   min?: number | undefined;
   /** 允許的最大值,預設不限。 */
   max?: number | undefined;
+  /**
+   * 錯誤訊息裡要用的名詞,預設 `"金額"`。
+   *
+   * 🔴 2026-09-30(使用者實機巡檢):這支函式後來也被拿去驗**點數**欄位(紅利點數的推薦獎勵、
+   * 生日贈點、手動調整、登記兌換),結果點數欄位下面出現「請輸入金額」「金額不能是負數」——
+   * 讀起來像系統搞錯了自己在驗哪一格。傳 `noun: "點數"` 就會變成「請輸入點數」「點數不能是負數」。
+   *
+   * 📌 **預設值刻意維持「金額」**,所以既有的呼叫端一個都不用改,訊息也一個字都沒變。
+   *    新增非金額欄位的使用點時記得傳這個,不要為了省事讓使用者看到不對的名詞。
+   */
+  noun?: string | undefined;
 }
 
 export type ParseAmountInputResult =
@@ -49,15 +62,15 @@ export function parseAmountInput(
   raw: string,
   options: ParseAmountInputOptions = {},
 ): ParseAmountInputResult {
-  const { integerOnly = false, min = 0, max } = options;
+  const { integerOnly = false, min = 0, max, noun = "金額" } = options;
   const text = raw.trim();
 
   if (text === "") {
-    return { ok: false, value: null, error: "請輸入金額" };
+    return { ok: false, value: null, error: `請輸入${noun}` };
   }
   if (!DECIMAL_PATTERN.test(text)) {
     // 一句話講完就好:使用者不需要知道「科學記號」「十六進位」這些名詞。
-    return { ok: false, value: null, error: "請輸入數字金額,只能填數字和小數點" };
+    return { ok: false, value: null, error: `請輸入數字${noun},只能填數字和小數點` };
   }
   if (integerOnly && text.includes(".")) {
     return { ok: false, value: null, error: "這個欄位只能填整數,不能有小數點" };
@@ -66,13 +79,13 @@ export function parseAmountInput(
   const value = Number(text);
   // 走到這裡一定是有限數(pattern 已經擋掉 Infinity / NaN),這行是防呆,不是主要防線。
   if (!Number.isFinite(value)) {
-    return { ok: false, value: null, error: "請輸入數字金額,只能填數字和小數點" };
+    return { ok: false, value: null, error: `請輸入數字${noun},只能填數字和小數點` };
   }
   if (value < min) {
     return {
       ok: false,
       value: null,
-      error: min === 0 ? "金額不能是負數" : `不能小於 ${min}`,
+      error: min === 0 ? `${noun}不能是負數` : `不能小於 ${min}`,
     };
   }
   if (max !== undefined && value > max) {

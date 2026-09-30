@@ -13,7 +13,7 @@
  * 🔴 顏色不能是唯一的差別(色盲看不出紅綠)—— 每個標籤都要有文字,這裡的圓點只是輔助。
  * 🔴 不用實心色塊。**唯一例外:StatusTag 的 `fillColor`**(2026-09-30 使用者裁決,
  *    SPECS-INDEX #832)—— 顏色是商家自己挑的那一種情境,淺底膠囊會跟卡片底色撞色整個消失
- *    (預設的「待確認」#ebaa2d 撞上黃卡就是這樣),所以改成實心填滿商家的色 + 自動挑黑白字。
+ *    (預設的「待確認」#ebaa2d 撞上黃卡就是這樣),所以改成實心填滿商家的色 + **一律白字**。
  *    詳見 fillColor 那個 prop 的說明。其他標籤維持「不用實心色塊」。
  *
  * `wrap`:標籤預設一行不折(whitespace-nowrap),因為短標籤折行會很醜。但標籤裡夾著使用者自填的
@@ -26,7 +26,7 @@
 import * as React from "react";
 
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { solidFillStyle } from "@/lib/readableTextColor";
+import { solidFillStyle } from "@/lib/statusPillStyle";
 import { cn } from "@/lib/utils";
 
 export type StatusTone = "success" | "warning" | "neutral" | "danger";
@@ -63,11 +63,14 @@ interface StatusTagProps extends Omit<BadgeProps, "variant">, WrapProps {
    * SPECS-INDEX #832)。**其他頁面的 StatusTag 不吃商家自訂色,不要為了統一而到處傳這個。**
    *
    * 給了之後這顆膠囊變成「實心填滿這個顏色」:
-   *   - 文字顏色由 readableTextColorOn() 依底色亮度自動挑黑或白,**不寫死白字**——
-   *     商家可能挑很淺的黃色,白字會完全看不見(2026-09-30 使用者裁決)。
+   *   - 🔴 文字顏色**一律白字**、底色原樣不動(2026-09-30 使用者實機巡檢後的裁決,原話
+   *     「一律白字,顏色完全不動」;白字在亮綠/橘上只有 WCAG 標準值的 40%~65%,這個代價
+   *     已經明確告知,使用者仍然選它)。**不要改回「依底色亮度自動挑黑或白」** ——
+   *     那個做法當天早一批做過、被使用者當面推翻。完整理由見 lib/statusPillStyle.ts 檔頭。
    *   - 左邊那顆小圓點改成 bg-current(跟文字同色),否則圓點會用 tone 的固定色、
    *     在商家自訂的底色上有機率整個看不見(這次要修的就是這種「撞色就消失」)。
-   *   - 邊框用文字色的 25% 透明度,保證商家挑接近白色時膠囊輪廓還在。
+   *   - 邊框用**固定深色**的 25% 透明度(不是文字色的)——文字既然固定白色,邊框跟著文字走
+   *     會在淺底色上變成「白底卡片 + 白邊 + 白字」整顆消失。
    *
    * 沒給的時候(全站其他所有使用點)渲染結果跟改版前完全一樣:淺底 + 深字 + tone 色圓點。
    *

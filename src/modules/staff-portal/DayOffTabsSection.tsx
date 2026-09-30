@@ -12,6 +12,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { LoadingSkeleton } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -175,7 +176,8 @@ function WholeDayOffTab({ merchantId, staffId }: { merchantId: string; staffId: 
   return (
     <div className="space-y-3">
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">載入中⋯</p>
+        /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+        <LoadingSkeleton variant="lines" rows={6} />
       ) : (
         <DayOffMonthCalendar
           monthAnchor={monthAnchor}
@@ -265,7 +267,8 @@ function BySlotOffTab({ merchantId, staffId }: { merchantId: string; staffId: st
       <div className="border-t border-border pt-3">
         <p className="mb-2 text-sm font-medium text-foreground">{selectedDateKey}</p>
         {businessHoursLoading ? (
-          <p className="text-sm text-muted-foreground">載入中⋯</p>
+          /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+          <LoadingSkeleton variant="lines" rows={4} />
         ) : !businessHours?.has_setting || businessHours.is_closed ? (
           <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
             這天商家沒有營業/沒有設定營業時間,不需要另外設定時段休息

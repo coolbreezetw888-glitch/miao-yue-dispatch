@@ -23,6 +23,7 @@
 
 import { useMemo } from "react";
 
+import { LoadingSkeleton } from "@/components/patterns";
 import { cn } from "@/lib/utils";
 import { isoToTaipeiTime, minutesToTime, timeToMinutes } from "@/modules/booking/dateUtils";
 import {
@@ -71,7 +72,8 @@ export function MyCalendarTimelineView({
   const gridTotalPx = slots.length * SLOT_PX;
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">載入中⋯</p>;
+    // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。
+    return <LoadingSkeleton variant="lines" rows={5} />;
   }
 
   if (!businessHours?.has_setting || businessHours.is_closed) {

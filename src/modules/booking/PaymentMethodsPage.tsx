@@ -16,6 +16,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  AlertNote,
   CardDialog,
   CardDialogClose,
   CardDialogContent,
@@ -80,18 +81,26 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
     setTaxValue(String(taxSettings.taxValue));
   }, [taxSettings]);
 
+  // 🔴 2026-09-30:原本是 `Number(taxValue)` + `Number.isNaN` + `< 0`,那個組合放行了
+  // 固定金額模式的 `Infinity`(`Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false),
+  // 以及 `1e3` → 1000、`0x10` → 16。這一欄是原生 `type="number"`,但這張卡沒有 `<form>`、
+  // 儲存鈕是 `type="button"` + onClick ⇒ 原生 min / max 從來不會觸發,擋不住任何東西。
+  // 改走全站共用的 parseAmountInput(百分比模式順便把 0~100 的上限交給它一起檢查)。
+  //
+  // 🔴 2026-09-30(使用者實機巡檢批):解析從 handleSave 裡面搬到**渲染時**算,錯誤改成
+  // `FormField error=`(欄位框變紅 + 下面一行 `!` 說明),不再用 toast.error(skill 二之七:
+  // 「錯誤:框變紅 + 下面一行 `!` 說明」)。理由跟本輪其他 4 處(建單 / 服務項目 / 點數頁 /
+  // 點數面板)完全一樣:
+  //   ① toast 會自己消失,使用者回頭改欄位時已經看不到錯誤說的是哪一格、要改成什麼。
+  //   ② toast 出現在畫面角落,離出錯的欄位很遠。
+  //   ③ 即時算 ⇒ **一改內容錯誤就自己清掉**,不用再按一次儲存才知道改對了沒。
+  // 順帶把儲存鈕在有錯時 disabled;按鈕變灰一定要說明原因(skill 二之三)⇒ 配一條常駐 `!`。
+  const parsedTax = parseAmountInput(taxValue, taxMode === "percentage" ? { max: 100 } : {});
+
   async function handleSave() {
-    // 🔴 2026-09-30:原本是 `Number(taxValue)` + `Number.isNaN` + `< 0`,那個組合放行了
-    // 固定金額模式的 `Infinity`(`Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false),
-    // 以及 `1e3` → 1000、`0x10` → 16。這一欄是原生 `type="number"`,但這張卡沒有 `<form>`、
-    // 儲存鈕是 `type="button"` + onClick ⇒ 原生 min / max 從來不會觸發,擋不住任何東西。
-    // 改走全站共用的 parseAmountInput(百分比模式順便把 0~100 的上限交給它一起檢查)。
-    const parsed = parseAmountInput(taxValue, taxMode === "percentage" ? { max: 100 } : {});
-    if (!parsed.ok) {
-      toast.error(parsed.error);
-      return;
-    }
-    const numericValue = parsed.value;
+    // 錯誤已經即時顯示在欄位下面、儲存鈕也 disabled,這裡是防呆,不是主要防線。
+    if (!parsedTax.ok) return;
+    const numericValue = parsedTax.value;
     setSaving(true);
     try {
       await upsertMerchantTaxSettings(merchantId, { taxMode, taxValue: numericValue });
@@ -145,6 +154,7 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
               label={taxMode === "percentage" ? "稅率(%)" : "稅額(元)"}
               htmlFor="merchant-tax-value"
               required
+              error={parsedTax.ok ? null : parsedTax.error}
               helpLabel="說明:稅金數字怎麼填"
               help={
                 taxMode === "percentage"
@@ -190,6 +200,15 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
                 </span>
               </div>
             </FormField>
+            {/* 🔴 2026-09-30:填錯時擋住儲存,不能只顯示紅字。按鈕變灰就要說明原因(skill 二之三)。 */}
+            {parsedTax.ok ? null : (
+              <AlertNote>
+                上面的稅金數字填錯了(標紅那一格),修好之後才能儲存。
+                {taxMode === "percentage"
+                  ? "百分比模式只能填 0~100 的數字,例如 5。"
+                  : "固定金額模式只能填 0 以上的數字,例如 30。"}
+              </AlertNote>
+            )}
             {/* 這一頁唯一的主要動作是頁首的「新增付款方式」,所以這顆儲存用次要樣式(skill 二之三:
                 一個畫面只能有一顆主要按鈕)。 */}
             <div>
@@ -197,7 +216,7 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
                 type="button"
                 variant="neutral"
                 size="touch"
-                disabled={saving}
+                disabled={saving || !parsedTax.ok}
                 onClick={handleSave}
               >
                 {saving ? "儲存中⋯" : "儲存稅金設定"}
