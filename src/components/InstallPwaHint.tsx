@@ -1,5 +1,10 @@
 // 模組 7(排班與休假管理)§6.5:安裝提示元件。
 // 邏輯(純函式抽到檔案底部,方便 Vitest 測試,不用整個渲染這個元件):
+// 0. 🔴 SPECS-INDEX #862(2026-09-30 使用者裁決 A):**只在手機顯示,電腦完全不跳。**
+//    原本的問題:`beforeinstallprompt` **桌面版 Chrome 也會觸發**(Chrome 桌面支援把 PWA 安裝成
+//    獨立視窗),所以這條「安裝秒約 App,以後更快打開」在電腦上也會跳出來。使用者用電腦是開網頁
+//    在用,不需要裝 App,提示條只是佔住畫面底部。判斷邏輯是 src/lib/deviceDetection.ts 的
+//    isMobileDevice(純函式,有單元測試)。
 // 1. 監聽 beforeinstallprompt 事件(Android/Chrome 等支援的瀏覽器會觸發),觸發後顯示提示條
 //    +「安裝」按鈕,點擊呼叫存下來的 prompt event 觸發瀏覽器原生安裝流程。
 // 2. 沒有觸發 beforeinstallprompt、且 User Agent 判斷是 iOS Safari 時,顯示不同文案的提示條
@@ -17,6 +22,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { isMobileDevice } from "@/lib/deviceDetection";
 import {
   BOTTOM_LAYER_HINT,
   BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR,
@@ -35,6 +41,9 @@ interface BeforeInstallPromptEvent extends Event {
 export default function InstallPwaHint() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isIosSafari, setIsIosSafari] = useState(false);
+  // #862:一律從 false 起跳(= 先不顯示)。UA/觸控點數只有掛載之後才讀得到,預設 false 代表
+  // 「還不確定就不要跳」,不會在電腦上先閃一下提示條再消失。
+  const [isMobile, setIsMobile] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [dismissed, setDismissed] = useState(true);
   // 畫面上同時有動作列(目前是商家設定頁的「尚未儲存變更」提示列)時,這條提示往上讓開。
@@ -43,6 +52,14 @@ export default function InstallPwaHint() {
   useEffect(() => {
     setIsStandalone(isRunningStandalone());
     setIsIosSafari(detectIosSafari(navigator.userAgent));
+    // #862:navigator.maxTouchPoints 一起帶進去 —— iPadOS 13 以後的 Safari 預設用「桌面版」
+    // UA(字串裡是 Macintosh,沒有 iPad),只靠 UA 會把 iPad 判成電腦。見 isMobileDevice 說明。
+    setIsMobile(
+      isMobileDevice({
+        userAgent: navigator.userAgent,
+        maxTouchPoints: navigator.maxTouchPoints ?? 0,
+      }),
+    );
     setDismissed(isRecentlyDismissed(readDismissedAt(), Date.now()));
 
     function handleBeforeInstallPrompt(e: Event) {
@@ -71,6 +88,8 @@ export default function InstallPwaHint() {
     setDeferredPrompt(null);
   }
 
+  // #862:電腦一律不跳。放在最前面 —— 不管 beforeinstallprompt 有沒有觸發都不顯示。
+  if (!isMobile) return null;
   if (isStandalone || dismissed) return null;
   if (!deferredPrompt && !isIosSafari) return null;
 
