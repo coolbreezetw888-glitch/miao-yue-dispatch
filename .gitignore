@@ -36,9 +36,19 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
-# Claude Code 的本機設定、skills 與 git worktree 暫存副本(.claude/worktrees/ 底下每一份
-# 都是一整套原始碼複本,不該進版控,也不該被 lint/format 掃到,見 eslint.config.js 的 ignores)
-.claude/
+# Claude Code 的本機設定與 git worktree 暫存副本(.claude/worktrees/ 底下每一份都是一整套
+# 原始碼複本,不該進版控,也不該被 lint/format 掃到,見 eslint.config.js 的 ignores)。
+#
+# 🔴 2026-09-30 使用者裁決:**只有 .claude/skills/ 要進版控**,其餘照舊忽略。
+#    理由:skills 裡累積的是使用者幾十次 UI/流程裁決的結果,原本只存在他那台電腦上、
+#    沒有任何備份,電腦壞掉就全沒了。納入版控等於同時有備份與變更歷史。
+# ⚠️ 寫法一定是 `.claude/*` 而不是 `.claude/`:git 的規則是「父目錄被排除時,
+#    底下的檔案就無法用 ! 重新加回來」,寫 `.claude/` 會讓下面那行 ! 完全失效。
+# ⚠️ 這個 repo 是 **Public** ⇒ 放進 .claude/skills/ 的東西等於對全世界公開。
+#    新增 skill 前一定要掃過:不可以有金鑰 / token / email / 帳密,
+#    也不可以寫「我們哪裡有漏洞」這類給攻擊者看的資訊(那種放 .project/,那個資料夾不上 git)。
+.claude/*
+!.claude/skills/
 
 # Editor directories and files
 .vscode/*
