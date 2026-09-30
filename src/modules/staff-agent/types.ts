@@ -99,7 +99,17 @@ export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
   {
     key: "show_member_info",
     label: "顯示會員資料",
-    description: "開啟後,這位服務人員可以看到預約客戶的會員資料。",
+    // 🔴 SPECS-INDEX #883:原本只寫「可以看到預約客戶的會員資料」,沒說「會員資料」到底包含什麼 ——
+    // 跟 #879 / #882 是完全同一類的「說明範圍比實際小」,而且這裡藏的是**紅利點數餘額**。
+    // 查證來源:`get_my_booking_schedule`(20260930010100_req851_*.sql L95-103)三個會員欄位
+    // is_member / member_name / member_points_balance 一律包在
+    // `case when v_show_member_info … else null end` 裡,而 v_show_member_info 就是這個欄位。
+    // 📌 那支函式**同時**先檢查 `has_own_staff_permission(staff_calendar_view)`(同檔 L146 的
+    //    comment),所以會員資料是「兩個開關都開才看得到」,這個前提也要寫出來,否則管理員會以為
+    //    只開這一項就有用。這個開關目前**只影響這支函式**(全 src 與 migrations 都查過),
+    //    也就是只影響服務人員自己的行事曆,不影響商家端任何畫面。
+    description:
+      "開啟後,這位服務人員在自己的行事曆點開預約明細時,可以看到這位客戶是不是會員、會員姓名,以及他目前的紅利點數餘額。這一項要搭配「行事曆檢視」自助權限一起開才看得到,任何一個是關的,會員資料就不會出現。",
     type: "boolean",
   },
   {

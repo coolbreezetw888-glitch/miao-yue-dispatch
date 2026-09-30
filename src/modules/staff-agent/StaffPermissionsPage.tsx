@@ -6,7 +6,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { LoadingSkeleton } from "@/components/patterns";
+import { AlertNote, LoadingSkeleton } from "@/components/patterns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 
@@ -65,11 +65,31 @@ function StaffPermissionsInner() {
       <Card>
         <CardHeader>
           <CardTitle>自助功能區塊</CardTitle>
+          {/* 🔴 SPECS-INDEX #879 ①:原本寫「只影響這位服務人員自己能不能看到/操作自己的資料」是錯的 ——
+              「行事曆檢視」開放的預約明細裡有**客戶**的姓名、電話、地址、備註,那不是「自己的資料」。
+              舊寫法會讓管理員低估這個開關的份量,所以改成明講客戶個資會一起被看到。 */}
           <CardDescription>
-            這四項只影響這位服務人員自己能不能看到/操作自己的資料,不涉及其他任何商家層級的敏感操作。
+            這四項決定這位服務人員登入服務人員端後能看到/操作哪些內容,不涉及商家層級的設定。
+            其中「行事曆檢視」開放的不只是他自己的班表 ——
+            預約明細裡會一併顯示客戶的姓名、電話、地址與備註,開啟前請先確認這位服務人員可以接觸客戶個資。
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* 🔴 SPECS-INDEX #877(使用者裁決 B):四筆權限紀錄是服務人員「第一次登入成功」那一刻才由
+              seed_default_staff_permissions 建立,而且一律建成「開」;但下面的 Switch 是
+              `grantedMap.get(key) ?? false`,查不到紀錄就顯示「關」。
+              ⇒ 還沒完成登入的人,這頁顯示的「四項全關」是假的。
+              依 ui-overlay-patterns 二之三「現在的狀態跟使用者以為的不一樣」⇒ 用常駐 `!`(AlertNote),
+              **不可以**收進要點開的 `?`。
+              📌 刻意不改 `?? false` —— 查不到紀錄就當沒權限是安全的方向,改成「沒紀錄當成開」會讓前端
+                 在資料異常時往寬鬆的方向猜,方向錯誤(#877 備註)。 */}
+          {staff && staff.login_status !== "active" ? (
+            <AlertNote>
+              這位服務人員還沒完成登入,
+              <strong className="font-bold">四項權限會在他第一次登入時預設全部開啟</strong>
+              ;現在顯示的關閉狀態不代表他登入後會是關的。等他完成登入後再回來這頁調整,才會是實際生效的設定。
+            </AlertNote>
+          ) : null}
           {isLoading ? (
             /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
             <LoadingSkeleton variant="lines" rows={4} />
