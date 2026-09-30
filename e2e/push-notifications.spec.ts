@@ -206,6 +206,21 @@ async function subscribeThisDevice(page: import("@playwright/test").Page): Promi
   await expect(page.getByTestId("push-test-section")).toBeVisible({ timeout: LOAD_TIMEOUT });
 }
 
+/**
+ * SPECS-INDEX #868:「要收哪幾種通知」這一段從 2026-09-30 起**預設是收合的**
+ * (展開後的四個事件開關會把整張卡撐得很長,把底下的「已開通裝置」擠出畫面)。
+ * 所以任何要驗事件開關的測試,都得先點一下標題那顆按鈕把它展開。
+ * ⚠️ 這個 helper 是**冪等**的:已經展開就不再點(不然會把它關回去)。
+ */
+async function expandPushEventSection(page: import("@playwright/test").Page): Promise<void> {
+  const toggle = page.getByTestId("push-event-section-toggle");
+  await expect(toggle).toBeVisible({ timeout: LOAD_TIMEOUT });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+}
+
 test("推播通知設定頁(§7.9):管理員切換開關並編輯文案後正確儲存,重新整理後仍然生效", async ({
   page,
 }) => {
@@ -327,6 +342,9 @@ test("事件開關(§7.4/裁決 Q7):服務人員開啟通知後出現 4 個開�
   await page.goto("/app");
   await expect(page.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
+  // #868:這一段預設收合,要先展開才看得到裡面的內容。
+  await expandPushEventSection(page);
+
   // 還沒開通任何裝置時,只給一句說明,不顯示開關清單。
   await expect(page.getByText("先開啟通知,才能選擇要收哪幾種。")).toBeVisible({
     timeout: LOAD_TIMEOUT,
@@ -364,6 +382,8 @@ test("事件開關(§4.2 第 4 點):商家總開關關閉的事件要停用並�
 
   await page.goto("/app");
   await expect(page.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // #868:這一段預設收合,要先展開才看得到開關清單。
+  await expandPushEventSection(page);
   await expect(page.getByTestId("push-event-toggle-list")).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   const createdRow = page.getByTestId("push-event-toggle-booking_created");
@@ -375,6 +395,8 @@ test("事件開關(§4.2 第 4 點):商家總開關關閉的事件要停用並�
   // 商家管理員把總開關打開之後,同一列就可以切換了。
   await setMerchantPushEventEnabled(fixture, "booking_created", true);
   await page.reload();
+  // 重新整理之後收合狀態會回到預設(收合),所以要再展開一次。
+  await expandPushEventSection(page);
   await expect(page.getByTestId("push-event-toggle-list")).toBeVisible({ timeout: LOAD_TIMEOUT });
   const reloadedRow = page.getByTestId("push-event-toggle-booking_created");
   await expect(reloadedRow.getByText("商家尚未開啟這個事件的推播通知")).toHaveCount(0);
@@ -414,6 +436,8 @@ test("事件開關(§7.4 第 6 點):切換一個開關之後重新整理仍然�
   await setMerchantPushEventEnabled(fixture, "booking_created", true);
 
   await page.goto("/app");
+  // #868:這一段預設收合,要先展開才點得到開關。
+  await expandPushEventSection(page);
   await expect(page.getByTestId("push-event-toggle-list")).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   const toggle = page.getByTestId("push-event-toggle-booking_created").getByRole("switch");
@@ -422,6 +446,8 @@ test("事件開關(§7.4 第 6 點):切換一個開關之後重新整理仍然�
   await expect(toggle).toHaveAttribute("data-state", "unchecked");
 
   await page.reload();
+  // 重新整理之後收合狀態會回到預設(收合),所以要再展開一次。
+  await expandPushEventSection(page);
   await expect(page.getByTestId("push-event-toggle-list")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(
     page.getByTestId("push-event-toggle-booking_created").getByRole("switch"),

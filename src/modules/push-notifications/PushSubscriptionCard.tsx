@@ -24,8 +24,17 @@
 //
 // **只動外觀,不動行為**:subscribe / unsubscribe / removeDevice / 測試推播的流程與判斷、
 // 三種不可用情境的判斷順序、data-testid 全部照舊。
+//
+// SPECS-INDEX #868(2026-09-30 使用者回報,商家端 + 服務人員端合併成一條):
+//   「要收哪幾種通知」整段改成**可收合、預設收合**。展開後的四個事件開關讓整張卡變得很長,
+//   把底下的「已開通裝置」擠出畫面;而事件開關是設定一次就不太會再動的東西。
+//   🔴 這張卡是**兩端共用**的(商家端 ManagePage 經 MyPushSubscriptionCard 包一層、
+//      服務人員端 HomePage 直接用)⇒ 改這一處兩端同時生效,不要另外去改 HomePage / ManagePage。
+//   PushEventToggleList 的行為、props、data-testid 一個字都沒動,只是外面多包一層收合殼。
+//   裁決 C:**訂閱成功的那一刻**自動展開一次(只有這一個時機),之後進頁面仍然預設收合。
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { AlertNote, StatusTag } from "@/components/patterns";
@@ -83,6 +92,15 @@ export function PushSubscriptionCard({
 
   const [testState, setTestState] = useState<PushTestState>("idle");
   const [isTesting, setIsTesting] = useState(false);
+  // SPECS-INDEX #868:「要收哪幾種通知」預設**收合**。展開後的四個事件開關讓整張卡變得很長,
+  // 把「已開通裝置」等其他區塊擠到畫面外 —— 而事件開關是「設定一次就不太會再動」的東西,
+  // 不需要每次打開頁面都佔掉一整屏。
+  // 唯一的例外是 #868 裁決 C:訂閱成功的那一刻自動展開一次(見 handleSubscribe())。
+  const [isEventSectionOpen, setIsEventSectionOpen] = useState(false);
+  // 🔴 收合區塊的 id 用 useId() 產生,**不可以寫死字串**:這張卡是三種角色共用的元件,
+  // 同一頁有可能出現兩張(一個人同時是客服又是服務人員)⇒ 寫死會撞出重複的 DOM id,
+  // aria-controls 就會指到另一張卡的區塊,螢幕閱讀器讀錯東西。
+  const eventSectionBodyId = useId();
   const timerRef = useRef<number | null>(null);
   const pollRef = useRef<number | null>(null);
 
@@ -178,6 +196,13 @@ export function PushSubscriptionCard({
       if (subscribed) {
         // §7.5 第 4 點:訂閱結果與測試結果是兩件事,兩行字,不要合成一句。
         toast.success("已開啟這台裝置的通知");
+        // SPECS-INDEX #868 裁決 C:**只有「這台裝置訂閱成功」的這一刻**才自動把「要收哪幾種通知」
+        // 展開一次 —— 剛按完「開啟通知」的人下一步幾乎一定是想選要收哪幾種,這是順著他的動作走。
+        // 🔴 這不違背 #868 的「預設收合」:「預設」指的是**進頁面時**的狀態,那一點沒有變
+        //    (重新整理 / 重新掛載都還是收合)。
+        // 🔴 不要改成「有 subscriptions 就展開」那種寫法 —— 那等於重新整理後也是展開,就真的
+        //    違背預設收合了。也不要在 unsubscribe / removeDevice / 測試推播 / 掛載時展開。
+        setIsEventSectionOpen(true);
         // §7.5 第 1 點:只測「剛剛這一台」,不要把使用者其他裝置也吵醒。
         void runTestPush(endpoint);
         return;
@@ -318,19 +343,50 @@ export function PushSubscriptionCard({
           </div>
         ) : null}
 
-        {/* §7.4:事件開關清單。還沒開通任何裝置時不顯示清單,只給一句說明。 */}
+        {/* §7.4:事件開關清單。還沒開通任何裝置時不顯示清單,只給一句說明。
+            SPECS-INDEX #868:整段做成可收合、**預設收合**,標題那一行本身就是展開 / 收合的觸發區。
+            🔴 觸發區是真正的 <button type="button">(Tab 聚焦得到、Enter / Space 可按),
+               不是掛了 onClick 的 <p> —— 那種鍵盤按不到。 */}
         <div className="flex flex-col gap-2 border-t border-border pt-3">
-          <p className={SECTION_LABEL_CLASS}>要收哪幾種通知</p>
-          {subscriptions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">先開啟通知,才能選擇要收哪幾種。</p>
-          ) : (
-            <PushEventToggleList
-              merchantId={merchantId}
-              targetType={targetType}
-              targetId={targetId}
-              isMerchantAdmin={targetType === "admin"}
-            />
-          )}
+          <button
+            type="button"
+            aria-expanded={isEventSectionOpen}
+            aria-controls={eventSectionBodyId}
+            // 🔴 data-testid 一定寫死(e2e 的 expandPushEventSection 與單元測試都靠它抓這顆按鈕),
+            //    只有 aria-controls / id 那一組才用 useId() 產生 —— 兩者用途不同,不要混。
+            data-testid="push-event-section-toggle"
+            onClick={() => setIsEventSectionOpen((open) => !open)}
+            className="-mx-1 flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          >
+            <span className={SECTION_LABEL_CLASS}>要收哪幾種通知</span>
+            {/* 收合狀態要看得出來,而且**不只靠箭頭方向** —— 旁邊直接寫「展開 / 收合」,
+                箭頭只是輔助(展開後轉 180°)。 */}
+            <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+              {isEventSectionOpen ? "收合" : "展開"}
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-4 w-4 transition-transform ${isEventSectionOpen ? "rotate-180" : ""}`}
+              />
+            </span>
+          </button>
+          {/* 這層殼永遠存在,aria-controls 才永遠指得到東西;收合時裡面不 render,
+              PushEventToggleList 也就不會為了一個看不到的區塊去查資料。
+              `empty:hidden`:收合時這層是空的,父層的 `gap-2` 會白白多吃一個 8px 的空隙,
+              整個藏起來就不佔 flex gap。🔴 不要為了這個把這層殼拿掉(aria-controls 會指空)。 */}
+          <div id={eventSectionBodyId} className="flex flex-col gap-2 empty:hidden">
+            {isEventSectionOpen ? (
+              subscriptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">先開啟通知,才能選擇要收哪幾種。</p>
+              ) : (
+                <PushEventToggleList
+                  merchantId={merchantId}
+                  targetType={targetType}
+                  targetId={targetId}
+                  isMerchantAdmin={targetType === "admin"}
+                />
+              )
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 border-t border-border pt-3">
