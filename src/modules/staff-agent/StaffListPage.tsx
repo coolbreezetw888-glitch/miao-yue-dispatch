@@ -282,21 +282,38 @@ function AvailabilityWindowsEditor({
         <FormPlaceholder>尚未設定任何可預約時段</FormPlaceholder>
       ) : (
         <ul className="flex flex-col gap-2">
-          {windows.map((w) => (
-            <li key={w.id}>
-              <ListCard
-                title={
-                  <span className="text-sm font-medium tabular-nums">
-                    星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
-                    {w.end_time.slice(0, 5)}
-                  </span>
-                }
-                menuItems={[
-                  { label: "刪除", danger: true, onSelect: () => void handleRemove(w.id) },
-                ]}
-              />
-            </li>
-          ))}
+          {windows.map((w) => {
+            const rangeLabel = `星期${DAY_OF_WEEK_LABELS[w.day_of_week]} ${w.start_time.slice(
+              0,
+              5,
+            )} - ${w.end_time.slice(0, 5)}`;
+            return (
+              <li key={w.id}>
+                <ListCard
+                  title={<span className="text-sm font-medium tabular-nums">{rangeLabel}</span>}
+                  // SPECS-INDEX #870(2026-09-30 使用者回報):⋯ 選單裡唯一的項目就是「刪除」,
+                  // 要先點開才看得到,多一個步驟反而更不方便 ⇒ 改用 ListCard 既有的 primaryAction
+                  // 槽位直接放一顆刪除鈕(ListCard 元件本身不動)。
+                  // 🔴 不標紅(variant="neutral"):一組時段只是 staff_availability_windows 的一列,
+                  //    刪錯下面馬上就能重新新增,沒有連帶資料 ⇒ 依 ui-overlay-patterns 的「可逆的動作
+                  //    不標紅」,紅色要留給真正不可逆的刪除。
+                  // aria-label 帶上是哪一組時段 —— 同一份清單會有好幾顆「刪除」,只寫「刪除」的話
+                  // 螢幕閱讀器使用者聽不出刪的是哪一組。
+                  primaryAction={
+                    <Button
+                      type="button"
+                      variant="neutral"
+                      size="card"
+                      aria-label={`刪除${rangeLabel}`}
+                      onClick={() => void handleRemove(w.id)}
+                    >
+                      刪除
+                    </Button>
+                  }
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
 
