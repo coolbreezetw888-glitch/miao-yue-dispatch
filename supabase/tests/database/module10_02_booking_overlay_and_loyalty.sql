@@ -121,7 +121,11 @@ select is(
   '3.6:create_booking 成功連結會員,member_id/member_name_snapshot 正確寫入快照'
 );
 
--- 不帶 p_member_id 的既有呼叫端行為不變:兩個欄位都是 null。
+-- 🔴 2026-09-30 SPECS-INDEX #912(使用者需求,改變了這裡原本要驗的東西):
+--    「不帶 p_member_id 建單」以前產生**訪客訂單**(member_id / member_name_snapshot 都是 null),
+--    現在 create_booking 會**自動建立一筆會員並連結**(這支電話 0955030002 在這個商家查無會員)。
+--    所以下面那條斷言從「兩個欄位都是 null」改成「自動建立並連結」。
+--    ⚠️ 原本那句描述「既有呼叫端行為完全不變」在改完之後是錯的,一併刪掉。
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
   p_payment_method_id => 'eb000000-0000-4000-8000-000000000061',
@@ -132,10 +136,20 @@ select id from create_booking(
   p_customer_phone => '0955030002'
 ) \gset guest_booking_
 
-select is(
-  (select row(member_id, member_name_snapshot) from bookings where id = :'guest_booking_id'::uuid)::text,
-  row(null, null)::text,
-  '3.6:不帶 p_member_id 的既有呼叫端行為完全不變,member_id/member_name_snapshot 皆為 null'
+select ok(
+  (select b.member_id is not null
+            and b.member_name_snapshot = '訪客訂單測試'
+            and b.member_auto_created = true
+     from bookings b where b.id = :'guest_booking_id'::uuid)
+  and exists (
+    select 1 from members m
+    where m.id = (select member_id from bookings where id = :'guest_booking_id'::uuid)
+      and m.merchant_id = 'eb000000-0000-4000-8000-000000000021'
+      and m.status = 'active'
+      and private.normalize_phone(m.phone) = '0955030002'
+      and m.identity_verified_at is null
+  ),
+  '3.6/#912/#911:不帶 p_member_id 且電話查無會員時,自動建立一筆會員並連結(member_auto_created=true、member_name_snapshot 帶出姓名、新會員屬於本商家且是「尚未驗證」)'
 );
 
 -- 跨商家的會員被擋下。
@@ -371,6 +385,18 @@ select id from create_booking(
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
 ) \gset real_guest_booking_
+
+-- 🔴 2026-09-30 SPECS-INDEX #912:create_booking 現在會自動建立/連結會員,**已經沒有辦法用
+--    create_booking 造出一筆真正的訪客訂單**。但「member_id 為 null 的訂單不發點數」這條規則
+--    (compute_member_loyalty_points 開頭那個 `if v_member_id is null then return`)仍然必須有人守,
+--    否則哪天有人把它拿掉不會有任何測試變紅 —— 例如 update_booking 把會員清空、或
+--    import_historical_bookings_batch 匯入沒有會員的歷史訂單,都還是會產生 member_id 為 null 的訂單。
+--    ⇒ 這裡以 postgres 身分(繞過 RLS)把剛剛自動連結上的會員清掉,還原成真正的訪客訂單,
+--      再 confirm/complete,原本要驗的東西就完整保留下來。
+select pg_temp.test_clear_auth();
+update bookings set member_id = null, member_name_snapshot = null
+where id = :'real_guest_booking_id'::uuid;
+select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 
 select confirm_booking(:'real_guest_booking_id'::uuid);
 select complete_booking(:'real_guest_booking_id'::uuid);

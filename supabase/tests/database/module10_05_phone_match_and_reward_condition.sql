@@ -67,8 +67,14 @@ values ('ee000000-0000-4000-8000-000000000021', 100, 0, 0);
 
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001');
 
-select id from create_member('ee000000-0000-4000-8000-000000000021', '同電話會員一', '0988000001') \gset phone_member1_
-select id from create_member('ee000000-0000-4000-8000-000000000021', '同電話會員二', '(09) 88-000-001') \gset phone_member2_
+-- 🔴 2026-09-30 SPECS-INDEX #931(使用者裁決,推翻 #614 當初「電話不當唯一鍵」的前提):
+--    **同一間商家底下,一支電話只能有一位 active 會員。**
+--    這裡原本刻意建兩位同電話(0988000001 / (09) 88-000-001)的會員來驗「家庭成員共用電話」,
+--    現在 create_member 會直接把第二位擋下來(而且是 \gset,psql 會當場噴錯、整檔崩),
+--    所以第二位改成**另一支電話**。「同一支電話會被擋下來」這件事本身改由
+--    module10_09_auto_member_on_booking.sql 的 E1/E2 斷言(含「訊息要指名是誰」)。
+select id from create_member('ee000000-0000-4000-8000-000000000021', '電話比對會員一', '0988000001') \gset phone_member1_
+select id from create_member('ee000000-0000-4000-8000-000000000021', '電話比對會員二', '(09) 88-000-002') \gset phone_member2_
 
 select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000002');
@@ -76,14 +82,15 @@ select id from create_member('ee000000-0000-4000-8000-000000000022', 'B店同電
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ① §10.2.1:get_members_by_phone——電話不當唯一鍵,正規化後相同電話回傳同商家所有客戶。
+-- ① §10.2.1:get_members_by_phone——只在本商家內比對,回傳這支電話的既有客戶。
+--    🔴 #931(2026-09-30)之後「同一支電話多位客戶」不再成立,所以這裡的期望值從 2 改成 1。
 -- =========================================================================
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000003');
 
 select is(
   jsonb_array_length(get_members_by_phone('ee000000-0000-4000-8000-000000000021', '0988000001')),
-  2,
-  '#614①:同一支電話(不同格式,正規化後相同)在同商家底下有 2 位既有客戶,全部列出'
+  1,
+  '#614①/#931:一支電話在同商家只會對到 1 位既有客戶(#931 之後不可能有第二位)'
 );
 
 select ok(
@@ -108,7 +115,7 @@ select is(
 
 -- 建單本身的權限邊界:只有 orders 權限(沒有 members 權限)的客服一樣能查詢。
 select ok(
-  jsonb_array_length(get_members_by_phone('ee000000-0000-4000-8000-000000000021', '0988000001')) = 2,
+  jsonb_array_length(get_members_by_phone('ee000000-0000-4000-8000-000000000021', '0988000001')) = 1,
   '規則 2.10 精神:只有 orders 權限、沒有 members 權限的客服一樣可以呼叫 get_members_by_phone(建單本身的權限邊界)'
 );
 
@@ -137,13 +144,15 @@ select ok(
   '#614:有連結訂單的會員,last_booking_date 正確帶出(不限訂單狀態)'
 );
 
+-- #931 之後「同電話的另一位會員」不存在了,所以這一條改成查**另一支電話**的那位會員
+-- (原本要驗的東西沒變:沒有任何訂單的會員 last_booking_date 必須是 null)。
 select ok(
   exists (
-    select 1 from jsonb_array_elements(get_members_by_phone('ee000000-0000-4000-8000-000000000021', '0988000001')) elem
+    select 1 from jsonb_array_elements(get_members_by_phone('ee000000-0000-4000-8000-000000000021', '0988000002')) elem
     where (elem ->> 'member_id')::uuid = :'phone_member2_id'::uuid
       and (elem ->> 'last_booking_date') is null
   ),
-  '#614:沒有任何訂單的同電話會員,last_booking_date 為 null,查無訂單則為 null'
+  '#614:沒有任何訂單的會員,last_booking_date 為 null,查無訂單則為 null'
 );
 
 select pg_temp.test_clear_auth();

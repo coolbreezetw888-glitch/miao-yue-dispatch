@@ -3,6 +3,23 @@
 -- §11.5(查詢某時間點狀態,含估算邏輯)、§11.7/§11.8(既有函式改用歷史資料,含「調整前後金額
 -- 各自正確」「查詢區間橫跨機制上線前用估算」「機制上線後才加入的人查入職前月份誠實顯示不存在」
 -- 三種核心情境)。
+-- 🔴 2026-10-01 修掉一整類「跟執行時間有關」的不穩定測試(只改**月份的計算基準**,
+--    沒有改任何期望數字,也沒有改 plan(N))。
+--
+-- 症狀:同一份程式碼,台北時間跨過某個月的午夜之前跑是綠的、之後跑就紅。
+-- 根因:本機測試資料庫的 TimeZone = UTC,所以測試裡裸寫的 now() / clock_timestamp() /
+--       current_date 取到的是 **UTC** 的年月;但帳務/薪資報表函式一律是用 **Asia/Taipei**
+--       切月的(v_month_start::timestamp at time zone 'Asia/Taipei',
+--       見 20260924040000_billing_summary_completion_time_basis.sql:502-503 與
+--       20260925020000_staff_commission_summary_completion_time_basis.sql:121-122)。
+--       而資料這一側是 complete_booking 寫的 completed_at = now()。
+-- ⇒ 每個月 1 號的台北 00:00–08:00(= UTC 上個月最後一天 16:00–24:00)這 8 小時,
+--   台北已經進新月、UTC 還在舊月:訂單被報表算進「新月」,測試卻去查「舊月」⇒ 撈到 0 ⇒ 紅。
+--   2026-10-01 台北 00:04 實測到這個現象(午夜前 PASS、午夜後 FAIL)。
+-- 修法:凡是要拿年/月/日去問報表函式,一律先 `at time zone 'Asia/Taipei'` 再 extract/date_trunc,
+--   跟報表自己的切月基準對齊。本檔案原本就有一部分是這樣寫的(那些是對的),這次把漏掉的補齊。
+-- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
+--   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
 
 -- 49 → 51:2026-09-24 使用者裁決推翻了 §11.9「per_staff_breakdown 維持目前在職名單」那條決策
@@ -574,8 +591,8 @@ select ok(
     select 1 from jsonb_array_elements(
       get_merchant_billing_summary(
         'e8020000-0000-4000-8000-000000000022',
-        extract(year from clock_timestamp())::int,
-        extract(month from clock_timestamp())::int
+        extract(year from clock_timestamp() at time zone 'Asia/Taipei')::int,
+        extract(month from clock_timestamp() at time zone 'Asia/Taipei')::int
       ) -> 'per_staff_breakdown'
     ) as elem
     where elem ->> 'staff_id' = 'e8020000-0000-4000-8000-000000000038'

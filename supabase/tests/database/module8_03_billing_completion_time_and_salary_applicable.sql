@@ -119,6 +119,27 @@ set effective_from = '2025-01-01 00:00:00+08'::timestamptz,
     monthly_base_salary = 20000
 where staff_id = 'e8030000-0000-4000-8000-000000000043' and effective_to is null;
 
+-- 🔴 2026-10-01 修掉一個時間炸彈(T1 被漏掉了;只改 fixture,不動任何斷言或期望數字)。
+-- 上面 T2/T3 的薪資歷史起點都被往前推到 2025-01-01,**但 T1(…041)一直沒有** —— 它的區間起點
+-- 是 merchant_staff 的 INSERT 觸發器寫的「測試執行當下」(schema 預設值就是 clock_timestamp(),
+-- 見 20260922150000_req622…:21 與 20260922150100_req623_624… 的 sync 函式)。
+-- 而 per_staff_breakdown 的母體是「該月月底當時 existed 且 status = active」
+-- (private.get_staff_payroll_status_as_of;單月版的 as_of 是該月最後一刻的 Asia/Taipei 時間,
+--  見 20260924040000_billing_summary_completion_time_basis.sql:177-178)。
+-- ⇒ 只要「測試執行當下」晚於 2026-09-30 23:59:59.999999(台北),T1 在查 2026-09 時就會被判定
+--   「當時還不存在」而整個不在名單裡,於是:
+--     ・「T1 在 9 月的 order_count 應為 0」那一條拿到的是 **null 不是 0** → 紅;
+--     ・「9 月人數(3)≠ 10 月人數(2)」那一條變成 2 = 2 → 紅。
+-- ⚠️ 這不是每月 8 小時的浮動,而是**一旦跨過 2026-09 就永久紅**(斷言查的年月是寫死的 2026-09/10)。
+--    2026-10-01 台北 00:04 實測:同一份程式碼在午夜前 PASS、午夜後 FAIL,紅的就是這 2 條。
+-- 📌 module8_04 第 93-104 行已經對它的服務人員做了完全相同的處理,而且註解還寫著「比照 module8_03
+--    的既有做法」—— 但 module8_03 當初只補了 T2/T3,把 T1 漏掉了。這裡補齊,兩檔一致。
+-- 只改 effective_from,不動 compensation_type / status / monthly_base_salary
+-- (T1 是 piece_rate,本來就沒有月薪)。
+update staff_payroll_status_history
+set effective_from = '2025-01-01 00:00:00+08'::timestamptz
+where staff_id = 'e8030000-0000-4000-8000-000000000041' and effective_to is null;
+
 -- T2 的請假:2026-09-10 ~ 2026-09-12(3 天),假別扣款規則 full_day_rate。
 -- 9 月有 30 天 → day_rate = 30000 / 30 = 1000 → 扣款 3 × 1000 = 3000。
 insert into merchant_leave_types (id, merchant_id, name) values

@@ -364,6 +364,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -408,6 +409,7 @@ export type Database = {
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
+          member_auto_created?: boolean
           member_id?: string | null
           member_name_snapshot?: string | null
           merchant_id: string
@@ -452,6 +454,7 @@ export type Database = {
           id?: string
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
+          member_auto_created?: boolean
           member_id?: string | null
           member_name_snapshot?: string | null
           merchant_id?: string
@@ -865,6 +868,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -893,6 +899,9 @@ export type Database = {
           created_by_user_id?: string | null
           email?: string | null
           id?: string
+          identity_first_verified_at?: string | null
+          identity_verified_at?: string | null
+          identity_verified_via?: string | null
           is_blacklisted?: boolean
           last_birthday_bonus_year?: number | null
           line_bound?: boolean
@@ -921,6 +930,9 @@ export type Database = {
           created_by_user_id?: string | null
           email?: string | null
           id?: string
+          identity_first_verified_at?: string | null
+          identity_verified_at?: string | null
+          identity_verified_via?: string | null
           is_blacklisted?: boolean
           last_birthday_bonus_year?: number | null
           line_bound?: boolean
@@ -2662,6 +2674,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -2736,6 +2751,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -2829,6 +2845,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -2890,6 +2907,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -2977,6 +2995,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -3032,6 +3051,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3110,6 +3132,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3586,6 +3611,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3668,6 +3696,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3832,6 +3863,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3869,6 +3903,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean
@@ -3989,6 +4026,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -4042,6 +4080,7 @@ export type Database = {
           id: string
           last_modified_at: string | null
           last_modified_by_user_id: string | null
+          member_auto_created: boolean
           member_id: string | null
           member_name_snapshot: string | null
           merchant_id: string
@@ -4117,6 +4156,9 @@ export type Database = {
           created_by_user_id: string | null
           email: string | null
           id: string
+          identity_first_verified_at: string | null
+          identity_verified_at: string | null
+          identity_verified_via: string | null
           is_blacklisted: boolean
           last_birthday_bonus_year: number | null
           line_bound: boolean

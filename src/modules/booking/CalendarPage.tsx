@@ -99,6 +99,8 @@ import {
   MemberPhoneMatchPanel,
   type SelectedMember,
 } from "@/modules/members/MemberPhoneMatchPanel";
+import { applyCandidatePrefill } from "@/modules/members/memberPhoneMatch";
+import type { MemberPhoneMatchCandidate } from "@/modules/members/types";
 // 模組 15(服務人員推播通知)規則 4.5:訂單內容異動的一句話摘要,由前端在呼叫 update_booking
 // 之前先算好(見下方 handleSubmit),當作參數傳給 updateBooking → dispatchPushNotification。
 import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
@@ -111,6 +113,13 @@ import {
   type BookingServiceItemSelectionInput,
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+import {
+  BOOKING_CREATED_TOAST_DURATION_MS,
+  buildBookingCreatedToast,
+  isSamePhone,
+  type PendingAttachMember,
+  resolveSubmitMemberId,
+} from "./bookingCreatedFeedback";
 import {
   setStaffDayOverride,
   useMerchantBookings,
@@ -419,9 +428,19 @@ export function BookingFormDialog({
   //    漏掉任何一邊,客服只要編輯一次訂單,原本藏起來的備註就自動公開給服務人員了,而且不報錯、
   //    畫面上也看不出來(跟 member 那個既有陷阱同一個形狀,見 api.ts 的 ⚠️ 註解)。
   const [hideNotesFromStaff, setHideNotesFromStaff] = useState(false);
-  // SPECS-INDEX #614(會員與紅利.md §10.2):選填的會員連結,不選就是訪客訂單。編輯模式下用既有的
-  // member_id/member_name_snapshot 帶入初始值,避免正常編輯流程意外清空既有連結(判斷 9)。
+  // 編輯模式專用:用既有的 member_id/member_name_snapshot 帶入初始值,送出時原樣帶回,
+  // 避免正常編輯流程意外清空既有連結(判斷 9)。
+  // 🔴 SPECS-INDEX #915/#936 第二波(規格書 §12.1):新增模式**不再使用**這個狀態 ——
+  //    新增訂單時前端一律不帶 p_member_id,由後端依送出當下的電話自動連結/建立會員;
+  //    面板上點選候選只會把電話/姓名/地址帶進表單(handleApplyCandidate),不會設定這裡。
+  //    所以新增模式下 member 永遠是 null(開啟表單時的 reset 設的),見 resolveSubmitMemberId。
+  //    編輯模式的「補掛」另外存在 pendingAttachMember,也不動這裡(§12.7)。
   const [member, setMember] = useState<SelectedMember | null>(null);
+  // SPECS-INDEX #915 第二波 §12.7 第 2 點(使用者裁決「要保留補掛功能」):編輯一筆**沒有連結會員**
+  // 的訂單時,客服在面板上點選的那位會員 = 儲存時要補掛的會員。連同電話一起記下,因為送出前要確認
+  // 「他的電話 = 表單電話」(防紅利發錯人);客服改電話時 handleCustomerPhoneChange 會即時清掉。
+  // 新增模式、以及已連結會員的編輯單永遠是 null。
+  const [pendingAttachMember, setPendingAttachMember] = useState<PendingAttachMember | null>(null);
   const [saving, setSaving] = useState(false);
 
   // 模組 6(訂單管理)§4.1/4.2:每個已勾選服務項目的數量/單價(字串狀態,方便控制輸入框,
@@ -514,6 +533,7 @@ export function BookingFormDialog({
       // 兩面,不要只做一半** —— 少了它,客服編輯一筆已經藏起來的訂單、完全沒碰那個開關,
       // 送出後旗標就被送成 false,備註靜默公開。
       setHideNotesFromStaff(editingDetail.hide_notes_from_staff);
+      setPendingAttachMember(null);
       setMember(
         editingDetail.member_id && editingDetail.member_name_snapshot
           ? { id: editingDetail.member_id, name: editingDetail.member_name_snapshot }
@@ -574,6 +594,7 @@ export function BookingFormDialog({
       // 跟資料庫 default false 一致。
       setHideNotesFromStaff(false);
       setMember(null);
+      setPendingAttachMember(null);
       setCustomTotalAmountEnabled(false);
       setCustomTotalAmount("");
       setDiscountEnabled(false);
@@ -778,6 +799,47 @@ export function BookingFormDialog({
     });
   }
 
+  // SPECS-INDEX #936(§12.2):點選面板裡的候選會員 ⇒ 電話 / 姓名 /(需要地址的產業才帶)地址
+  // 一次帶進表單,會覆蓋原本打的字(客服主動點選 = 明確意圖),帶入後三個欄位都可以直接改。
+  // 🔴 只有「點選」才帶入:客服自己把電話打完整(面板自然進到狀態 C)時不會呼叫這裡,
+  //    不會吃掉已經打好的姓名/地址。
+  // 新增模式:**不**記任何會員 —— 會員連結由後端依電話決定(§12.1)。
+  // 編輯模式、而且這筆訂單還沒連結會員(§12.7 第 2 點):另外記為「要補掛的會員」。
+  //    後端 update_booking 不依電話比對,所以補掛一定要客服明確點選,狀態 C 不會自動補掛。
+  function handleApplyCandidate(candidate: MemberPhoneMatchCandidate) {
+    const next = applyCandidatePrefill(
+      { customerPhone, customerName, customerAddress },
+      candidate,
+      requiresCustomerAddress,
+    );
+    setCustomerPhone(next.customerPhone);
+    setCustomerName(next.customerName);
+    setCustomerAddress(next.customerAddress);
+    if (isEdit && !member) {
+      // 會員電話萬一是空的,帶入後的表單電話不會等於他的電話 ⇒ 不記(記了送出時也會被擋掉)。
+      setPendingAttachMember(
+        isSamePhone(candidate.phone, next.customerPhone)
+          ? {
+              id: candidate.memberId,
+              name: candidate.name,
+              phone: candidate.phone,
+              isBlacklisted: candidate.isBlacklisted,
+              blacklistReason: candidate.blacklistReason,
+            }
+          : null,
+      );
+    }
+  }
+
+  // §12.7 第 2 點:點選補掛之後客服又改了電話 ⇒ 新電話跟那位會員對不上,當下就取消補掛
+  // (面板的「儲存後會連結到會員」也跟著消失)。不用 useEffect 做,改電話的當下就決定。
+  function handleCustomerPhoneChange(value: string) {
+    setCustomerPhone(value);
+    if (pendingAttachMember && !isSamePhone(pendingAttachMember.phone, value)) {
+      setPendingAttachMember(null);
+    }
+  }
+
   async function handleSubmit() {
     if (!staffId) {
       toast.error("請選擇服務人員");
@@ -878,7 +940,15 @@ export function BookingFormDialog({
         // 編輯模式下這個值是開啟表單時從 editingDetail 帶進來的現值,所以「使用者沒碰開關」
         // 送出的就是原值,不會把藏起來的備註靜默公開。有 Vitest 測試鎖住這條(#857)。
         hideNotesFromStaff,
-        memberId: member?.id ?? null,
+        // 🔴 SPECS-INDEX #915 第二波(§12.1 + §12.7):新增模式一律 null(後端依電話自動連結/建立
+        // 會員);編輯模式:已連結 → 原 id(不讓 update_booking 清掉它);未連結 → 只有「點選補掛、
+        // 而且那位會員的電話等於目前表單電話」才帶他的 id,否則 null。規則與測試見 bookingCreatedFeedback.ts。
+        memberId: resolveSubmitMemberId({
+          isEdit,
+          linkedMember: member,
+          pendingAttachMember,
+          customerPhone,
+        }),
         assistantStaffIds,
         materialCostItemIds,
         customTotalAmountEnabled,
@@ -932,8 +1002,21 @@ export function BookingFormDialog({
         });
         toast.success("已更新預約");
       } else {
-        await createBooking({ merchantId, ...shared });
-        toast.success("已建立預約");
+        const created = await createBooking({ merchantId, ...shared });
+        // SPECS-INDEX #916(§12.3):取代原本的「已建立預約」。用 sonner 的 toast(skill 三之二:
+        // 只是告知結果、不需要回應 ⇒ toast,不是小卡窗;不可以用 Dialog + setTimeout 自己關)。
+        // 會員姓名走 React 文字插值(自動轉義),不用 dangerouslySetInnerHTML(資安 #11)。
+        const feedback = buildBookingCreatedToast(created);
+        toast.success(feedback.title, {
+          description: (
+            <div className="flex flex-col gap-0.5">
+              {feedback.lines.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </div>
+          ),
+          duration: BOOKING_CREATED_TOAST_DURATION_MS,
+        });
       }
       onOpenChange(false);
       onSaved();
@@ -1015,20 +1098,22 @@ export function BookingFormDialog({
                   inputMode="tel"
                   className="tabular-nums"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  onChange={(e) => handleCustomerPhoneChange(e.target.value)}
                 />
               </FormField>
             </div>
-            {/* SPECS-INDEX #614(會員與紅利.md §10.2,取代舊版 §4.4 獨立的「會員(選填)」欄位):
-                電話當查詢索引,不當唯一鍵。輸入客戶電話後,這裡列出這支電話底下這個商家既有的所有
-                客戶,可以連結既有客戶或視為新客戶,歸在既有的 orders 權限底下(規則 2.10),不選
-                就是訪客訂單,對既有建單流程完全沒有強制性影響。 */}
+            {/* SPECS-INDEX #915/#936 第二波(規格書 §12.2):輸入客戶電話後自動顯示的面板。
+                新增模式:沒候選不顯示 / 開頭相符就列出候選(點一下把電話、姓名、地址帶進上方欄位)/
+                電話完全相等就顯示「將連結既有客戶」(黑名單另有常駐 `!`)。會員連結由後端
+                create_booking 依送出當下的電話決定,這裡不指定。
+                編輯模式(§12.7):已連結會員 ⇒ 唯讀一行;沒連結 ⇒ 一樣列候選,點選 = 帶入 + 記為要補掛。 */}
             <MemberPhoneMatchPanel
               merchantId={merchantId}
               phone={customerPhone}
-              customerName={customerName}
-              selectedMember={member}
-              onSelectMember={setMember}
+              mode={isEdit ? "edit" : "create"}
+              linkedMember={member}
+              pendingAttachMember={pendingAttachMember}
+              onApplyCandidate={handleApplyCandidate}
             />
             <FormField label="客戶 Email" htmlFor="booking-customer-email">
               <FieldInput

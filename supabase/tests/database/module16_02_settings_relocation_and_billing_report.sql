@@ -1,5 +1,22 @@
 -- 商家端三項調整規格書 §一(設定搬家權限放寬)、§二 2.9(merchant_staff_service_items 權限
 -- 補強)、§三(店家帳務報表:總營收拆分未稅/稅金、商家總淨利公式修正)— 核心必測。
+-- 🔴 2026-10-01 修掉一整類「跟執行時間有關」的不穩定測試(只改**月份的計算基準**,
+--    沒有改任何期望數字,也沒有改 plan(N))。
+--
+-- 症狀:同一份程式碼,台北時間跨過某個月的午夜之前跑是綠的、之後跑就紅。
+-- 根因:本機測試資料庫的 TimeZone = UTC,所以測試裡裸寫的 now() / clock_timestamp() /
+--       current_date 取到的是 **UTC** 的年月;但帳務/薪資報表函式一律是用 **Asia/Taipei**
+--       切月的(v_month_start::timestamp at time zone 'Asia/Taipei',
+--       見 20260924040000_billing_summary_completion_time_basis.sql:502-503 與
+--       20260925020000_staff_commission_summary_completion_time_basis.sql:121-122)。
+--       而資料這一側是 complete_booking 寫的 completed_at = now()。
+-- ⇒ 每個月 1 號的台北 00:00–08:00(= UTC 上個月最後一天 16:00–24:00)這 8 小時,
+--   台北已經進新月、UTC 還在舊月:訂單被報表算進「新月」,測試卻去查「舊月」⇒ 撈到 0 ⇒ 紅。
+--   2026-10-01 台北 00:04 實測到這個現象(午夜前 PASS、午夜後 FAIL)。
+-- 修法:凡是要拿年/月/日去問報表函式,一律先 `at time zone 'Asia/Taipei'` 再 extract/date_trunc,
+--   跟報表自己的切月基準對齊。本檔案原本就有一部分是這樣寫的(那些是對的),這次把漏掉的補齊。
+-- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
+--   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
 
 select plan(16);
@@ -199,11 +216,41 @@ insert into payment_methods (id, merchant_id, name) values ('d58ebc73-40eb-5a2b-
 
 
 -- 一筆有稅(1000元,10%稅=100元,final=1100)、一筆無稅(500元,final=500)。
+--
+-- 🔴 這兩筆 fixture 訂單踩過**兩個**不同的「跟執行時間有關」的不穩定測試。兩個都已經修好了,
+--    但它們是**兩件事**、修的地方也不同 —— 分開寫清楚,免得後人以為只有一個問題。
+--    (兩次都沒有動任何斷言,16 條期望數字一個字都沒改,plan(16) 也沒改。)
+--
+--    ① 【跨午夜】2026-09-30 修。原本寫 `p_start_at => now()` 與 `now() + interval '1 hour'`。
+--       服務項目工時 30 分鐘,而 private.check_staff_booking_slot 有一條
+--       「date(start_at at time zone 'Asia/Taipei') <> date(end_at at time zone 'Asia/Taipei')
+--         ⇒ raise 預約時段跨到隔天」的規則。
+--       ⇒ 這套測試只要在**台北 23:30 之後**跑,now() + 30 分鐘就跨過午夜、建單直接失敗,
+--         而且因為是 \gset,psql 當場中止 ⇒ 整檔變成「planned 16 / ran 12」。
+--         2026-09-30 深夜(台北 23:48)實際踩到:這一檔是全套 87 檔裡唯一的紅燈。
+--       ⇒ **修在下面這兩行 fixture**:固定綁成「now() 當天的台北 10:00 / 11:00」,永遠落在同一個
+--         台北日期內 ⇒ 不可能再跨午夜。(complete_booking 沒有「不能完成未來訂單」的限制,
+--         只檢查 status = 'accepted',所以清晨跑也不會壞。)
+--
+--    ② 【月份基準:UTC 月 vs 台北月】2026-10-01 修。①修好之後**還是紅** —— 而且原因完全不同:
+--       下面 §3.1/§3.2 那四個查詢原本裸寫 `extract(month from now())`,本機測試庫的 TimeZone
+--       是 UTC ⇒ 拿到的是 **UTC 月**;但帳務報表函式是用 **Asia/Taipei** 切月的,資料這一側
+--       又是 complete_booking 寫的 completed_at = now()。
+--       ⇒ 每個月 1 號的**台北 00:00–08:00**這 8 小時,台北已進新月、UTC 還在舊月:訂單被報表
+--         算進新月、測試卻去查舊月 ⇒ 撈到 0 ⇒ 紅。2026-10-01 台北 00:04 實測到(午夜前 PASS、
+--         午夜後 FAIL)。
+--       ⇒ **修在下面那四個 get_merchant_billing_summary 的呼叫**:年/月一律先
+--         `at time zone 'Asia/Taipei'` 再 extract,跟報表自己的切月基準對齊。
+--         這不是 fixture 的問題,所以①那次改 fixture 完全沒有、也不可能修到它。
+--       📌 同一類問題在本檔案開頭那段說明裡有完整的根因紀錄(還有其他檔案也一起修了)。
+--
+--    ⚠️ 給後人的重點:這兩筆訂單的時間是**台北當天 10:00 / 11:00**,所以它落在哪一個月,
+--       要用**台北**的月份去問報表,不能用 now() 的裸月份。①和②都修好了,現在不管幾點跑都綠。
 select id from create_booking(
   p_merchant_id => 'ed000000-0000-4000-8000-000000000021',
   p_staff_id => 'ed000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ed000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => now(),
+  p_start_at => (((now() at time zone 'Asia/Taipei')::date + time '10:00') at time zone 'Asia/Taipei'),
   p_customer_name => '含稅訂單測試客戶',
   p_customer_phone => '0966020001',
   p_tax_enabled => true,
@@ -218,7 +265,8 @@ select id from create_booking(
   p_merchant_id => 'ed000000-0000-4000-8000-000000000021',
   p_staff_id => 'ed000000-0000-4000-8000-000000000041',
   p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ed000000-0000-4000-8000-000000000031','quantity',1,'unit_price',500)),
-  p_start_at => now() + interval '1 hour',
+  -- 同上,固定成當天台北時間 11:00(跟 10:00 那筆相隔 1 小時,兩筆 30 分鐘的時段不會重疊)。
+  p_start_at => (((now() at time zone 'Asia/Taipei')::date + time '11:00') at time zone 'Asia/Taipei'),
   p_customer_name => '無稅訂單測試客戶',
   p_customer_phone => '0966020002'
 , p_payment_method_id => 'd58ebc73-40eb-5a2b-b8ca-3151a781e8bf') \gset no_tax_booking_
@@ -227,20 +275,20 @@ select confirm_booking(:'no_tax_booking_id'::uuid);
 select complete_booking(:'no_tax_booking_id'::uuid);
 
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now())::int, extract(month from now())::int) ->> 'total_revenue_excl_tax')::numeric,
+  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'total_revenue_excl_tax')::numeric,
   1500.00,
   '§3.1:total_revenue_excl_tax = 1000(含稅單未稅金額) + 500(無稅單) = 1500.00,不含稅金'
 );
 
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now())::int, extract(month from now())::int) ->> 'total_tax_amount')::numeric,
+  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'total_tax_amount')::numeric,
   100.00,
   '§3.1:total_tax_amount = 100.00(只有含稅那一筆的稅金)'
 );
 
 -- §3.2:estimated_net_margin = 1500(未稅營收) - 0(無料錢成本) - 300(抽成:1000×20%+500×20%) - 0(無月薪)
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now())::int, extract(month from now())::int) ->> 'estimated_net_margin')::numeric,
+  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'estimated_net_margin')::numeric,
   1200.00,
   '§3.2:estimated_net_margin 用未稅營收計算,1500 - 300(抽成) = 1200.00'
 );
@@ -248,7 +296,7 @@ select is(
 -- 對照組:如果沿用舊版「用含稅營收計算」的錯誤口徑,會得到 1300.00(1600-300),
 -- 證明這次修正確實生效,不是恰好兩個數字一樣矇混過關。
 select isnt(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now())::int, extract(month from now())::int) ->> 'estimated_net_margin')::numeric,
+  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'estimated_net_margin')::numeric,
   1300.00,
   '§3.2(修正生效驗證):如果沿用舊版含稅營收口徑會得到 1300.00,新公式不會得出這個錯誤數字'
 );

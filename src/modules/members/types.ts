@@ -5,7 +5,64 @@
 
 import type { Tables } from "@/integrations/supabase/types";
 
+/**
+ * 🔴 SPECS-INDEX #908 給讀 `Member.identity_verified_at` 的人的提醒(這段知識不要跟著程式碼一起消失)。
+ *
+ * `identity_verified_at` 是「**這個人本人已經證明過他就是這支手機的主人**」,**與登入方式無關**。
+ * 判定「是不是真正的會員」一律看這個欄位,**不看 `line_bound`、也不看 `phone_verified`**:
+ *   ・`line_bound` 的語意是「LINE 推播管道可用」——那是**通知管道**,不是身分。
+ *   ・`phone_verified` 的欄位註解自己寫著「不代表真的發送過簡訊驗證碼」——那是客服按的人工標記。
+ * 兩件事不可以互相取代,畫面上也不可以合併成一個欄位顯示(規格書 §一 的裁決 + #920)。
+ * 判斷與文案一律走 `memberIdentityStatus.ts` 的純函式,不要在元件裡 inline 寫 `!== null`。
+ *
+ * 📌 `identity_verified_via`(用哪一種方式驗的)依 #908 備註**刻意不回傳給前端**
+ *    (「畫面不需要知道」)⇒ 前端不要去 select 它,也不要拿它做判斷。
+ *    🔴 2026-10-01 品管打回後補上真正的守門:詳情頁不再走 `.select("*")`,改走下面的
+ *    `MemberDetail`(逐一列舉欄位)。`Member` 這個型別**維持整列**,因為它描述的是
+ *    `create_member` / `update_member` 這些 `returns public.members` 的 RPC 實際回傳的內容
+ *    (那些 RPC 真的會把整列送回瀏覽器 —— 已回報主腦,那屬於後端 migration 的範圍,不在
+ *    這次打回的六項裡)。**畫面要用的型別一律用 `MemberDetail`,不要用 `Member`。**
+ *
+ * 🟢 2026-09-30 收尾:#908 的 migration 已上線、`integrations/supabase/types.ts` 已重新產生,
+ *    所以這些欄位**已經在 `Tables<"members">` 裡**,原本為了跟那批平行進行而加的
+ *    `MemberIdentityVerificationColumns` 交集型別已經移除(它把欄位宣告成選填,現在只會讓人
+ *    誤會欄位還沒上線)。
+ */
 export type Member = Tables<"members">;
+
+/**
+ * 🔴 會員**詳情頁**實際拿到的欄位集合(#908 裁決 + 2026-10-01 品管打回後新增)。
+ *
+ * 為什麼要有這個型別,而不是直接用 `Member`(整列):
+ *   ① `identity_verified_via` 依 #908 裁決**刻意不回傳給前端** —— 原本 `fetchMember` 用的是
+ *      `.select("*")`,等於同一個模組一邊在註解裡寫「前端不要 select 它」、一邊又在 select 它。
+ *   ② 資安清單 #6 的既有原則:「表層政策給的是整列,以後新增的欄位會自動跟著外流」⇒ 逐一列欄位,
+ *      少回一個欄位就少一個資訊面。`MemberSummary`(名單頁)本來就是這樣寫的,詳情頁現在對齊。
+ *
+ * 🔴 這份清單就是 `api.ts` 裡 `MEMBER_DETAIL_COLUMNS` 那個 select 字串,**兩邊必須一致**。
+ *    詳情頁要多顯示一個欄位時,**兩個地方都要加**(只加這裡 ⇒ 執行時會是 undefined;只加
+ *    select 字串 ⇒ tsc 會說型別上沒有這個屬性)。目前這 16 個欄位就是詳情頁本體與它底下的
+ *    EditMemberDialog / BlacklistDialog / MemberPointsPanel 全部會讀到的欄位。
+ */
+export type MemberDetail = Pick<
+  Member,
+  | "id"
+  | "merchant_id"
+  | "name"
+  | "phone"
+  | "email"
+  | "birthday"
+  | "notes"
+  | "status"
+  | "tier_id"
+  | "points_balance"
+  | "referral_code"
+  | "is_blacklisted"
+  | "blacklist_reason"
+  | "phone_verified"
+  | "identity_verified_at"
+  | "identity_first_verified_at"
+>;
 export type MerchantMemberSettings = Tables<"merchant_member_settings">;
 export type MemberPointTransaction = Tables<"member_point_transactions">;
 /** #615(SPECS-INDEX):商家自訂會員等級清單,純分類標籤用途,這次不跟紅利點數倍率或其他權益掛勾。 */
@@ -102,7 +159,10 @@ export interface MemberReferral {
 }
 
 /** 4.1 會員列表搜尋用的最小欄位集合。#615/#616(SPECS-INDEX)疊加:新增 tierId/isBlacklisted
- * 供列表頁顯示/篩選。 */
+ * 供列表頁顯示/篩選。#918/#919 疊加:新增 identityVerifiedAt 供名單頁的「會員類型」標籤與篩選、
+ * 以及會員報表 CSV 的「會員類型」欄使用。
+ * 🔴 這個型別對應的 `.select(...)` **維持逐一列欄位**,不要改成 `select("*")`
+ * (資安清單 #6:表層政策給的是整列,以後新增的欄位會自動跟著外流)。 */
 export interface MemberSummary {
   id: string;
   name: string;
@@ -112,10 +172,14 @@ export interface MemberSummary {
   status: MemberStatus;
   tierId: string | null;
   isBlacklisted: boolean;
+  /** #908 的「已完成身分驗證」時間;null = 尚未驗證。判斷一律走
+   *  memberIdentityStatus.ts 的純函式,不要在畫面上自己寫 `!== null`。 */
+  identityVerifiedAt: string | null;
 }
 
-/** §10.2.1(SPECS-INDEX #614)get_members_by_phone 回傳的一筆同電話既有客戶。電話不當唯一鍵,
- * 只當查詢索引——同一支電話底下可能有多筆不同客戶(例如家庭成員共用市話)。 */
+/** §10.2.1(SPECS-INDEX #614)get_members_by_phone 回傳的一筆候選客戶。#929 之後是「前綴比對」
+ * (打 0903 就列出 0903 開頭的所有會員,完全相等的排第一);#931 之後同一商家一支電話只有一位
+ * active 會員。 */
 export interface MemberPhoneMatchCandidate {
   memberId: string;
   name: string;
@@ -123,4 +187,7 @@ export interface MemberPhoneMatchCandidate {
   lastBookingDate: string | null;
   isBlacklisted: boolean;
   blacklistReason: string | null;
+  /** SPECS-INDEX #936:這位會員在本商家最近一筆有填地址的訂單地址(members 表沒有地址欄位);
+   *  沒有就是 null ⇒ 點選候選時不動地址欄。 */
+  lastBookingAddress: string | null;
 }

@@ -25,6 +25,25 @@
 //
 // **只動外觀,不動行為**:搜尋 / 三種篩選的判斷、生日獎勵的被動核發、建立會員的驗證與送出欄位、
 // 下架 / 恢復的 API 呼叫、toast 文案全部照舊。
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// SPECS-INDEX #918(2026-09-30):會員的「兩層狀態」要分開顯示,而且可以篩選。
+// 規格書:.project/specs/建單自動建立會員與會員兩層狀態.md #918。
+//   - 每張卡多一顆 StatusTag:「已完成驗證」(success)/「尚未驗證」(neutral),
+//     判斷與文案都走 memberIdentityStatus.ts(文案的唯一來源),資料來自 #908 的
+//     members.identity_verified_at。
+//     🔴 2026-09-30 使用者裁決把原本的「已綁定會員」/「已建立(未綁定)」改成現在這兩個 ——
+//     狀態名稱裡不可以有「綁定」(理由見 memberIdentityStatus.ts 的註解:那是通知管道的詞,
+//     而且 #866 全面改手機簡訊驗證碼登入之後會有兩條驗證路徑)。這一頁不要 inline 寫死任何文案。
+//   - 多一個「會員類型」**下拉選單**篩選(全部 / 已完成驗證 / 尚未驗證),前端過濾。
+//     🔴 **刻意不加進上面那條底線式篩選列** —— skill 二之四末段明文規定「篩選列必須一眼全部看到,
+//     不橫向捲動也不換行」,那一列已經有三顆(上架中 / 已下架 / 全部),再塞一組三選一會在
+//     320px 手機上爆掉。下拉選單才是既有做法(等級篩選 / 黑名單篩選都是下拉)。
+//     ⇒ 下一個人不要「為了統一」把它搬進篩選列。
+//   - 標題旁多一個 `?`,說明兩種狀態的差別(照樣累點 / 不寄通知 / 要本人自己完成)。
+//     這三件事都是使用者的裁決,寫在畫面上讓商家看得懂;內容看過一次就懂 ⇒ 收進 `?`,不用常駐 `!`。
+//   - ⚠️ isError 分支(#846 修掉的「假空狀態」)完全沒動:篩選到 0 筆(真空)與查詢失敗(出錯)
+//     顯示的東西不一樣,新增篩選不可以把那個判斷弄壞。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -54,6 +73,7 @@ import {
   FullPageLayerClose,
   FullPageLayerContent,
   FullPageLayerTrigger,
+  HelpToggle,
   ListCard,
   LoadingSkeleton,
   PageHeader,
@@ -79,6 +99,14 @@ import {
   reactivateMember,
   useMerchantMemberTiers,
 } from "./api";
+import {
+  isMemberIdentityFilter,
+  matchesMemberIdentityFilter,
+  memberIdentityStatus,
+  MEMBER_IDENTITY_FILTER_OPTIONS,
+  MEMBER_IDENTITY_STATUS_LABELS,
+  type MemberIdentityFilter,
+} from "./memberIdentityStatus";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { MEMBER_STATUS_LABELS, type MemberStatus, type MemberSummary } from "./types";
 
@@ -344,6 +372,9 @@ function MembersListInner() {
   const [blacklistFilter, setBlacklistFilter] = useState<"all" | "blacklisted" | "not_blacklisted">(
     "all",
   );
+  // #918(SPECS-INDEX):會員類型(兩層狀態)篩選,比照上面等級 / 黑名單篩選的既有模式
+  // (下拉,"all" 顯示全部)。🔴 不是底線式篩選列 —— 理由見檔頭。
+  const [identityFilter, setIdentityFilter] = useState<MemberIdentityFilter>("all");
   const [birthdayNotice, setBirthdayNotice] = useState<number | null>(null);
   // ui-v1-full:「下架」搬進 ⋯ 選單之後,確認窗改成整頁一顆的受控實例(比照第 1 批服務人員頁的做法)。
   const [deactivatingMember, setDeactivatingMember] = useState<MemberSummary | null>(null);
@@ -407,6 +438,9 @@ function MembersListInner() {
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
     if (blacklistFilter === "blacklisted" && !m.isBlacklisted) return false;
     if (blacklistFilter === "not_blacklisted" && m.isBlacklisted) return false;
+    // #918:會員類型(兩層狀態)。判斷抽在 memberIdentityStatus.ts,不在這裡 inline 寫 `!== null`
+    // —— 規格書 §三 #923.3 第 5 條要求這段要能被 vitest 測到。
+    if (!matchesMemberIdentityFilter(m.identityVerifiedAt, identityFilter)) return false;
     if (tierFilter === "all") return true;
     if (tierFilter === UNASSIGNED_TIER_VALUE) return m.tierId === null;
     return m.tierId === tierFilter;
@@ -436,7 +470,19 @@ function MembersListInner() {
 
       <Card>
         <CardHeader className="gap-3">
-          <CardTitle>會員名單</CardTitle>
+          {/* #918:兩種會員類型的差別看過一次就懂 ⇒ 收進 `?`(skill 二),不用常駐 `!`。
+              HelpToggle 展開的說明區塊是 basis-full,所以這一列必須是 flex flex-wrap。 */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <CardTitle>會員名單</CardTitle>
+            <HelpToggle label="說明:「尚未驗證」和「已完成驗證」有什麼差別">
+              <strong>尚未驗證</strong>
+              :這位客戶的資料已經在你的會員管理裡(建單時自動登記,或你自己新增/匯入的),
+              但本人還沒有完成身分驗證。這種客戶<strong>照樣會累積紅利點數</strong>,但
+              <strong>不會收到通知</strong>。
+              <br />
+              <strong>已完成驗證</strong>:本人已經證明過自己就是這支手機的主人,通知才會寄得出去。
+            </HelpToggle>
+          </div>
           <FieldInput
             aria-label="搜尋姓名、電話或推薦碼"
             placeholder="搜尋姓名/電話/推薦碼"
@@ -486,6 +532,21 @@ function MembersListInner() {
                 { value: "blacklisted", label: "只看黑名單" },
                 { value: "not_blacklisted", label: "不含黑名單" },
               ]}
+            />
+            {/* #918(SPECS-INDEX):會員類型(兩層狀態)篩選。
+                🔴 這一顆刻意放在這個下拉區、**不放進上面那條底線式篩選列**(理由見檔頭)。
+                固定白名單 ⇒ 最嚴格的那一種 guard 用法。 */}
+            <FieldSelect<MemberIdentityFilter>
+              aria-label="依會員類型篩選"
+              value={identityFilter}
+              onValueChange={guardPhantomEmptyChange<MemberIdentityFilter>(
+                setIdentityFilter,
+                isMemberIdentityFilter,
+              )}
+              options={MEMBER_IDENTITY_FILTER_OPTIONS.map((o) => ({
+                value: o.value,
+                label: o.label,
+              }))}
             />
           </div>
         </CardHeader>
@@ -540,6 +601,26 @@ function MembersListInner() {
                           {member.isBlacklisted ? (
                             <StatusTag tone="danger">黑名單</StatusTag>
                           ) : null}
+                          {/* #918(SPECS-INDEX):會員類型(兩層狀態)。
+                              ⚠️ 這是「狀態」(一個人同一時間只會是其中一個)⇒ StatusTag 圓角膠囊,
+                              **不是**方角灰底的 AttributeTag。它跟上架狀態、黑名單一樣是獨立的一顆
+                              (skill 二之四的「一個人只會有一個」指的是同一種狀態,不是整張卡只能有
+                              一顆標籤 —— 黑名單那顆的既有註解就是同一個道理)。
+                              🔴 判斷看 identity_verified_at,不是 line_bound(身分 ≠ 通知管道)。
+                              🔴 **不要加 `wrap`**(2026-10-01 品管打回):Tags.tsx 的判準寫得很明確 ——
+                              `wrap` 是給「標籤裡夾著使用者自填的文字(登入信箱、客戶名)」用的,實作是
+                              `whitespace-normal break-all`(任意字元都可以斷)。這兩個文案是**固定的中文**、
+                              沒有任何使用者輸入,加了 wrap 只會讓 320px 下有機會斷成「已完成驗 / 證」。
+                              同一張卡上的「已上架」「黑名單」也都沒有加。 */}
+                          {memberIdentityStatus(member.identityVerifiedAt) === "verified" ? (
+                            <StatusTag tone="success">
+                              {MEMBER_IDENTITY_STATUS_LABELS.verified}
+                            </StatusTag>
+                          ) : (
+                            <StatusTag tone="neutral">
+                              {MEMBER_IDENTITY_STATUS_LABELS.unverified}
+                            </StatusTag>
+                          )}
                           {/* 屬性(靜態分類):方角、灰底、安靜。 */}
                           <AttributeTag className="tabular-nums">
                             {member.pointsBalance} 點

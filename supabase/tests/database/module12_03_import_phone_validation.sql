@@ -9,6 +9,9 @@
 --      加上正向對照:合法電話的 upsert 路徑照常運作(證明不是整支函式壞掉才「沒更新」)。
 --   C. import_historical_bookings_batch:同一條規則、同樣逐列回報;「缺少客戶電話」跟「格式不正確」是兩個
 --      不同的訊息(檢查順序沒有被打亂)。
+--   E. SPECS-INDEX #931 收尾(2026-10-01 品管打回):insert_only 遇到重複電話時,那一列**仍然算略過**
+--      (計數語意不變),但 error_report 必須多一筆**指名撞到哪一位既有會員**的白話訊息。反向對照:
+--      upsert_by_phone 路徑沒有被污染(照舊是更新成功、error_report 保持空)。
 --   D. 權限衛生(supabase-permission-hygiene 規則 1):兩支匯入函式 create or replace 之後 ACL 沒有被放寬
 --      (anon/PUBLIC 沒有 EXECUTE,authenticated 有 → 正向對照);is_valid_taiwan_phone 依然只有
 --      service_role(這次呼叫它、沒有動它的權限)。
@@ -22,9 +25,14 @@
 --     B3 在舊版下**沒有**轉紅,原因是舊版已經先把 A 段的「A4三碼(123)」建進去,B2 的 limit 1 配到的是那一筆
 --     而不是 B 段的髒會員 —— B3 的價值是「新版下髒資料不被碰」的守門,不是故障注入的偵測器,特此註明。
 --     重新套用 20260928040000 之後 24/24 全綠。
+--   ・E 段的故障注入(engineer 2026-10-01 實際做過):把 20260930040500 裡新加的那一段
+--     「select 撞到的會員姓名 + 往 v_error_report 塞一筆」整塊註解掉(= 退回 20260928040000 的行為)
+--     → **E2 / E3 / E4 三條精準轉紅**(31 條裡只有這三條),E1 / E5 / E6 / E7 全部仍綠,
+--     module12_01 那些吃計數的既有斷言也全綠 ⇒ 證明兩件事:①這三條真的在守「訊息有沒有出現」,
+--     ②這次改動確實沒有動到 success / failed / skipped 的計數語意。恢復後 31/31 全綠。
 begin;
 
-select plan(24);
+select plan(31);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -119,8 +127,20 @@ select ok(
 -- =========================================================================
 -- B. 舊髒資料不動 + insert_only / upsert_by_phone 對不合格電話的行為
 -- =========================================================================
--- 模擬 #822 之前留下的髒資料:create_member 後端沒有格式檢查(#822 刻意沒動它),所以可以直接建出「123」。
-select id from create_member('ec030000-0000-4000-8000-000000000020', '既有髒會員', '123') \gset dirty_member_
+-- 模擬 #822 之前留下的髒資料。
+-- 🔴 2026-09-30 SPECS-INDEX #827(使用者裁決 Q5 = (A)「把 #827 一起修掉」):
+--    這一行原本是 `create_member(…, '123')` —— 靠的正是「create_member 後端沒有格式檢查」這個後門。
+--    #827 已經把那個後門關掉,所以現在 create_member 會 raise,而這是 \gset ⇒ psql 會當場噴錯、整檔崩。
+--    改成以 postgres 身分直接 insert into members(members 完全沒有 INSERT 政策,只有超級使用者能這樣做)
+--    —— 這其實是**更忠實**的模擬:真正的舊髒資料就是在「後端還沒有任何檢查」的年代進去的,
+--    不是透過今天這支已經會檢查的 RPC 進去的。B3 要驗的「舊髒資料一字不改」完全不受影響。
+select pg_temp.test_clear_auth();
+
+insert into members (merchant_id, name, phone, referral_code, status)
+values ('ec030000-0000-4000-8000-000000000020', '既有髒會員', '123', 'PGTAPD12', 'active')
+returning id \gset dirty_member_
+
+select pg_temp.test_set_auth('ec030000-0000-4000-8000-000000000001');
 
 select import_members_batch(
   'ec030000-0000-4000-8000-000000000020',
@@ -244,6 +264,77 @@ select ok(
   (select e->>'error_message' from merchant_bulk_operations o, jsonb_array_elements(o.error_report) e
    where o.id = :'opC6_import_historical_bookings_batch'::uuid) = '缺少必填欄位：客戶電話',
   'C6 沒填客戶電話 → 還是既有的「缺少必填欄位：客戶電話」,格式檢查排在非空檢查之後,沒有把兩種錯誤混在一起');
+
+-- =========================================================================
+-- E. SPECS-INDEX #931 收尾(2026-10-01 品管打回):CSV 匯入遇到重複電話,商家要看得到是哪一列、
+--    跟哪一位既有會員撞、那個人叫什麼名字 —— 不能只有一個「略過(重複) 1」的數字。
+-- =========================================================================
+-- 品管實測到的原狀:三列匯入、其中一列的電話跟前一列重複(只是寫法不同)⇒ 那一列既不算成功也不算
+-- 失敗,error_report 裡一個字都沒有,商家永遠不知道是哪一列、跟誰撞、那個人叫什麼名字。
+-- 根因:import_members_batch 在呼叫 create_member **之前**就先短路略過了,所以 create_member 裡
+-- #931 那句「這支電話已經有會員:某某某」從匯入這條路徑走不到。而 insert_only 是匯入精靈的**預設**模式。
+-- 修在 20260930040500_req931_import_duplicate_phone_error_report.sql。
+--
+-- 🔴 修法刻意「只加訊息、不改計數」:那一列仍然算 skipped_duplicate_rows。E1 就是在守這件事 ——
+--    哪天有人「順手」把它改成 failed,E1 會紅(結果頁三格數字與 module12_01 的既有斷言都吃這三個計數)。
+select import_members_batch(
+  'ec030000-0000-4000-8000-000000000020',
+  'insert_only',
+  jsonb_build_array(
+    jsonb_build_object('row_number', 1, 'name', 'E1新客戶',     'phone', '0933111222'),
+    jsonb_build_object('row_number', 2, 'name', 'E2以為是別人', 'phone', '0933-111-222'),
+    jsonb_build_object('row_number', 3, 'name', 'E3另一位',     'phone', '0933333444')
+  )
+) \gset opE_
+
+select is(
+  (select row(success_rows, failed_rows, skipped_duplicate_rows)::text
+   from merchant_bulk_operations where id = :'opE_import_members_batch'::uuid),
+  '(2,0,1)',
+  'E1 計數語意一個字都沒變:第 1、3 列成功,第 2 列(同一支電話的不同寫法)算「略過」而不是「失敗」');
+
+select is(
+  (select count(*)::int from merchant_bulk_operations o, jsonb_array_elements(o.error_report) e
+   where o.id = :'opE_import_members_batch'::uuid),
+  1,
+  'E2 被略過的那一列**有**在 error_report 留下一筆(修正前這裡是 0 —— 商家什麼訊息都看不到)');
+
+select is(
+  (select e->>'row_number' from merchant_bulk_operations o, jsonb_array_elements(o.error_report) e
+   where o.id = :'opE_import_members_batch'::uuid),
+  '2',
+  'E3 而且精準指出是第 2 列(商家知道要回 CSV 的哪一列去改)');
+
+select ok(
+  (select e->>'error_message' from merchant_bulk_operations o, jsonb_array_elements(o.error_report) e
+   where o.id = :'opE_import_members_batch'::uuid)
+  like '這支電話已經有會員:E1新客戶%已略過%',
+  'E4 訊息**指名是誰**(使用者原話:「要擋下來並指名是誰…不能只說失敗」),而且明講這一列是「已略過」');
+
+select is(
+  (select count(*)::int from members
+   where merchant_id = 'ec030000-0000-4000-8000-000000000020' and name = 'E2以為是別人'),
+  0,
+  'E5 第 2 列真的沒有被建成會員(insert_only 的既有行為沒有被這次改動弄壞)');
+
+select is(
+  (select row(name, phone)::text from members
+   where merchant_id = 'ec030000-0000-4000-8000-000000000020' and phone = '0933111222'),
+  '(E1新客戶,0933111222)',
+  'E6 撞到的那位既有會員一個字都沒動(只是多留了一句訊息,沒有偷偷變成 upsert)');
+
+-- 反向對照:這次只加在 insert_only 的略過分支,upsert_by_phone 那條路徑完全沒被碰。
+select import_members_batch(
+  'ec030000-0000-4000-8000-000000000020',
+  'upsert_by_phone',
+  jsonb_build_array(jsonb_build_object('row_number', 1, 'name', 'E7改名成功', 'phone', '0933-111-222'))
+) \gset opE7_
+
+select is(
+  (select row(success_rows, failed_rows, skipped_duplicate_rows, jsonb_array_length(error_report))::text
+   from merchant_bulk_operations where id = :'opE7_import_members_batch'::uuid),
+  '(1,0,0,0)',
+  'E7 反向對照:upsert_by_phone 模式下同一支電話照舊是「更新成功」、error_report 保持空 —— 新訊息只長在 insert_only 的略過分支,沒有污染 upsert 路徑');
 
 select pg_temp.test_clear_auth();
 

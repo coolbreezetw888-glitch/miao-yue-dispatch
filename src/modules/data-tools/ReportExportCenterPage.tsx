@@ -18,6 +18,9 @@
 //
 // **只動外觀,不動行為**:四份 CSV 的欄位、篩選條件怎麼組、檔名、toast 文案、抽成匯出逐位
 // 服務人員容錯跳過的做法全部照舊。
+//
+// SPECS-INDEX #919(2026-09-30):會員報表 CSV **多一欄「會員類型」**(已完成驗證 / 尚未驗證),
+// 見 handleExportMembers 裡的說明。其餘三份報表的欄位完全沒動。
 
 import { useState } from "react";
 import {
@@ -40,6 +43,9 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { fetchMerchantBookings } from "@/modules/booking/api";
 import { fetchMerchantMembersList } from "@/modules/members/api";
+// #919:會員類型的中文對應由會員模組自己提供(模組獨立性:文案與判斷的家在 members,
+// 這裡只是使用者,不自己複製一份 if)。
+import { memberIdentityStatusLabel } from "@/modules/members/memberIdentityStatus";
 import { fetchStaffLeaveRecords, fetchMerchantLeaveTypesAll } from "@/modules/scheduling/api";
 import { fetchStaffCommissionSummary } from "@/modules/payroll/api";
 import { formatStaffCommissionItemBreakdown } from "@/modules/payroll/types";
@@ -144,9 +150,24 @@ function ReportExportCenterPageInner() {
     setExporting(true);
     try {
       const rows = await fetchMerchantMembersList(merchantId, "", true);
+      // #919(SPECS-INDEX):多一欄「會員類型」,讓商家在 Excel 裡也分得出兩層狀態。
+      // 🔴 CSV 裡寫**中文白話**(「已完成驗證」/「尚未驗證」),不寫時間戳、也不寫 true/false
+      //    —— 這份檔案是給商家在 Excel 裡看的,不是給程式讀的。
+      // 🔴 中文對應**不在這裡 inline 寫**,一律用會員模組匯出的 memberIdentityStatusLabel:
+      //    名單頁(#918)、詳情頁(#920)、這份 CSV 三個地方的文案必須一致,分三份寫早晚會對不上
+      //    (規格書 §三 #923.3 第 6 條也要求這段要能被 vitest 測到)。
+      // 📌 資料來源沒變,還是同一支 fetchMerchantMembersList(…, unpaged=true);#918 在那支的
+      //    select 裡多帶了 identity_verified_at,所以這裡直接就有值。
       const csv = buildCsvContent(
-        ["姓名", "電話", "推薦碼", "點數餘額", "狀態"],
-        rows.map((m) => [m.name, m.phone, m.referralCode, m.pointsBalance, m.status]),
+        ["姓名", "電話", "推薦碼", "點數餘額", "狀態", "會員類型"],
+        rows.map((m) => [
+          m.name,
+          m.phone,
+          m.referralCode,
+          m.pointsBalance,
+          m.status,
+          memberIdentityStatusLabel(m.identityVerifiedAt),
+        ]),
       );
       downloadCsv(`會員報表_${todayIso()}.csv`, csv);
       toast.success(`已匯出 ${rows.length} 筆會員`);

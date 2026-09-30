@@ -1,5 +1,22 @@
 -- 模組 8(薪資與帳務)— 對應規格書 .project/specs/薪資與帳務.md 全文。
 -- 核心必測:規則 2.4(抽成快照建立後不自動重算)、規則 2.6(手動重算僅限管理員)。
+-- 🔴 2026-10-01 修掉一整類「跟執行時間有關」的不穩定測試(只改**月份的計算基準**,
+--    沒有改任何期望數字,也沒有改 plan(N))。
+--
+-- 症狀:同一份程式碼,台北時間跨過某個月的午夜之前跑是綠的、之後跑就紅。
+-- 根因:本機測試資料庫的 TimeZone = UTC,所以測試裡裸寫的 now() / clock_timestamp() /
+--       current_date 取到的是 **UTC** 的年月;但帳務/薪資報表函式一律是用 **Asia/Taipei**
+--       切月的(v_month_start::timestamp at time zone 'Asia/Taipei',
+--       見 20260924040000_billing_summary_completion_time_basis.sql:502-503 與
+--       20260925020000_staff_commission_summary_completion_time_basis.sql:121-122)。
+--       而資料這一側是 complete_booking 寫的 completed_at = now()。
+-- ⇒ 每個月 1 號的台北 00:00–08:00(= UTC 上個月最後一天 16:00–24:00)這 8 小時,
+--   台北已經進新月、UTC 還在舊月:訂單被報表算進「新月」,測試卻去查「舊月」⇒ 撈到 0 ⇒ 紅。
+--   2026-10-01 台北 00:04 實測到這個現象(午夜前 PASS、午夜後 FAIL)。
+-- 修法:凡是要拿年/月/日去問報表函式,一律先 `at time zone 'Asia/Taipei'` 再 extract/date_trunc,
+--   跟報表自己的切月基準對齊。本檔案原本就有一部分是這樣寫的(那些是對的),這次把漏掉的補齊。
+-- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
+--   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
 
 -- 96 → 99:2026-09-24 完成時間基準(migration 20260924040000)新增三條斷言——
@@ -984,15 +1001,15 @@ select is(
 select is(
   (get_merchant_billing_summary(
     'e8000000-0000-4000-8000-000000000021',
-    extract(year from now())::int,
-    extract(month from now())::int
+    extract(year from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
   ) ->> 'total_revenue_excl_tax')::numeric,
   (select coalesce(sum(b.subtotal_amount_snapshot - b.discount_amount_snapshot), 0)
    from bookings b
    where b.merchant_id = 'e8000000-0000-4000-8000-000000000021'
      and b.status = 'completed'
-     and coalesce(b.completed_at, b.start_at) >= date_trunc('month', now())
-     and coalesce(b.completed_at, b.start_at) < date_trunc('month', now()) + interval '1 month'),
+     and coalesce(b.completed_at, b.start_at) >= (date_trunc('month', now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei')
+     and coalesce(b.completed_at, b.start_at) < (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month') at time zone 'Asia/Taipei'),
   '§3.11 + 2026-09-24 完成時間基準:total_revenue_excl_tax 用 coalesce(completed_at, start_at) 當月份基準,跟直接對 bookings 用相同篩選條件加總 Σ(subtotal − discount) 的結果一致'
 );
 
@@ -1001,8 +1018,8 @@ select is(
 select cmp_ok(
   (get_merchant_billing_summary(
     'e8000000-0000-4000-8000-000000000021',
-    extract(year from now())::int,
-    extract(month from now())::int
+    extract(year from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
   ) ->> 'total_revenue_excl_tax')::numeric,
   '>=',
   3500.00,
@@ -1020,8 +1037,8 @@ select is(
 select is(
   (get_merchant_billing_summary(
     'e8000000-0000-4000-8000-000000000021',
-    extract(year from now())::int,
-    extract(month from now())::int
+    extract(year from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
   ) ->> 'total_tax_amount')::numeric,
   0.00,
   '§3.1:total_tax_amount = 0.00(這三筆訂單都沒有開稅金)'
@@ -1034,13 +1051,13 @@ select is(
 select is(
   (get_merchant_billing_summary(
     'e8000000-0000-4000-8000-000000000021',
-    extract(year from now())::int,
-    extract(month from now())::int
+    extract(year from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
   ) ->> 'total_commission_payout')::numeric,
   (select coalesce(sum(commission_amount), 0) from booking_commission_records
    where merchant_id = 'e8000000-0000-4000-8000-000000000021'
-     and computed_at >= date_trunc('month', now())
-     and computed_at < date_trunc('month', now()) + interval '1 month'),
+     and computed_at >= (date_trunc('month', now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei')
+     and computed_at < (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month') at time zone 'Asia/Taipei'),
   '§3.11:total_commission_payout 用 computed_at(而非訂單日期)當月份基準,跟直接對 booking_commission_records 用相同篩選條件加總的結果一致'
 );
 
@@ -1230,13 +1247,13 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000001');
 select is(
   (get_merchant_billing_summary_by_range(
     'e8000000-0000-4000-8000-000000000021',
-    date_trunc('month', now())::date,
-    (date_trunc('month', now()) + interval '1 month - 1 day')::date
+    date_trunc('month', now() at time zone 'Asia/Taipei')::date,
+    (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_revenue_excl_tax')::numeric,
   (get_merchant_billing_summary(
     'e8000000-0000-4000-8000-000000000021',
-    extract(year from now())::int,
-    extract(month from now())::int
+    extract(year from now() at time zone 'Asia/Taipei')::int,
+    extract(month from now() at time zone 'Asia/Taipei')::int
   ) ->> 'total_revenue_excl_tax')::numeric,
   '§3.6 + 2026-09-24 完成時間基準:get_merchant_billing_summary_by_range(完成當月整月)的 total_revenue_excl_tax 跟月份版本 get_merchant_billing_summary(完成當月)算出完全相同的數字'
 );
@@ -1245,8 +1262,8 @@ select is(
 select cmp_ok(
   (get_merchant_billing_summary_by_range(
     'e8000000-0000-4000-8000-000000000021',
-    date_trunc('month', now())::date,
-    (date_trunc('month', now()) + interval '1 month - 1 day')::date
+    date_trunc('month', now() at time zone 'Asia/Taipei')::date,
+    (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_revenue_excl_tax')::numeric,
   '>=',
   3500.00,
@@ -1256,8 +1273,8 @@ select cmp_ok(
 select is(
   (get_merchant_billing_summary_by_range(
     'e8000000-0000-4000-8000-000000000021',
-    date_trunc('month', now())::date,
-    (date_trunc('month', now()) + interval '1 month - 1 day')::date
+    date_trunc('month', now() at time zone 'Asia/Taipei')::date,
+    (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_tax_amount')::numeric,
   0.00,
   '§3.6:get_merchant_billing_summary_by_range 的 total_tax_amount 跟月份版本一致(0.00,這三筆都沒開稅金)'

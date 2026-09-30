@@ -12,6 +12,7 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Member,
+  MemberDetail,
   MemberPhoneMatchCandidate,
   MemberPointHistoryEntry,
   MemberPointTransactionType,
@@ -119,17 +120,6 @@ export async function createMember(input: CreateMemberInput): Promise<Member> {
   return data as Member;
 }
 
-/** §5.1 對外介面:§10.2.2(SPECS-INDEX #614)建單頁「+ 這支電話的新客戶」快速建立入口專用的
- * 精簡版本(取代已移除的 §4.4 MemberPickerField 快速建立)。 */
-export async function createMemberQuick(
-  merchantId: string,
-  name: string,
-  phone?: string | null,
-  birthday?: string | null,
-): Promise<Member> {
-  return createMember({ merchantId, name, phone: phone ?? null, birthday: birthday ?? null });
-}
-
 export interface UpdateMemberInput {
   name: string;
   phone?: string | null;
@@ -211,6 +201,9 @@ interface RawMemberPhoneMatchCandidate {
   last_booking_date: string | null;
   is_blacklisted: boolean;
   blacklist_reason: string | null;
+  /** SPECS-INDEX #936(20261001010100 migration 新增)。用 `?:` 是刻意的:那支 migration 若沒有
+   *  上線,回傳就不會有這個 key,下面一律當成 null,點選候選時不動地址欄,不會壞。 */
+  last_booking_address?: string | null;
 }
 
 export async function fetchMembersByPhone(
@@ -229,6 +222,7 @@ export async function fetchMembersByPhone(
     lastBookingDate: row.last_booking_date,
     isBlacklisted: row.is_blacklisted,
     blacklistReason: row.blacklist_reason,
+    lastBookingAddress: row.last_booking_address ?? null,
   }));
 }
 
@@ -335,6 +329,36 @@ export async function reactivateMemberTier(tierId: string): Promise<void> {
  * 篩選由呼叫端自行處理)。 */
 const POSTGREST_PAGE_SIZE = 1000;
 
+/**
+ * fetchMerchantMembersList 這支查詢實際會拿到的原始欄位。
+ *
+ * 🟢 **2026-09-30 收尾:型別擋板已經移除。**
+ * `identity_verified_at` 已經隨 #908 的 migration 進了 `src/integrations/supabase/types.ts`
+ * (資料庫產生的那份已重新產生),所以原本掛在下面兩處查詢尾端的
+ * `.overrideTypes<MembersListRow[], { merge: false }>()` **已經拆掉**。
+ * 那個擋板當初只是為了讓 #918/#919/#920 這批介面工作能跟 #908 的 migration **平行進行** ——
+ * 欄位還不存在時,supabase-js 的 select 字串型別解析會把整個結果判成
+ * `SelectQueryError<"column 'identity_verified_at' does not exist on 'members'">`,`npx tsc` 直接紅。
+ * 🔴 **不要再加回來**:overrideTypes 會擋掉 select 字串的真實型別檢查,欄位打錯字時 tsc 就抓不到了。
+ *
+ * 📌 這個手寫型別本身**刻意留著**,不是擋板的殘骸:
+ *   1. 下面的 `let data` / `const pages`(分頁迴圈要先宣告再累加)需要一個具名型別;
+ *   2. 拆掉擋板之後,它變成 select 字串的**契約檢查** —— 少 select 一個欄位、或資料庫欄位型別變了,
+ *      `tsc` 會在指派那一行直接報錯,而不是等到執行時畫面上才少一塊資料。
+ */
+type MembersListRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  referral_code: string;
+  points_balance: number;
+  status: string;
+  tier_id: string | null;
+  is_blacklisted: boolean;
+  /** #908「已完成身分驗證」的時間;null = 尚未驗證。 */
+  identity_verified_at: string | null;
+};
+
 export async function fetchMerchantMembersList(
   merchantId: string,
   search?: string,
@@ -344,9 +368,16 @@ export async function fetchMerchantMembersList(
   unpaged?: boolean,
 ): Promise<MemberSummary[]> {
   function buildQuery() {
+    // 🔴 #918/#919:只多加 identity_verified_at 一個欄位,**維持逐一列欄位的寫法**,
+    //    不要改成 select("*")(資安清單 #6:以後新增的欄位會自動跟著外流)。
+    //    identity_verified_via 依 #908 備註刻意不帶到前端。
+    //    ⚠️ 這個欄位由 #908 的 migration 建立;migration 還沒套用時這支查詢會失敗
+    //    (PostgREST 回「column does not exist」),名單頁會走 isError 分支顯示「讀不到會員名單」。
     let query = supabase
       .from("members")
-      .select("id, name, phone, referral_code, points_balance, status, tier_id, is_blacklisted")
+      .select(
+        "id, name, phone, referral_code, points_balance, status, tier_id, is_blacklisted, identity_verified_at",
+      )
       .eq("merchant_id", merchantId)
       .order("created_at", { ascending: false });
 
@@ -357,18 +388,9 @@ export async function fetchMerchantMembersList(
     return query;
   }
 
-  let data: {
-    id: string;
-    name: string;
-    phone: string | null;
-    referral_code: string;
-    points_balance: number;
-    status: string;
-    tier_id: string | null;
-    is_blacklisted: boolean;
-  }[];
+  let data: MembersListRow[];
   if (unpaged) {
-    const pages: typeof data = [];
+    const pages: MembersListRow[] = [];
     let offset = 0;
     for (;;) {
       const { data: page, error } = await buildQuery().range(
@@ -396,6 +418,8 @@ export async function fetchMerchantMembersList(
     status: row.status as MemberStatus,
     tierId: row.tier_id,
     isBlacklisted: row.is_blacklisted,
+    // #918/#919:兩層狀態的判定欄位。`?? null` 是保險 —— 舊資料或型別上的 undefined 一律當成未驗證。
+    identityVerifiedAt: row.identity_verified_at ?? null,
   }));
 }
 
@@ -411,17 +435,42 @@ export function useMerchantMembersList(
   });
 }
 
-export async function fetchMember(memberId: string): Promise<Member | null> {
+/**
+ * 🔴 詳情頁要抓的欄位,**逐一列舉,刻意不是 `select("*")`**(2026-10-01 品管打回)。
+ *
+ * 兩個理由,缺一個都還是要這樣寫:
+ *   ① `identity_verified_via` 依 #908 裁決**刻意不回傳給前端**(「畫面不需要知道」)。
+ *      原本這裡是 `select("*")`,等於 types.ts 的註解寫著「前端不要去 select 它」、
+ *      同一個模組的這支函式卻正在 select 它 —— 那一欄一路送到瀏覽器的 network 面板。
+ *   ② 資安清單 #6:「表層政策給的是整列,以後新增的欄位會自動跟著外流」⇒ 逐一列欄位,
+ *      少回一個欄位就少一個資訊面。名單頁的 `fetchMerchantMembersList` 本來就是這樣寫的。
+ *
+ * 🔴 這串欄位必須跟 `types.ts` 的 `MemberDetail` 一致(那邊也寫了同一句提醒)。
+ *    順序照 members 表的欄位習慣排,加欄位時兩邊一起加。
+ *    ⚠️ 刻意**沒有**列進來的欄位(不是漏掉):
+ *      ・`identity_verified_via` —— #908 明確裁決不給前端。
+ *      ・`line_bound` / `line_user_id` —— 詳情頁的 LINE 區塊是 MemberLineBindingSection
+ *        自己另外抓的,這一頁不需要。
+ *      ・`user_id` / `created_by_user_id` / `blacklisted_by_user_id` / `blacklisted_at` /
+ *        `referred_by_member_id` / `referral_rewarded_at` / `last_birthday_bonus_year` /
+ *        `phone_verified_at` / `created_at` / `updated_at` —— 畫面上沒有任何地方顯示。
+ */
+const MEMBER_DETAIL_COLUMNS =
+  "id, merchant_id, name, phone, email, birthday, notes, status, tier_id, points_balance, referral_code, is_blacklisted, blacklist_reason, phone_verified, identity_verified_at, identity_first_verified_at";
+
+export async function fetchMember(memberId: string): Promise<MemberDetail | null> {
   const { data, error } = await supabase
     .from("members")
-    .select("*")
+    .select(MEMBER_DETAIL_COLUMNS)
     .eq("id", memberId)
     .maybeSingle();
   if (error) throw error;
   return data;
 }
 
-export function useMember(memberId: string | null | undefined): UseQueryResult<Member | null> {
+export function useMember(
+  memberId: string | null | undefined,
+): UseQueryResult<MemberDetail | null> {
   return useQuery({
     queryKey: ["members-module", "member-detail", memberId],
     queryFn: () => fetchMember(memberId as string),

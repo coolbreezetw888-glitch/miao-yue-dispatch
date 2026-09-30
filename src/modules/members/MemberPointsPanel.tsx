@@ -67,7 +67,7 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import { adjustMemberPoints, redeemMemberPoints, useMemberPointHistory } from "./api";
-import { MEMBER_POINT_TRANSACTION_TYPE_LABELS, type Member } from "./types";
+import { MEMBER_POINT_TRANSACTION_TYPE_LABELS, type MemberDetail } from "./types";
 
 /** 小卡窗的按鈕列在 <form> 外面(位置由殼決定),送出鈕用 form= 指回來。 */
 const REDEEM_FORM_ID = "redeem-points-form";
@@ -78,7 +78,7 @@ function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString("zh-TW", { hour12: false });
 }
 
-function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
+function RedeemPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [points, setPoints] = useState("");
   const [pointsError, setPointsError] = useState<string | null>(null);
@@ -196,7 +196,7 @@ function RedeemPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
 
 /** 規則 2.6(核心):這個按鈕只有商家管理員看得到,依 merchantRole==='admin' 判斷,不是依
  * useAgentPermission——這個操作本來就不透過 section_key 開放。 */
-function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
+function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [delta, setDelta] = useState("");
   const [deltaError, setDeltaError] = useState<string | null>(null);
@@ -325,7 +325,7 @@ function AdjustPointsDialog({ member, onSaved }: { member: Member; onSaved: () =
  * 會員詳情頁「點數」卡片的內容:目前餘額 + 登記兌換/手動調整入口 + 完整異動歷史。
  * 放在 MemberDetailPage 的 <Card> 裡面使用,卡片外框由呼叫端負責(維持該頁既有的卡片樣式)。
  */
-export function MemberPointsPanel({ member }: { member: Member }) {
+export function MemberPointsPanel({ member }: { member: MemberDetail }) {
   const queryClient = useQueryClient();
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";

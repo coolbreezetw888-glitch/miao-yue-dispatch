@@ -47,6 +47,24 @@
 //
 // **只動外觀,不動行為**:編輯 / 黑名單 / 電話驗證標記 / 解除黑名單的 API 呼叫與驗證、
 // points_feature_enabled 關閉時整張點數卡片隱藏、推薦人唯讀、複製推薦碼的 1.5 秒回饋全部照舊。
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// SPECS-INDEX #920(2026-09-30):這一頁要顯示會員的「兩層狀態」。
+// 規格書:.project/specs/建單自動建立會員與會員兩層狀態.md #920。
+//
+// 🔴 **「會員狀態」與下面的「LINE 綁定」是兩個不同的區塊,不可以合併成一個。**
+//    ・「會員狀態」= **身分**:這個人本人證明過「我就是這支手機的主人」,**跟用哪一種方式登入無關**
+//      (資料看 #908 的 `members.identity_verified_at`)。
+//    ・「LINE 綁定」= **通知管道**:LINE 綁好了才推播得出去(資料看 `members.line_bound`)。
+//    合併等於把身分旗標寫死成 LINE,違反使用者 2026-09-30 的裁決(原話:「這邊牽涉到登入方式,
+//    未來可能會改手機登入,所以這邊我先不講死登入的方式」)——#866「登入方式可能要調整」還懸著,
+//    真的改成手機登入時,合併過的畫面要整個重做。
+//    ⇒ 下一個人不要「為了少一個區塊」把這兩塊併起來,也不要把「會員狀態」的判斷改成看 line_bound。
+//
+// 位置:放在**基本資料卡片裡**(所以天生就在「LINE 綁定」卡片的**之上**),獨立一個
+// `DetailSection label="會員狀態"`,不塞進既有的「標記」組 —— 那一組裡的「電話驗證狀態」是
+// 客服自己按的人工標記(欄位註解明寫「不代表真的發送過簡訊驗證碼」),跟「本人證明過身分」
+// 完全是兩件事,擺在一起會讓客服以為按一下「標記為已驗證」就能把人變成正式會員。
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -55,6 +73,7 @@ import { toast } from "sonner";
 
 import {
   ActionBar,
+  AlertNote,
   AttributeTag,
   CardDialog,
   CardDialogClose,
@@ -104,9 +123,14 @@ import {
   useMerchantMemberSettings,
   useMerchantMemberTiers,
 } from "./api";
+import {
+  formatIdentityVerifiedDate,
+  memberIdentityStatus,
+  MEMBER_IDENTITY_STATUS_LABELS,
+} from "./memberIdentityStatus";
 import { MemberPointsPanel } from "./MemberPointsPanel";
 import { RequireMembersAccess } from "./RequireMembersAccess";
-import { MEMBER_STATUS_LABELS, type Member } from "./types";
+import { MEMBER_STATUS_LABELS, type MemberDetail } from "./types";
 
 const UNASSIGNED_TIER_VALUE = "__unassigned__";
 
@@ -122,7 +146,7 @@ function formatDateTime(iso: string | null): string {
 // ---------------------------------------------------------------------------
 // 編輯基本資料 Dialog。推薦人只能唯讀顯示,不可編輯(判斷:推薦關係只在建立當下決定)。
 // ---------------------------------------------------------------------------
-function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
+function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const { data: tiers } = useMerchantMemberTiers(member.merchant_id, true);
   const [name, setName] = useState(member.name);
@@ -291,7 +315,7 @@ function EditMemberDialog({ member, onSaved }: { member: Member; onSaved: () => 
 /** #616(SPECS-INDEX §10.4):列入黑名單需要輸入原因(必填,函式層檢查)。解除黑名單不需要
  * 額外輸入,直接呼叫。這不是最高權限敏感操作,依既有 members 權限判斷,管理員跟被授權的客服
  * 都可以操作(規則 2.10 既有分類原則)。 */
-function BlacklistDialog({ member, onSaved }: { member: Member; onSaved: () => void }) {
+function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -461,6 +485,22 @@ function MemberDetailInner() {
     );
   }
 
+  // #920(SPECS-INDEX):「會員狀態」區塊要用的三個值,一次算好,下面的膠囊 / 日期 / 常駐 `!` 全部共用
+  // (原本是在 JSX 裡重複呼叫同一支函式,加了第三個值之後會變成呼叫五次)。
+  // 🔴 兩個時間欄位的語意**不一樣**,不可以互相取代:
+  //   ・identity_verified_at       = **目前**有沒有通過驗證 ⇒ 解除 LINE 綁定會被清成 null(膠囊翻回「尚未驗證」)。
+  //   ・identity_first_verified_at = **第一次**完成驗證的時間 ⇒ **永遠不清,解除綁定也不清**
+  //     (#910 的 migration 刻意把它排除在解除綁定的 UPDATE 之外,並有資料庫測試 H8 在守)。
+  //     使用者 2026-09-30 原話:「如果真的解除綁定,會員資料、紀錄、加入時間也不該清除」
+  //     ⇒ 所以被解除過綁定的人,畫面上**必須**還看得到他第一次驗證的日期,否則就違背這個裁決。
+  const identityStatus = memberIdentityStatus(member.identity_verified_at);
+  const identityVerifiedDate = formatIdentityVerifiedDate(member.identity_verified_at);
+  const identityFirstVerifiedDate = formatIdentityVerifiedDate(member.identity_first_verified_at);
+  // 只在「它真的多講了一件事」時才顯示:目前未驗證(膠囊上沒日期),或第一次是更早的另一天。
+  // 同一天就不顯示 —— 同一個日期印兩次只會讓人以為是兩件不同的事。
+  const showFirstVerifiedRow =
+    identityFirstVerifiedDate !== null && identityFirstVerifiedDate !== identityVerifiedDate;
+
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
@@ -514,6 +554,70 @@ function MemberDetailInner() {
                 ? tierNameById.get(member.tier_id)
                 : "未分級"}
             </DetailRow>
+          </DetailSection>
+
+          {/* #920(SPECS-INDEX):會員的「兩層狀態」。
+              🔴 這一塊跟下面的「LINE 綁定」卡片是**兩個不同的區塊,不可以合併**(完整理由見檔頭):
+                 這裡講的是**身分**(本人證明過他是這支手機的主人,與登入方式無關),
+                 「LINE 綁定」講的是**通知管道**(綁了才推播得出去)。
+              🔴 判斷一律看 #908 的 identity_verified_at,**不看 line_bound、也不看 phone_verified**
+                 (phone_verified 是客服自己按的人工標記,不是客戶本人證明的)。 */}
+          <DetailSection label="會員狀態">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[13px] text-muted-foreground">身分驗證狀態</p>
+                <p className="text-xs text-muted-foreground">
+                  本人有沒有來認領過這個身分。跟下面的「LINE 綁定」是兩件事
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                {identityStatus === "verified" ? (
+                  <>
+                    <StatusTag tone="success" wrap>
+                      {MEMBER_IDENTITY_STATUS_LABELS.verified}
+                    </StatusTag>
+                    {identityVerifiedDate ? (
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        ({identityVerifiedDate} 完成驗證)
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <StatusTag tone="neutral" wrap>
+                    {MEMBER_IDENTITY_STATUS_LABELS.unverified}
+                  </StatusTag>
+                )}
+              </div>
+            </div>
+            {/* 🔴 #910 的「加入時間不該清除」在畫面上的落點:被解除過綁定的人,膠囊會翻回「尚未驗證」、
+                上面那個日期也跟著消失,這一列是**唯一**還看得到「他其實早就驗過、哪一天驗的」的地方。
+                判斷條件見 showFirstVerifiedRow(同一天不重複印)。 */}
+            {showFirstVerifiedRow ? (
+              <DetailRow label="第一次完成驗證" size="sm">
+                <span className="tabular-nums">{identityFirstVerifiedDate}</span>
+              </DetailRow>
+            ) : null}
+            {/* 🟡 常駐 `!`(skill 二):這是「現在的狀態跟你以為的不一樣」那一類 ——
+                客服會以為名單上的人都收得到通知。這種一律常駐,不可以收進 `?`、也不可以做成 toast
+                (toast 幾秒就沒了,狀態卻還在)。
+                🔴 文案要分「從來沒驗過」跟「驗過但目前已被解除」兩種,**不可以合成一句**:
+                   上面那一列已經寫著「第一次完成驗證 2026-09-21」,這裡若還寫「還沒有完成身分驗證」,
+                   同一個畫面就會自己打自己。兩種文案都是使用者 2026-09-30 逐字核准的。 */}
+            {identityStatus === "unverified" ? (
+              member.identity_first_verified_at ? (
+                <AlertNote>
+                  這位客戶之前完成過身分驗證,但目前<strong>已經解除</strong>,所以現在
+                  <strong>收不到任何通知</strong>
+                  。會員資料、點數與紀錄都還在,點數照樣會累積。要讓他重新收到通知,請用下面的「LINE
+                  綁定」再產生一次綁定碼給他。
+                </AlertNote>
+              ) : (
+                <AlertNote>
+                  這位客戶還沒有完成身分驗證,所以<strong>收不到任何通知</strong>
+                  。點數照樣會累積。要讓他收到通知,請用下面的「LINE 綁定」產生綁定碼給他。
+                </AlertNote>
+              )
+            ) : null}
           </DetailSection>
 
           <DetailSection label="標記">

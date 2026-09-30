@@ -174,29 +174,36 @@ test("紅利點數管理頁(§10.5/#617/#830):獨立卡片入口、只剩規則�
 });
 
 test("建單表單電話比對連結既有會員(§10.2)+ 訂單詳情頁會員連結(§4.5)", async ({ page }) => {
-  // 2026-09-24 更新:原本這一段測的是 §4.4 的獨立「會員(選填)」欄位 MemberPickerField
-  //(用姓名/電話搜尋框選會員)。§10.2(SPECS-INDEX #614,git 931f43a/7c602aa)已經把那個欄位
-  // 整個移除,改成「電話當查詢索引、不當唯一鍵」:客服在既有的「客戶電話」欄位輸入電話,下方的
-  // MemberPhoneMatchPanel 列出這支電話底下這個商家的既有客戶,點選其中一位完成連結。
-  // 驗證意圖不變(在建單表單裡找到既有會員、選中後正確顯示連結結果),只是換成新的互動流程。
+  // 2026-10-01 更新(SPECS-INDEX #915 / #936 第二波,規格書 §12.2):面板改成「自動」的顯示。
+  // 原本測的是「點選候選 → 面板變成『已連結會員:<姓名>』+『清除連結』按鈕」,但第二波裁決:
+  //   ・新增訂單時前端一律不帶 p_member_id,會員連結由後端依送出當下的電話自動決定(§12.1);
+  //   ・點選候選只是把電話 / 姓名 / 地址帶進表單的快捷鍵(#936);
+  //   ・「清除連結」按鈕整顆移除(使用者裁決不需要不入會的退路)。
+  // 驗證意圖不變(在建單表單裡找到既有會員、畫面正確告訴客服會連結到誰),改成新的互動流程:
+  // 打電話開頭 → 列出開頭相符的候選 → 點一下 → 電話與姓名被帶入、面板顯示「將連結既有客戶」。
   await page.goto("/app/calendar");
   await page.getByRole("button", { name: "新增預約" }).click();
   await expect(page.getByRole("dialog").getByRole("heading", { name: "新增預約" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
-  // 輸入既有客戶的電話 → 候選名單列出這位客戶(顯示姓名 + 最近消費日期)。
-  await page.locator("#booking-customer-phone").fill(EXISTING_MEMBER_PHONE);
+  // 只打電話開頭(前綴比對至少 4 位數字)→ 列出開頭相符的候選(姓名 + 電話 + 最近消費日期)。
+  const phonePrefix = EXISTING_MEMBER_PHONE.slice(0, 7);
+  await page.locator("#booking-customer-phone").fill(phonePrefix);
+  await expect(page.getByText("開頭相符的客戶(點一下帶入資料)")).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   const candidateButton = page.getByRole("button", {
     name: new RegExp(fixture.existingMemberName),
   });
   await expect(candidateButton).toBeVisible({ timeout: LOAD_TIMEOUT });
   await candidateButton.click();
 
-  // 選中後面板改成顯示「已連結會員:<姓名>」+「清除連結」按鈕(候選名單收起來)。
-  await expect(page.getByText("已連結會員:")).toBeVisible();
-  await expect(page.getByText(fixture.existingMemberName).last()).toBeVisible();
-  await expect(page.getByRole("button", { name: "清除連結" })).toBeVisible();
+  // 點選後:電話補成完整號碼、姓名帶入,面板切到「將連結既有客戶:<姓名>」(不是按鈕,也沒有清除連結)。
+  await expect(page.locator("#booking-customer-phone")).toHaveValue(EXISTING_MEMBER_PHONE);
+  await expect(page.locator("#booking-customer-name")).toHaveValue(fixture.existingMemberName);
+  await expect(page.getByText("將連結既有客戶:")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("button", { name: "清除連結" })).toHaveCount(0);
 
   // §4.5:訂單詳情頁——fixture 已完成的訂單連結到 existingMember,管理員應該看到可點擊連結。
   await page.goto("/app/orders");
