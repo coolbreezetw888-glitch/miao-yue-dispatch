@@ -14,8 +14,21 @@
 // FullPageLayer,內容改用明細列(DetailSection / DetailRow / 可點的電話與地址 / 兩種備註)、狀態
 // 標籤搬到標題列右側,底部固定「關閉」一顆。**照商家端 BookingDetailDialog.tsx 第一階段改好的樣子
 // 改,但刻意不合併成同一個元件**(權限不同,見上方說明),也不把商家端才有的動作按鈕搬過來。
-// 🔴 服務人員端看得到內部備註(2026-09-29 使用者確認),所以 InternalNote 照樣顯示,並保留
-// 「客戶看不到,服務人員看得到」那個標記(標記由 InternalNote 元件固定加上)。
+// 🔴 服務人員端**預設**看得到內部備註(2026-09-29 使用者確認),所以 InternalNote 照樣顯示。
+// SPECS-INDEX #850~#855(2026-09-30):客服可以逐單勾「不讓服務人員看到這則內部備註」。
+// 勾起來的那一筆,遮蔽是做在資料庫那一層(get_my_booking_schedule 直接回 notes = null),
+// **不是在這裡 if 掉不 render** —— 服務人員端是手機瀏覽器直打 Supabase,只要 API 回應裡帶著
+// 那段文字,開發者工具的 Network 面板就看得到。所以下面那個既有的 `{booking.notes ? …}`
+// 條件式一行都不用改,旗標打開時 notes 本來就是 null,整塊自動消失(主腦裁決 T1=A:
+// **不顯示任何「有東西被藏起來」的提示**,連「有沒有藏」都不讓服務人員知道)。
+// ⚠️ 所以這顆彈窗裡的 InternalNote 一律維持預設的 audience="staff-visible" ——
+//    服務人員只會在「看得到」的情況下看到它,標記文字本來就成立;傳 "staff-hidden" 反而等於
+//    告訴服務人員「這裡有東西被藏起來」,跟 T1 的裁決相反。
+//
+// 🔴 SPECS-INDEX #861(2026-09-30 使用者實機巡檢)這顆彈窗改了三處:
+//   ① 「人員」那一組的小標改成「服務人員」(第 2 項)
+//   ② 「我的角色」那一列除了角色標籤,還要顯示自己的名字(第 3 項)
+//   ③ 「主要服務人員 / 協助」兩顆標籤要分得開、主手要更顯眼(第 4 項)
 
 import {
   ActionBar,
@@ -46,11 +59,19 @@ import type { MyBookingScheduleItem } from "./api";
 
 export function MyBookingDetailDialog({
   booking,
+  staffName,
   showCustomerAddress,
   open,
   onOpenChange,
 }: {
   booking: MyBookingScheduleItem | null;
+  /**
+   * SPECS-INDEX #861 第 3 項:登入者自己的姓名,顯示在「我的角色」那一列。
+   * 由呼叫端(MyCalendarPage)從已經查好的 useActiveMyStaffRecord 傳進來,不在這顆彈窗裡自己查
+   * —— 沿用這個元件既有的設計原則(呼叫端已經拿到手的資料直接當 prop,不重新查詢,見檔頭)。
+   * 還沒載入完時傳 null,那一列就只顯示角色標籤(不顯示一個空白的名字)。
+   */
+  staffName: string | null;
   /**
    * 2026-09-24 使用者裁決(任務 2):商家從「到府派工」切成「到店服務」之後,既有訂單的客戶地址
    * 要隱藏(包含服務人員端)。這裡刻意由呼叫端(MyCalendarPage)算好再傳進來,不在這顆彈窗裡自己
@@ -100,11 +121,23 @@ export function MyBookingDetailDialog({
 
           <DetailDivider />
 
-          <DetailSection label="人員">
+          {/* #861 第 2 項:小標從「人員」改成「服務人員」—— 這一組講的就是服務人員本人,
+              「人員」太籠統,而且全站用語一律「服務人員」(skill 二之二)。 */}
+          <DetailSection label="服務人員">
+            {/* #861 第 3 項:除了角色標籤,也要顯示自己的名字。服務人員可能同時在多間商家任職、
+                也可能一個人被登記成兩筆(改名前/改名後),看到名字才確定「這確實是我這一筆」。
+                #861 第 4 項:主手用 tone="strong"(主題色淺底),協助維持安靜灰底,一眼分得開。 */}
             <DetailRow label="我的角色">
-              <AttributeTag>
-                {booking.role_in_booking === "primary" ? "主要服務人員" : "協助"}
-              </AttributeTag>
+              <span className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                {staffName ? (
+                  <span className="min-w-0 break-words font-semibold text-foreground">
+                    {staffName}
+                  </span>
+                ) : null}
+                <AttributeTag tone={booking.role_in_booking === "primary" ? "strong" : "muted"}>
+                  {booking.role_in_booking === "primary" ? "主要服務人員" : "協助"}
+                </AttributeTag>
+              </span>
             </DetailRow>
           </DetailSection>
 

@@ -188,7 +188,6 @@ function CategoryManager({
                             void handleRename(category.id);
                           }
                         }}
-                        autoFocus
                       />
                     }
                     primaryAction={

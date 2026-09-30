@@ -33,6 +33,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import {
   CARD_CLOSE_CLASS,
   CARD_CONTENT_CLASS,
@@ -58,20 +59,30 @@ interface CardDialogContentProps extends Omit<
 const CardDialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   CardDialogContentProps
->(({ children, hideClose = false, ...props }, ref) => (
-  <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
-    <DialogPrimitive.Content ref={ref} className={CARD_CONTENT_CLASS} {...props}>
-      {children}
-      {hideClose ? null : (
-        <DialogPrimitive.Close className={CARD_CLOSE_CLASS}>
-          <X className="h-5 w-5" />
-          <span className="sr-only">關閉</span>
-        </DialogPrimitive.Close>
-      )}
-    </DialogPrimitive.Content>
-  </DialogPrimitive.Portal>
-));
+>(({ children, hideClose = false, onOpenAutoFocus, ...props }, ref) => {
+  // SPECS-INDEX #861:開窗時不要自動聚焦第一個可聚焦元素(手機會彈鍵盤),改把焦點放在
+  // 對話框容器本身。完整理由與無障礙考量見 overlayAutoFocus.ts。
+  const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
+  return (
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
+      <DialogPrimitive.Content
+        ref={autoFocus.ref}
+        onOpenAutoFocus={autoFocus.onOpenAutoFocus}
+        className={CARD_CONTENT_CLASS}
+        {...props}
+      >
+        {children}
+        {hideClose ? null : (
+          <DialogPrimitive.Close className={CARD_CLOSE_CLASS}>
+            <X className="h-5 w-5" />
+            <span className="sr-only">關閉</span>
+          </DialogPrimitive.Close>
+        )}
+      </DialogPrimitive.Content>
+    </DialogPrimitive.Portal>
+  );
+});
 CardDialogContent.displayName = "CardDialogContent";
 
 const CardDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

@@ -4,10 +4,15 @@
 // 比起既有管理員/客服版本的行事曆(可以跨服務人員切換、建單、編輯),這裡刻意做成簡化版
 // 唯讀檢視——服務人員這次的範圍只到「看得到自己的排程」,不包含建單/編輯(見規格書判斷 2)。
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 
-import { GuardLoading, LoadingSkeleton } from "@/components/patterns";
-import { Badge } from "@/components/ui/badge";
+import {
+  AttributeTag,
+  GuardLoading,
+  ListCard,
+  LoadingSkeleton,
+  StatusTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -23,8 +28,24 @@ import {
   addMonths,
   toDateKey,
 } from "@/modules/booking/dateUtils";
+import { formatAmount } from "@/modules/booking/orderAmount";
+import {
+  BOOKING_STATUS_LABELS,
+  bookingCardAccentBorderStyle,
+  bookingCardHoverBorderColor,
+  bookingStatusTone,
+  DEFAULT_BOOKING_STATUS_COLORS,
+  getBookingStatusColor,
+  type BookingStatus,
+  type BookingStatusColorMap,
+} from "@/modules/booking/types";
 
-import { useActiveMyStaffRecord, useMyBookingSchedule, useMyStaffPermission } from "./context";
+import {
+  useActiveMyStaffRecord,
+  useMyBookingSchedule,
+  useMyBookingStatusColors,
+  useMyStaffPermission,
+} from "./context";
 import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
 import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
 import type { MyBookingScheduleItem } from "./api";
@@ -36,17 +57,32 @@ type CalendarViewMode = "list" | "timeline";
 const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 
 // v2 §10.2.4:兩種檢視(卡片列表/時間軸格線)點擊任一筆預約都要能開啟同一個唯讀詳情彈窗
-// (MyBookingDetailDialog),所以這裡新增 onClick,原本純展示用的 <li> 改成可點擊的 <button>,
-// 卡片本身的呈現內容完全不變。
+// (MyBookingDetailDialog),所以卡片是可點的。
+//
+// 🔴 SPECS-INDEX #861(2026-09-30 使用者實機巡檢):「卡片列表改成訂單管理那樣的 UI」。
+// 改版前這裡是自己手刻的 <li><button> + 一堆 text-xs 小灰字堆疊,跟訂單管理頁(OrdersPage.tsx)
+// 的訂單卡片完全是兩套外觀。現在改成套用跟它同一套共用元件與同一套視覺規則
+// (skill 二之五「列表卡片」+ 二之四「標籤三類」):
+//   ① 外殼用共用的 ListCard(圓角 12px、整張可點、狀態底色)
+//   ② 左側 4px 色條 + 狀態膠囊都讀商家自訂的訂單狀態顏色(#860,bookingCardAccentBorderStyle /
+//      getBookingStatusColor),跟商家端/訂單管理頁同一組色碼,不再是寫死的灰藍
+//   ③ 待確認的卡片整張變黃(state="attention")、已取消整張變灰 —— 跟 OrdersPage 同一條規則
+//   ④ 金額用 text-base font-bold text-brand,跟 OrdersPage 的金額同一個樣式
+// 刻意**不照抄** OrdersPage 的欄位組合:那邊 title 放服務項目、meta 第一行放「預約時間・建單時間・
+// 建單客服」。服務人員端沒有建單時間/建單客服(get_my_booking_schedule 不回傳,也不該回傳),
+// 而且服務人員看自己的一天,最需要一眼看到的是**幾點到幾點**,所以時間放在 meta 第一行放大加粗。
 function BookingListItem({
   booking,
   showCustomerAddress,
+  statusColors,
   onClick,
 }: {
   booking: MyBookingScheduleItem;
   /** 2026-09-24 使用者裁決(任務 2):商家目前的產業需要地址時才顯示客戶地址,見下方
    * MyCalendarPage 裡 showCustomerAddress 的完整說明。 */
   showCustomerAddress: boolean;
+  /** #860:商家自訂的四個訂單狀態色碼(由呼叫端一次查好傳進來,不是每張卡各查一次)。 */
+  statusColors: BookingStatusColorMap;
   onClick: () => void;
 }) {
   // 2026-09-24 深夜巡檢問題 5:原本這裡用 toLocaleTimeString 但**沒有帶 timeZone**,顯示的是
@@ -56,59 +92,87 @@ function BookingListItem({
   // dateUtils.ts 檔頭已明講「不依賴瀏覽器本機時區」,這裡改用它提供的 isoToTaipeiTime。
   const startTime = isoToTaipeiTime(booking.start_at);
   const endTime = isoToTaipeiTime(booking.end_at);
+  const status = booking.status as BookingStatus;
+  const isPrimary = booking.role_in_booking === "primary";
 
   return (
     <li>
-      <button
-        type="button"
+      <ListCard
         onClick={onClick}
-        className="w-full rounded-md border border-border px-3 py-2.5 text-left transition-colors hover:border-brand hover:bg-brand-soft/40"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium text-foreground">
-            {startTime} - {endTime}
-          </p>
-          <div className="flex gap-1.5">
-            <Badge variant={booking.role_in_booking === "primary" ? "default" : "secondary"}>
-              {booking.role_in_booking === "primary" ? "主要服務人員" : "協助"}
-            </Badge>
-            {booking.is_member ? <Badge variant="outline">會員</Badge> : null}
+        state={
+          status === "pending_confirmation"
+            ? "attention"
+            : status === "cancelled"
+              ? "inactive"
+              : "default"
+        }
+        className="border-l-4 hover:border-[color:var(--booking-card-hover-border)]"
+        style={
+          {
+            ...bookingCardAccentBorderStyle(statusColors, status),
+            "--booking-card-hover-border": bookingCardHoverBorderColor(statusColors, status),
+          } as CSSProperties
+        }
+        title={
+          booking.service_item_names.length > 0
+            ? booking.service_item_names.join("、")
+            : "(無服務項目資料)"
+        }
+        tags={
+          <>
+            {/* 狀態膠囊:實心填入商家自訂的那個顏色 + 一律白字,跟訂單管理頁同一條規則
+                (2026-09-30 使用者裁決,SPECS-INDEX #832,理由見 lib/statusPillStyle.ts 檔頭)。 */}
+            <StatusTag
+              tone={bookingStatusTone(status)}
+              fillColor={getBookingStatusColor(statusColors, status)}
+            >
+              {BOOKING_STATUS_LABELS[status] ?? booking.status}
+            </StatusTag>
+            {/* 🔴 SPECS-INDEX #861:「主要服務人員 / 協助」要更顯眼,而且兩者顏色要分得開。
+                改版前兩顆都是同一個灰底 Badge(default/secondary 在這個主題下幾乎一樣),
+                服務人員分不出自己這一單是主手還是副手。現在主手用 tone="strong"(主題色淺底 +
+                主題色字 + 淡框)、協助維持安靜灰底。兩顆都是方角屬性標籤,不會跟左邊的狀態膠囊搞混。 */}
+            <AttributeTag tone={isPrimary ? "strong" : "muted"}>
+              {isPrimary ? "主要服務人員" : "協助"}
+            </AttributeTag>
+            {booking.is_member ? <AttributeTag>會員</AttributeTag> : null}
+          </>
+        }
+        meta={
+          <div className="flex flex-col gap-0.5">
+            {/* 服務人員看自己的一天,最需要一眼看到的就是幾點到幾點 ⇒ 放大加粗放在第一行。 */}
+            <span className="text-[15px] font-semibold text-foreground">
+              {startTime} - {endTime}
+            </span>
+            <span className="text-foreground">
+              {booking.customer_name}
+              {booking.customer_phone ? `・${booking.customer_phone}` : ""}
+            </span>
+            {/* 任務 2:商家切成「到店服務」之後,服務人員的手機上也不該再看到客戶住家地址,所以條件是
+                「商家目前的產業需要地址」且「這筆預約真的有地址值」,不是只看有沒有值。 */}
+            {showCustomerAddress && booking.customer_address ? (
+              <span>{booking.customer_address}</span>
+            ) : null}
+            {/* SPECS-INDEX #851:客服勾了「不讓服務人員看到」時,booking.notes 在資料庫那一層就
+                已經是 null(不是前端藏起來),所以這個既有的條件式不用改就自動什麼都不顯示。 */}
+            {booking.notes ? <span>內部備註:{booking.notes}</span> : null}
+            {booking.customer_notes ? <span>客戶備註:{booking.customer_notes}</span> : null}
+            {booking.is_member ? (
+              <span>
+                會員{booking.member_name ? `:${booking.member_name}` : ""}
+                {booking.member_points_balance != null
+                  ? `(目前點數 ${booking.member_points_balance})`
+                  : ""}
+              </span>
+            ) : null}
+            {booking.final_amount_snapshot != null ? (
+              <span className="mt-1 text-base font-bold text-brand">
+                {formatAmount(booking.final_amount_snapshot)}
+              </span>
+            ) : null}
           </div>
-        </div>
-        <p className="mt-1 text-sm text-foreground">
-          {booking.customer_name}
-          {booking.customer_phone ? `・${booking.customer_phone}` : ""}
-        </p>
-        {/* 任務 2:商家切成「到店服務」之後,服務人員的手機上也不該再看到客戶住家地址,所以條件是
-            「商家目前的產業需要地址」且「這筆預約真的有地址值」,不是只看有沒有值。 */}
-        {showCustomerAddress && booking.customer_address ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{booking.customer_address}</p>
-        ) : null}
-        {booking.service_item_names.length > 0 ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            服務項目:{booking.service_item_names.join("、")}
-          </p>
-        ) : null}
-        {booking.notes ? (
-          <p className="mt-1 text-xs text-muted-foreground">內部備註:{booking.notes}</p>
-        ) : null}
-        {booking.customer_notes ? (
-          <p className="mt-1 text-xs text-muted-foreground">客戶備註:{booking.customer_notes}</p>
-        ) : null}
-        {booking.is_member ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            會員{booking.member_name ? `:${booking.member_name}` : ""}
-            {booking.member_points_balance != null
-              ? `(目前點數 ${booking.member_points_balance})`
-              : ""}
-          </p>
-        ) : null}
-        {booking.final_amount_snapshot != null ? (
-          <p className="mt-1 text-xs text-muted-foreground">
-            金額:{booking.final_amount_snapshot} 元
-          </p>
-        ) : null}
-      </button>
+        }
+      />
     </li>
   );
 }
@@ -136,6 +200,11 @@ export default function MyCalendarPage() {
     isLoading: scheduleLoading,
     error,
   } = useMyBookingSchedule(merchantId, rangeStartKey, rangeEndKey);
+
+  // SPECS-INDEX #860:商家自訂的四個訂單狀態色碼,整頁查一次傳給每張卡片(卡片列表的色條/狀態
+  // 膠囊、時間軸格線的色塊都用它)。載入中/查無資料時 fallback 成 DEFAULT_BOOKING_STATUS_COLORS。
+  const { data: bookingStatusColors } = useMyBookingStatusColors(staffRow?.id ?? null);
+  const effectiveStatusColors = bookingStatusColors ?? DEFAULT_BOOKING_STATUS_COLORS;
 
   const bookingsByDate = useMemo(() => {
     const map = new Map<string, MyBookingScheduleItem[]>();
@@ -302,6 +371,7 @@ export default function MyCalendarPage() {
                     key={`${booking.id}-${booking.role_in_booking}`}
                     booking={booking}
                     showCustomerAddress={showCustomerAddress}
+                    statusColors={effectiveStatusColors}
                     onClick={() => setDetailBookingId(booking.id)}
                   />
                 ))}
@@ -312,6 +382,10 @@ export default function MyCalendarPage() {
 
       <MyBookingDetailDialog
         booking={detailBooking}
+        // SPECS-INDEX #861 第 3 項:「我的角色」那一列要顯示自己的名字,不是只有角色標籤。
+        // 名字從 useActiveMyStaffRecord 拿(這一頁本來就已經查過,不用多發一支查詢);
+        // 還沒載入完時傳 null,那一列就只顯示角色標籤(維持改版前的樣子,不顯示空白名字)。
+        staffName={staffRow?.name ?? null}
         showCustomerAddress={showCustomerAddress}
         open={detailBookingId !== null}
         onOpenChange={(open) => {

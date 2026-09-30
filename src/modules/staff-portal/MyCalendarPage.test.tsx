@@ -25,6 +25,8 @@ const useCurrentMerchantMock = vi.fn();
 const useMyStaffPermissionMock = vi.fn();
 const useActiveMyStaffRecordMock = vi.fn();
 const useMyBookingScheduleMock = vi.fn();
+// SPECS-INDEX #860:卡片的左側色條與狀態膠囊改讀商家自訂的訂單狀態顏色。
+const useMyBookingStatusColorsMock = vi.fn();
 
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => useCurrentMerchantMock(),
@@ -34,6 +36,7 @@ vi.mock("./context", () => ({
   useMyStaffPermission: (...args: unknown[]) => useMyStaffPermissionMock(...args),
   useActiveMyStaffRecord: (...args: unknown[]) => useActiveMyStaffRecordMock(...args),
   useMyBookingSchedule: (...args: unknown[]) => useMyBookingScheduleMock(...args),
+  useMyBookingStatusColors: (...args: unknown[]) => useMyBookingStatusColorsMock(...args),
 }));
 
 // 這兩個子元件不是這次的測試對象,換成最小的替身,避免把它們自己的資料查詢也拖進來。
@@ -85,6 +88,8 @@ describe("MyCalendarPage", () => {
     useActiveMyStaffRecordMock.mockReturnValue({ data: { id: "staff-1" }, isLoading: false });
     useMyStaffPermissionMock.mockReturnValue({ data: true, isLoading: false });
     useMyBookingScheduleMock.mockReturnValue({ data: [], isLoading: false, error: null });
+    // 沒自訂過顏色 → 元件自己 fallback 成 DEFAULT_BOOKING_STATUS_COLORS。
+    useMyBookingStatusColorsMock.mockReturnValue({ data: undefined });
   });
 
   afterEach(() => {
@@ -169,5 +174,82 @@ describe("MyCalendarPage", () => {
     expect(
       screen.getByText("尚未開放此功能,請洽商家管理員開通「行事曆檢視」權限。"),
     ).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // SPECS-INDEX #856:「旗標沒開的訂單,服務人員一定看得到內部備註」的回歸測試。
+  //
+  // 🔴 為什麼要補這一條:這個顯示邏輯從 2026-09-21(commit 1caf4d5 / 25b2402)就存在,
+  // 但**完全沒有測試在保護它** —— 這個檔案原本的測試資料把 notes 設成 null(見 makeBooking),
+  // 等於「有值的情況」從來沒被測到;module14 那支 pgTAP 測了 customer_name / is_member /
+  // role_in_booking,就是沒測 notes。使用者 2026-09-30 回報「服務人員端看不到內部備註」,
+  // 主腦與 planner 覆核後確認**那是那筆訂單沒填備註**,不是功能缺失(使用者自己也確認「是有顯示的」)。
+  // ⇒ 需求 1 要做的不是新功能,是**把這個沒人保護的行為釘住**,以後任何人改這一頁
+  //   (例如這次 #861 把卡片整個換成 ListCard)都不會把它弄掉。
+  //
+  // 【故障注入驗證(2026-09-30 實際跑過並還原)】
+  //   MyCalendarPage.tsx 的 `{booking.notes ? <span>內部備註:{booking.notes}</span> : null}` 拿掉
+  //   → 下面第 1 條轉紅;第 2 條(旗標打開 = notes 為 null 時不顯示)仍綠。
+  // =========================================================================
+  it("#856:內部備註有值時,卡片上要顯示「內部備註:…」(預設服務人員看得到)", async () => {
+    useMyBookingScheduleMock.mockReturnValue({
+      data: [makeBooking({ notes: "上次尾款沒收", customer_notes: "有養狗" })],
+      isLoading: false,
+      error: null,
+    });
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    expect(screen.getByText("內部備註:上次尾款沒收")).toBeInTheDocument();
+    // 兩種備註要分得開(skill 二之六):客戶備註有自己的前綴,不會被混在一起。
+    expect(screen.getByText("客戶備註:有養狗")).toBeInTheDocument();
+  });
+
+  it("#851/#855:客服勾了「不讓服務人員看到」時 notes 已經在資料層被遮成 null,卡片上整塊不出現", async () => {
+    // 遮蔽是做在 get_my_booking_schedule 裡(不是前端 if 掉),所以前端拿到的就是 notes = null。
+    // 主腦裁決 T1=A:不顯示任何「有東西被藏起來」的提示 —— 所以連「內部備註」這四個字都不該出現。
+    useMyBookingScheduleMock.mockReturnValue({
+      data: [makeBooking({ notes: null, customer_notes: "有養狗" })],
+      isLoading: false,
+      error: null,
+    });
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    expect(screen.queryByText(/內部備註/)).not.toBeInTheDocument();
+    // 客戶備註不受影響(它從來不是這個旗標的範圍)。
+    expect(screen.getByText("客戶備註:有養狗")).toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // SPECS-INDEX #861 第 4 項:「主要服務人員 / 協助」要更顯眼 + 兩者顏色要區分。
+  // 改版前兩顆都是灰底 Badge,服務人員分不出自己這一單是主手還是副手。
+  // =========================================================================
+  it("#861:主要服務人員的標籤用主題色(attributeStrong),協助用安靜灰底,兩者 class 不同", async () => {
+    useMyBookingScheduleMock.mockReturnValue({
+      data: [
+        makeBooking({ id: "b-primary", role_in_booking: "primary" }),
+        makeBooking({
+          id: "b-assistant",
+          role_in_booking: "assistant",
+          start_at: "2026-09-24T18:30:00+00:00",
+          end_at: "2026-09-24T19:30:00+00:00",
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    });
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    const primaryTag = screen.getByText("主要服務人員");
+    const assistantTag = screen.getByText("協助");
+    // 🔴 顏色不能是唯一的差別(skill 二之四)—— 兩顆都有完整文字,上面兩行就是在確認這件事。
+    expect(primaryTag.className).not.toBe(assistantTag.className);
+    expect(primaryTag.className).toContain("text-brand");
+    expect(assistantTag.className).toContain("text-muted-foreground");
   });
 });

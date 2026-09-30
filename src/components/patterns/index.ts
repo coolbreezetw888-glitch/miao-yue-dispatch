@@ -17,6 +17,7 @@
 // | 底線式切換列 | UnderlineTabs.tsx | 二之四末段 + 二之八 |
 // | 右緣漸層要不要顯示(橫捲提示) | useHorizontalScrollHint.ts | 六 |
 // | `?` 說明鈕 / `!` 提醒條 | HelpHint.tsx | 二 |
+// | 彈窗開窗時不自動聚焦(手機不彈鍵盤)| overlayAutoFocus.ts | 三、兩種窗(SPECS-INDEX #861)|
 
 export * from "./ActionBar";
 export * from "./CardAlertDialog";
@@ -27,6 +28,7 @@ export * from "./FullPageLayer";
 export * from "./GuardLoading";
 export * from "./HelpHint";
 export * from "./ListCard";
+export * from "./overlayAutoFocus";
 export * from "./PageScaffold";
 export * from "./parseAmountInput";
 export * from "./Tags";

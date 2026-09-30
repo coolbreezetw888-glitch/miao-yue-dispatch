@@ -112,12 +112,35 @@ export function StatusTag({
   );
 }
 
+/** 屬性標籤的兩種強度。SPECS-INDEX #861。 */
+export type AttributeTone = "muted" | "strong";
+
 export function AttributeTag({
+  tone = "muted",
   wrap,
   className,
   ...props
-}: Omit<BadgeProps, "variant"> & WrapProps) {
-  return <Badge variant="attribute" className={cn(wrapClass(wrap), className)} {...props} />;
+}: Omit<BadgeProps, "variant"> &
+  WrapProps & {
+    /**
+     * muted(預設)= skill 二之四 的標準屬性標籤:方角、灰底、安靜。全站既有使用點都是這個,
+     * 不傳就跟改版前完全一樣。
+     *
+     * strong = 同樣方角(還是屬性,不是狀態),但換成主題色淺底 + 主題色字 + 淡框。
+     * 只用在「同一個位置會出現兩種互斥的屬性,而其中一種明顯比較重要、使用者必須一眼分出來」
+     * 的情境 —— 目前唯一的使用點是服務人員端的「主要服務人員」vs「協助」
+     * (SPECS-INDEX #861:兩顆原本都是灰底,服務人員分不出自己這一單是主手還是副手)。
+     * ⚠️ 不要為了「讓標籤好看一點」到處傳 strong,一整頁都醒目等於沒有一個醒目。
+     */
+    tone?: AttributeTone | undefined;
+  }) {
+  return (
+    <Badge
+      variant={tone === "strong" ? "attributeStrong" : "attribute"}
+      className={cn(wrapClass(wrap), className)}
+      {...props}
+    />
+  );
 }
 
 export function TodoTag({

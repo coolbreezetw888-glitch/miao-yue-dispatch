@@ -32,6 +32,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import { OVERLAY_CLASS } from "./overlayClasses";
 
 const FullPageLayer = DialogPrimitive.Root;
@@ -75,70 +76,87 @@ const FullPageLayerContent = React.forwardRef<
   FullPageLayerContentProps
 >(
   (
-    { children, title, titleExtra, footer, size = "default", subtitle, description, ...props },
+    {
+      children,
+      title,
+      titleExtra,
+      footer,
+      size = "default",
+      subtitle,
+      description,
+      onOpenAutoFocus,
+      ...props
+    },
     ref,
-  ) => (
-    <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
-      <DialogPrimitive.Content
-        ref={ref}
-        // 沒有 Description 時要明確給 undefined,Radix 才不會在 console 警告缺少 aria-describedby;
-        // 有 Description 時不能傳(傳 undefined 會蓋掉 Radix 自動連結的 id)。
-        {...(subtitle || description ? {} : { "aria-describedby": undefined })}
-        className={cn(
-          // 手機:整個螢幕蓋滿(dvh 才會避開 iOS Safari 的網址列)。
-          "fixed inset-0 z-50 flex h-dvh w-full flex-col bg-background focus:outline-none",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-          // 電腦:置中面板、上下各留 18px、左右最少留 16px、圓角 16px。
-          "sm:inset-x-auto sm:inset-y-[18px] sm:left-1/2 sm:h-auto sm:w-[calc(100%-32px)] sm:-translate-x-1/2 sm:overflow-hidden sm:rounded-xl sm:border sm:shadow-lg",
-          "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
-          SIZE_CLASS[size],
-        )}
-        {...props}
-      >
-        <header className="shrink-0 border-b border-border">
-          <div className="flex h-[54px] items-center gap-2 px-2 sm:px-3">
-            {/* 手機:左上角 ✕ */}
-            <DialogPrimitive.Close className={cn(closeButtonClass, "sm:hidden")}>
-              <X className="h-5 w-5" />
-              <span className="sr-only">關閉</span>
-            </DialogPrimitive.Close>
-            <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-base font-bold text-foreground sm:pl-1">
-              {title}
-            </DialogPrimitive.Title>
-            {!subtitle && description ? (
-              <DialogPrimitive.Description className="sr-only">
-                {description}
+  ) => {
+    // SPECS-INDEX #861:開窗時不要自動聚焦第一個可聚焦元素(手機會彈鍵盤)。全頁層是長表單的殼
+    // (建單、編輯服務人員……),第一個可聚焦元素幾乎都是輸入框,所以這裡是使用者回報的主場。
+    // 焦點改放在對話框容器本身,理由與無障礙考量見 overlayAutoFocus.ts。
+    const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
+    return (
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
+        <DialogPrimitive.Content
+          ref={autoFocus.ref}
+          onOpenAutoFocus={autoFocus.onOpenAutoFocus}
+          // 沒有 Description 時要明確給 undefined,Radix 才不會在 console 警告缺少 aria-describedby;
+          // 有 Description 時不能傳(傳 undefined 會蓋掉 Radix 自動連結的 id)。
+          {...(subtitle || description ? {} : { "aria-describedby": undefined })}
+          className={cn(
+            // 手機:整個螢幕蓋滿(dvh 才會避開 iOS Safari 的網址列)。
+            "fixed inset-0 z-50 flex h-dvh w-full flex-col bg-background focus:outline-none",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+            // 電腦:置中面板、上下各留 18px、左右最少留 16px、圓角 16px。
+            "sm:inset-x-auto sm:inset-y-[18px] sm:left-1/2 sm:h-auto sm:w-[calc(100%-32px)] sm:-translate-x-1/2 sm:overflow-hidden sm:rounded-xl sm:border sm:shadow-lg",
+            "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
+            SIZE_CLASS[size],
+          )}
+          {...props}
+        >
+          <header className="shrink-0 border-b border-border">
+            <div className="flex h-[54px] items-center gap-2 px-2 sm:px-3">
+              {/* 手機:左上角 ✕ */}
+              <DialogPrimitive.Close className={cn(closeButtonClass, "sm:hidden")}>
+                <X className="h-5 w-5" />
+                <span className="sr-only">關閉</span>
+              </DialogPrimitive.Close>
+              <DialogPrimitive.Title className="min-w-0 flex-1 truncate text-base font-bold text-foreground sm:pl-1">
+                {title}
+              </DialogPrimitive.Title>
+              {!subtitle && description ? (
+                <DialogPrimitive.Description className="sr-only">
+                  {description}
+                </DialogPrimitive.Description>
+              ) : null}
+              {titleExtra ? (
+                <div className="flex shrink-0 items-center gap-2">{titleExtra}</div>
+              ) : null}
+              {/* 電腦:右上角 ✕ */}
+              <DialogPrimitive.Close className={cn(closeButtonClass, "hidden sm:inline-flex")}>
+                <X className="h-5 w-5" />
+                <span className="sr-only">關閉</span>
+              </DialogPrimitive.Close>
+            </div>
+            {subtitle ? (
+              // 可見副標:手機對齊標題(標題前面有 40px 的 ✕,所以左邊 padding 跟著補到 48px);
+              // 電腦沒有左上角 ✕,對齊標題的 pl-1 + px-3。
+              <DialogPrimitive.Description className="-mt-1.5 break-words px-4 pb-2.5 pl-12 text-[13px] leading-relaxed text-muted-foreground sm:pl-4">
+                {subtitle}
               </DialogPrimitive.Description>
             ) : null}
-            {titleExtra ? (
-              <div className="flex shrink-0 items-center gap-2">{titleExtra}</div>
-            ) : null}
-            {/* 電腦:右上角 ✕ */}
-            <DialogPrimitive.Close className={cn(closeButtonClass, "hidden sm:inline-flex")}>
-              <X className="h-5 w-5" />
-              <span className="sr-only">關閉</span>
-            </DialogPrimitive.Close>
-          </div>
-          {subtitle ? (
-            // 可見副標:手機對齊標題(標題前面有 40px 的 ✕,所以左邊 padding 跟著補到 48px);
-            // 電腦沒有左上角 ✕,對齊標題的 pl-1 + px-3。
-            <DialogPrimitive.Description className="-mt-1.5 break-words px-4 pb-2.5 pl-12 text-[13px] leading-relaxed text-muted-foreground sm:pl-4">
-              {subtitle}
-            </DialogPrimitive.Description>
+          </header>
+
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
+
+          {footer ? (
+            <footer className="shrink-0 border-t border-border px-3 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:px-4">
+              {footer}
+            </footer>
           ) : null}
-        </header>
-
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4">{children}</div>
-
-        {footer ? (
-          <footer className="shrink-0 border-t border-border px-3 pt-2.5 pb-[max(14px,env(safe-area-inset-bottom))] sm:px-4">
-            {footer}
-          </footer>
-        ) : null}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  ),
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    );
+  },
 );
 FullPageLayerContent.displayName = "FullPageLayerContent";
 

@@ -26,6 +26,22 @@
  *     </CardAlertDialogContent>
  *   </CardAlertDialog>
  *
+ * 🔴 SPECS-INDEX #861「全站彈窗關掉自動聚焦」為什麼**沒有**動這個檔案(不是漏改):
+ *    Radix 的 AlertDialogContent 內部**本來就已經**做了這件事 ——
+ *      node_modules/@radix-ui/react-alert-dialog/dist/index.mjs 第 58-61 行:
+ *        onOpenAutoFocus: composeEventHandlers(contentProps.onOpenAutoFocus, (event) => {
+ *          event.preventDefault();
+ *          cancelRef.current?.focus({ preventScroll: true });
+ *        })
+ *    它 preventDefault 掉「自動聚焦第一個可聚焦元素」,然後把焦點放在**「取消」按鈕**上。
+ *    所以:① 焦點不是輸入框 ⇒ 手機不會彈鍵盤(使用者回報的問題在這個殼上不存在);
+ *          ② 焦點在對話框裡面、而且落在「安全的那一顆」⇒ 無障礙比放在裸容器上更好。
+ *    ⇒ 在這裡再疊一層 onOpenAutoFocus 只會把「落在取消鈕」換成「落在容器」,沒有任何好處,
+ *      還讓鍵盤使用者多按一次 Tab。這個殼也永遠不會有輸入欄位(有欄位的短表單一律用 CardDialog),
+ *      所以不會有「以後某天它變成會彈鍵盤」的風險。
+ *    ⚠️ 如果哪天要改成跟另外兩個殼一樣(焦點放容器),請用 useOverlayOpenAutoFocus
+ *      (src/components/patterns/overlayAutoFocus.ts),不要各寫一份。
+ *
  * ⚠️ 這裡改動會影響全站所有確認窗,改之前先讀 .claude/skills/ui-overlay-patterns/SKILL.md。
  */
 

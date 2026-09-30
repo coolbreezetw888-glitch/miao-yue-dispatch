@@ -46,6 +46,7 @@ import {
   useStaffMonthlyPayrollSummaryByRange,
 } from "./api";
 import { buildCsvContent, downloadCsv } from "./csvExport";
+import { validateDateRange } from "./dateRangeUtils";
 import { formatStaffCommissionItemBreakdown } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
@@ -141,6 +142,20 @@ export function PieceRateStaffReport({
     downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
+  // 🔴 SPECS-INDEX #861(2026-09-30 使用者實機巡檢):日期填反時,DateRangePicker 底下已經有
+  // 一行欄位錯誤「結束日期不能早於起始日期」,這裡不可以再跳一塊「讀不到這份報表 / 可能是網路斷了,
+  // 或你沒有查看這位服務人員報表的權限」—— 那個訊息會把「你把日期填反了」誤導成「系統壞了 /
+  // 你沒有權限」,使用者只會更慌,而且真正該修的地方(上面那兩個日期欄)完全沒被指出來。
+  //
+  // 查詢本身早就已經不會送出:三支 *_by_range hook 的 enabled 都帶了
+  // `validateDateRange(...) === null`(見 payroll/api.ts)。問題純粹是「查詢被停用時 data 是
+  // undefined,而下面的條件寫成 `error || !summary`」,於是 undefined 被當成失敗。
+  // ⇒ 這裡用同一支 validateDateRange 判斷,不合法就整塊不渲染(單一訊息來源 = 欄位錯誤那一行)。
+  const dateRangeError = dateRange
+    ? validateDateRange(dateRange.startDate, dateRange.endDate)
+    : null;
+
+  if (dateRangeError) return null;
   if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
     return (
@@ -337,6 +352,20 @@ export function MonthlySalaryStaffReport({
     downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
   }
 
+  // 🔴 SPECS-INDEX #861(2026-09-30 使用者實機巡檢):日期填反時,DateRangePicker 底下已經有
+  // 一行欄位錯誤「結束日期不能早於起始日期」,這裡不可以再跳一塊「讀不到這份報表 / 可能是網路斷了,
+  // 或你沒有查看這位服務人員報表的權限」—— 那個訊息會把「你把日期填反了」誤導成「系統壞了 /
+  // 你沒有權限」,使用者只會更慌,而且真正該修的地方(上面那兩個日期欄)完全沒被指出來。
+  //
+  // 查詢本身早就已經不會送出:三支 *_by_range hook 的 enabled 都帶了
+  // `validateDateRange(...) === null`(見 payroll/api.ts)。問題純粹是「查詢被停用時 data 是
+  // undefined,而下面的條件寫成 `error || !summary`」,於是 undefined 被當成失敗。
+  // ⇒ 這裡用同一支 validateDateRange 判斷,不合法就整塊不渲染(單一訊息來源 = 欄位錯誤那一行)。
+  const dateRangeError = dateRange
+    ? validateDateRange(dateRange.startDate, dateRange.endDate)
+    : null;
+
+  if (dateRangeError) return null;
   if (isLoading) return <LoadingSkeleton variant="cards" rows={3} />;
   if (error || !summary)
     return (
