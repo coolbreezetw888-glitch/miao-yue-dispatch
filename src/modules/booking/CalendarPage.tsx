@@ -1430,7 +1430,9 @@ export function BookingFormDialog({
                       />
                       <span
                         aria-hidden="true"
-                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[15px] text-muted-foreground"
+                        // #869 配套:疊在輸入框上的裝飾字,字級要跟輸入框本體(手機 16 / 桌機 15)同步,
+                        // 否則手機上數字 16px、`%` 15px 會對不齊。
+                        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[16px] text-muted-foreground md:text-[15px]"
                       >
                         %
                       </span>

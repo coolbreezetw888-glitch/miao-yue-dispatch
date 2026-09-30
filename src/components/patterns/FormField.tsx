@@ -132,8 +132,18 @@ export function FieldError({ children }: { children: React.ReactNode }) {
 // 輸入元件:44px / 10px 圓角 / 錯誤時跟著外框變紅
 // ---------------------------------------------------------------------------
 
+// 🔴 **手機一定要 16px,不可以再改回 15px**(SPECS-INDEX #869,2026-09-30 使用者回報)。
+// iOS Safari 只要「可輸入的控制項」字級 < 16px,聚焦時就會自動把整頁放大,左右兩側被切掉。
+// 這一份 class 是全站每一個輸入框 / 金額框 / 多行文字框 / 原生下拉 / 時間選擇器的共用字級,
+// 所以原本的 `text-[15px]` 等於全站都會中招,不只使用者回報的數量 / 單價欄位。
+// shadcn 原生的 ui/input.tsx、ui/textarea.tsx 本來就寫 `text-base md:text-sm`(手機 16 / 桌機 14),
+// 那正是官方對這個問題的標準解 —— 是這裡的 `text-[15px] md:text-[15px]` 把它覆蓋掉才把問題帶回來。
+// Tailwind 是 mobile-first ⇒ `text-[16px] md:text-[15px]` = 手機 16px、≥768px 桌機仍然 15px,
+// **桌機外觀完全不變**。
+// ❌ 不要改用在 index.html 的 viewport 加 `maximum-scale=1` / `user-scalable=no` 來鎖縮放 ——
+//    那會連使用者自己想放大看都被擋掉,是無障礙退步。
 const FIELD_CONTROL_CLASS =
-  "h-11 rounded-md border-input bg-background px-3 text-[15px] md:text-[15px] group-data-[invalid=true]/field:border-destructive group-data-[invalid=true]/field:focus-visible:ring-destructive";
+  "h-11 rounded-md border-input bg-background px-3 text-[16px] md:text-[15px] group-data-[invalid=true]/field:border-destructive group-data-[invalid=true]/field:focus-visible:ring-destructive";
 
 export const FieldInput = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, ...props }, ref) => (
@@ -149,7 +159,8 @@ export const FieldTextarea = React.forwardRef<
   <Textarea
     ref={ref}
     className={cn(
-      "min-h-[88px] rounded-md border-input bg-background px-3 py-2.5 text-[15px] leading-relaxed md:text-[15px] group-data-[invalid=true]/field:border-destructive",
+      // 手機 16px 的理由同 FIELD_CONTROL_CLASS 上方那段(#869):多行文字框一樣會觸發 iOS 自動放大。
+      "min-h-[88px] rounded-md border-input bg-background px-3 py-2.5 text-[16px] leading-relaxed md:text-[15px] group-data-[invalid=true]/field:border-destructive",
       className,
     )}
     {...props}
@@ -173,7 +184,9 @@ export const FieldAmountInput = React.forwardRef<
   <div className="relative">
     <span
       aria-hidden="true"
-      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[15px] text-muted-foreground"
+      // #869 配套:這個 `$` 是疊在輸入框上的裝飾字,字級要跟輸入框本體同步變成手機 16 / 桌機 15,
+      // 否則手機上數字 16px、`$` 15px,兩個字會對不齊(baseline 差一截)。
+      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[16px] text-muted-foreground md:text-[15px]"
     >
       $
     </span>
@@ -290,9 +303,11 @@ export function FieldSelect<T extends string = string>({
 // 原生控制項:<select> / <input type="time"> / <input type="date">
 // ---------------------------------------------------------------------------
 
-/** 原生控制項共用:跟 FIELD_CONTROL_CLASS 同高同圓角同字級,錯誤時同樣跟著外框變紅。 */
+/** 原生控制項共用:跟 FIELD_CONTROL_CLASS 同高同圓角同字級,錯誤時同樣跟著外框變紅。
+ *  字級同樣是手機 16 / 桌機 15(#869)—— 原生 <select> 與 <input type="time"> 在 iOS 上
+ *  一樣會因為字級 < 16px 觸發整頁自動放大。 */
 const NATIVE_CONTROL_CLASS =
-  "h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-[15px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 group-data-[invalid=true]/field:border-destructive";
+  "h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-[16px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 group-data-[invalid=true]/field:border-destructive md:text-[15px]";
 
 /** time / date 的原生小圖示(Chrome 的 ::-webkit-calendar-picker-indicator)預設自帶一截左邊距,
  *  兩顆時間欄位並排在 320px 時會把「上午 09:00」最後一個字擠掉,這裡把它歸零。 */

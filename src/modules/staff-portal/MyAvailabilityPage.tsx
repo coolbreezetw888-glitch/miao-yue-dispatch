@@ -115,9 +115,18 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
           </ul>
         )}
 
+        {/* 🔴 這三個原生控制項的字級一定是「手機 16px / 桌機 text-sm」,**不可以改回單一 text-sm**
+            (SPECS-INDEX #869,2026-09-30 使用者回報)。iOS Safari 只要可輸入的控制項字級 < 16px,
+            聚焦時就會自動把整頁放大、左右兩側被切掉。這一頁的 select / time 是手寫的原生控制項,
+            沒有走 components/patterns/FormField.tsx,所以不會被那邊的共用修法涵蓋,要各自寫。
+            Tailwind 是 mobile-first ⇒ `text-[16px] md:text-sm` = 手機 16px、≥768px 桌機仍是 14px,
+            **桌機外觀完全不變**(py-1.5 也沒動,高度不變)。
+            ❌ 不要改用在 index.html 的 viewport 鎖縮放,那會連使用者自己想放大看都被擋掉。
+            📌 這一頁整體換成 FieldNativeSelect / FieldTime 的 ui-pattern 對齊是另一列需求,
+               這次**只補字級、不做改版**。 */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <select
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className="rounded-md border border-input bg-background px-2 py-1.5 text-[16px] md:text-sm"
             value={dayOfWeek}
             onChange={(e) => setDayOfWeek(e.target.value)}
           >
@@ -129,14 +138,14 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
           </select>
           <input
             type="time"
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className="rounded-md border border-input bg-background px-2 py-1.5 text-[16px] md:text-sm"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
           />
           <span className="text-sm text-muted-foreground">至</span>
           <input
             type="time"
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+            className="rounded-md border border-input bg-background px-2 py-1.5 text-[16px] md:text-sm"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
           />

@@ -44,7 +44,12 @@ const CommandInput = React.forwardRef<
     <CommandPrimitive.Input
       ref={ref}
       className={cn(
-        "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+        // 🔴 `text-base md:text-sm`(手機 16px / 桌機 14px),**不可以改回單純的 `text-sm`**
+        // (SPECS-INDEX #869)。iOS Safari 只要文字輸入框字級 < 16px,聚焦時就會自動把整頁放大、
+        // 左右兩側被切掉。這是 shadcn 的 ui/input.tsx 與 ui/textarea.tsx 一直在用的同一個寫法,
+        // 也是官方對這個問題的標準解。目前全 repo 還沒有人用到 Command,這一行是先把回歸入口堵掉 ——
+        // 哪天有人拿它做搜尋框,就不會又把這個 bug 帶回來。
+        "flex h-10 w-full rounded-md bg-transparent py-3 text-base outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
         className,
       )}
       {...props}
