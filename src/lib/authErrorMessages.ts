@@ -3,7 +3,7 @@
 // 為什麼需要這個檔案(2026-09-24 深夜巡檢抓到的問題):
 // src/routes/signin.tsx 跟 src/routes/signup.tsx 原本直接把 `error.message` 丟進 toast,
 // 那是 Supabase Auth(GoTrue)回傳的英文字串。結果整個產品都是中文,偏偏「最常出錯的那一頁」
-// 是英文——師傅在手機上打錯密碼看到的是「登入失敗 / Invalid login credentials」,
+// 是英文——服務人員在手機上打錯密碼看到的是「登入失敗 / Invalid login credentials」,
 // Email 已經註冊過看到的是「User already registered」。
 //
 // 設計原則(刻意這樣定,之後維護請照這個原則加):

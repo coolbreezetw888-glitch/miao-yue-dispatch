@@ -343,7 +343,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
   },
   {
     key: "staff_report",
-    // 2026-09-24 使用者指定改名:「師傅報表」→「服務人員報表」。這個 label 是客服權限設定頁上實際顯示的
+    // 2026-09-24 使用者指定改名:原本的舊稱報表名稱 →「服務人員報表」。這個 label 是客服權限設定頁上實際顯示的
     // 開關名稱,要跟 appLayoutLogic.ts 的頁首標題、ManagePage.tsx 的功能卡片 label 用同一個詞。
     label: "服務人員報表",
     description:

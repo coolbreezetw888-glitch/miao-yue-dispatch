@@ -1,9 +1,9 @@
 // 用語守門測試:全系統「使用者看得到的字」都不可以出現特定產業的稱呼。
 //
 // 🔴 為什麼要有這一支(2026-09-30,SPECS-INDEX #832 收尾批)
-// 2026-09-24 全系統把「師傅」改成「服務人員」之後,**已經第三次**在使用者看得到的地方抓到殘留:
-//   ① ui-v1-full 第 3 批:資料匯入精靈的「歷史訂單 CSV 模板」示範列寫「王師傅」。
-//   ② 收尾批:行銷首頁(src/routes/index.tsx)「服務人員端」那段的手機模擬畫面寫「阿哲師傅」
+// 2026-09-24 全系統把冷氣業舊稱(FORBIDDEN_TERMS 第一個詞)改成「服務人員」之後,**已經第三次**在使用者看得到的地方抓到殘留:
+//   ① ui-v1-full 第 3 批:資料匯入精靈的「歷史訂單 CSV 模板」示範列的服務人員姓名帶著舊稱。
+//   ② 收尾批:行銷首頁(src/routes/index.tsx)「服務人員端」那段的手機模擬畫面,示範姓名帶著舊稱
 //      —— 而且就在一句「服務人員端不用下載 App」的正下方。
 //   ③(加上原本 2026-09-24 那批本身漏掉的幾處)
 //
@@ -12,7 +12,7 @@
 // 「通知訊息範本的範例值」「行銷首頁的假畫面」這些同樣是使用者看得到的字。所以這裡改成
 // **直接掃原始碼**:凡是會被編譯進畫面的字(字串常值、JSX 文字),一律不准出現那些詞。
 //
-// 🔴 程式碼註解要排除在外。註解裡本來就會寫歷史沿革(「2026-09-24 把師傅改成服務人員」)、
+// 🔴 程式碼註解要排除在外。註解裡本來就會寫歷史沿革(「2026-09-24 把舊稱改成服務人員」)、
 //    寫這次踩的坑 —— 那是**脈絡**,不是用語,把它一起禁掉的話,以後沒有人能在程式碼裡
 //    解釋「為什麼不能用這個詞」,規則本身就失傳了。所以下面 stripComments() 會先把
 //    `//` 行註解、`/* */` 區塊註解(含 JSX 的 `{/* */}`)整段換成空白,只留字串與 JSX 文字。
@@ -36,8 +36,8 @@ import { PUSH_TEMPLATE_PREVIEW_SAMPLE_VALUES } from "@/modules/push-notification
 /**
  * 🔴 禁用的特定產業稱呼。要新增的話直接加在這裡。
  *
- * 一律用「服務人員」。理由(skill 二之二):使用者本人做冷氣,會不自覺講「師傅」,但這套系統
- * 要賣給美甲、美容、寵物美容、到府清潔各行各業 —— 美甲師看到「師傅」會覺得這套系統不是給他用的。
+ * 一律用「服務人員」。理由(skill 二之二):使用者本人做冷氣,會不自覺講冷氣業的舊稱(下面清單第一個詞),
+ * 但這套系統要賣給美甲、美容、寵物美容、到府清潔各行各業 —— 美甲師看到那個舊稱會覺得這套系統不是給他用的。
  */
 const FORBIDDEN_TERMS = ["師傅", "店長", "技師", "美容師"];
 
@@ -226,7 +226,7 @@ describe("用語守門:使用者看得到的字不可以出現特定產業稱呼
     // 註解那兩行被清成空白
     expect(stripped.split("\n")[0]!.trim()).toBe("");
     expect(stripped.split("\n")[1]!.trim()).toBe("");
-    // 🔴 關鍵:`https://` 後面的 `"王師傅"` 不可以被當成行註解一起吃掉
+    // 🔴 關鍵:`https://` 後面那個含禁用詞的字串常值,不可以被當成行註解一起吃掉
     expect(stripped.split("\n")[2]).toContain("王師傅");
     expect(stripped.split("\n")[3]).toContain("店長");
   });
@@ -270,7 +270,7 @@ describe("用語守門:通知訊息範本的範例值", () => {
 //
 // 🔴 為什麼要延伸(2026-09-30,SPECS-INDEX #878)
 // 上面那一段只掃 `src/` 跟 `supabase/functions/`,**掃不到資料庫函式的內容**。結果是
-// `raise exception '沒有權限查詢這間商家的師傅報表'` 這句在 migration 裡活了 10 天、
+// `raise exception '沒有權限查詢這間商家的(舊稱)報表'` 這句在 migration 裡活了 10 天、
 // 散在 8 個檔案裡沒有人發現 —— 而那是服務人員/客服被擋下來時,**畫面上直接跳出來的紅字**。
 // 守門網有洞就等於沒有守門網,所以這一段把範圍延伸到 migration。
 //
@@ -306,11 +306,19 @@ const SQL_RAISE_STATEMENT = /\braise\s+(exception|notice|warning|info|log|debug)
  *
  * 📌 刻意不處理 dollar-quoting:函式本體裡面本來就是 SQL,用同一套規則掃
  *    (本體裡的行註解該清掉、本體裡的 `'…'` 該保留)剛好就是我們要的行為。
+ *
+ * 🔴 字串邊界一旦判斷錯,字串裡的 `--` 會被當成註解起點,把後面**真正的違規字**一起清掉
+ *    (例:`select E'\''; raise exception '-- 師傅';` 曾經漏抓)。所以(QA 2026-10-01):
+ *   ・`E'…'` / `e'…'`(前一個字元不是識別字字元)是跳脫字串,`\` 連同下一個字元一起跳過;
+ *     字串邊界統一交給 findSqlStringEnd(),跟 maskNonTopLevelSql() 用同一套規則。
+ *   ・雙引號識別字 `"…"`(`""` 是跳脫後的雙引號)原樣保留,裡面的 `--`、`'` 都不算數。
+ *   ・字串或識別字**沒閉合**(結構沒讀懂)→ 從那裡到檔尾全部原樣保留、不再清任何註解。
+ *     寧可把註解裡的歷史沿革也一起掃進來(多報),也不要因為錯位清掉真正的違規字(漏抓)。
  */
 function stripSqlComments(source: string): string {
   const out: string[] = [];
   let i = 0;
-  type SqlMode = "code" | "line" | "block" | "str";
+  type SqlMode = "code" | "line" | "block";
   let mode: SqlMode = "code";
 
   while (i < source.length) {
@@ -330,10 +338,17 @@ function stripSqlComments(source: string): string {
         i += 2;
         continue;
       }
-      if (c === "'") {
-        mode = "str";
-        out.push(c);
-        i += 1;
+      if (c === "'" || c === '"') {
+        const end =
+          c === "'"
+            ? findSqlStringEnd(source, i, isSqlEscapeStringStart(source, i))
+            : findSqlQuotedIdentifierEnd(source, i);
+        if (end === -1) {
+          out.push(source.slice(i)); // 沒閉合:剩下的原樣保留,不再清任何東西
+          break;
+        }
+        out.push(source.slice(i, end + 1));
+        i = end + 1;
         continue;
       }
       out.push(c);
@@ -352,26 +367,43 @@ function stripSqlComments(source: string): string {
       continue;
     }
 
-    if (mode === "block") {
-      if (c === "*" && next === "/") {
-        mode = "code";
-        out.push("  ");
-        i += 2;
-        continue;
-      }
-      out.push(c === "\n" ? "\n" : " ");
-      i += 1;
+    // mode === "block"
+    if (c === "*" && next === "/") {
+      mode = "code";
+      out.push("  ");
+      i += 2;
       continue;
     }
-
-    // 字串常值:原樣保留(這就是要檢查的內容)。SQL 用兩個連續單引號表示一個引號,
-    // 這裡的處理是「離開字串 → 下一個字元立刻又進入字串」,對偵測註解起點的結果完全一樣。
-    if (c === "'") mode = "code";
-    out.push(c);
+    out.push(c === "\n" ? "\n" : " ");
     i += 1;
   }
 
   return out.join("");
+}
+
+/** `quoteAt` 這個單引號是不是 `E'…'` / `e'…'` 跳脫字串的開頭(前一個字元是 E/e,再前一個不是識別字字元)。 */
+function isSqlEscapeStringStart(source: string, quoteAt: number): boolean {
+  const prev = source[quoteAt - 1];
+  const prevPrev = source[quoteAt - 2];
+  return (
+    (prev === "E" || prev === "e") && !(prevPrev !== undefined && /[A-Za-z0-9_$]/.test(prevPrev))
+  );
+}
+
+/** 從 `quoteAt`(雙引號的位置)往後找到識別字結尾;`""` 是跳脫後的雙引號。沒閉合回傳 -1。 */
+function findSqlQuotedIdentifierEnd(source: string, quoteAt: number): number {
+  let i = quoteAt + 1;
+  while (i < source.length) {
+    if (source[i] === '"') {
+      if (source[i + 1] === '"') {
+        i += 2;
+        continue;
+      }
+      return i;
+    }
+    i += 1;
+  }
+  return -1;
 }
 
 function listMigrationFiles(): string[] {
@@ -393,41 +425,298 @@ interface SqlViolation {
   text: string;
 }
 
-function findMigrationViolations(): SqlViolation[] {
-  const violations: SqlViolation[] = [];
-  for (const file of listMigrationFiles()) {
-    const raw = readFileSync(join(MIGRATIONS_DIR, file), "utf8").split("\r\n").join("\n");
-    stripSqlComments(raw)
-      .split("\n")
-      .forEach((line, index) => {
-        for (const term of FORBIDDEN_TERMS) {
-          if (!line.includes(term)) continue;
-          violations.push({
-            at: `${file}:${index + 1}`,
-            term,
-            kind: SQL_RAISE_STATEMENT.test(line) ? "raise" : "string",
-            text: line.trim().slice(0, 120),
-          });
+/** 一個 migration 檔案:檔名 + 已經清掉 SQL 註解的內容(行號與原檔一致)。 */
+interface StrippedSqlSource {
+  file: string;
+  stripped: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 資料庫註解(comment on … is '…')的「現役版本」判斷(2026-10-01,SPECS-INDEX #927)
+//
+// 🔴 為什麼需要這一段
+// 資料庫註解跟函式本體不一樣:同一個物件可以被後面的 migration 再 `comment on` 一次,
+// 新的那句會**直接取代**舊的;物件被 `drop` 之後,舊註解也跟著消失。
+// 所以歷史 migration 檔案裡「被後面覆蓋掉的舊註解」在資料庫裡早就不存在了 ——
+// 跟上面「已被覆蓋的舊版 raise」是同一個道理,但註解可以用「最後一句是誰」機械式判斷,
+// 不用一條一條手動列例外。#927 用一支只有 COMMENT ON 的 migration 把現役註解全改成
+// 「服務人員」之後,原本例外清單裡 13 條 developerComment 全部變成「已被覆蓋」,
+// 清單因此從 23 條縮到 10 條(只剩 raise 那 10 條)。
+//
+// 🔴 判斷規則(偏嚴格:看不懂的寫法一律「不算被覆蓋」,寧可轉紅也不要假性通過)
+//   ・同一個物件(物件種類 + 名稱 + 參數型別)只有**最後一次出現**的 comment on 算現役。
+//   ・之後若出現 `drop function/table/view … <同一個物件>`,前面所有註解都算已覆蓋。
+//   ・現役註解裡有禁用詞 → 照樣轉紅(而且不能加例外,直接改字)。
+//   ・物件名稱比對前會正規化:沒加雙引號的部分轉小寫、去空白、沒寫 schema 的補 public.、
+//     常見型別別名統一(integer/int4→int、boolean→bool…);**加了雙引號的識別字保留大小寫**
+//     (Postgres 本來就這樣:"Merchant_Staff" 跟 merchant_staff 是兩個不同物件)。
+//     正規化認不出來的寫法(例如參數名稱寫在簽章裡)只會讓舊註解「不被當成已覆蓋」
+//     → 測試轉紅,不會漏抓。
+//   ・只認 migration **頂層**的 comment on / drop:字串常值裡的、函式本體或 DO 區塊
+//     ($$ … $$ / $tag$ … $tag$)裡的一律不算 —— 那些不是 migration 套用當下確定會執行的敘述
+//     (QA 2026-10-01 打回的 L1~L3)。
+//   ・物件只要被 `alter … rename to` / `alter … set schema` 過,它在那之前的註解會跟著
+//     搬到新名字底下繼續存在 ⇒ 那之前的註解一律不算被覆蓋(QA 打回的 L5)。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SQL_COMMENT_ON =
+  /\bcomment\s+on\s+(table|column|function|procedure|view|materialized\s+view|schema|type|index|sequence|trigger|policy|constraint)\s+([^;']*?)\s+is\s+(?='|null\b)/gi;
+const SQL_DROP_OBJECT =
+  /\bdrop\s+(function|procedure|table|view|materialized\s+view)\s+(?:if\s+exists\s+)?([^;']*?)\s*(?:\bcascade\b|\brestrict\b)?\s*;/gi;
+const SQL_RENAME_OBJECT =
+  /\balter\s+(function|procedure|table|view|materialized\s+view)\s+(?:if\s+exists\s+)?([^;']*?)\s+(?:rename\s+to|set\s+schema)\b[^;]*;/gi;
+
+/**
+ * 只留下 migration「頂層」的程式碼:單引號字串的**內容**換成空白(引號本身保留,
+ * 讓 `is '…'` 的位置還找得到),`$$ … $$` / `$tag$ … $tag$` 整段(含分隔符號)換成空白。
+ * 長度與換行完全不變,所以算出來的位置可以直接拿回原文使用。
+ *
+ * 🔴 `E'…'`(跳脫字串,QA 2026-10-01 第二輪打回):裡面的 `\'` 是跳脫後的引號、不是字串結尾。
+ *    沒認出來的話字串邊界會整個錯位,後面字串裡的 `comment on …` 會被當成頂層敘述。
+ *    所以 `E'` / `e'`(前一個字元不是識別字字元)開頭的字串,反斜線連同下一個字元一起跳過。
+ *
+ * 🔴 `uncertain`:只要有任何字串或 dollar-quote 沒有閉合,代表這個檔案的結構我們沒有讀懂,
+ *    呼叫端就不從這個檔案產生任何覆蓋 / 刪除 / 改名事件(寧可多報,不可漏抓)。
+ */
+function maskNonTopLevelSql(source: string): { masked: string; uncertain: boolean } {
+  const out = source.split("");
+  const blank = (from: number, to: number) => {
+    for (let k = from; k < to && k < out.length; k += 1) if (out[k] !== "\n") out[k] = " ";
+  };
+  const isIdentChar = (ch: string | undefined) => ch !== undefined && /[A-Za-z0-9_$]/.test(ch);
+  let uncertain = false;
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i]!;
+    if (c === '"') {
+      // 雙引號識別字:原樣保留(正規化物件名稱要用),但裡面的 ' 或 $ 不可以被當成字串 / dollar-quote 起點
+      const end = findSqlQuotedIdentifierEnd(source, i);
+      if (end === -1) {
+        uncertain = true;
+        break;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (c === "'") {
+      const end = findSqlStringEnd(source, i, isSqlEscapeStringStart(source, i));
+      if (end === -1) {
+        uncertain = true;
+        blank(i + 1, source.length);
+        break;
+      }
+      blank(i + 1, end); // 保留頭尾兩個引號
+      i = end + 1;
+      continue;
+    }
+    if (c === "$" && !isIdentChar(source[i - 1])) {
+      const tag = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(source.slice(i, i + 64));
+      if (tag) {
+        const close = source.indexOf(tag[0], i + tag[0].length);
+        if (close === -1) {
+          uncertain = true;
+          blank(i, source.length);
+          break;
         }
+        const end = close + tag[0].length;
+        blank(i, end);
+        i = end;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return { masked: out.join(""), uncertain };
+}
+
+function normalizeSqlObjectKey(objectKind: string, target: string): string {
+  // 依雙引號切段:偶數段是沒加引號的部分(轉小寫、統一型別別名),奇數段是加了引號的識別字(原樣保留)
+  let t = target
+    .split('"')
+    .map((part, index) =>
+      index % 2 === 1
+        ? part
+        : part
+            .toLowerCase()
+            .replace(/\btimestamp\s+with\s+time\s+zone\b/g, "timestamptz")
+            .replace(/\bcharacter\s+varying\b/g, "varchar")
+            .replace(/\bdouble\s+precision\b/g, "float8")
+            .replace(/\b(integer|int4)\b/g, "int")
+            .replace(/\bint8\b/g, "bigint")
+            .replace(/\bboolean\b/g, "bool")
+            .replace(/\s+/g, ""),
+    )
+    .join("");
+  const parenAt = t.indexOf("(");
+  const name = parenAt === -1 ? t : t.slice(0, parenAt);
+  if (!name.includes(".")) t = `public.${t}`;
+  return `${objectKind.toLowerCase().replace(/\s+/g, " ")}:${t}`;
+}
+
+/**
+ * 從 `quoteAt`(單引號的位置)往後找到字串結尾,找不到(沒閉合)回傳 -1。
+ * SQL 的 `''` 是跳脫後的單引號;`backslashEscapes`(E'…' 字串)時 `\` 連同下一個字元一起跳過。
+ */
+function findSqlStringEnd(source: string, quoteAt: number, backslashEscapes = false): number {
+  let i = quoteAt + 1;
+  while (i < source.length) {
+    const ch = source[i];
+    if (backslashEscapes && ch === "\\") {
+      i += 2;
+      continue;
+    }
+    if (ch === "'") {
+      if (source[i + 1] === "'") {
+        i += 2;
+        continue;
+      }
+      return i;
+    }
+    i += 1;
+  }
+  return -1;
+}
+
+/**
+ * 回傳每個檔案裡「已被後續 migration 覆蓋掉的舊註解」整句的字元範圍 [起, 迄](含迄)。
+ * 用字元範圍而不是整行,是為了同一行如果還有別的敘述,別的敘述照樣會被掃到。
+ * 檔案順序 = 陣列順序(呼叫端要先依檔名排好,跟 supabase 套用 migration 的順序一致)。
+ */
+function findSupersededCommentRanges(
+  sources: readonly StrippedSqlSource[],
+): Map<string, [number, number][]> {
+  type CommentEvent = {
+    kind: "comment" | "drop" | "rename";
+    key: string;
+    file: string;
+    range: [number, number];
+  };
+  const events: CommentEvent[] = [];
+
+  for (const { file, stripped } of sources) {
+    const found: { at: number; event: CommentEvent }[] = [];
+    // 事件只從「頂層」找(字串內容、$$ 本體都已遮掉);註解的字元範圍則回原文 stripped 算
+    const { masked: topLevel, uncertain } = maskNonTopLevelSql(stripped);
+    // 結構沒讀懂的檔案:不產生任何覆蓋/刪除/改名事件(它前面的舊註解都不算被覆蓋,
+    // 它自己的註解也照常被掃)—— 寧可多報。
+    if (uncertain) continue;
+
+    for (const m of topLevel.matchAll(SQL_COMMENT_ON)) {
+      const start = m.index ?? 0;
+      const valueAt = start + m[0].length;
+      const end = stripped[valueAt] === "'" ? findSqlStringEnd(stripped, valueAt) : valueAt;
+      if (end === -1) continue; // 理論上不會發生(上面 uncertain 已攔下),保險起見不當成事件
+      found.push({
+        at: start,
+        event: {
+          kind: "comment",
+          key: normalizeSqlObjectKey(m[1]!, m[2]!),
+          file,
+          range: [start, end],
+        },
       });
+    }
+
+    for (const [regex, kind] of [
+      [SQL_DROP_OBJECT, "drop"],
+      [SQL_RENAME_OBJECT, "rename"],
+    ] as const) {
+      for (const m of topLevel.matchAll(regex)) {
+        const at = m.index ?? 0;
+        found.push({
+          at,
+          event: { kind, key: normalizeSqlObjectKey(m[1]!, m[2]!), file, range: [at, at] },
+        });
+      }
+    }
+
+    found.sort((a, b) => a.at - b.at).forEach(({ event }) => events.push(event));
+  }
+
+  // drop function 會讓同名 comment on function 失效;drop table/view 同理 → 用「種類:名稱」配對。
+  // comment on 的種類跟 drop 的種類用同一套字(function / table / view …),直接共用 key。
+  const lastIndexByKey = new Map<string, number>();
+  const lastRenameIndexByKey = new Map<string, number>();
+  events.forEach((event, index) => {
+    if (event.kind === "rename") lastRenameIndexByKey.set(event.key, index);
+    else lastIndexByKey.set(event.key, index);
+  });
+
+  const superseded = new Map<string, [number, number][]>();
+  events.forEach((event, index) => {
+    if (event.kind !== "comment") return;
+    if (lastIndexByKey.get(event.key) === index) return; // 現役版本
+    // 這句註解之後物件被改名/搬 schema 過 → 註解跟著物件走了,不能當成被覆蓋
+    if ((lastRenameIndexByKey.get(event.key) ?? -1) > index) return;
+    const list = superseded.get(event.file) ?? [];
+    list.push(event.range);
+    superseded.set(event.file, list);
+  });
+  return superseded;
+}
+
+/** 把指定字元範圍換成空白(保留換行,行號不變)。 */
+function blankRanges(source: string, ranges: readonly [number, number][]): string {
+  if (ranges.length === 0) return source;
+  const chars = source.split("");
+  for (const [start, end] of ranges) {
+    for (let i = start; i <= end && i < chars.length; i += 1) {
+      if (chars[i] !== "\n") chars[i] = " ";
+    }
+  }
+  return chars.join("");
+}
+
+function findViolationsInSources(sources: readonly StrippedSqlSource[]): SqlViolation[] {
+  const superseded = findSupersededCommentRanges(sources);
+  const violations: SqlViolation[] = [];
+  for (const { file, stripped } of sources) {
+    // 已被後續 comment on / drop 覆蓋的舊註解整句清成空白 —— 資料庫裡已經不存在了
+    const live = blankRanges(stripped, superseded.get(file) ?? []);
+    live.split("\n").forEach((line, index) => {
+      for (const term of FORBIDDEN_TERMS) {
+        if (!line.includes(term)) continue;
+        violations.push({
+          at: `${file}:${index + 1}`,
+          term,
+          kind: SQL_RAISE_STATEMENT.test(line) ? "raise" : "string",
+          text: line.trim().slice(0, 120),
+        });
+      }
+    });
   }
   return violations;
 }
 
-/** 例外清單的每一條都要指定理由;理由文字集中在這裡,不要同一段話抄 23 次。 */
+function loadStrippedMigrations(): StrippedSqlSource[] {
+  return listMigrationFiles().map((file) => ({
+    file,
+    stripped: stripSqlComments(
+      readFileSync(join(MIGRATIONS_DIR, file), "utf8").split("\r\n").join("\n"),
+    ),
+  }));
+}
+
+function findMigrationViolations(): SqlViolation[] {
+  return findViolationsInSources(loadStrippedMigrations());
+}
+
+/** 例外清單的每一條都要指定理由;理由文字集中在這裡,不要同一段話抄 10 次。 */
 const MIGRATION_LEGACY_REASONS = {
   supersededRaise:
     "已被後續 migration 覆蓋掉的舊版函式本體。正式庫現在跑的是 " +
     "20260930030000_req878_payroll_reports_terminology_fix.sql 的版本(已用 md5(pg_proc.prosrc) " +
     "指紋驗證),這幾處只是歷史紀錄,不會影響任何人看到的畫面。歷史 migration 一旦套用就不回頭改。",
-  developerComment:
-    "comment on table / comment on function 的資料庫註解,只有開發者用 psql 或 pg_get_functiondef " +
-    "看得到,使用者在畫面上永遠看不到。歷史 migration 不回頭改;如果之後因為別的需求重建了那支函式," +
-    "請在新 migration 裡順手把註解一起改成「服務人員」,並把這裡對應的那一行刪掉。",
 } as const;
 
 /**
- * 🔒 既有例外清單(2026-09-30 #878 當下的完整盤點,共 23 條)。
+ * 🔒 既有例外清單(#878 當下盤點 23 條;2026-10-01 #927 縮成 10 條)。
+ *
+ * 📌 #927 之前這裡還有 13 條 `developerComment`(comment on 的資料庫註解)。#927 用一支只有
+ *    COMMENT ON 的 migration(20261001130000_req927_…)把正式庫現役的註解全改掉,
+ *    再加上 findSupersededCommentRanges() 能自動認出「已被後續 comment on / drop 覆蓋的舊註解」,
+ *    那 13 條就不需要再手動列了,`developerComment` 這個理由代碼也一併移除 ——
+ *    **之後資料庫註解出現禁用詞,一律新開 migration 用 COMMENT ON 改字,沒有例外可加。**
  *
  * **要往這份清單加東西之前請先停一下**:如果是 `raise exception` 這一類使用者看得到的訊息,
  * 正確做法永遠是「新開一支 migration 把字改掉」,不是加進這份清單。這份清單只是在承認
@@ -437,7 +726,7 @@ const MIGRATION_LEGACY_ALLOWLIST: readonly (readonly [
   string,
   keyof typeof MIGRATION_LEGACY_REASONS,
 ])[] = [
-  // ── ① 已被後續 migration 覆蓋掉的舊版函式本體裡的 raise exception(10 條)──────
+  // ── 已被後續 migration 覆蓋掉的舊版函式本體裡的 raise exception(10 條)──────────
   ["20260920120400_payroll_reports.sql:166", "supersededRaise"],
   ["20260920120400_payroll_reports.sql:237", "supersededRaise"],
   ["20260921130000_staff_portal_payroll_overlay.sql:36", "supersededRaise"],
@@ -448,20 +737,6 @@ const MIGRATION_LEGACY_ALLOWLIST: readonly (readonly [
   ["20260922130300_req580_581_payroll_by_range_functions.sql:227", "supersededRaise"],
   ["20260925020000_staff_commission_summary_completion_time_basis.sql:116", "supersededRaise"],
   ["20260925020000_staff_commission_summary_completion_time_basis.sql:224", "supersededRaise"],
-  // ── ② 資料庫註解(comment on …),只有開發者看得到(13 條)──────────────────────
-  ["20260916100000_staff_agent_schema.sql:48", "developerComment"],
-  ["20260920120100_payroll_billing_functions.sql:81", "developerComment"],
-  ["20260920120400_payroll_reports.sql:208", "developerComment"],
-  ["20260920120400_payroll_reports.sql:244", "developerComment"],
-  ["20260921130000_staff_portal_payroll_overlay.sql:78", "developerComment"],
-  ["20260921130000_staff_portal_payroll_overlay.sql:110", "developerComment"],
-  ["20260922130300_req580_581_payroll_by_range_functions.sql:190", "developerComment"],
-  ["20260922130300_req580_581_payroll_by_range_functions.sql:290", "developerComment"],
-  ["20260924020100_merchant_staff_identity_columns_guard.sql:131", "developerComment"],
-  ["20260924020200_merchants_group_id_guard.sql:73", "developerComment"],
-  ["20260924020400_fix_update_booking_material_cost_snapshot.sql:243", "developerComment"],
-  ["20260924030100_merchant_staff_identity_columns_insert_guard.sql:150", "developerComment"],
-  ["20260925020000_staff_commission_summary_completion_time_basis.sql:293", "developerComment"],
 ];
 
 const MIGRATION_ALLOWED_AT = new Set(MIGRATION_LEGACY_ALLOWLIST.map(([at]) => at));
@@ -535,5 +810,242 @@ describe("用語守門:supabase/migrations 的 SQL(#878 延伸)", () => {
       expect(MIGRATION_LEGACY_REASONS[reason], `${at} 的理由代碼無效`).toBeTruthy();
     }
     expect(MIGRATION_LEGACY_ALLOWLIST.length).toBe(MIGRATION_ALLOWED_AT.size);
+  });
+
+  // ── #927:資料庫註解只看「現役版本」──────────────────────────────────────────────
+  const src = (file: string, ...lines: string[]): StrippedSqlSource => ({
+    file,
+    stripped: stripSqlComments(lines.join("\n")),
+  });
+
+  it("資料庫註解(comment on):現役版本零容忍,不接受任何例外", () => {
+    const offenders = findMigrationViolations().filter((v) => v.kind === "string");
+    expect(
+      offenders,
+      "資料庫註解的現役版本出現特定產業稱呼。新開一支 migration 用 `comment on … is '…'` 把字改掉" +
+        "(不用重建函式),不要加例外:\n" +
+        offenders.map((v) => `  ${v.at} 出現「${v.term}」→ ${v.text}`).join("\n"),
+    ).toEqual([]);
+  });
+
+  it("被後面 comment on 覆蓋的舊註解不算違規;型別別名、大小寫、空白、schema 省略都要認得是同一個物件", () => {
+    const violations = findViolationsInSources([
+      src(
+        "001.sql",
+        "comment on function public.f(uuid, integer, boolean) is '舊版:師傅報表';",
+        "comment on table merchant_staff is '舊版:店長';",
+      ),
+      src(
+        "002.sql",
+        "COMMENT ON FUNCTION f(uuid,int,bool) IS '新版:服務人員報表';",
+        "comment on table public.merchant_staff is '新版:商家管理員';",
+      ),
+    ]);
+    expect(violations).toEqual([]);
+  });
+
+  it("drop 之後舊註解跟著消失,不算違規", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function public.g(uuid) is '師傅';"),
+      src("002.sql", "drop function if exists public.g(uuid);"),
+    ]);
+    expect(violations).toEqual([]);
+  });
+
+  it("故障注入:最後一版註解含禁用詞 → 抓得到(不管前面有沒有乾淨的版本)", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function public.f(uuid) is '服務人員';"),
+      src("002.sql", "comment on function public.f(uuid) is '改回師傅';"),
+      src("003.sql", "comment on function public.h(uuid) is '店長';"),
+    ]);
+    expect(violations.map((v) => `${v.at}:${v.term}`)).toEqual([
+      "002.sql:1:師傅",
+      "003.sql:1:店長",
+    ]);
+  });
+
+  it("多行 comment on(update_booking 那種長簽章):舊版整句都算被覆蓋;現役版中間行的禁用詞照抓", () => {
+    const violations = findViolationsInSources([
+      src(
+        "001.sql",
+        "comment on function public.k(",
+        "  uuid, integer",
+        ") is '舊版第一行",
+        "舊版第二行寫到師傅';",
+      ),
+      src(
+        "002.sql",
+        "comment on function public.k(uuid, int) is '新版第一行",
+        "新版第二行寫到店長';",
+      ),
+    ]);
+    expect(violations.map((v) => `${v.at}:${v.term}`)).toEqual(["002.sql:2:店長"]);
+  });
+
+  it("簽章不同(不同 overload)不算覆蓋 → 舊的照樣抓", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function public.f(uuid) is '師傅';"),
+      src("002.sql", "comment on function public.f(uuid, text) is '服務人員';"),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it("同一行如果還有別的敘述,只清掉被覆蓋的那一句,別的敘述照樣掃", () => {
+    const violations = findViolationsInSources([
+      src(
+        "001.sql",
+        "comment on function public.f(uuid) is '師傅'; comment on function public.z() is '店長';",
+      ),
+      src("002.sql", "comment on function public.f(uuid) is '服務人員';"),
+    ]);
+    expect(violations.map((v) => `${v.at}:${v.term}`)).toEqual(["001.sql:1:店長"]);
+  });
+  // ── QA 打回(2026-10-01):以下 5 種「看起來像覆蓋、其實沒有」的寫法,舊註解都要照抓 ──────
+  const INJECTED = "comment on table public.merchant_staff is '師傅注入';";
+
+  it("L1:寫在字串常值裡的 comment on 不算覆蓋", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", INJECTED),
+      src("002.sql", "select 'comment on table public.merchant_staff is ''ok''';"),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it("L2:寫在函式本體($$ … $$)裡的 comment on 不算覆蓋(那是呼叫時才執行,不是 migration 當下)", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", INJECTED),
+      src(
+        "002.sql",
+        "create function public.qa_x() returns void language plpgsql as $$",
+        "begin comment on table public.merchant_staff is 'ok'; end $$;",
+      ),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it("L3:DO 區塊($tag$ … $tag$)裡的 drop 不算覆蓋(可能根本沒執行)", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function private.can_view_staff_report(uuid) is '師傅注入';"),
+      src(
+        "002.sql",
+        "do $body$ begin if false then drop function private.can_view_staff_report(uuid); end if; end $body$;",
+      ),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it('L4:帶雙引號的識別字保留大小寫,"Merchant_Staff" 跟 merchant_staff 是不同物件', () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on table public.\"Merchant_Staff\" is '師傅注入';"),
+      src("002.sql", "comment on table public.merchant_staff is 'ok';"),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+    // 反向:不分大小寫的未加引號寫法、或加了引號但全小寫,都要認得是同一個物件
+    expect(
+      findViolationsInSources([
+        src("001.sql", "comment on table public.\"merchant_staff\" is '師傅';"),
+        src("002.sql", "comment on table PUBLIC.Merchant_Staff is 'ok';"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("L5:物件被 alter … rename 過,先前的註解跟著新名字還活著 → 一律不算被覆蓋", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function private.qa_f(uuid) is '師傅注入';"),
+      src("002.sql", "alter function private.qa_f(uuid) rename to qa_g;"),
+      src("003.sql", "comment on function private.qa_f(uuid) is 'ok';"),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+  // ── QA 第二輪打回(2026-10-01):E'…' 跳脫字串 + 結構沒讀懂時走保守 ─────────────────────
+  it("E 字串:QA 重現案例 —— E 字串裡出現反斜線跳脫的引號之後,字串裡的 comment on 不可以被當成頂層覆蓋", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", INJECTED),
+      src(
+        "002.sql",
+        String.raw`select E'a\'b'; select 'comment on table public.merchant_staff is ''ok''';`,
+      ),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it("E 字串:正常情況下,E 字串後面真正頂層的 comment on 照樣算覆蓋(小寫 e 也認得)", () => {
+    for (const prefix of ["E", "e"]) {
+      const violations = findViolationsInSources([
+        src("001.sql", INJECTED),
+        src(
+          "002.sql",
+          String.raw`select ${prefix}'it\'s \\ fine'; comment on table public.merchant_staff is 'ok';`,
+        ),
+      ]);
+      expect(violations, `${prefix}'…'`).toEqual([]);
+    }
+  });
+
+  it("E 字串:識別字結尾剛好是 e 的普通字串(例如 type'…')不可以被當成 E 字串", () => {
+    // `type'a\'` 是普通字串 'a\'(反斜線不跳脫),後面那句頂層 comment on 要照常算覆蓋
+    const violations = findViolationsInSources([
+      src("001.sql", INJECTED),
+      src("002.sql", String.raw`select type'a\'; comment on table public.merchant_staff is 'ok';`),
+    ]);
+    expect(violations).toEqual([]);
+  });
+
+  it("結構沒讀懂(字串沒閉合)→ 整個檔案不產生任何覆蓋事件,前面的舊註解照抓", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", INJECTED),
+      src("002.sql", "comment on table public.merchant_staff is 'ok'; select 'oops;"),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1"]);
+  });
+
+  it("結構沒讀懂(dollar-quote 沒閉合)→ 同樣走保守,連 drop 也不算", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", "comment on function private.qa_f(uuid) is '師傅注入';", INJECTED),
+      src(
+        "002.sql",
+        "drop function private.qa_f(uuid); comment on table public.merchant_staff is 'ok';",
+        "do $x$ begin perform 1;",
+      ),
+    ]);
+    expect(violations.map((v) => v.at)).toEqual(["001.sql:1", "001.sql:2"]);
+  });
+  // ── QA 第三輪(2026-10-01):stripSqlComments() 的字串邊界也要套同一套規則 ──────────────
+  it("清註解:E 字串裡跳脫的引號不可以讓後面字串裡的 -- 被當成註解,把違規字清掉", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", String.raw`select E'\''; raise exception '-- 師傅';`),
+    ]);
+    expect(violations.map((v) => `${v.at}:${v.kind}`)).toEqual(["001.sql:1:raise"]);
+  });
+
+  it("清註解:雙引號識別字裡的 -- 或 ' 都不算數,後面的違規字照抓", () => {
+    const violations = findViolationsInSources([
+      src("001.sql", `select "x--y", '師傅';`),
+      src("002.sql", `select "it's", '-- ok'; raise exception '店長';`),
+    ]);
+    expect(violations.map((v) => `${v.at}:${v.term}`)).toEqual([
+      "001.sql:1:師傅",
+      "002.sql:1:店長",
+    ]);
+  });
+
+  it("清註解:字串沒閉合 → 從那裡到檔尾原樣保留(連註解也不清),寧可多報", () => {
+    const stripped = stripSqlComments(["select 'oops;", "-- 師傅(本來是註解)"].join("\n"));
+    expect(stripped).toContain("師傅");
+    const identifier = stripSqlComments(['select "oops;', "-- 店長(本來是註解)"].join("\n"));
+    expect(identifier).toContain("店長");
+  });
+
+  it("清註解:正常的 E 字串與註解照常處理(不可以因為新規則把該清的註解留下來)", () => {
+    const stripped = stripSqlComments(
+      [
+        String.raw`select E'a\'b -- 字串裡', 1; -- 這是註解:師傅`,
+        "select 2; /* 區塊註解:店長 */",
+      ].join("\n"),
+    );
+    const lines = stripped.split("\n");
+    expect(lines[0]).toContain("-- 字串裡");
+    expect(lines[0]).not.toContain("師傅");
+    expect(lines[1]).not.toContain("店長");
   });
 });

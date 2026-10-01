@@ -18,7 +18,7 @@ function input(overrides: Partial<BookingSlotOptionsInput> = {}): BookingSlotOpt
 describe("buildBookingSlotOptions", () => {
   describe("整天請假(on_leave)", () => {
     it("整天請假時回傳空陣列,即使可預約區間照常有資料", () => {
-      // 這就是稽核抓到的那個情境:師傅整天請假,行事曆主畫面已經整欄灰掉,
+      // 這就是稽核抓到的那個情境:服務人員整天請假,行事曆主畫面已經整欄灰掉,
       // 但建單表單的時段清單以前照樣列出他平常的所有時間。
       expect(buildBookingSlotOptions(input({ onLeave: true }))).toEqual([]);
     });

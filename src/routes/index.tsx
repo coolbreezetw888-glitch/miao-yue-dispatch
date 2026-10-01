@@ -463,7 +463,7 @@ function StaffMobile() {
           <div className="mx-auto w-[300px] rounded-[2.5rem] border-8 border-foreground/85 bg-card shadow-2xl shadow-primary/10">
             <div className="mx-auto mt-3 h-1.5 w-16 rounded-full bg-foreground/20" />
             <div className="px-4 py-5">
-              {/* 🔴 用語:2026-09-30 抓到這裡原本寫「阿哲師傅」——「師傅」是冷氣產業的講法,
+              {/* 🔴 用語:2026-09-30 抓到這裡原本的示範姓名帶著冷氣業舊稱 —— 那是冷氣產業的講法,
                   這套系統要給美甲 / 美容 / 寵物美容 / 到府清潔各行各業用(skill 二之二)。
                   這是行銷首頁的示範資料,而且就在「服務人員端」那一段的手機模擬畫面裡,
                   是全站最多人看到的一處。示範人名一律只寫名字,不加職業稱呼

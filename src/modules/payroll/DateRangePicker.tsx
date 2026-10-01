@@ -8,7 +8,7 @@
 // §15.2:「不是另外設計一套不同的篩選邏輯」),比照既有 YearMonthPicker 被 MyPayrollPage.tsx
 // 跨模組 import 的先例。
 //
-// 商家管理員視角的師傅報表頁(StaffReportPage.tsx)這次不在範圍內,繼續用既有的 YearMonthPicker,
+// 商家管理員視角的服務人員報表頁(StaffReportPage.tsx)這次不在範圍內,繼續用既有的 YearMonthPicker,
 // 不受影響。
 //
 // ui-v1-full 第二階段第 2 批(2026-09-29):「按日期 / 按月份」二選一改 ChoiceChipGroup(skill 二之七 單選),

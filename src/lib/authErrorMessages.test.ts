@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { translateAuthErrorMessage } from "./authErrorMessages";
 
 describe("translateAuthErrorMessage:登入相關", () => {
-  it("Invalid login credentials(師傅打錯密碼最常見的那一句)", () => {
+  it("Invalid login credentials(服務人員打錯密碼最常見的那一句)", () => {
     expect(translateAuthErrorMessage("Invalid login credentials")).toBe("Email 或密碼不正確");
   });
 

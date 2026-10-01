@@ -668,7 +668,7 @@ export default function ManagePage() {
     {
       key: "staff-report",
       to: "/app/staff-report",
-      // 2026-09-24 使用者指定改名:「師傅報表」→「服務人員報表」。要跟 appLayoutLogic.ts 的
+      // 2026-09-24 使用者指定改名:原本的舊稱報表名稱 →「服務人員報表」。要跟 appLayoutLogic.ts 的
       // /app/staff-report 頁首標題、StaffReportPage.tsx 自己的 <h1> 保持完全一致。
       label: "服務人員報表",
       description: "查看個別服務人員的抽成或薪資明細",

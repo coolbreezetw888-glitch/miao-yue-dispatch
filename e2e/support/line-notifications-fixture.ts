@@ -32,7 +32,10 @@ import { disableFixtureMerchant } from "./merchant-teardown-helper";
 
 const FIXTURE_PURPOSE = "line-notifications 這個 e2e 測試";
 
-export const STAFF_NAME_PREFIX = "E2E測試LINE模組師傅";
+// #826(SPECS-INDEX,2026-10-01):測試資料名稱前綴改成現行用語「服務人員」。舊前綴 `E2E測試LINE模組師傅`
+// 建立的孤兒資料仍留在正式庫,#638 清理時新舊前綴都要涵蓋 —— 完整清單集中寫在 payroll-fixture.ts。
+// teardown 是 id-based,不靠前綴篩選,改名不影響清理邏輯;spec 只透過這個常數 / fixture 回傳值比對。
+export const STAFF_NAME_PREFIX = "E2E測試LINE模組服務人員";
 export const MEMBER_NAME_PREFIX = "E2E測試LINE模組會員";
 
 export interface LineNotificationsFixture {

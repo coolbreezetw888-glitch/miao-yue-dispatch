@@ -289,7 +289,7 @@ function BookingDateTimeField({
   // 2026-09-24 稽核修正(問題 5):同時排除整天請假(on_leave)跟單日排休
   // (availability_overrides 且 is_available=false)——這兩份資料本來就在同一包
   // get_merchant_day_schedule 回傳值裡,以前只讀了 available_windows 沒讀它們,
-  // 導致行事曆主畫面已經整欄灰掉的師傅,在建單表單裡照樣列得出所有時段。
+  // 導致行事曆主畫面已經整欄灰掉的服務人員,在建單表單裡照樣列得出所有時段。
   // 實際計算搬到 bookingSlotOptions.ts(純函式,有單元測試),這裡只負責把資料餵進去。
   const slotOptions = useMemo(() => {
     if (!staffBlock) return [];

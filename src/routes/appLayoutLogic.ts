@@ -291,7 +291,7 @@ const APP_HEADER_TITLE_RULES: AppHeaderTitleRule[] = [
   { pattern: "/app/scheduling", title: "排班一覽" },
   // --- 抽成與薪資(模組 8)---
   { pattern: "/app/payroll-settings", title: "抽成與薪資設定" },
-  // 2026-09-24 使用者指定改名:「師傅報表」→「服務人員報表」(整個系統的用語統一成「服務人員」)。
+  // 2026-09-24 使用者指定改名:原本的舊稱報表名稱 →「服務人員報表」(整個系統的用語統一成「服務人員」)。
   // ⚠️ 這個標題、ManagePage.tsx 的功能卡片 label、StaffReportPage.tsx 自己的 <h1> 三處必須一致。
   { pattern: "/app/staff-report", title: "服務人員報表" },
   // --- 會員(模組 9/10)---

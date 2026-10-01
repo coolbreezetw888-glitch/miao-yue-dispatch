@@ -1,4 +1,4 @@
-// 模組 8(薪資與帳務)§4.5:師傅報表頁(4.4)的路由守衛。完全比照模組 7
+// 模組 8(薪資與帳務)§4.5:服務人員報表頁(4.4)的路由守衛。完全比照模組 7
 // RequireTeamLeaveAccess.tsx 的既有寫法。判斷邏輯:merchantRole === 'admin' 一律放行;
 // merchantRole === 'agent' 則要求 useAgentPermission('staff_report') 回傳 true 才放行。
 // 不符合則導回 /app,不顯示這個頁面存在。
