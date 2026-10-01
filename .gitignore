@@ -36,6 +36,10 @@ playwright-report/
 blob-report/
 playwright/.cache/
 
+# TypeScript 增量編譯快取(建置產物,不是原始碼;紅利重構批次 8 收尾)
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
 # Claude Code 的本機設定與 git worktree 暫存副本(.claude/worktrees/ 底下每一份都是一整套
 # 原始碼複本,不該進版控,也不該被 lint/format 掃到,見 eslint.config.js 的 ignores)。
 #

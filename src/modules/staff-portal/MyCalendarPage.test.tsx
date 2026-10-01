@@ -27,6 +27,9 @@ const useActiveMyStaffRecordMock = vi.fn();
 const useMyBookingScheduleMock = vi.fn();
 // SPECS-INDEX #860:卡片的左側色條與狀態膠囊改讀商家自訂的訂單狀態顏色。
 const useMyBookingStatusColorsMock = vi.fn();
+// SPECS-INDEX #874(#895):即時同步 hook。這個檔案只驗「頁面有用對的參數呼叫它」;
+// hook 本身的訂閱 / 退訂 / 去抖行為由 useStaffScheduleLiveSync.test.tsx 鎖住。
+const useStaffScheduleLiveSyncMock = vi.fn();
 
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => useCurrentMerchantMock(),
@@ -37,6 +40,7 @@ vi.mock("./context", () => ({
   useActiveMyStaffRecord: (...args: unknown[]) => useActiveMyStaffRecordMock(...args),
   useMyBookingSchedule: (...args: unknown[]) => useMyBookingScheduleMock(...args),
   useMyBookingStatusColors: (...args: unknown[]) => useMyBookingStatusColorsMock(...args),
+  useStaffScheduleLiveSync: (...args: unknown[]) => useStaffScheduleLiveSyncMock(...args),
 }));
 
 // 這兩個子元件不是這次的測試對象,換成最小的替身,避免把它們自己的資料查詢也拖進來。
@@ -162,6 +166,39 @@ describe("MyCalendarPage", () => {
     // —— 那等於要求程式碼退回被 skill 明文禁止的做法。
     expect(screen.getByLabelText("載入中")).toBeInTheDocument();
     expect(screen.queryByText(/尚未開放此功能/)).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // SPECS-INDEX #874(#895):行事曆頁掛上即時同步訂閱。
+  // =========================================================================
+  it("#895:用自己的 staff_id 與行事曆檢視權限呼叫即時同步 hook", async () => {
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    expect(useStaffScheduleLiveSyncMock).toHaveBeenCalledWith("staff-1", { hasCalendarView: true });
+  });
+
+  it("#895:載入中(early return 之前)也照樣呼叫 hook,只是參數讓它不訂閱", async () => {
+    useActiveMyStaffRecordMock.mockReturnValue({ data: null, isLoading: true });
+    useMyStaffPermissionMock.mockReturnValue({ data: undefined, isLoading: false });
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    expect(screen.getByLabelText("載入中")).toBeInTheDocument();
+    expect(useStaffScheduleLiveSyncMock).toHaveBeenCalledWith(null, { hasCalendarView: undefined });
+  });
+
+  it("#903:沒有行事曆檢視權限時,傳給 hook 的權限是 false(hook 內部因此不訂閱)", async () => {
+    useMyStaffPermissionMock.mockReturnValue({ data: false, isLoading: false });
+    const MyCalendarPage = await importMyCalendarPage();
+
+    render(<MyCalendarPage />);
+
+    expect(useStaffScheduleLiveSyncMock).toHaveBeenCalledWith("staff-1", {
+      hasCalendarView: false,
+    });
   });
 
   it("真的沒有權限時(載入都結束了)仍然照既有行為顯示空狀態文字", async () => {

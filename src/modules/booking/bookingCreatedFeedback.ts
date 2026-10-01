@@ -62,17 +62,26 @@ export interface BookingCreatedToastContent {
   lines: string[];
 }
 
-/** 秒數(規格書 §12.3 / #916 定案 6 秒:這則有 2~3 行要讀,sonner 預設 4 秒是給單行用的)。 */
+/** 秒數(規格書 §12.3 / #916 定案 6 秒:這則有 2~4 行要讀,sonner 預設 4 秒是給單行用的)。 */
 export const BOOKING_CREATED_TOAST_DURATION_MS = 6000;
 
 /**
- * #916(本波版本:**沒有紅利那一行** —— #917 延到紅利改版那批,不留空殼、不寫「計算中」)。
+ * #916 建單成功提示框。紅利系統重構 批次 7(§4.11)補上第 3 / 4 行(原本延到紅利改版那批,不留空殼)。
  *
  * | 位置 | 文案 | 條件 |
  * | 標題 | 已送出訂單(待確認) | 一律 |
  * | 第 1 行 | 已自動建立會員:{姓名} | member_auto_created === true |
  * | 第 1 行 | 已連結既有會員:{姓名} | member_auto_created === false 且 member_id 有值 |
- * | 第 2 行 | 訂單金額 {formatAmount(金額)} | 一律 |
+ * | 第 2 行 | 訂單金額 {formatAmount(金額)} | 一律(仍是折抵前金額,§2.11) |
+ * | 第 3 行 | 紅利點數 {points_planned} 點(訂單完成後入帳) | points_planned > 0 |
+ * | 第 4 行 | 紅利折抵 {points_redeemed} 點(−{折抵金額}),實付 {最終金額 − 折抵金額} | points_redeemed > 0 |
+ *
+ * 紅利兩行讀的是 create_booking 回傳列上的**快照**(points_planned / points_redeemed /
+ * points_redeem_amount_snapshot),不另外呼叫任何函式 —— 快照就是「這張單講好要派幾點」的唯一真相,
+ * 不會出現「提示框說 12 點、訂單詳情寫 10 點」(§〇.4 判斷 18)。功能關閉時後端一定寫 0,所以
+ * 「> 0」這個條件就夠,不用另外判斷開關。
+ * 🔴 「(訂單完成後入帳)」不可以省略:只寫「紅利點數 12 點」會讓客服以為點數已經進去了。
+ * 🔴 第 4 行的理由:「訂單金額」顯示的是折抵前金額(第 3 題),不寫實付,客服會照訂單金額跟客人收錢。
  *
  * {姓名} 用**會員的姓名**(create_booking 回傳列上的 member_name_snapshot,後端從 members 表讀出),
  * 不是這次表單填的姓名 —— #931 規則:會員姓名不會被建單覆蓋,兩者可能不同。
@@ -82,7 +91,13 @@ export const BOOKING_CREATED_TOAST_DURATION_MS = 6000;
 export function buildBookingCreatedToast(
   booking: Pick<
     Booking,
-    "member_auto_created" | "member_id" | "member_name_snapshot" | "final_amount_snapshot"
+    | "member_auto_created"
+    | "member_id"
+    | "member_name_snapshot"
+    | "final_amount_snapshot"
+    | "points_planned"
+    | "points_redeemed"
+    | "points_redeem_amount_snapshot"
   >,
 ): BookingCreatedToastContent {
   const lines: string[] = [];
@@ -94,6 +109,18 @@ export function buildBookingCreatedToast(
         : `已連結既有會員:${memberName}`,
     );
   }
-  lines.push(`訂單金額 ${formatAmount(Number(booking.final_amount_snapshot))}`);
+  const finalAmount = Number(booking.final_amount_snapshot);
+  lines.push(`訂單金額 ${formatAmount(finalAmount)}`);
+  if (booking.points_planned > 0) {
+    lines.push(`紅利點數 ${booking.points_planned} 點(訂單完成後入帳)`);
+  }
+  if (booking.points_redeemed > 0) {
+    const redeemAmount = Number(booking.points_redeem_amount_snapshot);
+    lines.push(
+      `紅利折抵 ${booking.points_redeemed} 點(−${formatAmount(redeemAmount)}),實付 ${formatAmount(
+        finalAmount - redeemAmount,
+      )}`,
+    );
+  }
   return { title: "已送出訂單(待確認)", lines };
 }

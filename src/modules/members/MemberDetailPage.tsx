@@ -120,7 +120,7 @@ import {
   useMember,
   useMemberReferrals,
   useMemberRelatedBookings,
-  useMerchantMemberSettings,
+  useMerchantPointsFeatureEnabled,
   useMerchantMemberTiers,
 } from "./api";
 import {
@@ -128,6 +128,7 @@ import {
   memberIdentityStatus,
   MEMBER_IDENTITY_STATUS_LABELS,
 } from "./memberIdentityStatus";
+import { describeRelatedBookingPointsTags } from "./memberRelatedBookingPoints";
 import { MemberPointsPanel } from "./MemberPointsPanel";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { MEMBER_STATUS_LABELS, type MemberDetail } from "./types";
@@ -265,7 +266,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
           <FormField
             label="生日"
             htmlFor="edit-member-birthday"
-            help="填了生日,系統才會在生日當月自動核發生日獎勵(依台北時區比對生日的月、日)。"
+            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數管理 > 生日獎勵」開啟才會發。"
             helpLabel="說明:填生日會發生什麼事"
           >
             <FieldDate
@@ -400,8 +401,12 @@ function MemberDetailInner() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { merchant } = useCurrentMerchant();
-  const { data: memberSettings } = useMerchantMemberSettings(merchant?.id ?? null);
-  const pointsFeatureEnabled = memberSettings?.points_feature_enabled !== false;
+  // 🔴 紅利系統重構 批次 7(v2.4 裁決 21 ①):原本用 useMerchantMemberSettings 判斷,只有 members 鑰匙的
+  // 客服讀不到設定表(RLS 查無列)⇒ hook 退回預設值「開著」⇒ 功能關了卡片還在。改讀
+  // get_merchant_points_feature_enabled(SECURITY DEFINER,只回一個布林)。
+  // 載入中 / 讀取失敗時**不顯示**點數卡片(fail-closed:不知道開沒開時,寧可先不顯示)。
+  const { data: pointsFeatureEnabledData } = useMerchantPointsFeatureEnabled(merchant?.id ?? null);
+  const pointsFeatureEnabled = pointsFeatureEnabledData === true;
 
   const { data: member, isLoading } = useMember(id);
   const { data: relatedBookings } = useMemberRelatedBookings(id);
@@ -730,11 +735,12 @@ function MemberDetailInner() {
                         <AttributeTag className="tabular-nums">
                           ${Number(booking.finalAmountSnapshot).toFixed(0)}
                         </AttributeTag>
-                        <AttributeTag className="tabular-nums">
-                          {booking.earnedPoints !== null
-                            ? `已核發 ${booking.earnedPoints} 點`
-                            : "未核發點數"}
-                        </AttributeTag>
+                        {/* 紅利系統重構 §4.8:預定 / 已入帳 / 折抵(規則在 memberRelatedBookingPoints.ts)。 */}
+                        {describeRelatedBookingPointsTags(booking).map((tag) => (
+                          <AttributeTag key={tag} className="tabular-nums">
+                            {tag}
+                          </AttributeTag>
+                        ))}
                       </>
                     }
                     meta={booking.serviceItemNames.join("、") || "—"}

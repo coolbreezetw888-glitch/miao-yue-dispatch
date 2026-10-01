@@ -47,6 +47,9 @@ vi.mock("./api", () => ({
   getBooking: getBookingMock,
   createBooking: createBookingMock,
   updateBooking: updateBookingMock,
+  // 紅利系統重構 批次 7:表單會呼叫紅利預覽。這支測試只管「隱藏備註」,讓紅利功能維持關閉
+  // (區塊整個不渲染),紅利區塊自己的測試在 bookingFormPoints.test.tsx。
+  previewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
   MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
 }));
 
@@ -155,6 +158,12 @@ function editingDetail(hideNotesFromStaff: boolean) {
     payment_method_name_snapshot: null,
     custom_duration_enabled: false,
     custom_duration_minutes: null,
+    // 紅利系統重構 批次 7:編輯表單會帶入這幾個欄位(這張單沒派點、沒折抵)。
+    points_planned: 0,
+    points_planned_auto: 0,
+    points_planned_overridden: false,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
     created_at: "2036-01-01T00:00:00+00:00",
     last_modified_at: null,
     createdByName: "客服小美",
@@ -260,6 +269,25 @@ describe("建單/編輯表單:不讓服務人員看到這則內部備註(#853 / 
     expect(payload["hideNotesFromStaff"]).toBe(false);
     // 「有這個 key」跟「值是 false」是兩件事,兩個都要測 —— 漏帶 key 是這次最危險的那個 bug。
     expect(Object.prototype.hasOwnProperty.call(payload, "hideNotesFromStaff")).toBe(true);
+  });
+
+  it("🔴 紅利系統重構批次 3/7:紅利區塊沒出現(功能關閉)時,編輯表單儲存明確送 pointsRedeemed = null(= 維持原折抵),而且 memberId 這個 key 一定在", async () => {
+    // 批次 7 起編輯表單有紅利區塊,但功能關閉時整塊不渲染 ⇒ 不可以拿「沒有折抵開關」當成 0 送出
+    //(那會把客人已折抵的點數默默退掉,§〇.4 判斷 15);派點也不可以帶值(功能關閉時後端會擋)。
+    // memberId 漏帶則會讓後端把會員清空(v2.4 裁決 5 R7)。
+    // 用「已勾起來」的那筆:開關變成 checked = 訂單詳情已經載入完成,才按儲存。
+    getBookingMock.mockResolvedValue(editingDetail(true));
+    renderForm(BOOKING_ID);
+    await waitFor(() => expect(hideNotesSwitch()).toHaveAttribute("data-state", "checked"));
+
+    screen.getByRole("button", { name: "儲存變更" }).click();
+
+    await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
+    const payload = updateBookingMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(payload, "pointsRedeemed")).toBe(true);
+    expect(payload["pointsRedeemed"]).toBeNull();
+    expect(payload["pointsOverride"]).toBeNull();
+    expect(Object.prototype.hasOwnProperty.call(payload, "memberId")).toBe(true);
   });
 
   it("#850:新建訂單時開關預設是關的(= 使用者要的「預設服務人員看得到」)", async () => {

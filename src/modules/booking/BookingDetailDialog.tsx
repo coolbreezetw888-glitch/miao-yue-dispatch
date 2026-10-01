@@ -12,10 +12,9 @@
 //        點清單裡任一筆會直接切換成該筆的詳情(不重新開一顆彈窗)。
 // 其餘既有邏輯(狀態徽章、確認/完成/編輯/取消按鈕、建立/修改追蹤資訊列)原封不動搬過來,不變動行為。
 
-import { useEffect, useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
@@ -29,6 +28,7 @@ import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agen
 // 資料查詢、權限判斷全部維持原樣。
 import {
   ActionBar,
+  AlertNote,
   CardAlertDialog,
   CardAlertDialogAction,
   CardAlertDialogCancel,
@@ -67,12 +67,38 @@ import type { PendingLineNotificationTarget } from "@/modules/line-notifications
 
 import {
   cancelBooking,
+  cancelCompletedBooking,
   completeBooking,
   confirmBooking,
+  fetchCompletedBookingReversalPreview,
   getBooking,
+  getBookingPointsLedger,
   getCustomerRelatedBookings,
+  revertCompletedBooking,
 } from "./api";
+// #844 批次 4:已完成訂單的「還原完成 / 取消訂單」確認子畫面(§五 5.1~5.4)。
+import {
+  AGENT_CANNOT_REVERSE_NOTE,
+  REVERSAL_PREVIEW_QUERY_SEGMENT,
+  REVERSAL_SUCCESS_TOAST,
+  REVERSAL_TITLES,
+  buildCompletedBookingReversalView,
+  invalidateAfterCompletedBookingReversal,
+  isReversalStateChangedError,
+  normalizeReversalReason,
+  reversalConfirmDisabledReason,
+  reversalReasonError,
+  reversalShortfallNotice,
+  type ReversalShortfallNotice,
+} from "./completedBookingReversal";
+import {
+  CompletedBookingReversalContent,
+  CompletedBookingReversalFooter,
+} from "./CompletedBookingReversalView";
+// 紅利系統重構 批次 7(§4.7):訂單詳情的紅利那幾行。只看這張訂單自己的欄位,不看商家目前的開關。
+import { describeBookingDetailPoints } from "./bookingPointsLogic";
 import { useBookingStatusChangeLogs } from "./context";
+import { BackToDetailLink, StatusChangeLogsView } from "./StatusChangeLogsView";
 import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import {
@@ -81,25 +107,9 @@ import {
   bookingStatusTone,
   getPaymentMethodLabel,
   type BookingStatus,
-  type BookingStatusChangeLog,
+  type CompletedBookingReversalAction,
   type CustomerRelatedBooking,
 } from "./types";
-
-/** 子畫面左上角的「‹ 返回訂單詳情」:skill 二之八的骨架寫法(一行小字,不是按鈕)。 */
-function BackToDetailLink({ onBack }: { onBack: () => void }) {
-  return (
-    <Button
-      type="button"
-      variant="text"
-      size="card"
-      className="-ml-2 self-start px-2"
-      onClick={onBack}
-    >
-      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-      返回訂單詳情
-    </Button>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // §3.3:相關訂單清單畫面,套用在同一顆 Dialog 裡(不另外疊一層彈窗)。
@@ -165,61 +175,6 @@ function RelatedBookingsView({
   );
 }
 
-// ---------------------------------------------------------------------------
-// 模組 6 §9.1(SPECS-INDEX #597):操作記錄清單畫面,套用在同一顆 Dialog 裡(比照 §3.3 相關訂單
-// 的既有互動模式,不另外疊一層彈窗)。
-// ---------------------------------------------------------------------------
-function statusChangeLogText(log: BookingStatusChangeLog): string {
-  if (log.fromStatus === null) {
-    return `建立訂單(${BOOKING_STATUS_LABELS[log.toStatus]})`;
-  }
-  return `把訂單狀態從「${BOOKING_STATUS_LABELS[log.fromStatus]}」改成「${BOOKING_STATUS_LABELS[log.toStatus]}」`;
-}
-
-function StatusChangeLogsView({
-  loading,
-  logs,
-  onBack,
-}: {
-  loading: boolean;
-  logs: BookingStatusChangeLog[];
-  onBack: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3">
-      <BackToDetailLink onBack={onBack} />
-      {loading ? (
-        <LoadingSkeleton variant="cards" rows={3} />
-      ) : logs.length === 0 ? (
-        <EmptyState
-          title="目前沒有任何操作紀錄"
-          description="之後有人確認、完成或取消這筆訂單,會記在這裡,可以查是誰、什麼時候改的。"
-          action={
-            <Button type="button" variant="neutral" size="touch" onClick={onBack}>
-              返回訂單詳情
-            </Button>
-          }
-        />
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {logs.map((log) => (
-            <li key={log.id}>
-              <ListCard
-                title={
-                  <span className="text-sm font-medium">
-                    {log.actorNameSnapshot} {statusChangeLogText(log)}
-                  </span>
-                }
-                meta={isoToTaipeiDateTimeWithSeconds(log.createdAt)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 export function BookingDetailDialog({
   bookingId,
   staffNameById,
@@ -244,6 +199,27 @@ export function BookingDetailDialog({
   // 模組 6 §9.1(SPECS-INDEX #597):操作記錄的顯示狀態,跟 showRelated 互斥(同一時間只顯示
   // 其中一種子畫面),比照「相關訂單」既有的互動模式。
   const [showLogs, setShowLogs] = useState(false);
+  // #844 §5.2:第三個子畫面「確認還原 / 取消已完成訂單」,跟上面兩個子畫面互斥。null = 不在這個子畫面。
+  const [reversalAction, setReversalAction] = useState<CompletedBookingReversalAction | null>(null);
+  const [reversalReason, setReversalReason] = useState("");
+  // 動過原因欄才在欄位下顯示紅字(一打開就紅字不友善);按鈕上方的黃色 `!` 一直都在。
+  const [reversalReasonTouched, setReversalReasonTouched] = useState(false);
+  // §3.7 / Q2 定案 C:取消已完成訂單「預設不通知」。
+  const [reversalNotify, setReversalNotify] = useState(false);
+  // §5.4:差額 > 0 時的小卡窗內容(關掉之後才關全頁層)。
+  const [shortfallNotice, setShortfallNotice] = useState<ReversalShortfallNotice | null>(null);
+  // QA 打回 1:差額小卡窗開窗時焦點要落在「知道了」(Radix AlertDialog 預設找 Cancel 鈕,這顆窗沒有)。
+  const shortfallAckRef = useRef<HTMLButtonElement>(null);
+  // #965:「差額小卡窗已經要開、還沒收尾」的同步旗標。小卡窗剛插入畫面的頭一兩幀,Radix 還沒把它登記成
+  // 最上層,這時按 Esc 會被下面的全頁層接走(關錯層)⇒ finishReversal 沒跑、列表沒重抓。全頁層的
+  // onOpenChange(見 handleLayerOpenChange)看到這個旗標就改走 finishReversal。用 ref 不用 state:
+  // 從 RPC 回來到 React 真的重新渲染之間也有空窗,ref 在 setShortfallNotice 的同一刻就立起來。
+  const shortfallPendingRef = useRef(false);
+  // QA 打回 3:成功 / 狀態已改變後要呼叫 onChanged(),但必須等確認子畫面真的關掉(reversalAction 變 null、
+  // 預覽查詢 disabled)之後 —— 否則呼叫端讓 ["booking-module"] 整組過期時,預覽查詢還是 active,會多打一次
+  // 預覽 RPC,而這張單已經不是已完成 ⇒ 400「狀態已經改變」紅字。
+  const [pendingChangedNotify, setPendingChangedNotify] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (open) {
@@ -251,6 +227,12 @@ export function BookingDetailDialog({
       setReason("");
       setShowRelated(false);
       setShowLogs(false);
+      setReversalAction(null);
+      setReversalReason("");
+      setReversalReasonTouched(false);
+      setReversalNotify(false);
+      setShortfallNotice(null);
+      shortfallPendingRef.current = false;
     }
   }, [open, bookingId]);
 
@@ -259,6 +241,24 @@ export function BookingDetailDialog({
     queryFn: () => getBooking(viewingBookingId as string),
     enabled: open && Boolean(viewingBookingId),
   });
+
+  // 紅利系統重構 §4.7:查「已入帳 / 已收回」(分類帳要 members 鑰匙,所以走
+  // get_booking_points_ledger,orders 鑰匙即可;只回這一張單的入帳 / 收回點數)。
+  // #844 §4.8:還原後的已確認、取消後的已取消也可能入帳過又被收回 ⇒ 條件從「已完成」放寬成
+  // 「不是待確認(待確認的單一定還沒完成過)」。
+  // #844 批次 4(批次 3 QA 觀察 ①):**不再要求派點 > 0** —— 還原後改單把派點改成 0 的單,分類帳上仍有
+  // 上一輪的入帳 / 收回 / 差額,要看得到;派點條件只決定「預定派點」那一行,不決定要不要查分類帳。
+  const { data: pointsLedger } = useQuery({
+    queryKey: ["booking-module", "points-ledger", viewingBookingId],
+    queryFn: () => getBookingPointsLedger(viewingBookingId as string),
+    enabled:
+      open &&
+      Boolean(viewingBookingId) &&
+      booking !== undefined &&
+      booking !== null &&
+      booking.status !== "pending_confirmation",
+  });
+  const detailPoints = booking ? describeBookingDetailPoints(booking, pointsLedger ?? null) : null;
 
   // 模組 10(會員與紅利)§4.5:判斷目前使用者是否也擁有 members 權限,決定會員姓名要不要做成
   // 可點擊連結。這裡完全不需要額外的權限檢查/API 呼叫(一之二節方向一)——member_name_snapshot
@@ -372,6 +372,109 @@ export function BookingDetailDialog({
     }
   }
 
+  // -------------------------------------------------------------------------
+  // #844 §5.2~§5.4:還原完成 / 取消已完成訂單
+  // -------------------------------------------------------------------------
+  const reversalPreviewQuery = useQuery({
+    queryKey: ["booking-module", REVERSAL_PREVIEW_QUERY_SEGMENT, viewingBookingId],
+    queryFn: () => fetchCompletedBookingReversalPreview(viewingBookingId as string),
+    enabled: open && reversalAction !== null && Boolean(viewingBookingId),
+    // 每次進子畫面都重算(數字會因別人剛改過餘額而變),不用快取、不自動重試(42501 / 狀態已改變重試也沒用)。
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  });
+  const reversalView =
+    reversalAction && reversalPreviewQuery.data
+      ? buildCompletedBookingReversalView(reversalPreviewQuery.data, reversalAction)
+      : null;
+  const reversalPreviewError = reversalPreviewQuery.isError
+    ? getErrorMessage(reversalPreviewQuery.error)
+    : null;
+  const reversalDisabledReason = reversalConfirmDisabledReason(reversalView, reversalReason);
+
+  function openReversal(action: CompletedBookingReversalAction) {
+    // 丟掉上一次的預覽結果(含錯誤狀態),確保進子畫面一定先看到骨架、再看到這一次重算的數字。
+    queryClient.removeQueries({
+      queryKey: ["booking-module", REVERSAL_PREVIEW_QUERY_SEGMENT, viewingBookingId],
+    });
+    setReversalAction(action);
+    setReversalReason("");
+    setReversalReasonTouched(false);
+    setReversalNotify(false);
+  }
+
+  function refreshAfterReversal(id: string) {
+    // 這支 helper 本身排除了預覽查詢;呼叫端的 onChanged() 不會排除,所以延後到 effect 裡(見下方)。
+    void invalidateAfterCompletedBookingReversal(queryClient, id);
+    setPendingChangedNotify(true);
+  }
+
+  useEffect(() => {
+    if (pendingChangedNotify && reversalAction === null) {
+      setPendingChangedNotify(false);
+      onChanged();
+    }
+  }, [pendingChangedNotify, reversalAction, onChanged]);
+
+  function finishReversal() {
+    shortfallPendingRef.current = false;
+    const id = booking?.id ?? viewingBookingId;
+    setShortfallNotice(null);
+    setReversalAction(null);
+    onOpenChange(false);
+    if (id) refreshAfterReversal(id);
+  }
+
+  async function handleReversalConfirm() {
+    if (!booking || !reversalAction || reversalDisabledReason !== null) return;
+    const action = reversalAction;
+    const reasonToSend = normalizeReversalReason(reversalReason);
+    setBusy(true);
+    try {
+      const result =
+        action === "revert"
+          ? await revertCompletedBooking(booking.id, reasonToSend)
+          : await cancelCompletedBooking(booking.id, reasonToSend, { notify: reversalNotify });
+      toast.success(REVERSAL_SUCCESS_TOAST[action]);
+      const notice = reversalShortfallNotice(result);
+      if (notice) {
+        // §5.4:差額不用 toast 帶過,改用小卡窗;關掉後才關全頁層、重抓。
+        shortfallPendingRef.current = true;
+        setShortfallNotice(notice);
+      } else {
+        finishReversal();
+      }
+    } catch (err) {
+      const message = getErrorMessage(err);
+      if (isReversalStateChangedError(message)) {
+        // §3.11:兩個人同時按 / 別人剛處理過。停在確認畫面沒有意義(數字已經不對),回到預約詳情並重抓,
+        // 讓畫面直接顯示最新狀態。
+        toast.error("操作失敗", {
+          description:
+            "這筆訂單的狀態已經改變(可能有其他人剛處理過),畫面已重新整理,請確認後再操作。",
+        });
+        setReversalAction(null);
+        refreshAfterReversal(booking.id);
+      } else {
+        // §5.4 / 邊界 17:其他失敗(整筆已回滾)停在確認畫面,原因欄內容保留。
+        toast.error("操作失敗", { description: message });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function retryReversalPreview() {
+    if (reversalPreviewError !== null && isReversalStateChangedError(reversalPreviewError)) {
+      // 預覽說狀態已經改變 ⇒「重新整理」= 回到預約詳情並重抓。
+      setReversalAction(null);
+      if (viewingBookingId) refreshAfterReversal(viewingBookingId);
+      return;
+    }
+    void reversalPreviewQuery.refetch();
+  }
+
   async function handleCancel() {
     if (!booking) return;
     setBusy(true);
@@ -397,21 +500,48 @@ export function BookingDetailDialog({
   const showEditAndCancel =
     isViewingOriginal &&
     (booking?.status === "pending_confirmation" || booking?.status === "accepted");
+  // #844 §5.1:已完成訂單 —— 商家管理員看到「取消訂單」「還原完成」兩顆;其他人(客服)看到一行常駐 `!`。
+  // 前端只是體驗,後端 private.is_merchant_admin 才是安全邊界。角色還在讀取中(undefined)兩者都不顯示。
+  const isCompletedOriginal = isViewingOriginal && booking?.status === "completed";
+  const showReversalButtons = isCompletedOriginal && merchantRole === "admin";
+  const showAgentReversalNote =
+    isCompletedOriginal && merchantRole !== undefined && merchantRole !== "admin";
 
   // ui-v1-full 階段一:外殼改用 FullPageLayer(skill 三、全頁層:手機滿版 / 電腦置中面板、標題列與
   // 按鈕列固定、只有中間捲動)。操作按鈕依 skill 二之三搬到底部固定動作列並三顆等寬(取消預約 /
   // 編輯 / 確認訂單或標記完成),**顯示條件與點擊行為跟原本一模一樣**;取消預約的二次確認改用小卡窗
   // 殼 CardAlertDialog(疊在全頁層之上,skill 三、兩層重疊),內容與 handleCancel 不變。
   // 狀態標籤搬到標題列右側(titleExtra),原本內容區第一列的「訂單狀態」因此拿掉,資訊沒有少。
-  const isDetailView = !showRelated && !showLogs;
+  const isReversalView = reversalAction !== null;
+  const isDetailView = !showRelated && !showLogs && !isReversalView;
   const showActionBar =
-    Boolean(booking) && isDetailView && (showConfirm || showComplete || showEditAndCancel);
+    Boolean(booking) &&
+    isDetailView &&
+    (showConfirm || showComplete || showEditAndCancel || showReversalButtons);
+
+  // #965:全頁層要關(Esc / 右上角關閉)時,如果差額小卡窗已經要開、還沒收尾,一律改走 finishReversal
+  // (等同按「知道了」:小卡窗與全頁層一起關、重抓列表),不讓收尾被跳過。
+  function handleLayerOpenChange(next: boolean) {
+    if (!next && shortfallPendingRef.current) {
+      finishReversal();
+      return;
+    }
+    onOpenChange(next);
+  }
 
   return (
     <>
-      <FullPageLayer open={open} onOpenChange={onOpenChange}>
+      <FullPageLayer open={open} onOpenChange={handleLayerOpenChange}>
         <FullPageLayerContent
-          title={showRelated ? "相關訂單" : showLogs ? "操作記錄" : "預約詳情"}
+          title={
+            reversalAction
+              ? REVERSAL_TITLES[reversalAction]
+              : showRelated
+                ? "相關訂單"
+                : showLogs
+                  ? "操作記錄"
+                  : "預約詳情"
+          }
           titleExtra={
             booking && isDetailView ? (
               <StatusTag tone={bookingStatusTone(booking.status as BookingStatus)}>
@@ -420,7 +550,15 @@ export function BookingDetailDialog({
             ) : null
           }
           footer={
-            booking && showActionBar ? (
+            reversalAction ? (
+              <CompletedBookingReversalFooter
+                view={reversalView}
+                disabledReason={reversalDisabledReason}
+                busy={busy}
+                onBack={() => setReversalAction(null)}
+                onConfirm={() => void handleReversalConfirm()}
+              />
+            ) : booking && showActionBar ? (
               <ActionBar>
                 {showEditAndCancel ? (
                   <CardAlertDialog>
@@ -485,11 +623,56 @@ export function BookingDetailDialog({
                     標記完成
                   </Button>
                 ) : null}
+                {/* #844 §5.1:兩顆等寬,都不直接執行,點下去切到確認子畫面;沒有實心主要鈕
+                    (兩個反轉動作都不該是最好按的那顆)。取消 = 危險(白底紅字),還原 = 次要(白底灰框)。 */}
+                {showReversalButtons ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="touch"
+                    disabled={busy}
+                    onClick={() => openReversal("cancel")}
+                  >
+                    取消訂單
+                  </Button>
+                ) : null}
+                {showReversalButtons ? (
+                  <Button
+                    type="button"
+                    variant="neutral"
+                    size="touch"
+                    disabled={busy}
+                    onClick={() => openReversal("revert")}
+                  >
+                    還原完成
+                  </Button>
+                ) : null}
               </ActionBar>
             ) : null
           }
         >
-          {showLogs ? (
+          {reversalAction ? (
+            <CompletedBookingReversalContent
+              action={reversalAction}
+              loading={reversalPreviewQuery.isLoading}
+              errorMessage={reversalPreviewError}
+              stateChanged={
+                reversalPreviewError !== null && isReversalStateChangedError(reversalPreviewError)
+              }
+              view={reversalView}
+              reason={reversalReason}
+              onReasonChange={(value) => {
+                setReversalReason(value);
+                setReversalReasonTouched(true);
+              }}
+              reasonError={reversalReasonTouched ? reversalReasonError(reversalReason) : null}
+              notify={reversalNotify}
+              onNotifyChange={setReversalNotify}
+              busy={busy}
+              onBack={() => setReversalAction(null)}
+              onRetry={retryReversalPreview}
+            />
+          ) : showLogs ? (
             <StatusChangeLogsView
               loading={statusChangeLogsLoading}
               logs={statusChangeLogs ?? []}
@@ -512,6 +695,12 @@ export function BookingDetailDialog({
             // skill 二之六 明細列:分組 + 組間留白、金額整組色塊、最重要的值放大、標籤淡值粗、
             // 數字 tabular-nums、電話/地址可點擊各佔一行、兩種備註分開。
             <div className="flex min-w-0 flex-col gap-5">
+              {/* #844 §5.1 / Q4 定案 A:客服最可能是誤按完成的人,會去找「取消」找不到 ⇒ 常駐講清楚。 */}
+              {showAgentReversalNote ? (
+                <AlertNote data-testid="agent-cannot-reverse-note">
+                  {AGENT_CANNOT_REVERSE_NOTE}
+                </AlertNote>
+              ) : null}
               <div className="flex flex-col gap-1">
                 <DetailRow label="預約時間" size="lg">
                   {isoToTaipeiTime(booking.start_at)} – {isoToTaipeiTime(booking.end_at)}
@@ -586,6 +775,18 @@ export function BookingDetailDialog({
                 <DetailRow label="最終金額" size="xl">
                   {formatAmount(booking.final_amount_snapshot)}
                 </DetailRow>
+                {/* 紅利系統重構 §4.7 / §2.11:有折抵時多兩行;「最終金額」那一行不改、仍是折抵前金額,
+                    實付只在顯示層相減(資料庫不多存一欄)。放在金額組裡,客服收錢時一眼看得到。 */}
+                {detailPoints?.redeemText ? (
+                  <>
+                    <DetailRow label="紅利點數折抵" size="sm">
+                      {detailPoints.redeemText}
+                    </DetailRow>
+                    <DetailRow label="實付" size="lg">
+                      {formatAmount(detailPoints.paidAmount)}
+                    </DetailRow>
+                  </>
+                ) : null}
                 {/* 模組 9(支付方式)v2:直接顯示快照文字,沒有選擇時顯示「尚未設定」。 */}
                 <DetailRow label="付款方式" size="sm">
                   {getPaymentMethodLabel(booking.payment_method_name_snapshot)}
@@ -630,6 +831,19 @@ export function BookingDetailDialog({
                   <DetailAddressRow address={booking.customer_address} />
                 ) : null}
               </DetailSection>
+
+              {/* 紅利系統重構 §4.7:預定派點 / 已入帳。只看這張訂單自己的欄位(points_planned > 0 或
+                  points_redeemed > 0),功能關閉後歷史紀錄仍要看得到。completed 之後純顯示。 */}
+              {detailPoints?.show && detailPoints.plannedText ? (
+                <DetailSection label="紅利點數">
+                  <DetailRow label="預定派點">{detailPoints.plannedText}</DetailRow>
+                  {detailPoints.earnedText ? (
+                    <DetailRow label="入帳狀態">{detailPoints.earnedText}</DetailRow>
+                  ) : booking.status !== "completed" ? (
+                    <p className="text-right text-[12px] text-muted-foreground">訂單完成後才入帳</p>
+                  ) : null}
+                </DetailSection>
+              ) : null}
 
               {booking.customer_notes || booking.notes ? (
                 <DetailSection label="備註">
@@ -682,6 +896,40 @@ export function BookingDetailDialog({
         onOpenChange={setShowLineDialog}
         onChoice={(shouldNotify) => void doConfirm(shouldNotify)}
       />
+
+      {/* #844 §5.4:差額 > 0 的小卡窗(只有一段文字 + 一顆「知道了」)。疊在全頁層之上(skill 三、兩層重疊)。
+          關法(QA 實測):按「知道了」或按 Esc 都會關(Esc 等同「知道了」,走同一條 onOpenChange(false));
+          點遮罩關不掉(Radix AlertDialog)。開窗焦點放在「知道了」,Enter 即可關。
+          shortfall_hint 原文純文字顯示、保留換行,不做成連結(v1.2:提示裡沒有訂單 ID)。
+          關掉之後才關全頁層並重抓。 */}
+      <CardAlertDialog
+        open={shortfallNotice !== null}
+        onOpenChange={(next) => {
+          // #965:旗標已經被全頁層那條路徑收掉(同一次 Esc 兩層都收到)就不再跑第二次,避免 onChanged 兩次。
+          if (!next && shortfallPendingRef.current) finishReversal();
+        }}
+      >
+        <CardAlertDialogContent
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            shortfallAckRef.current?.focus();
+          }}
+        >
+          <CardAlertDialogHeader>
+            <CardAlertDialogTitle>{shortfallNotice?.title ?? ""}</CardAlertDialogTitle>
+            <CardAlertDialogDescription
+              className="whitespace-pre-line break-words"
+              data-testid="reversal-shortfall-hint"
+            >
+              {shortfallNotice?.hint ?? ""}
+            </CardAlertDialogDescription>
+          </CardAlertDialogHeader>
+          <CardAlertDialogFooter>
+            {/* 不另外掛 onClick:Action 會關窗並觸發上面的 onOpenChange(false) → finishReversal,掛了會跑兩次。 */}
+            <CardAlertDialogAction ref={shortfallAckRef}>知道了</CardAlertDialogAction>
+          </CardAlertDialogFooter>
+        </CardAlertDialogContent>
+      </CardAlertDialog>
     </>
   );
 }

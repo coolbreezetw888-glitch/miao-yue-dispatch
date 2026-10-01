@@ -84,8 +84,15 @@ describe("resolveSubmitMemberId(§12.1 + §12.7)", () => {
   });
 });
 
-describe("buildBookingCreatedToast(#916,本波無紅利行)", () => {
-  const base = { final_amount_snapshot: 1200 };
+describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
+  // 紅利系統重構 批次 7:型別多了三個紅利快照欄位。這一組全部帶 0 = 「這筆沒有派點、沒有折抵」,
+  // 原本的斷言(只有會員行 + 金額行)維持不變 —— 0 點時本來就不該出現紅利行。
+  const base = {
+    final_amount_snapshot: 1200,
+    points_planned: 0,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+  };
 
   it("自動建立會員:標題 + 「已自動建立會員:{會員姓名}」+ 金額", () => {
     expect(
@@ -122,8 +129,9 @@ describe("buildBookingCreatedToast(#916,本波無紅利行)", () => {
     ).toEqual(["訂單金額 $1,200"]);
   });
 
-  it("金額用 formatAmount(四捨五入、千分位),而且整則沒有任何紅利 / 點數字樣", () => {
+  it("金額用 formatAmount(四捨五入、千分位);0 點、沒折抵時整則沒有任何紅利 / 點數字樣", () => {
     const content = buildBookingCreatedToast({
+      ...base,
       final_amount_snapshot: 12345.6,
       member_auto_created: true,
       member_id: "m-1",
@@ -135,5 +143,70 @@ describe("buildBookingCreatedToast(#916,本波無紅利行)", () => {
 
   it("秒數是 6 秒", () => {
     expect(BOOKING_CREATED_TOAST_DURATION_MS).toBe(6000);
+  });
+});
+
+describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => {
+  const base = {
+    final_amount_snapshot: 1000,
+    member_auto_created: false,
+    member_id: "m-1",
+    member_name_snapshot: "王小明",
+    points_planned: 0,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+  };
+
+  it("points_planned = 0 ⇒ 不出現第 3 行", () => {
+    expect(buildBookingCreatedToast(base).lines).toEqual([
+      "已連結既有會員:王小明",
+      "訂單金額 $1,000",
+    ]);
+  });
+
+  it("points_planned > 0 ⇒ 第 3 行,而且一定帶「(訂單完成後入帳)」", () => {
+    const lines = buildBookingCreatedToast({ ...base, points_planned: 12 }).lines;
+    expect(lines).toEqual([
+      "已連結既有會員:王小明",
+      "訂單金額 $1,000",
+      "紅利點數 12 點(訂單完成後入帳)",
+    ]);
+  });
+
+  it("有折抵 ⇒ 第 4 行,實付 = 最終金額 − 折抵金額;「訂單金額」那一行仍是折抵前金額", () => {
+    const lines = buildBookingCreatedToast({
+      ...base,
+      points_planned: 50,
+      points_redeemed: 55,
+      points_redeem_amount_snapshot: 5,
+    }).lines;
+    expect(lines).toEqual([
+      "已連結既有會員:王小明",
+      "訂單金額 $1,000",
+      "紅利點數 50 點(訂單完成後入帳)",
+      "紅利折抵 55 點(−$5),實付 $995",
+    ]);
+  });
+
+  it("有折抵但派 0 點 ⇒ 只有第 4 行,不出現第 3 行", () => {
+    const lines = buildBookingCreatedToast({
+      ...base,
+      points_redeemed: 100,
+      points_redeem_amount_snapshot: 10,
+    }).lines;
+    expect(lines).toEqual([
+      "已連結既有會員:王小明",
+      "訂單金額 $1,000",
+      "紅利折抵 100 點(−$10),實付 $990",
+    ]);
+  });
+
+  it("沒有會員 ⇒ 第 1 行照舊不出現(紅利行只看快照)", () => {
+    const lines = buildBookingCreatedToast({
+      ...base,
+      member_id: null,
+      member_name_snapshot: null,
+    }).lines;
+    expect(lines).toEqual(["訂單金額 $1,000"]);
   });
 });

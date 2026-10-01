@@ -41,6 +41,14 @@ import { toast } from "sonner";
 import {
   ActionBar,
   AlertNote,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
   ChoiceChip,
   ChoiceChipGroup,
   DetailDivider,
@@ -113,6 +121,25 @@ import {
   type BookingServiceItemSelectionInput,
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+// 紅利系統重構 批次 7(§4.6,#842/#799):建單 / 編輯表單的紅利區塊。判斷邏輯在 bookingPointsLogic.ts,
+// 預覽 hook 在 useBookingPointsPreview.ts,畫面在 BookingPointsSection.tsx。
+import { BookingPointsSection } from "./BookingPointsSection";
+import {
+  blockShowsPoints,
+  buildCreatePointsParams,
+  buildUpdatePointsParams,
+  isPointsSubmitBlockedByStalePreview,
+  needsPointsReviewConfirm,
+  POINTS_PREVIEW_STALE_MESSAGE,
+  type OriginalBookingPoints,
+  type PointsFormState,
+  previewMemberKey,
+  resolveBookingPointsBlockView,
+  shouldResetRedeemOnMemberChange,
+  validatePointsOverride,
+  validateRedeemPoints,
+} from "./bookingPointsLogic";
+import { useBookingPointsPreview } from "./useBookingPointsPreview";
 import {
   BOOKING_CREATED_TOAST_DURATION_MS,
   buildBookingCreatedToast,
@@ -478,6 +505,20 @@ export function BookingFormDialog({
   // (沿用建單與訂單管理介面優化 §3 既有的 sentinel 寫法)。
   const [paymentMethodValue, setPaymentMethodValue] = useState<string>(PAYMENT_METHOD_UNSET);
 
+  // 紅利系統重構 批次 7(§4.6):紅利區塊的表單狀態。編輯模式在下面的 useEffect 帶入這張單原本的
+  // 人工派點 / 折抵(跟 hideNotesFromStaff 同一個道理:帶入 + 送出時依規則帶值,兩邊都要做)。
+  const [pointsOverrideEnabled, setPointsOverrideEnabled] = useState(false);
+  const [pointsOverrideInput, setPointsOverrideInput] = useState("");
+  const [pointsRedeemEnabled, setPointsRedeemEnabled] = useState(false);
+  const [pointsRedeemInput, setPointsRedeemInput] = useState("");
+  // 判斷 24:預覽對到的會員變了 ⇒ 折抵歸零並顯示提示。
+  const [pointsRedeemResetNotice, setPointsRedeemResetNotice] = useState(false);
+  const previewMemberKeyRef = useRef<string | null>(null);
+  // §2.5 第 2 點:有自訂總金額 / 折扣時,送出前的「人工確認派點」小卡窗(疊在全頁層上 = 兩層重疊)。
+  const [pointsReviewConfirmOpen, setPointsReviewConfirmOpen] = useState(false);
+  // 每次開啟表單換一個值,預覽 hook 只沿用同一次開啟的上一筆結果(見 useBookingPointsPreview.ts)。
+  const [pointsPreviewSession, setPointsPreviewSession] = useState(0);
+
   // 模組 9 v2 §5.2:選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的
   // 那一筆」(即使它現在已經下架),詳見 types.ts buildPaymentMethodOptions 的說明。
   const paymentMethodOptions = useMemo(
@@ -498,8 +539,20 @@ export function BookingFormDialog({
   useEffect(() => {
     if (!open) return;
     setCategoryFilter("all"); // #598:每次開啟表單,分類篩選重設為「全部」。
+    // 紅利系統重構 批次 7:每次開啟都重來(預覽 session、會員變更判斷、確認窗)。
+    setPointsPreviewSession((n) => n + 1);
+    previewMemberKeyRef.current = null;
+    setPointsRedeemResetNotice(false);
+    setPointsReviewConfirmOpen(false);
     if (isEdit) {
       if (!editingDetail) return; // 還在載入中,等資料回來再帶入
+      // 紅利系統重構 §4.6 編輯模式第 1 點:帶入這張單目前的派點(含是否人工設定)與折抵。
+      setPointsOverrideEnabled(editingDetail.points_planned_overridden);
+      setPointsOverrideInput(String(editingDetail.points_planned));
+      setPointsRedeemEnabled(editingDetail.points_redeemed > 0);
+      setPointsRedeemInput(
+        editingDetail.points_redeemed > 0 ? String(editingDetail.points_redeemed) : "",
+      );
       setStaffId(editingDetail.staff_id);
       setServiceItemIds(editingDetail.serviceItems.map((i) => i.id));
       setItemQuantities(
@@ -606,6 +659,10 @@ export function BookingFormDialog({
       setPaymentMethodValue(PAYMENT_METHOD_UNSET);
       setCustomDurationEnabled(false);
       setCustomDurationMinutes("");
+      setPointsOverrideEnabled(false);
+      setPointsOverrideInput("");
+      setPointsRedeemEnabled(false);
+      setPointsRedeemInput("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit, editingDetail, merchantTaxSettings]);
@@ -763,6 +820,134 @@ export function BookingFormDialog({
     }, 0);
   }, [materialCostItemIds, materialCostItems]);
 
+  // ───────── 紅利系統重構 批次 7(§4.6):紅利區塊 ─────────
+  // 新增模式:帶電話、不帶會員(§12.1,由伺服器依電話找會員,跟 create_booking 同一套規則);
+  // 編輯模式:帶這張單的 id + resolveSubmitMemberId 的結果(補掛對象也算),電話不拿來找會員(§12.7)。
+  const pointsPreviewMemberId = resolveSubmitMemberId({
+    isEdit,
+    linkedMember: member,
+    pendingAttachMember,
+    customerPhone,
+  });
+  const pointsPreviewInput = useMemo(() => {
+    if (!open || !merchantId) return null;
+    if (isEdit && !editingDetail) return null; // 編輯單還沒載入
+    if (amountFields.hasError) return null; // 金額填錯時不去問(算出來也是錯的)
+    return {
+      merchantId,
+      bookingId: isEdit ? editingBookingId : null,
+      memberId: pointsPreviewMemberId,
+      customerPhone,
+      serviceItems: serviceItemIds.map<BookingServiceItemSelectionInput>((id) => ({
+        serviceItemId: id,
+        quantity: parseItemQuantity(itemQuantities[id]),
+        unitPrice: resolveUnitPrice(amountFields, id),
+      })),
+      customTotalAmountEnabled,
+      customTotalAmount: amountFields.customTotalAmount.value,
+      discountEnabled,
+      discountMode: discountEnabled ? discountMode : null,
+      discountValue: amountFields.discountValue.value,
+      taxEnabled,
+      taxMode: taxEnabled ? taxMode : null,
+      taxValue: amountFields.taxValue.value,
+    };
+  }, [
+    open,
+    merchantId,
+    isEdit,
+    editingDetail,
+    editingBookingId,
+    pointsPreviewMemberId,
+    customerPhone,
+    serviceItemIds,
+    itemQuantities,
+    amountFields,
+    customTotalAmountEnabled,
+    discountEnabled,
+    discountMode,
+    taxEnabled,
+    taxMode,
+  ]);
+  const { query: pointsPreviewQuery, isStale: pointsPreviewStale } = useBookingPointsPreview(
+    pointsPreviewInput,
+    `${pointsPreviewSession}:${editingBookingId ?? "new"}`,
+  );
+  const pointsPreview = pointsPreviewQuery.data;
+  const pointsFetchErrorMessage =
+    pointsPreviewQuery.error && !pointsPreview ? getErrorMessage(pointsPreviewQuery.error) : null;
+  const pointsView = resolveBookingPointsBlockView(pointsPreview, {
+    fetchFailed: pointsFetchErrorMessage !== null,
+  });
+  const pointsOriginal: OriginalBookingPoints | null =
+    isEdit && editingDetail
+      ? {
+          planned: editingDetail.points_planned,
+          plannedAuto: editingDetail.points_planned_auto,
+          overridden: editingDetail.points_planned_overridden,
+          redeemed: editingDetail.points_redeemed,
+          redeemAmount: Number(editingDetail.points_redeem_amount_snapshot),
+        }
+      : null;
+  const pointsOverrideValidation = validatePointsOverride(pointsOverrideInput);
+  const pointsRedeemInfo =
+    pointsPreview && pointsPreview.featureEnabled && pointsPreview.error === null
+      ? pointsPreview.redeem
+      : null;
+  // v2.4 裁決 22 L4:可用 0 點時不顯示折抵開關(BookingPointsSection 改顯示一行灰字)。
+  const pointsRedeemAvailable =
+    pointsView === "member" &&
+    pointsRedeemInfo?.enabled === true &&
+    pointsRedeemInfo.availablePoints > 0;
+  // v2.4 裁決 22 ①:折抵要扣誰 = 這次預覽對到的會員(existing / given)。
+  const pointsRedeemMemberId =
+    pointsPreview && pointsPreview.featureEnabled && pointsPreview.error === null
+      ? pointsPreview.memberId
+      : null;
+  const pointsRedeemValidation = pointsRedeemInfo
+    ? validateRedeemPoints(
+        pointsRedeemInput.trim() === "" ? "0" : pointsRedeemInput,
+        pointsRedeemInfo,
+      )
+    : { points: 0, amount: 0, error: null, hint: null };
+  // 折抵開著、而且這次真的有有效的折抵金額 ⇒ 金額預覽多兩行「紅利折抵 / 實付」(§4.6 第 4 點)。
+  const pointsRedeemActiveAmount =
+    pointsRedeemAvailable && pointsRedeemEnabled && pointsRedeemValidation.error === null
+      ? pointsRedeemValidation.amount
+      : 0;
+  const pointsReviewRequired = customTotalAmountEnabled || discountEnabled;
+
+  // 判斷 24:預覽對到的會員一變(電話改了、補掛 / 取消補掛),折抵開關關掉、點數清成 0,並提示。
+  // 用 effect 是因為「會員是誰」要等伺服器回答,不是改電話當下就知道。
+  const currentPreviewMemberKey = previewMemberKey(pointsPreview);
+  useEffect(() => {
+    if (currentPreviewMemberKey === null) return;
+    const prev = previewMemberKeyRef.current;
+    previewMemberKeyRef.current = currentPreviewMemberKey;
+    const redeemActive = pointsRedeemEnabled || pointsRedeemInput.trim() !== "";
+    if (shouldResetRedeemOnMemberChange(prev, currentPreviewMemberKey, redeemActive)) {
+      setPointsRedeemEnabled(false);
+      setPointsRedeemInput("");
+      setPointsRedeemResetNotice(true);
+    }
+    // 只在「對到的會員」變了的時候跑;折抵輸入框本身的變動不觸發。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPreviewMemberKey]);
+
+  function handlePointsOverrideEnabledChange(enabled: boolean) {
+    setPointsOverrideEnabled(enabled);
+    // 打開時預設帶入系統建議值(§4.6 第 2 點)。
+    if (enabled && pointsPreview && pointsPreview.featureEnabled && pointsPreview.error === null) {
+      setPointsOverrideInput(String(pointsPreview.autoPoints));
+    }
+  }
+
+  function handlePointsRedeemEnabledChange(enabled: boolean) {
+    setPointsRedeemEnabled(enabled);
+    setPointsRedeemResetNotice(false);
+    if (!enabled) setPointsRedeemInput("");
+  }
+
   function toggleInArray(current: string[], id: string): string[] {
     return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
   }
@@ -840,7 +1025,10 @@ export function BookingFormDialog({
     }
   }
 
-  async function handleSubmit() {
+  /**
+   * @param options.pointsReviewConfirmed 紅利系統重構 §2.5 第 2 點:客服已在「人工確認派點」小卡窗按了確認。
+   */
+  async function handleSubmit(options: { pointsReviewConfirmed?: boolean } = {}) {
     if (!staffId) {
       toast.error("請選擇服務人員");
       return;
@@ -915,6 +1103,51 @@ export function BookingFormDialog({
       toast.error("已開啟自訂工時,請輸入大於 0 的總服務時長(分鐘)");
       return;
     }
+
+    // ───── 紅利系統重構 批次 7(§4.6)送出前的紅利檢查(體驗層;後端 create_booking / update_booking 會再驗一次)─────
+    const pointsBlockShowsPoints = blockShowsPoints(pointsView);
+    if (pointsBlockShowsPoints && pointsOverrideEnabled && !pointsOverrideValidation.ok) {
+      toast.error("手動修改的派點數有問題", { description: pointsOverrideValidation.error });
+      return;
+    }
+    if (pointsRedeemAvailable && pointsRedeemEnabled && pointsRedeemValidation.error) {
+      toast.error("紅利折抵點數有問題", { description: pointsRedeemValidation.error });
+      return;
+    }
+    const pointsReviewConfirmNeeded = needsPointsReviewConfirm({
+      view: pointsView,
+      customTotalAmountEnabled,
+      discountEnabled,
+    });
+    // 🔴 v2.4 裁決 22 ① (b):畫面上的紅利數字還不是「目前這份輸入」算出來的(例:剛改了電話、預覽還沒回來),
+    // 而這次送出會用到那些數字(折抵 / 手動派點 / 人工確認)⇒ 先擋,不然會帶著上一位會員的折抵送出去。
+    // 後端另有一道:p_points_redeem_member_id 必須等於實際決定的會員。
+    if (
+      isPointsSubmitBlockedByStalePreview({
+        previewStale: pointsPreviewStale,
+        view: pointsView,
+        overrideEnabled: pointsOverrideEnabled,
+        redeemActive: pointsRedeemAvailable && pointsRedeemEnabled,
+        reviewConfirmNeeded: pointsReviewConfirmNeeded,
+      })
+    ) {
+      toast.error(POINTS_PREVIEW_STALE_MESSAGE);
+      return;
+    }
+    // §2.5 第 2 點:有自訂總金額 / 折扣時不能靜默送出,先跳確認小卡窗(確認後才真的呼叫 RPC)。
+    if (!options.pointsReviewConfirmed && pointsReviewConfirmNeeded) {
+      setPointsReviewConfirmOpen(true);
+      return;
+    }
+    const pointsFormState: PointsFormState = {
+      view: pointsView,
+      overrideEnabled: pointsOverrideEnabled,
+      overrideValue: pointsOverrideValidation.ok ? pointsOverrideValidation.value : null,
+      redeemAvailable: pointsRedeemAvailable,
+      redeemEnabled: pointsRedeemEnabled,
+      redeemPoints: pointsRedeemValidation.points,
+      redeemMemberId: pointsRedeemMemberId,
+    };
 
     setSaving(true);
     try {
@@ -998,11 +1231,23 @@ export function BookingFormDialog({
         await updateBooking({
           bookingId: editingBookingId,
           ...shared,
+          // 🔴 紅利系統重構 §3.4 / 批次 7:規則在 buildUpdatePointsParams(有單元測試)——
+          //   折抵開關有出現 ⇒ 帶表單上的值(關 = 0 = 退回);沒出現(功能關閉、會員已下架…)⇒ null = 維持;
+          //   派點沒改 ⇒ null(功能關閉時帶值會被後端擋);原本人工設定、這次關掉 / 按「改用建議值」⇒ reset。
+          //   (會員若被換掉 / 清空,後端會把原折抵整筆退回給原會員,不會留下「有折抵、沒會員」。)
+          ...(pointsOriginal
+            ? buildUpdatePointsParams(pointsFormState, pointsOriginal)
+            : { pointsRedeemed: null, pointsOverride: null }),
           ...(changeSummary ? { changeSummary } : {}),
         });
         toast.success("已更新預約");
       } else {
-        const created = await createBooking({ merchantId, ...shared });
+        const created = await createBooking({
+          merchantId,
+          ...shared,
+          // 紅利系統重構 §3.3:派點覆寫 / 折抵點數(規則在 buildCreatePointsParams,有單元測試)。
+          ...buildCreatePointsParams(pointsFormState),
+        });
         // SPECS-INDEX #916(§12.3):取代原本的「已建立預約」。用 sonner 的 toast(skill 三之二:
         // 只是告知結果、不需要回應 ⇒ toast,不是小卡窗;不可以用 Dialog + setTimeout 自己關)。
         // 會員姓名走 React 文字插值(自動轉義),不用 dangerouslySetInnerHTML(資安 #11)。
@@ -1044,6 +1289,18 @@ export function BookingFormDialog({
 
   // ui-v1-full:外殼從 Sheet(底部 92vh)換成全頁層(skill 三):手機滿版、電腦置中面板,標題列與
   // 底部按鈕列固定、只有中間會捲動;「取消 / 建立預約(儲存變更)」兩顆等寬(skill 二之三)。
+  // 確認小卡窗要顯示的兩個數字:系統建議 N 點 / 本單將派 M 點。
+  const pointsSuggested =
+    pointsPreview && pointsPreview.featureEnabled && pointsPreview.error === null
+      ? pointsPreview.autoPoints
+      : null;
+  const pointsWillAssign =
+    pointsOverrideEnabled && pointsOverrideValidation.ok
+      ? pointsOverrideValidation.value
+      : isEdit && pointsOriginal?.overridden && pointsOverrideEnabled
+        ? pointsOriginal.planned
+        : pointsSuggested;
+
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
@@ -1070,7 +1327,7 @@ export function BookingFormDialog({
                 variant="primary"
                 size="touch"
                 disabled={saving || amountFields.hasError}
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
               >
                 {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
               </Button>
@@ -1576,9 +1833,58 @@ export function BookingFormDialog({
               <DetailRow label="最終金額" size="xl">
                 {formatAmount(amountPreview.finalAmount)}
               </DetailRow>
+              {/* 紅利系統重構 §4.6 第 4 點 / §2.11:有折抵時多兩行。「最終金額」那一行仍是折抵前金額
+                  (第 3 題定案 A:final_amount_snapshot 不扣),實付只在顯示層相減。 */}
+              {pointsRedeemActiveAmount > 0 ? (
+                <>
+                  <DetailRow label="紅利折抵" size="sm">
+                    −{formatAmount(pointsRedeemActiveAmount)}
+                  </DetailRow>
+                  <DetailRow label="實付" size="lg">
+                    {formatAmount(amountPreview.finalAmount - pointsRedeemActiveAmount)}
+                  </DetailRow>
+                </>
+              ) : null}
             </div>
             {amountPreview.error ? <AlertNote>{amountPreview.error}</AlertNote> : null}
           </DetailSection>
+
+          {/* ───────── 紅利點數(紅利系統重構 §4.6,#842 / #799)───────── */}
+          {/* skill 二之九:金額之後、備註之前(數字依賴金額)。功能關閉時 BookingPointsSection 回 null。 */}
+          <BookingPointsSection
+            view={pointsView}
+            preview={pointsPreview}
+            fetchErrorMessage={pointsFetchErrorMessage}
+            noServiceItems={serviceItemIds.length === 0}
+            amountInvalid={amountFields.hasError}
+            original={pointsOriginal}
+            reviewRequired={pointsReviewRequired}
+            overrideEnabled={pointsOverrideEnabled}
+            onOverrideEnabledChange={handlePointsOverrideEnabledChange}
+            overrideInput={pointsOverrideInput}
+            onOverrideInputChange={setPointsOverrideInput}
+            overrideError={
+              pointsOverrideEnabled && !pointsOverrideValidation.ok
+                ? pointsOverrideValidation.error
+                : null
+            }
+            onUseSuggested={() => setPointsOverrideEnabled(false)}
+            redeemEnabled={pointsRedeemEnabled}
+            onRedeemEnabledChange={handlePointsRedeemEnabledChange}
+            redeemInput={pointsRedeemInput}
+            onRedeemInputChange={(value) => {
+              setPointsRedeemInput(value);
+              setPointsRedeemResetNotice(false);
+            }}
+            redeemValidation={pointsRedeemValidation}
+            redeemResetNotice={pointsRedeemResetNotice}
+            memberRemoved={
+              isEdit &&
+              Boolean(editingDetail?.member_id) &&
+              pointsPreviewMemberId === editingDetail?.member_id &&
+              pointsView === "no_member"
+            }
+          />
 
           {/* ───────── 料錢成本 ───────── */}
           {/* 建單功能擴充 2.3/5.1 第 3 點:料錢成本區塊,只有商家開啟功能時才顯示。 */}
@@ -1688,6 +1994,41 @@ export function BookingFormDialog({
             />
           </DetailSection>
         </div>
+        {/* 紅利系統重構 §2.5 第 2 點:有自訂總金額 / 折扣時,送出前的人工確認。
+        ⚠️ 這是 skill 三「兩層重疊」目前全站唯一的個案:建單表單(全頁層)上面再疊這個小卡窗。
+        放在全頁層的內容裡,Radix 會把它另外 portal 到 body(FullPageLayer.tsx 檔頭寫的用法),後開的蓋在上面,
+        背景遮罩疊兩層會更暗 —— 這是預期的長相(skill 三「兩層重疊」)。
+        AlertDialog:點遮罩不會關(按 Esc 會關),確認類。 */}
+        <CardAlertDialog open={pointsReviewConfirmOpen} onOpenChange={setPointsReviewConfirmOpen}>
+          <CardAlertDialogContent>
+            <CardAlertDialogHeader>
+              <CardAlertDialogTitle>請確認這筆訂單的派點數</CardAlertDialogTitle>
+              <CardAlertDialogDescription>
+                {`本單有自訂總金額/折扣,系統建議 ${pointsSuggested ?? 0} 點僅供參考,是否以 ${
+                  pointsWillAssign ?? 0
+                } 點送出?`}
+              </CardAlertDialogDescription>
+            </CardAlertDialogHeader>
+            <div className="flex flex-col gap-1 rounded-md bg-muted/50 px-3.5 py-2.5 text-sm tabular-nums">
+              <span>系統建議 {pointsSuggested ?? 0} 點</span>
+              <span className="font-semibold">本單將派 {pointsWillAssign ?? 0} 點</span>
+            </div>
+            {/* v2.4 裁決 22 ① (b):確認窗開著時輸入又變了(或預覽還在重查)⇒ 上面兩個數字不可信,先不讓確認。 */}
+            {pointsPreviewStale ? <AlertNote>{POINTS_PREVIEW_STALE_MESSAGE}</AlertNote> : null}
+            <CardAlertDialogFooter>
+              <CardAlertDialogCancel>返回修改</CardAlertDialogCancel>
+              <CardAlertDialogAction
+                disabled={pointsPreviewStale}
+                onClick={() => {
+                  setPointsReviewConfirmOpen(false);
+                  void handleSubmit({ pointsReviewConfirmed: true });
+                }}
+              >
+                確認送出
+              </CardAlertDialogAction>
+            </CardAlertDialogFooter>
+          </CardAlertDialogContent>
+        </CardAlertDialog>
       </FullPageLayerContent>
     </FullPageLayer>
   );

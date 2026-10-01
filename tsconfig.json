@@ -6,7 +6,9 @@
     "eslint.config.js",
     "vitest.config.ts",
     "playwright.config.ts",
-    "e2e/**/*.ts"
+    "playwright.local.config.ts",
+    "e2e/**/*.ts",
+    "e2e-local/**/*.ts"
   ],
   "compilerOptions": {
     "target": "ES2022",

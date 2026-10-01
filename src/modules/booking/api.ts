@@ -21,6 +21,8 @@ import type {
   BookingStatusChangeLog,
   BookingStatusColorMap,
   CalendarStateStyleMap,
+  CompletedBookingReversalPreview,
+  CompletedBookingReversalResult,
   CustomerRelatedBooking,
   MaterialCostItem,
   MerchantBusinessHours,
@@ -211,6 +213,15 @@ export interface CreateBookingInput extends BookingAmountAdjustmentInput {
    * ⚠️ 下面 createBooking 送出時**一律無條件帶值**,不可以用這個檔案裡
    *    `...(input.x ? { p_x: input.x } : {})` 的既有慣用寫法 —— `false` 是 falsy,會被整個省略掉。 */
   hideNotesFromStaff?: boolean;
+  /** 紅利系統重構 §3.3(#842):客服人工設定的派點數(0~100,000 的整數)。不帶 / null = 用系統建議值。
+   * 0 是合法的覆寫值(「這筆不派點」),所以送出時用 `!= null` 判斷,不可以用 truthy 判斷。 */
+  pointsOverride?: number | null;
+  /** 紅利系統重構 §3.3(#839/#842):這筆訂單要用幾點會員點數折抵。不帶 = 0(不折抵)。
+   * 建單當下就從會員餘額扣掉;會員由後端依電話決定(新增訂單不帶 memberId,§12.1)。 */
+  pointsRedeemed?: number;
+  /** v2.4 裁決 22 ①:折抵要扣「哪一位會員」的點數(= 畫面預覽對到的那位)。pointsRedeemed > 0 時必帶;
+   * 後端會比對它跟依電話實際連結的會員,不同就擋下(防「改電話後立刻送出 ⇒ 扣錯人」)。 */
+  pointsRedeemMemberId?: string | null;
 }
 
 export async function createBooking(input: CreateBookingInput): Promise<Booking> {
@@ -253,6 +264,14 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     // (`?? false` 而不是直接 `input.hideNotesFromStaff`:exactOptionalPropertyTypes:true 下
     //  可選欄位不能明確給 undefined。)
     p_hide_notes_from_staff: input.hideNotesFromStaff ?? false,
+    // 紅利系統重構 §3.3 第 6 步:折抵點數**一律明確帶值**(`?? 0`),不用 `...(x ? {…} : {})`
+    // —— 0 是 falsy(同 #852 的理由)。人工派點 0 也是合法值,所以用 `!= null` 判斷要不要帶。
+    p_points_redeemed: input.pointsRedeemed ?? 0,
+    ...(input.pointsOverride !== null && input.pointsOverride !== undefined
+      ? { p_points_override: input.pointsOverride }
+      : {}),
+    // v2.4 裁決 22 ①:一律帶這個 key(沒有折抵就是 null)。gen types 推成 string(不含 null),資料庫接受 null。
+    p_points_redeem_member_id: (input.pointsRedeemMemberId ?? null) as string,
   });
   if (error) throw error;
   const booking = data as Booking;
@@ -318,6 +337,21 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
    *    下面 updateBooking 也一律無條件帶值,兩邊都有 Vitest / pgTAP 測試鎖住(#857)。
    */
   hideNotesFromStaff?: boolean;
+  /**
+   * 紅利系統重構 §3.4(#842):這張單要用幾點折抵。
+   *   - null / 不帶:**維持這張單目前的折抵**(後端 default null 的語意;會員沒變就原封不動,
+   *     會員被換掉或清空時,原折抵整筆退回給原會員)。
+   *   - 數字(含 0):改成這個點數(0 = 取消折抵、把點數退回)。
+   * ⚠️ updateBooking 送出時**一律帶 p_points_redeemed 這個 key**(沒有值就明確送 null),
+   *    不讓「有沒有帶這個參數」變成隱性語意(#852/#857 同一個坑的教訓)。
+   */
+  pointsRedeemed?: number | null;
+  /** 紅利系統重構 §3.4:人工派點數。null / 不帶 = 維持原本的人工設定(沒設定過就跟著系統建議值)。 */
+  pointsOverride?: number | null;
+  /** 紅利系統重構 §3.4 / 第 6 題:客服按了「改用建議值」。不帶 = false。不可跟 pointsOverride 同時帶。 */
+  pointsOverrideReset?: boolean;
+  /** v2.4 裁決 22 ①:同 CreateBookingInput.pointsRedeemMemberId。pointsRedeemed > 0 時必須等於 memberId。 */
+  pointsRedeemMemberId?: string | null;
 }
 
 /**
@@ -395,6 +429,15 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     // 不報錯、畫面上也看不出來。所以這裡一律無條件帶值,絕對不要改成
     // `...(input.hideNotesFromStaff ? {…} : {})`(那個寫法會把明確的 false 整個吃掉)。
     p_hide_notes_from_staff: input.hideNotesFromStaff ?? false,
+    // 🔴 紅利系統重構 §3.4 第 0-1 步:折抵點數一律帶這個 key。null = 維持原折抵(後端預設值也是 null,
+    // 但這裡不靠「沒帶」表達語意)。`as number`:gen types 把有預設值的參數推成 `number`(不含 null),
+    // 跟上面 p_member_id 同一個型別產生工具落差;資料庫端完全接受 null,而且 null 正是「維持」的意思。
+    p_points_redeemed: (input.pointsRedeemed ?? null) as number,
+    ...(input.pointsOverride !== null && input.pointsOverride !== undefined
+      ? { p_points_override: input.pointsOverride }
+      : {}),
+    p_points_override_reset: input.pointsOverrideReset ?? false,
+    p_points_redeem_member_id: (input.pointsRedeemMemberId ?? null) as string,
   });
   if (error) throw error;
   const booking = data as Booking;
@@ -411,6 +454,73 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(staffWasReassigned && previousStaffId ? { previousStaffId } : {}),
   });
   return booking;
+}
+
+// =========================================================================
+// 紅利系統重構 批次 7(§3.2 / §4.6):建單頁的紅利即時預覽。
+// 權限跟建單同一把鑰匙(orders);伺服器用跟 create_booking 完全相同的規則依電話找會員(新增模式),
+// 編輯模式改帶 bookingId + memberId(= resolveSubmitMemberId 的結果)。
+// 🔴 回傳 {feature_enabled: true, error} 時原樣交給畫面顯示(parseBookingPointsPreview),不可以當成 0 點。
+// =========================================================================
+export interface PreviewBookingPointsInput extends Omit<
+  BookingAmountAdjustmentInput,
+  "paymentMethodId" | "customDurationEnabled" | "customDurationMinutes"
+> {
+  merchantId: string;
+  /** 編輯模式才帶;新增模式 null。 */
+  bookingId: string | null;
+  /** 編輯模式 = resolveSubmitMemberId(...);新增模式一律 null(§12.1)。 */
+  memberId: string | null;
+  customerPhone: string;
+  serviceItems: BookingServiceItemSelectionInput[];
+}
+
+export async function previewBookingPoints(input: PreviewBookingPointsInput): Promise<unknown> {
+  const { data, error } = await supabase.rpc("preview_booking_points", {
+    p_merchant_id: input.merchantId,
+    // gen types 把 uuid 參數推成 string(不含 null),資料庫端接受 null(= 新增模式 / 沒有會員)。
+    p_booking_id: input.bookingId as string,
+    p_member_id: input.memberId as string,
+    p_customer_phone: input.customerPhone,
+    p_service_items: buildServiceItemsJsonb(input.serviceItems),
+    p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
+    p_custom_total_amount: (input.customTotalAmount ?? null) as number,
+    p_discount_enabled: input.discountEnabled ?? false,
+    p_discount_mode: (input.discountMode ?? null) as string,
+    p_discount_value: (input.discountValue ?? null) as number,
+    p_tax_enabled: input.taxEnabled ?? false,
+    p_tax_mode: (input.taxMode ?? null) as string,
+    p_tax_value: (input.taxValue ?? null) as number,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** §4.7 訂單詳情「已入帳 N 點 / 已收回」。orders 鑰匙即可(分類帳本身要 members 鑰匙,所以走這支)。 */
+export interface BookingPointsLedger {
+  /** 本單 earn_booking 加總;從未入帳為 null。 */
+  earnedPoints: number | null;
+  /** 本單被收回的點數(#844 完成後取消 / 還原時才會有)。 */
+  reversedPoints: number;
+  /** 有效入帳 = 入帳 − 收回;從未入帳為 null。 */
+  effectivePoints: number | null;
+}
+
+export async function getBookingPointsLedger(bookingId: string): Promise<BookingPointsLedger> {
+  const { data, error } = await supabase.rpc("get_booking_points_ledger", {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+  const row = (data ?? {}) as {
+    earned_points?: number | null;
+    reversed_points?: number | null;
+    effective_points?: number | null;
+  };
+  return {
+    earnedPoints: row.earned_points ?? null,
+    reversedPoints: row.reversed_points ?? 0,
+    effectivePoints: row.effective_points ?? null,
+  };
 }
 
 // =========================================================================
@@ -545,6 +655,68 @@ export async function completeBooking(bookingId: string): Promise<Booking> {
     eventType: "booking_completed",
   });
   return booking;
+}
+
+// =========================================================================
+// #844 已完成訂單取消/還原(規格書 §4.5)。真正的權限(只有商家管理員)、原因必填與 500 字上限、
+// 狀態檢查、匯入單不能還原,全部在後端 private.reverse_booking_completion;前端只是體驗。
+// =========================================================================
+
+/** 「這次會連帶影響」清單的資料來源(只讀不鎖,畫面一律寫「預計」)。 */
+export async function fetchCompletedBookingReversalPreview(
+  bookingId: string,
+): Promise<CompletedBookingReversalPreview> {
+  const { data, error } = await supabase.rpc("get_completed_booking_reversal_preview", {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+  return data as unknown as CompletedBookingReversalPreview;
+}
+
+/** 還原完成(completed → accepted)。§3.7:**一律不發**任何 LINE / 推播。 */
+export async function revertCompletedBooking(
+  bookingId: string,
+  reason: string,
+): Promise<CompletedBookingReversalResult> {
+  const { data, error } = await supabase.rpc("revert_completed_booking", {
+    p_booking_id: bookingId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as unknown as CompletedBookingReversalResult;
+}
+
+/**
+ * 取消已完成訂單(completed → cancelled)。§3.7 / Q2 定案 C:**預設不通知**;只有管理員在確認畫面
+ * 打開開關(notify === true)才比照 cancelBooking 發 LINE + 推播(不等待、吞錯誤)。
+ * notify 同時傳給 p_notify_requested,只用來寫稽核表 notified(資料庫不發通知)。
+ */
+export async function cancelCompletedBooking(
+  bookingId: string,
+  reason: string,
+  options: { notify: boolean },
+): Promise<CompletedBookingReversalResult> {
+  const notify = options.notify === true;
+  const { data, error } = await supabase.rpc("cancel_completed_booking", {
+    p_booking_id: bookingId,
+    p_reason: reason,
+    p_notify_requested: notify,
+  });
+  if (error) throw error;
+  const result = data as unknown as CompletedBookingReversalResult;
+  if (notify) {
+    dispatchLineNotification({
+      merchantId: result.booking.merchant_id,
+      bookingId: result.booking.id,
+      eventType: "booking_cancelled",
+    });
+    dispatchPushNotification({
+      merchantId: result.booking.merchant_id,
+      bookingId: result.booking.id,
+      eventType: "booking_cancelled",
+    });
+  }
+  return result;
 }
 
 // =========================================================================
@@ -1191,6 +1363,7 @@ export async function getBookingStatusChangeLogs(
       actor_name_snapshot: string;
       actor_role_snapshot: string;
       created_at: string;
+      note: string | null;
     }[]
   ).map((row) => ({
     id: row.id,
@@ -1199,6 +1372,8 @@ export async function getBookingStatusChangeLogs(
     actorNameSnapshot: row.actor_name_snapshot,
     actorRoleSnapshot: row.actor_role_snapshot as BookingStatusChangeLog["actorRoleSnapshot"],
     createdAt: row.created_at,
+    // #844 §2.2:空字串視同沒有原因(後端已把純空白存成 null,這裡只是保險)。
+    note: row.note?.trim() ? row.note.trim() : null,
   }));
 }
 

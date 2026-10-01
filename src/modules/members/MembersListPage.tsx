@@ -1,5 +1,6 @@
 // 對應模組 10(會員與紅利)規格書 §4.1:會員管理列表頁(新路由 /app/members)。
-// 頁面載入時先呼叫 grant_pending_birthday_bonuses(規則 2.5),有核發時顯示提示條。
+// (紅利系統重構 批次 5:原本「頁面載入時呼叫 grant_pending_birthday_bonuses + 生日提示條」已移除,
+//  生日贈點改由每天台北 00:05 的排程發放,§3.12。)
 // 清單:搜尋(姓名/電話/推薦碼)+ 篩選(狀態)。「新增會員」開啟全頁層表單。
 //
 // ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
@@ -95,7 +96,6 @@ import {
   createMember,
   deactivateMember,
   fetchMerchantMembersList,
-  grantPendingBirthdayBonuses,
   reactivateMember,
   useMerchantMemberTiers,
 } from "./api";
@@ -315,7 +315,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <FormField
             label="生日"
             htmlFor="member-birthday"
-            help="填了生日,系統才會在生日當月自動核發生日獎勵(依台北時區比對生日的月、日)。"
+            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數管理 > 生日獎勵」開啟才會發。"
             helpLabel="說明:填生日會發生什麼事"
           >
             <FieldDate
@@ -375,7 +375,6 @@ function MembersListInner() {
   // #918(SPECS-INDEX):會員類型(兩層狀態)篩選,比照上面等級 / 黑名單篩選的既有模式
   // (下拉,"all" 顯示全部)。🔴 不是底線式篩選列 —— 理由見檔頭。
   const [identityFilter, setIdentityFilter] = useState<MemberIdentityFilter>("all");
-  const [birthdayNotice, setBirthdayNotice] = useState<number | null>(null);
   // ui-v1-full:「下架」搬進 ⋯ 選單之後,確認窗改成整頁一顆的受控實例(比照第 1 批服務人員頁的做法)。
   const [deactivatingMember, setDeactivatingMember] = useState<MemberSummary | null>(null);
 
@@ -393,21 +392,6 @@ function MembersListInner() {
   });
   const { data: tiers } = useMerchantMemberTiers(merchantId, false);
   const tierNameById = new Map((tiers ?? []).map((t) => [t.id, t.name]));
-
-  // 規則 2.5:頁面載入時被動檢查並核發生日獎勵,不是背景排程。
-  useEffect(() => {
-    grantPendingBirthdayBonuses(merchantId)
-      .then((count) => {
-        if (count > 0) {
-          setBirthdayNotice(count);
-          void queryClient.invalidateQueries({ queryKey: ["members-module", "members-list"] });
-        }
-      })
-      .catch(() => {
-        // 靜默失敗即可,不影響列表頁本身的顯示(這不是使用者主動觸發的操作)。
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchantId]);
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: ["members-module", "members-list"] });
@@ -461,12 +445,6 @@ function MembersListInner() {
         description={`「${merchant!.name}」的會員名錄與紅利點數`}
         action={<NewMemberDialog merchantId={merchantId} onSaved={refetch} />}
       />
-
-      {birthdayNotice ? (
-        <div className="rounded-md border border-brand/40 bg-brand-soft/40 px-3 py-2 text-sm tabular-nums text-foreground">
-          🎂 今天有 {birthdayNotice} 位會員收到生日獎勵
-        </div>
-      ) : null}
 
       <Card>
         <CardHeader className="gap-3">

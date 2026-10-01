@@ -1,6 +1,6 @@
 {
   "comment": "Playwright e2e「應該有幾條測試」的基準值(#804)。由 npm run test:e2e:count:update 自動產生,不要手改。npm run test:e2e 開跑前與跑完後都會拿實際數字對照這裡:數字變少 = 測試靜默消失(#714/#804),要查;新增測試後數字變多 = 重跑 update 更新即可。",
-  "updatedAt": "2026-09-28",
+  "updatedAt": "2026-10-01",
   "tests": 123,
   "files": 22
 }

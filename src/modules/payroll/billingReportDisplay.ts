@@ -332,7 +332,28 @@ export const BILLING_SUMMARY_LABELS = {
   monthlySalaryDeduction: "月薪扣款合計",
   monthlySalaryNet: "月薪實發合計",
   netMargin: "商家總淨利",
+  /** 紅利系統重構 §3.15 / §4.10(#848):卡片標題與 CSV「項目」欄共用。紅利功能關閉時兩邊都不出現。 */
+  pointsRedeemAmount: "紅利折抵金額",
 } as const;
+
+/**
+ * 紅利系統重構 §4.10(#848):「紅利折抵金額」卡片 / CSV 那一列要不要出現。
+ *
+ * 🔴 判斷來源**只能是報表函式回傳的 points_feature_enabled**(SECURITY DEFINER 讀的),不能用
+ *    useMerchantMemberSettings —— 只有 billing 鑰匙的客服讀不到設定表,hook 會退回「開著」(判斷 13),
+ *    結果是功能關閉時卡片反而出現。
+ * 關閉時整塊不渲染(不是灰掉、不是顯示 0),比照 #830 已上線的做法。
+ * summary 還沒載入(undefined)⇒ false(fail-closed)。
+ */
+export function shouldShowPointsRedeemAmount(
+  summary: Pick<MerchantBillingSummary, "points_feature_enabled"> | undefined,
+): boolean {
+  return summary?.points_feature_enabled === true;
+}
+
+/** 卡片的白話說明(附「為什麼」),規格書 §4.10 原文。 */
+export const POINTS_REDEEM_AMOUNT_DESCRIPTION =
+  "這段期間完成的訂單裡,客人用紅利點數折掉的金額加總。營收與抽成都沒有扣掉這筆(折抵是店家自己吸收的行銷成本),這裡單獨列出來讓您知道一共折了多少。";
 
 /** 總計區塊最上面那一列的欄位名。存成檔案之後,光看檔名不一定分得出是哪一段期間的報表,所以
  * 區間一定要寫進檔案內容裡。 */
@@ -359,6 +380,8 @@ export type BillingCsvSummaryFields = Pick<
   | "total_monthly_salary_base"
   | "total_monthly_salary_deduction"
   | "estimated_net_margin"
+  | "points_feature_enabled"
+  | "total_points_redeem_amount"
 >;
 
 /** 總計區塊的一個項目:左邊是畫面上那張卡的標題,右邊是數字或「算不出來」的說明文字。 */
@@ -410,6 +433,16 @@ export function buildBillingCsvSummaryItems(
       label: BILLING_SUMMARY_LABELS.netMargin,
       value: salaryCsvValue(salaryApplicable, summary.estimated_net_margin),
     },
+    // 紅利系統重構 §3.15(#848):紅利功能開啟時多一列;關閉時不輸出(跟畫面一致)。
+    // 這是「資訊欄」,不是修正上面任何一個數字(營收、抽成、淨利都不扣折抵,§2.11)。
+    ...(shouldShowPointsRedeemAmount(summary)
+      ? [
+          {
+            label: BILLING_SUMMARY_LABELS.pointsRedeemAmount,
+            value: Number(summary.total_points_redeem_amount),
+          },
+        ]
+      : []),
   ];
 }
 

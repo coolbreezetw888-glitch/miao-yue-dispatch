@@ -67,7 +67,7 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import { adjustMemberPoints, redeemMemberPoints, useMemberPointHistory } from "./api";
-import { MEMBER_POINT_TRANSACTION_TYPE_LABELS, type MemberDetail } from "./types";
+import { memberPointTransactionTypeLabel, type MemberDetail } from "./types";
 
 /** 小卡窗的按鈕列在 <form> 外面(位置由殼決定),送出鈕用 form= 指回來。 */
 const REDEEM_FORM_ID = "redeem-points-form";
@@ -383,7 +383,7 @@ export function MemberPointsPanel({ member }: { member: MemberDetail }) {
               >
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-[13px] font-semibold text-foreground">
-                    {MEMBER_POINT_TRANSACTION_TYPE_LABELS[entry.transactionType]}
+                    {memberPointTransactionTypeLabel(entry.transactionType)}
                     {entry.relatedMemberName ? `(${entry.relatedMemberName})` : ""}
                   </p>
                   {entry.note ? (

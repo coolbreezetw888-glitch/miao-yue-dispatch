@@ -31,6 +31,7 @@ import {
   AttributeTag,
   EmptyState,
   ErrorState,
+  HelpToggle,
   ListCard,
   LoadingSkeleton,
   PageHeader,
@@ -47,6 +48,7 @@ import { useMerchantBillingSummaryByRange } from "./api";
 // 點畫面幾乎不可能發現,必須有測試釘住。
 import {
   BILLING_SUMMARY_LABELS,
+  POINTS_REDEEM_AMOUNT_DESCRIPTION,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
   buildBillingCsvSummarySection,
@@ -61,6 +63,7 @@ import {
   salaryCardValue,
   salaryDisplayValue,
   shouldShowResignedBadge,
+  shouldShowPointsRedeemAmount,
   shouldShowSalaryUnavailableNotice,
 } from "./billingReportDisplay";
 import { buildCsvContentFromRows, downloadCsv } from "./csvExport";
@@ -227,6 +230,17 @@ function BillingReportPageInner() {
               value={netMonthlySalary}
               unavailableText={SALARY_UNAVAILABLE_TEXT}
             />
+            {/* 紅利系統重構 §4.10(#848):統計卡 grid 的最後一格,刻意不插進下面「稅金小計 + 商家總淨利」
+                那一組(2026-09-22 §3.5 刻意成組)。顯示條件只看報表函式回傳的 points_feature_enabled
+                (判斷 13:只有 billing 鑰匙的客服讀不到設定表);關閉時整張不渲染,不是顯示 0。
+                區間模式同樣顯示(單純加總,不需要完整月份)。 */}
+            {shouldShowPointsRedeemAmount(summary) ? (
+              <SummaryCard
+                label={BILLING_SUMMARY_LABELS.pointsRedeemAmount}
+                value={Number(summary.total_points_redeem_amount)}
+                help={POINTS_REDEEM_AMOUNT_DESCRIPTION}
+              />
+            ) : null}
           </div>
 
           {/* 月薪算不出來時,額外解釋「為什麼」跟「怎麼做才看得到」——只顯示「需選擇完整月份才能
@@ -370,15 +384,25 @@ function SummaryCard({
   label,
   value,
   unavailableText = "—",
+  help,
 }: {
   label: string;
   value: number | null | undefined;
   unavailableText?: string;
+  /** skill 二 `?`:「這是什麼」的說明,要點才展開(目前只有紅利折抵金額卡用)。 */
+  help?: string;
 }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardDescription>{label}</CardDescription>
+        {help ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <CardDescription>{label}</CardDescription>
+            <HelpToggle label={`說明:${label}是什麼`}>{help}</HelpToggle>
+          </div>
+        ) : (
+          <CardDescription>{label}</CardDescription>
+        )}
       </CardHeader>
       <CardContent>
         {value === null || value === undefined ? (

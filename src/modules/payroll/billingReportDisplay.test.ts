@@ -57,6 +57,7 @@ import {
   salaryDisplayValue,
   shouldShowResignedBadge,
   shouldShowSalaryUnavailableNotice,
+  shouldShowPointsRedeemAmount,
 } from "./billingReportDisplay";
 
 // =========================================================================
@@ -542,6 +543,10 @@ function csvSummaryFields(
     total_monthly_salary_base: 30000,
     total_monthly_salary_deduction: 0,
     estimated_net_margin: -28000,
+    // 紅利系統重構 批次 7(#848):既有這一整組測試是「紅利功能關閉」的情境(八個項目);
+    // 開啟時多一列的情境在檔尾「紅利折抵金額」那一組。
+    points_feature_enabled: false,
+    total_points_redeem_amount: 0,
     ...overrides,
   };
 }
@@ -572,7 +577,13 @@ describe("CSV 總計區塊:項目與順序", () => {
     ]);
     // 畫面 JSX 用的也是這同一組常數(BillingReportPage.tsx 的 SummaryCard/CardTitle),所以這條
     // 斷言等於同時釘住「畫面改了文案、CSV 卻留著舊名稱」這種漂移。
-    expect(labels).toEqual(Object.values(BILLING_SUMMARY_LABELS));
+    // 紅利系統重構 批次 7:BILLING_SUMMARY_LABELS 多了「紅利折抵金額」,它只在紅利功能開啟時才輸出
+    // (這組 fixture 是關閉),所以比對時把它排除;開啟時的完整比對在檔尾那一組。
+    expect(labels).toEqual(
+      Object.values(BILLING_SUMMARY_LABELS).filter(
+        (label) => label !== BILLING_SUMMARY_LABELS.pointsRedeemAmount,
+      ),
+    );
   });
 });
 
@@ -728,6 +739,60 @@ describe("buildBillingCsvSummarySection(總計區塊完整的 CSV 列)", () => {
     for (const line of salaryLines) {
       expect(line[1]).toBe(SALARY_UNAVAILABLE_TEXT);
       expectNeverLooksLikeZero(line[1]);
+    }
+  });
+});
+
+// =========================================================================
+// 紅利系統重構 §3.15 / §4.10(#848):紅利折抵金額卡片 + CSV 一列
+// =========================================================================
+describe("紅利折抵金額(#848):顯示條件只看報表函式回傳的 points_feature_enabled", () => {
+  it("開 → 有;關 → 無;還沒載入 → 無(fail-closed)", () => {
+    expect(shouldShowPointsRedeemAmount({ points_feature_enabled: true })).toBe(true);
+    expect(shouldShowPointsRedeemAmount({ points_feature_enabled: false })).toBe(false);
+    expect(shouldShowPointsRedeemAmount(undefined)).toBe(false);
+  });
+
+  it("功能開啟 ⇒ CSV 總計區多一列「紅利折抵金額」,排在最後,值 = total_points_redeem_amount", () => {
+    const summary = csvSummaryFields({
+      points_feature_enabled: true,
+      total_points_redeem_amount: 35,
+    });
+    const labels = buildBillingCsvSummaryItems(summary).map((item) => item.label);
+    expect(labels).toEqual(Object.values(BILLING_SUMMARY_LABELS));
+    expect(labels[labels.length - 1]).toBe("紅利折抵金額");
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.pointsRedeemAmount)).toBe(35);
+  });
+
+  it("功能開啟但這段期間沒有任何折抵 ⇒ 照樣輸出 0(真的是 0,不是算不出來)", () => {
+    const summary = csvSummaryFields({
+      points_feature_enabled: true,
+      total_points_redeem_amount: 0,
+    });
+    expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.pointsRedeemAmount)).toBe(0);
+  });
+
+  it("功能關閉 ⇒ CSV 不輸出這一列(就算數字不是 0 也一樣)", () => {
+    const summary = csvSummaryFields({
+      points_feature_enabled: false,
+      total_points_redeem_amount: 35,
+    });
+    expect(
+      buildBillingCsvSummaryItems(summary).some(
+        (item) => item.label === BILLING_SUMMARY_LABELS.pointsRedeemAmount,
+      ),
+    ).toBe(false);
+  });
+
+  it("營收 / 抽成 / 淨利不受紅利折抵影響(§2.11:資訊欄,不是修正既有數字)", () => {
+    const off = csvSummaryFields({ points_feature_enabled: true, total_points_redeem_amount: 0 });
+    const on = csvSummaryFields({ points_feature_enabled: true, total_points_redeem_amount: 500 });
+    for (const label of [
+      BILLING_SUMMARY_LABELS.revenueExclTax,
+      BILLING_SUMMARY_LABELS.commissionPayout,
+      BILLING_SUMMARY_LABELS.netMargin,
+    ]) {
+      expect(csvSummaryValue(on, label)).toBe(csvSummaryValue(off, label));
     }
   });
 });

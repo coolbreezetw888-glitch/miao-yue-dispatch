@@ -9,7 +9,10 @@
 -- 語意釘住,兩個方向都要驗:
 --   ① 負面:關閉後三條「系統自動核發」的路徑全部停擺——
 --      消費累點(compute_member_loyalty_points)、推薦獎勵(referral_bonus)、
---      生日贈點(grant_pending_birthday_bonuses)。
+--      生日贈點(批次 5 起為排程 run_birthday_bonus_grants;原 grant_pending_birthday_bonuses 已廢止)。
+--   【紅利系統重構 批次 5 改寫】生日改用 run_birthday_bonus_grants(台北日期)。它只給排程(postgres)
+--   執行,所以呼叫前先 test_clear_auth();生日 fixture 改成「台北今天−2 天」(7 天補發窗口內);
+--   settings 補 birthday_bonus_enabled = true(§2.9 第 2 點)。斷言數量與語意不變。
 --   ② 「不留標記」:關閉期間不能把 last_birthday_bonus_year / referral_rewarded_at 標記掉。
 --      ⚠️⚠️ 2026-09-24 第二次使用者裁決把「補不補發」這件事整個反轉了,讀這份測試務必先看懂:
 --        原本(20260924030000)的結論是「不標記 → 會補發」。使用者明確推翻:
@@ -86,9 +89,16 @@ insert into payment_methods (id, merchant_id, name) values
 
 -- points_feature_enabled 不指定,用 schema 預設 true(先驗「開啟時照常累積」)。
 -- reward_condition_mode 也用預設 'none'(不設資格條件),讓這份測試只變動「開關」這一個變數。
+-- 🔴 紅利系統重構 批次 4(2026-10-01):完成時改入帳建單定案的 points_planned 快照,不再讀舊的「消費點數比例」欄位。
+-- 這裡用等價的基本模式設定(每滿 100 元 1 點,與舊的「每 100 元 1 點」算出相同點數);推薦獎勵要開關 1。
+-- (批次 6 已 drop 舊欄位,fixture 一併拿掉。)
 insert into merchant_member_settings (
-  merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points
-) values ('d3000000-0000-4000-8000-000000000020', 100, 50, 30);
+  merchant_id, referral_bonus_points, birthday_bonus_points,
+  earn_mode, basic_min_amount, basic_points_per_order, basic_tiered_enabled, referral_inviter_reward_enabled,
+  birthday_bonus_enabled
+) values ('d3000000-0000-4000-8000-000000000020', 50, 30, 'basic', 100, 1, true, true, true);
+
+select (now() at time zone 'Asia/Taipei')::date as tpe_today \gset
 
 select pg_temp.test_set_auth('d3000000-0000-4000-8000-000000000001');
 
@@ -163,15 +173,17 @@ select is(
 --       不是這個標記能救的,見檔頭 ② 的說明)。
 -- =========================================================================
 select id from create_member(
-  'd3000000-0000-4000-8000-000000000020', '本月生日會員', '0955000002',
-  p_birthday => (date_trunc('month', current_date) + interval '2 days')::date
+  'd3000000-0000-4000-8000-000000000020', '窗口內生日會員', '0955000002',
+  p_birthday => make_date(1992, extract(month from :'tpe_today'::date - 2)::int, extract(day from :'tpe_today'::date - 2)::int)
 ) \gset birthday_member_
 
+select pg_temp.test_clear_auth();
 select is(
-  grant_pending_birthday_bonuses('d3000000-0000-4000-8000-000000000020'),
+  run_birthday_bonus_grants(:'tpe_today'::date),
   0,
-  '核心:關閉狀態下 grant_pending_birthday_bonuses 一位會員都不處理,回傳 0'
+  '核心:關閉狀態下 run_birthday_bonus_grants 一位會員都不處理,回傳 0'
 );
+select pg_temp.test_set_auth('d3000000-0000-4000-8000-000000000001');
 
 select is(
   (select points_balance from members where id = :'birthday_member_id'::uuid),
@@ -273,8 +285,8 @@ select pg_temp.test_clear_auth();
 -- 重新打開開關。
 -- ⚠️ 2026-09-24 第二次裁決之後,這一段的意義變了,不要照舊理解:
 --    ・⑯⑰(生日贈點)在這個情境下**仍然**會發出去,但原因**不是**「補發」,而是這位會員今年
---      生日的那一天功能確實是開著的。這個測試檔案的生日 fixture 是「本月 3 號」,而開關的歷史
---      區間是在這個交易裡才產生的(migration 套用時這個商家根本還不存在),所以本月 3 號那天
+--      生日的那一天功能確實是開著的。這個測試檔案的生日 fixture 是「台北今天−2 天」(批次 5 前是本月 3 號),而開關的歷史
+--      區間是在這個交易裡才產生的(migration 套用時這個商家根本還不存在),所以那一天
 --      落在「完全沒有歷史紀錄涵蓋」的範圍 → private.was_points_feature_enabled_on 回傳 true
 --      (刻意選 true:不拿系統以前沒在記錄這件事去追溯沒收商家的獎勵)。
 --      → 真正的「生日落在關閉區間內 → 不補發」情境,需要手工造出跨越整天的關閉區間才驗得出來
@@ -291,11 +303,13 @@ select pg_temp.test_set_auth('d3000000-0000-4000-8000-000000000001');
 --     該日落在完全沒有歷史紀錄涵蓋的範圍,was_points_feature_enabled_on 回傳 true),
 --     不是「關閉期間欠的補發回來」。「生日當天功能關著就不發、而且永不補發」那個情境在
 --     module10_06_points_feature_history_no_backfill.sql 驗證。
+select pg_temp.test_clear_auth();
 select is(
-  grant_pending_birthday_bonuses('d3000000-0000-4000-8000-000000000020'),
+  run_birthday_bonus_grants(:'tpe_today'::date),
   1,
-  '重新打開:生日當天功能是開著的(該日沒有任何關閉歷史涵蓋)→ 生日贈點正常核發,grant_pending_birthday_bonuses 回傳 1'
+  '重新打開:生日當天功能是開著的(該日沒有任何關閉歷史涵蓋)→ 生日贈點正常核發,run_birthday_bonus_grants 回傳 1'
 );
+select pg_temp.test_set_auth('d3000000-0000-4000-8000-000000000001');
 
 select is(
   (select points_balance from members where id = :'birthday_member_id'::uuid),

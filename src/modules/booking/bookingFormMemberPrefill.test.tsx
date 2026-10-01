@@ -34,6 +34,8 @@ vi.mock("./api", () => ({
   getBooking: getBookingMock,
   createBooking: createBookingMock,
   updateBooking: updateBookingMock,
+  // 紅利系統重構 批次 7:表單會呼叫紅利預覽;這支只測會員面板,讓紅利功能維持關閉(區塊不渲染)。
+  previewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
   MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
 }));
 

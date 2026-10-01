@@ -22,7 +22,11 @@ export default mergeConfig(
       // ⚠️ 這條路徑刻意只收 `*.test.ts`:**Playwright 的檔案一律是 `*.spec.ts`**,不會被
       //    Vitest 誤收進來(誤收的話 Vitest 會去 import @playwright/test 然後整批爆掉)。
       //    新增 e2e 測試時請維持這個命名分工:Playwright = `.spec.ts`,Vitest = `.test.ts`。
-      include: ["src/**/*.test.{ts,tsx}", "e2e/support/**/*.test.{ts,tsx}"],
+      include: [
+        "src/**/*.test.{ts,tsx}",
+        "e2e/support/**/*.test.{ts,tsx}",
+        "e2e-local/support/**/*.test.{ts,tsx}",
+      ],
       css: false,
     },
   }),

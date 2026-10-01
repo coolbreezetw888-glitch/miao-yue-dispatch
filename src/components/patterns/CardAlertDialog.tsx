@@ -2,8 +2,9 @@
  * 小卡窗殼(AlertDialog 版,純確認用)—— ui-overlay-patterns skill 三、兩種窗 → 小卡窗。
  *
  * 跟 CardDialog.tsx 同一套外觀規格(置中 / 16px 圓角 / 手機留 16px / 電腦 400px / 高度隨內容),
- * 差別只在底層是 Radix AlertDialog:點遮罩、按 Esc 不會關,一定要按按鈕,適合「刪除 / 取消預約 /
- * 解除串接」這類要使用者明確二選一的確認。有輸入欄位的短表單請用 CardDialog。
+ * 差別只在底層是 Radix AlertDialog:**點遮罩不會關**,適合「刪除 / 取消預約 / 解除串接」這類要使用者
+ * 明確二選一的確認。⚠️ **按 Esc 會關**(Radix AlertDialog 只擋點遮罩,不擋 Esc;#844 批次 4 QA 實測),
+ * 效果等同按「取消」那顆 —— 走 onOpenChange(false)。有輸入欄位的短表單請用 CardDialog。
  *
  * 按鈕階層(skill 二之三):
  *   - CardAlertDialogCancel  → ② 次要(白底灰框)

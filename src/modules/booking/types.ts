@@ -464,6 +464,9 @@ export interface BookingStatusChangeLog {
   actorNameSnapshot: string;
   actorRoleSnapshot: "merchant_admin" | "agent" | "staff" | "system";
   createdAt: string;
+  /** #844 §2.2/§4.6:操作備註。「還原完成」「取消已完成訂單」會帶管理員填的原因(只有原因,
+   * 不含點數/餘額);其他轉換為 null。 */
+  note: string | null;
 }
 
 /** 模組 6 §3.3/§6.3:相關訂單清單裡的一筆訂單摘要,由 getCustomerRelatedBookings 回傳。 */
@@ -493,4 +496,93 @@ export interface BookingDetail extends Booking {
   materialCosts: BookingDetailMaterialCost[];
   createdByName: string;
   lastModifiedByName: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// #844 已完成訂單取消/還原(規格書 .project/specs/已完成訂單取消與還原.md §4.2~§4.5)。
+// 鍵名照 migration 20261001090100_req844_completion_reversal_functions.sql 原文。
+// ⚠️ 預覽與執行結果含會員 / 推薦人的姓名與餘額 —— 只有商家管理員拿得到(後端 42501 擋)。
+// ---------------------------------------------------------------------------
+
+/** 兩個入口:還原完成(completed → accepted)/ 取消已完成訂單(completed → cancelled)。 */
+export type CompletedBookingReversalAction = "revert" | "cancel";
+
+export interface ReversalCodeMessage {
+  code: string;
+  /** 後端已寫成白話,前端原樣顯示(純文字)。 */
+  message: string;
+}
+
+export interface CompletedBookingReversalPreviewMember {
+  member_id: string;
+  name: string;
+  status: string;
+  balance: number;
+  due_expected: number;
+  frozen_refund_expected: number;
+  shortfall_if_revert: number;
+  shortfall_if_cancel: number;
+}
+
+export interface CompletedBookingReversalPreviewReferral {
+  referrer_member_id: string;
+  referrer_name: string | null;
+  referrer_balance: number | null;
+  due_expected: number;
+  shortfall_expected: number;
+  shortfall_if_revert: number;
+  shortfall_if_cancel: number;
+}
+
+/** public.get_completed_booking_reversal_preview 回傳(§4.2)。 */
+export interface CompletedBookingReversalPreview {
+  booking_id: string;
+  status: string;
+  source: string;
+  can_revert: boolean;
+  can_cancel: boolean;
+  blocked_reasons: ReversalCodeMessage[];
+  staff: { id: string; name: string; status: string; compensation_type_now: string } | null;
+  commission: {
+    exists: boolean;
+    amount: number | string;
+    recalculated: boolean;
+    computed_at: string | null;
+  };
+  completed_at: string;
+  /** 'YYYY-MM'(台北時區)。 */
+  report_month: string;
+  is_cross_month: boolean;
+  months_ago: number;
+  revenue_amount: number | string;
+  member: { id: string; name: string; status: string; balance: number } | null;
+  /** 本單從來沒有任何點數交易時為 null。 */
+  points: {
+    members: CompletedBookingReversalPreviewMember[];
+    points_due_expected: number;
+    frozen_points: number;
+    referral: CompletedBookingReversalPreviewReferral | null;
+  } | null;
+  warnings: ReversalCodeMessage[];
+}
+
+/** revert_completed_booking / cancel_completed_booking 回傳(§4.1;**沒有頂層 status**,狀態在 booking 裡)。 */
+export interface CompletedBookingReversalResult {
+  booking: Booking;
+  action: "revert_to_accepted" | "cancel_completed";
+  commission_amount_reversed: number | string;
+  report_month: string;
+  is_cross_month: boolean;
+  points: {
+    points_due: number;
+    points_recovered: number;
+    points_shortfall: number;
+    referral_due: number;
+    referral_recovered: number;
+    referral_shortfall: number;
+    referrer_member_id: string | null;
+    /** 有差額才有值;純文字顯示,不解析連結(v1.2:裡面沒有訂單 ID)。 */
+    shortfall_hint: string | null;
+    frozen_points_refunded: number;
+  };
 }

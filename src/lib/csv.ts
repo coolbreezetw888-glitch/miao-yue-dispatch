@@ -90,7 +90,10 @@ export function parseCsvText(text: string): ParsedCsv {
   // 過濾掉完全空白的列(常見於檔案結尾多一個換行)。
   const nonEmptyRows = rows.filter((r) => !(r.length === 1 && r[0] === ""));
 
-  const [headers, ...dataRows] = nonEmptyRows;
+  // #925:把匯出時為了防公式注入補上的單引號拿掉(見下方 escapeCsvCell 的說明)。
+  const unescapedRows = nonEmptyRows.map((r) => r.map(unescapeCsvFormulaGuard));
+
+  const [headers, ...dataRows] = unescapedRows;
   return { headers: headers ?? [], rows: dataRows };
 }
 
@@ -137,9 +140,56 @@ export function applyColumnMapping(
   });
 }
 
-/** 把一格內容轉成安全的 CSV 欄位(RFC 4180)。 */
-function escapeCsvCell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? "" : String(value);
+// =========================================================================
+// SPECS-INDEX #925:CSV 公式注入(CSV / Formula Injection)防護
+//
+// 使用者可以自由輸入的文字(姓名、備註、地址、服務項目名稱…)如果以 = + - @ 開頭(或 Tab、
+// 歸位字元開頭),匯出的 CSV 在 Excel / Google Sheets 打開時會被當成「公式」執行。React 畫面上
+// 一律當文字插值,畫面不受影響;風險發生在「別人的電腦打開這個檔案的那一刻」。
+//
+// 做法(OWASP 建議):字串第一個字元是上述之一時,前面加一個單引號 '。
+//   * 🔴 只看**字串**型別。number 型別(金額、點數)維持原樣 —— 負數 -100 如果被加上單引號,
+//     Excel 會把它當文字,整欄無法加總。
+//   * 全專案每一個匯出 CSV 的地方都必須經過這一支 escapeCsvCell(本檔 buildCsvContent,以及
+//     src/modules/payroll/csvExport.ts 直接 import 這一支)。不要在別處另寫一份跳脫邏輯。
+//   * 匯入時由 parseCsvText 呼叫 unescapeCsvFormulaGuard 把這個單引號拿掉,讓「匯出 → 修正 →
+//     再匯入」(例如「匯入失敗清單」)不會讓資料多出一個單引號。
+// =========================================================================
+export const CSV_FORMULA_TRIGGER_CHARS: readonly string[] = ["=", "+", "-", "@", "\t", "\r"];
+
+/** 去掉開頭連續的單引號之後,第一個字元是不是公式觸發字元。
+ * 例:"=x"、"'=x"、"''=x" 都是 true;"'abc"、"王小明"、"'" 是 false。 */
+function startsWithQuotesThenTrigger(text: string): boolean {
+  let i = 0;
+  while (i < text.length && text.charAt(i) === "'") i++;
+  return i < text.length && CSV_FORMULA_TRIGGER_CHARS.includes(text.charAt(i));
+}
+
+/** 字串以公式觸發字元開頭時,前面補一個單引號。非字串一律原樣回傳(只有字串才判斷)。
+ *
+ * 匯出 / 匯入要完全對稱(主腦 2026-10-01 QA 後追加):原本就以「單引號 + 觸發字元」開頭的
+ * 字串(例如使用者真的輸入 '=x)也要再補一個(→ ''=x),否則匯入端拿掉一個單引號後會變成 =x,
+ * 資料少了一個字。規則統一成「零到多個單引號後面接觸發字元 → 補一個單引號」,匯入端
+ * 用同一個判斷拿掉一個,兩邊互為反函式。 */
+export function neutralizeCsvFormula<T>(value: T): T | string {
+  if (typeof value !== "string" || value.length === 0) return value;
+  return startsWithQuotesThenTrigger(value) ? `'${value}` : value;
+}
+
+/** 匯入時的反向處理:「一到多個單引號 + 公式觸發字元」開頭的格子,拿掉最前面那一個單引號。
+ * 是 neutralizeCsvFormula 的反函式:'=x → =x、''=x → '=x;'abc 這種一般資料不動。 */
+export function unescapeCsvFormulaGuard(text: string): string {
+  if (text.charAt(0) === "'" && startsWithQuotesThenTrigger(text)) {
+    return text.slice(1);
+  }
+  return text;
+}
+
+/** 把一格內容轉成安全的 CSV 欄位:先做公式注入防護(#925,只對字串),再做 RFC 4180 跳脫
+ * (含逗號 / 雙引號 / 換行時整格用雙引號包起來,內部雙引號變兩個)。全專案唯一的一份。 */
+export function escapeCsvCell(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  const text = String(neutralizeCsvFormula(value));
   if (/[",\n\r]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }

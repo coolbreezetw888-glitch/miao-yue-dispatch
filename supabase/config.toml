@@ -197,6 +197,11 @@ policy = "per_worker"
 inspector_port = 8083
 deno_version = 2
 
+# 紅利系統重構 批次 5(#841):生日 LINE 由 pg_cron 呼叫,身上沒有 JWT,只有 X-Cron-Secret 標頭。
+# 寫死在這裡,避免 `supabase functions deploy` 用預設值 verify_jwt = true 蓋掉(權限衛生規則 7)。
+[functions.birthday-line-dispatch]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

@@ -22,7 +22,7 @@ import {
   EXISTING_MEMBER_PHONE,
   INITIAL_POINTS_BALANCE,
   injectMembersFixtureSession,
-  POINTS_EARN_RATE,
+  BASIC_TIER_AMOUNT,
   setupMembersFixture,
   STAFF_NAME_PREFIX,
   teardownMembersFixture,
@@ -108,7 +108,7 @@ test("會員詳情頁(§4.2/#830):點數卡片含登記兌換與手動調整入�
   // SPECS-INDEX #830:點數卡片改回完整操作面板(大字餘額顯示,用 CSS class 精準定位)+ 登記兌換 /
   // 手動調整入口(fixture 登入的是商家管理員,兩顆都要看得到)+ 異動歷史,不再有「查看完整點數紀錄」
   // 連結導去紅利點數管理頁。
-  const expectedEarnedPoints = 1000 / POINTS_EARN_RATE;
+  const expectedEarnedPoints = 1000 / BASIC_TIER_AMOUNT;
   const initialBalance = INITIAL_POINTS_BALANCE + expectedEarnedPoints;
   const balanceDisplay = page.locator("p.text-3xl");
   await expect(balanceDisplay).toHaveText(`${initialBalance} 點`);
@@ -166,7 +166,11 @@ test("紅利點數管理頁(§10.5/#617/#830):獨立卡片入口、只剩規則�
   await expect(page.getByText("核發獎勵資格條件", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("點數設定", { exact: true })).toBeVisible();
+  // 紅利系統重構批次 6(#836):「點數設定」卡片已移除,改成獨立的啟用開關 + 四個分頁(細節在
+  // member-points-settings.spec.ts)。
+  await expect(page.getByText("點數設定", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("啟用紅利點數功能", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "紅利計算" })).toBeVisible();
   await expect(page.getByText("會員點數餘額總覽")).toHaveCount(0);
   await expect(page.getByPlaceholder("搜尋姓名/電話")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "登記兌換" })).toHaveCount(0);

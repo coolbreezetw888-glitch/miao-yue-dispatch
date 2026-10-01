@@ -80,11 +80,13 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('da070000-0000-4000-8000-000000000054', 'member_settings', true);
 
 insert into merchant_member_settings (
-  merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points,
+  merchant_id, basic_points_per_order, referral_bonus_points, birthday_bonus_points,
   reward_condition_mode, policy_enabled, policy_content
 ) values (
-  'da070000-0000-4000-8000-000000000020', 100, 50, 30, 'none', false, '原始政策內容'
+  'da070000-0000-4000-8000-000000000020', 10, 50, 30, 'none', false, '原始政策內容'
 );
+-- 紅利系統重構批次 6:舊的 points_earn_rate 已 drop,這份測試改用取代它的 basic_points_per_order
+-- (同樣是「紅利點數規則」組、同樣是數字欄位),要守的權限邊界一個字都沒變。
 
 -- =========================================================================
 -- ① private.can_manage_member_points 本身的判斷正確。
@@ -115,15 +117,15 @@ select ok(
 -- =========================================================================
 select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000004');
 
-update merchant_member_settings set points_earn_rate = 999
+update merchant_member_settings set basic_points_per_order = 999
 where merchant_id = 'da070000-0000-4000-8000-000000000020';
 
 select pg_temp.test_clear_auth();
 select is(
-  (select points_earn_rate from merchant_member_settings
+  (select basic_points_per_order from merchant_member_settings
    where merchant_id = 'da070000-0000-4000-8000-000000000020'),
-  100.00,
-  '任務 6(最重要的一條):只有 members 權限的客服完全改不動 points_earn_rate(仍然是 100,不是 999)'
+  10,
+  '任務 6(最重要的一條):只有 members 權限的客服完全改不動 basic_points_per_order(仍然是 10,不是 999)'
 );
 
 select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000004');
@@ -150,7 +152,7 @@ select lives_ok(
     set policy_enabled = true,
         policy_content = '客服S改過的政策',
         -- 以下五個規則欄位「原樣」送一次(值完全沒變),模擬整列 upsert 的真實行為
-        points_earn_rate = 100,
+        basic_points_per_order = 10,
         referral_bonus_points = 50,
         birthday_bonus_points = 30,
         points_feature_enabled = true,
@@ -171,10 +173,10 @@ select is(
 select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000003');
 
 select throws_ok(
-  $$update merchant_member_settings set points_earn_rate = 200
+  $$update merchant_member_settings set basic_points_per_order = 200
     where merchant_id = 'da070000-0000-4000-8000-000000000020'$$,
   '42501', null,
-  '任務 6(核心):只有 member_settings 權限的客服真的去改 points_earn_rate 的值 → 被擋下(42501)'
+  '任務 6(核心):只有 member_settings 權限的客服真的去改 basic_points_per_order 的值 → 被擋下(42501)'
 );
 
 select throws_ok(
@@ -193,7 +195,7 @@ select throws_ok(
 
 -- INSERT 面(upsert 第一次會走 INSERT):S 在「還沒有設定列」的第二間商家直接建一列並帶規則值 → 擋下。
 select throws_ok(
-  $$insert into merchant_member_settings (merchant_id, points_earn_rate)
+  $$insert into merchant_member_settings (merchant_id, basic_points_per_order)
     values ('da070000-0000-4000-8000-000000000021', 50)$$,
   '42501', null,
   '任務 6(INSERT 面):只有 member_settings 權限的客服不能在「還沒有設定列」的商家 INSERT 一列並帶著非預設的規則值——否則只要繞過 UPDATE 走 INSERT 就能把規則一次填好(這正是 20260924030100 學到的教訓)'
@@ -216,7 +218,7 @@ select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000002');
 
 select lives_ok(
   $$update merchant_member_settings
-    set points_earn_rate = 200, birthday_bonus_points = 60,
+    set basic_points_per_order = 200, birthday_bonus_points = 60,
         reward_condition_mode = 'phone_verified', points_feature_enabled = false
     where merchant_id = 'da070000-0000-4000-8000-000000000020'$$,
   '任務 6(反面對照):被開通 member_points 的客服 P 可以修改全部五個紅利點數規則欄位'
@@ -224,10 +226,10 @@ select lives_ok(
 
 select pg_temp.test_clear_auth();
 select is(
-  (select points_earn_rate from merchant_member_settings
+  (select basic_points_per_order from merchant_member_settings
    where merchant_id = 'da070000-0000-4000-8000-000000000020'),
-  200.00,
-  '任務 6:客服 P 的修改確實生效(points_earn_rate 變成 200)'
+  200,
+  '任務 6:客服 P 的修改確實生效(basic_points_per_order 變成 200)'
 );
 
 select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000002');
@@ -282,12 +284,14 @@ select throws_ok(
 );
 
 -- =========================================================================
--- ⑦ 任務 6 第 4 點:grant_pending_birthday_bonuses 維持 can_manage_members,確認正確。
---    它是「核發動作」(打開會員管理列表頁就自動跑),不是「設定規則」,所以 members 鑰匙就該能跑。
+-- ⑦ 【紅利系統重構 批次 5 改寫】原本釘的是 grant_pending_birthday_bonuses 只要 members 鑰匙就能跑;
+--    那支被動補發已廢止(§3.12),改成排程 run_birthday_bonus_grants(沒有使用者,只給 postgres /
+--    service_role,權限測試在 module10_15)。這裡改釘第 10 題定案:生日「發送紀錄」members 或
+--    member_points 任一放行 ⇒ 只有 members 鑰匙的客服可以讀 get_birthday_bonus_grants。
 -- =========================================================================
 select lives_ok(
-  $$select grant_pending_birthday_bonuses('da070000-0000-4000-8000-000000000020')$$,
-  '任務 6 第 4 點(確認維持現狀正確):grant_pending_birthday_bonuses 仍然只要 members 權限就能呼叫——它是「核發動作」(打開會員管理列表頁自動觸發),不是「設定規則」,使用者裁決歸給紅利點數管理的是「核發獎勵資格**條件**」那個設定值,不是核發這個動作'
+  $$select * from get_birthday_bonus_grants('da070000-0000-4000-8000-000000000020')$$,
+  '第 10 題(批次 5):只有 members 鑰匙的客服可以讀生日發送紀錄 get_birthday_bonus_grants(members 或 member_points 任一放行)'
 );
 
 select pg_temp.test_clear_auth();

@@ -64,6 +64,12 @@ insert into merchant_staff (id, merchant_id, user_id, name, status, login_status
   ('ed500000-0000-4000-8000-000000000053', 'ed500000-0000-4000-8000-000000000021', null, '服務人員己', 'active', 'invited', '0900000303'),
   ('ed500000-0000-4000-8000-000000000054', 'ed500000-0000-4000-8000-000000000021', 'ed500000-0000-4000-8000-000000000007', '辛-服務人員身份', 'active', 'active', '0900000304');
 
+-- SPECS-INDEX #876(2026-10-01):推播收件人另外要求「行事曆檢視」是開的。真實流程裡服務人員第一次
+-- 完成登入就會由 seed_default_staff_permissions 種下四筆 granted=true;這裡的 login_status=active
+-- 服務人員是直接 insert 的,所以照真實流程補種,讓既有斷言測的仍是原本要測的事。
+select seed_default_staff_permissions(id) from merchant_staff
+where merchant_id = 'ed500000-0000-4000-8000-000000000021' and login_status = 'active';
+
 select seed_default_push_event_settings('ed500000-0000-4000-8000-000000000021');
 select seed_default_push_event_settings('ed500000-0000-4000-8000-000000000022');
 

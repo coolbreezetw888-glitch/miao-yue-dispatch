@@ -77,6 +77,7 @@ import { addMerchantStaff } from "@/modules/staff-agent/api";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { importHistoricalBookingsBatch, importMembersBatch, parseErrorReport } from "./api";
+import { buildFailedRowsCsv } from "./failedRowsCsv";
 import { checkImportRowPreview, phoneRequiredForMembers } from "./importRowPreview";
 import { RequireDataImportAccess } from "./RequireDataImportAccess";
 import {
@@ -317,12 +318,8 @@ function ImportWizardPageInner() {
 
   function handleDownloadFailedRows() {
     if (rawFailedRows.length === 0) return;
-    const headers = Array.from(new Set(rawFailedRows.flatMap((r) => Object.keys(r))));
-    const rows = rawFailedRows.map((r) =>
-      headers.map((h) => (r[h] === undefined || r[h] === null ? "" : String(r[h]))),
-    );
-    const csv = buildCsvContent(headers, rows);
-    downloadCsv("匯入失敗清單.csv", csv);
+    // SPECS-INDEX #925:組裝邏輯抽到 ./failedRowsCsv.ts(公式注入防護 + number 維持 number)。
+    downloadCsv("匯入失敗清單.csv", buildFailedRowsCsv(rawFailedRows));
   }
 
   function resetWizard() {

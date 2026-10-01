@@ -1,6 +1,6 @@
 -- 模組 10(會員與紅利)— 對應規格書 §3.9~§3.14、§3.17~§3.18、規則 2.5~2.7、2.9。
 -- 涵蓋:redeem_member_points(規則 2.7)、adjust_member_points(規則 2.6 核心,僅限管理員)、
--- grant_pending_birthday_bonuses(規則 2.5)、get_member_point_history/get_member_related_bookings/
+-- 生日贈點(批次 5 起改測 run_birthday_bonus_grants,§2.9)、get_member_point_history/get_member_related_bookings/
 -- get_member_referrals(唯讀函式 + 一之二節方向二權限邊界)、platform_export/purge(規則 2.9)。
 begin;
 
@@ -59,8 +59,13 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit, compensation_type) values
   ('ec000000-0000-4000-8000-000000000041', 'ec000000-0000-4000-8000-000000000021', '服務人員P', '0901000101', true, 'piece_rate');
 
-insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
-values ('ec000000-0000-4000-8000-000000000021', 100, 0, 88);
+-- 🔴 紅利系統重構 批次 4(2026-10-01):完成時改入帳建單定案的 points_planned 快照,不再讀舊的「消費點數比例」欄位。
+-- 這裡用等價的基本模式設定(每滿 100 元 1 點,與舊的「每 100 元 1 點」算出相同點數);推薦獎勵要開關 1。
+-- (批次 6 已 drop 舊欄位,fixture 一併拿掉。)
+insert into merchant_member_settings (
+  merchant_id, referral_bonus_points, birthday_bonus_points,
+  earn_mode, basic_min_amount, basic_points_per_order, basic_tiered_enabled, referral_inviter_reward_enabled
+) values ('ec000000-0000-4000-8000-000000000021', 0, 88, 'basic', 100, 1, true, true);
 
 -- SPECS-INDEX #604(本次同批次疊加):create_booking 新建訂單付款方式改為必填。
 insert into payment_methods (id, merchant_id, name) values
@@ -161,81 +166,94 @@ select throws_ok(
 );
 
 -- =========================================================================
--- ③ 規則 2.5:grant_pending_birthday_bonuses(本月生日容錯、防重複核發)。
+-- ③ 生日贈點。【紅利系統重構 批次 5 改寫】舊的 grant_pending_birthday_bonuses(規則 2.5,打開會員
+--    列表頁被動補發、以「當月」容錯)已廢止,改由排程 run_birthday_bonus_grants(p_run_date)(§2.9:
+--    台北日期、7 天補發窗口、member_birthday_bonus_grants 唯一索引防重複)。斷言數量維持 9 條,語意對照:
+--    「本月生日」→「生日在 7 天窗口內」;「birthday_bonus_points = 0 仍標記年份」→ 新規格「0 點不發、
+--    不留紀錄」(§1.3 points > 0、§2.9 第 2 點);權限:只有排程(postgres)/service_role 能執行。
+--    日期一律用台北時間(automated-testing #933)。
 -- =========================================================================
-select id from create_member('ec000000-0000-4000-8000-000000000021', '本月生日會員', '0988000002', p_birthday => (date_trunc('month', current_date) + interval '2 days')::date) \gset birthday_member_
-select id from create_member('ec000000-0000-4000-8000-000000000021', '非本月生日會員', '0988000003', p_birthday => (date_trunc('month', current_date) - interval '2 months')::date) \gset non_birthday_member_
+select (now() at time zone 'Asia/Taipei')::date as tpe_today \gset
+-- 生日年份用 1992(閏年),避免台北今天−2 剛好是 2/29 時 make_date 出錯。
+select id from create_member('ec000000-0000-4000-8000-000000000021', '窗口內生日會員', '0988000002', p_birthday => make_date(1992, extract(month from :'tpe_today'::date - 2)::int, extract(day from :'tpe_today'::date - 2)::int)) \gset birthday_member_
+select id from create_member('ec000000-0000-4000-8000-000000000021', '窗口外生日會員', '0988000003', p_birthday => make_date(1992, extract(month from (:'tpe_today'::date - interval '2 months')::date)::int, least(28, extract(day from (:'tpe_today'::date - interval '2 months')::date)::int))) \gset non_birthday_member_
 select id from create_member('ec000000-0000-4000-8000-000000000021', '沒填生日會員', '0988000004') \gset no_birthday_member_
 
-select grant_pending_birthday_bonuses('ec000000-0000-4000-8000-000000000021') \gset birthday_run1_
+select pg_temp.test_clear_auth();
+-- birthday_bonus_enabled 預設 false(§1.1 D),要明確打開。
+update merchant_member_settings set birthday_bonus_enabled = true
+where merchant_id = 'ec000000-0000-4000-8000-000000000021';
+
+select run_birthday_bonus_grants(:'tpe_today'::date) \gset birthday_run1_
 
 select is(
   (select points_balance from members where id = :'birthday_member_id'::uuid),
   88,
-  '規則 2.5:本月生日且今年未核發的會員正確核發 88 點'
+  '§2.9:生日在 7 天補發窗口內(台北今天−2)且今年未發的會員正確發 88 點'
 );
 
 select is(
   (select last_birthday_bonus_year from members where id = :'birthday_member_id'::uuid),
-  extract(year from current_date)::int,
-  '規則 2.5:核發後正確標記今年的年份'
+  extract(year from :'tpe_today'::date - 2)::int,
+  '§1.3:發放後相容寫入 last_birthday_bonus_year(= 錨定日所在年份)'
 );
 
 select is(
   (select points_balance from members where id = :'non_birthday_member_id'::uuid),
   0,
-  '規則 2.5:非本月生日的會員不受影響'
+  '§2.9:生日在窗口外(約兩個月前)的會員不受影響'
 );
 
 select is(
   (select last_birthday_bonus_year from members where id = :'non_birthday_member_id'::uuid),
   null,
-  '規則 2.5:非本月生日的會員 last_birthday_bonus_year 不會被標記'
+  '§2.9:窗口外的會員 last_birthday_bonus_year 不會被標記'
 );
 
 select is(
   (select points_balance from members where id = :'no_birthday_member_id'::uuid),
   0,
-  '規則 2.5 邊界情況:birthday 為 null 的會員永遠不會被選中,不會報錯'
+  '§2.9 邊界情況:birthday 為 null 的會員永遠不會被選中,不會報錯'
 );
 
--- 已核發過的今年不重複(重複呼叫應該冪等)。
-select grant_pending_birthday_bonuses('ec000000-0000-4000-8000-000000000021') \gset birthday_run2_
+-- 同一天重跑(排程重疊 / 人工重跑)應該冪等。
+select run_birthday_bonus_grants(:'tpe_today'::date) \gset birthday_run2_
 
 select is(
   (select points_balance from members where id = :'birthday_member_id'::uuid),
   88,
-  '規則 2.5:已核發過的今年不重複呼叫,餘額維持 88 點'
+  '§2.9 第 6 點:同一天重跑不重複發,餘額維持 88 點'
 );
 
--- birthday_bonus_points=0 時仍正確標記年份。
+-- birthday_bonus_points = 0:新規格不發、也不留任何紀錄(之後商家調回 > 0 時,窗口內仍會補發)。
 update merchant_member_settings set birthday_bonus_points = 0
 where merchant_id = 'ec000000-0000-4000-8000-000000000021';
 
-select id from create_member('ec000000-0000-4000-8000-000000000021', '零生日獎勵會員', '0988000005', p_birthday => (date_trunc('month', current_date) + interval '5 days')::date) \gset zero_birthday_member_
+select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
+select id from create_member('ec000000-0000-4000-8000-000000000021', '零生日獎勵會員', '0988000005', p_birthday => make_date(1992, extract(month from :'tpe_today'::date)::int, extract(day from :'tpe_today'::date)::int)) \gset zero_birthday_member_
+select pg_temp.test_clear_auth();
 
-select grant_pending_birthday_bonuses('ec000000-0000-4000-8000-000000000021') \gset birthday_run3_
+select run_birthday_bonus_grants(:'tpe_today'::date) \gset birthday_run3_
 
 select is(
   (select points_balance from members where id = :'zero_birthday_member_id'::uuid),
   0,
-  '規則 2.5:birthday_bonus_points=0 時,餘額不變'
+  '§2.9:birthday_bonus_points = 0 時,餘額不變'
 );
 
-select isnt(
-  (select last_birthday_bonus_year from members where id = :'zero_birthday_member_id'::uuid),
-  null,
-  '規則 2.5:birthday_bonus_points=0 時,仍正確標記 last_birthday_bonus_year'
+select is(
+  (select count(*)::int from member_birthday_bonus_grants where member_id = :'zero_birthday_member_id'::uuid)
+    + (select count(*)::int from members where id = :'zero_birthday_member_id'::uuid and last_birthday_bonus_year is not null),
+  0,
+  '§1.3/§2.9:birthday_bonus_points = 0 時不寫發送紀錄、也不標記 last_birthday_bonus_year(只有真的發出點數才留紀錄)'
 );
 
-select pg_temp.test_clear_auth();
-
--- 規則 2.10:未被開通 members 的客服(僅 orders)呼叫 grant_pending_birthday_bonuses 被擋下。
+-- 權限:生日排程只給 postgres(排程)/service_role,一般登入者(含僅 orders 的客服)一律被擋。
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000004');
 select throws_ok(
-  $$select grant_pending_birthday_bonuses('ec000000-0000-4000-8000-000000000021')$$,
+  $$select run_birthday_bonus_grants()$$,
   '42501', null,
-  '規則 2.10:僅有 orders 權限的客服呼叫 grant_pending_birthday_bonuses 被擋下'
+  '§3.6:一般登入者(僅 orders 權限的客服)呼叫 run_birthday_bonus_grants 被擋下'
 );
 select pg_temp.test_clear_auth();
 

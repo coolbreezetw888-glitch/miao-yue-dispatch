@@ -3,7 +3,9 @@
 // 區塊」,一律 import 這個檔案匯出的 hooks,不要自己 import supabase client 直接查
 // merchant_staff_permissions 這張表。
 
+import { useEffect } from "react";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
@@ -38,6 +40,17 @@ import {
   type MyDayScheduleState,
   type StaffAvailabilityOverride,
 } from "./api";
+import {
+  createStaffScheduleRefreshScheduler,
+  effectiveStaffScheduleStatus,
+  INITIAL_STAFF_SCHEDULE_CHANNEL_STATE,
+  invalidateStaffSchedule,
+  nextStaffScheduleChannelState,
+  resolveStaffScheduleSubscription,
+  shouldRefreshFromBroadcast,
+  STAFF_SCHEDULE_EVENT,
+  type StaffScheduleChannelState,
+} from "./staffScheduleChannel";
 import type { StaffPermissionSectionKey } from "./types";
 
 /** 5.6 對外介面:唯讀,回傳目前登入者在指定商家的 merchant_staff 那一列(受模組 3 規格書 3.3
@@ -303,4 +316,130 @@ export function useMyCalendarStateStyles(
     queryFn: () => fetchMyCalendarStateStyles(staffId as string),
     enabled: Boolean(staffId),
   });
+}
+
+// =========================================================================
+// SPECS-INDEX #874 服務人員端行事曆即時同步 —— 批次 4:前端接線(#895 ~ #899、#903)。
+//
+// 商家端改單時,資料庫 trigger 會對受影響的服務人員私有頻道 `staff:<staff_id>:schedule` 發一則
+// 不含任何內容的 `schedule_changed` 訊號(批次 1/2)。這支 hook 只負責「收到就把行事曆標成過期」,
+// 資料照舊 100% 走 get_my_booking_schedule,可見範圍完全不變。所有判斷都在 staffScheduleChannel.ts
+// (純函式、Vitest 已鎖住),這裡只做 supabase channel 的接線與生命週期。
+// =========================================================================
+
+/** 這支 hook 需要的 supabase client 介面(測試時可以注入替身,正式環境一律用全站共用的 supabase)。 */
+export type StaffScheduleRealtimeClient = {
+  channel: (topic: string, opts: { config: { private: boolean } }) => RealtimeChannel;
+  removeChannel: (channel: RealtimeChannel) => unknown;
+};
+
+export interface StaffScheduleLiveSyncOptions {
+  /** `useMyStaffPermission('staff_calendar_view').data`。只有明確 `true` 才訂閱(#895 啟用條件 2)。 */
+  hasCalendarView: boolean | null | undefined;
+  /** 只給測試注入用;不傳就用 `@/integrations/supabase/client` 的 supabase。 */
+  client?: StaffScheduleRealtimeClient;
+}
+
+const LIVE_SYNC_LOG_PREFIX = "[staff-schedule-live-sync]";
+
+/**
+ * 5.x 對外介面(#895):在服務人員行事曆頁掛上「班表即時同步」訂閱。無回傳值,副作用是掛訂閱。
+ *
+ * - **只在 MyCalendarPage 呼叫**,刻意不放 AppLayout:只有真的開著行事曆的人才佔一條 Realtime 連線
+ *   (Free 方案同時連線上限 200,見規格書 #901)。
+ * - 啟用條件:staffId 是合法 UUID **而且**行事曆檢視權限明確為 true(resolveStaffScheduleSubscription)。
+ *   權限中途被關掉(#903)⇒ 權限查詢重抓回 false ⇒ topic 變 null ⇒ effect cleanup 退訂。
+ * - 換商家(staffId 變)⇒ topic 變 ⇒ 先跑舊的 cleanup(退舊頻道)再訂新頻道;離開頁面 / 登出 ⇒ 元件卸載 ⇒ cleanup。
+ * - 🔴 `{ config: { private: true } }` 一定要帶:資料庫端是 private broadcast,兩邊不一致**不會報錯、只會安靜收不到**。
+ * - #897:每一次 SUBSCRIBED(含斷線重連後)都重查一次,補上斷線期間漏掉的變更;重查一律經過去抖(#900)。
+ * - #899:任何失敗只記 console.warn / console.info,**不彈 toast、不顯示錯誤區塊**;行事曆照舊靠既有三個
+ *   觸發點(掛載、視窗聚焦、推播)運作。連續**被拒**(伺服器回覆的 CHANNEL_ERROR)達上限(批次 3 的 giveUp)
+ *   就退掉頻道,不讓 supabase-js 對一個註定被拒的頻道無限重試;**傳輸層斷線**造成的 CHANNEL_ERROR
+ *   不算(視同 CLOSED),否則手機訊號不穩幾次就永久失去即時同步(#897 失效)。
+ * - #898:不手動 setAuth。supabase-js 會在 join 前用目前 session 的 access token 授權,並在 token 續期時
+ *   自動送新 token(本機 e2e E1 實測:訂自己的頻道拿到 SUBSCRIBED = token 帶對了)。
+ */
+export function useStaffScheduleLiveSync(
+  staffId: string | null | undefined,
+  options: StaffScheduleLiveSyncOptions,
+): void {
+  const queryClient = useQueryClient();
+  const topic = resolveStaffScheduleSubscription({
+    staffId,
+    hasCalendarView: options.hasCalendarView,
+  });
+  const client: StaffScheduleRealtimeClient =
+    options.client ?? (supabase as unknown as StaffScheduleRealtimeClient);
+
+  useEffect(() => {
+    if (!topic) return undefined;
+
+    let disposed = false;
+    let channel: RealtimeChannel | null = null;
+    let channelState: StaffScheduleChannelState = INITIAL_STAFF_SCHEDULE_CHANNEL_STATE;
+
+    const scheduler = createStaffScheduleRefreshScheduler(() => {
+      if (!disposed) invalidateStaffSchedule(queryClient);
+    });
+
+    // 退掉目前的頻道(重複呼叫安全)。removeChannel 失敗(同步丟錯或 Promise reject)只記 warn。
+    const releaseChannel = () => {
+      const current = channel;
+      channel = null;
+      if (!current) return;
+      try {
+        const result = client.removeChannel(current);
+        if (result && typeof (result as Promise<unknown>).catch === "function") {
+          (result as Promise<unknown>).catch((error: unknown) => {
+            console.warn(`${LIVE_SYNC_LOG_PREFIX} 退訂頻道失敗`, error);
+          });
+        }
+      } catch (error) {
+        console.warn(`${LIVE_SYNC_LOG_PREFIX} 退訂頻道失敗`, error);
+      }
+    };
+
+    try {
+      const created = client.channel(topic, { config: { private: true } });
+      channel = created;
+      created.on("broadcast", { event: STAFF_SCHEDULE_EVENT }, (message: unknown) => {
+        if (disposed) return;
+        if (shouldRefreshFromBroadcast(message)) scheduler.trigger();
+      });
+      created.subscribe((status: string, error?: Error) => {
+        if (disposed) return;
+        // 傳輸層斷線(socket closed / 心跳逾時)造成的 CHANNEL_ERROR 視同 CLOSED:交給 supabase-js
+        // 自己重連,不算進「連續被拒就放棄」(見 staffScheduleChannel.ts isTransportChannelError)。
+        const decision = nextStaffScheduleChannelState(
+          channelState,
+          effectiveStaffScheduleStatus(status, error),
+        );
+        channelState = decision.state;
+        if (decision.log === "warn") {
+          console.warn(
+            `${LIVE_SYNC_LOG_PREFIX} 即時同步頻道狀態 ${status}(行事曆照常可用,只是暫時不會自動更新)`,
+            error?.message ?? "",
+          );
+        } else if (decision.log === "info") {
+          console.info(`${LIVE_SYNC_LOG_PREFIX} 即時同步頻道狀態 ${status}`, error?.message ?? "");
+        }
+        if (decision.refresh) scheduler.trigger();
+        if (decision.giveUp) {
+          console.warn(`${LIVE_SYNC_LOG_PREFIX} 連續被拒,停止即時同步(重新進入行事曆頁會再試一次)`);
+          scheduler.cancel();
+          releaseChannel();
+        }
+      });
+    } catch (error) {
+      // #899:建頻道 / 訂閱本身丟錯(例如瀏覽器封鎖 WebSocket)⇒ 靜默降級,行事曆照常。
+      console.warn(`${LIVE_SYNC_LOG_PREFIX} 無法建立即時同步頻道(行事曆照常可用)`, error);
+      releaseChannel();
+    }
+
+    return () => {
+      disposed = true;
+      scheduler.cancel();
+      releaseChannel();
+    };
+  }, [topic, queryClient, client]);
 }

@@ -28,7 +28,9 @@ export const EXISTING_MEMBER_NAME_PREFIX = "E2E測試既有會員";
 export const EXISTING_MEMBER_PHONE = "0955888001";
 export const REFERRED_MEMBER_NAME_PREFIX = "E2E測試被推薦會員";
 export const BOOKING_SUBTOTAL = 1000;
-export const POINTS_EARN_RATE = 100; // 每 100 元 1 點
+/** 紅利系統重構批次 6:舊的「每 N 元 1 點」欄位已刪除,改用基本模式「每滿額累計」表達同一個規則:
+ * 每滿 BASIC_TIER_AMOUNT 元給 1 點(1000 元的訂單 = 10 點,跟改版前的斷言數字相同)。 */
+export const BASIC_TIER_AMOUNT = 100;
 export const INITIAL_POINTS_BALANCE = 30; // 手動灌點,方便測試兌換
 
 export interface MembersFixture {
@@ -122,7 +124,13 @@ export async function setupMembersFixture(): Promise<MembersFixture> {
   const { error: memberSettingsError } = await client.from("merchant_member_settings").upsert(
     {
       merchant_id: merchantId as string,
-      points_earn_rate: POINTS_EARN_RATE,
+      // 紅利系統重構:派點改由「紅利計算」的基本模式決定(建單當下定案、完成時入帳);
+      // 推薦獎勵要開關 1(referral_inviter_reward_enabled)才會發。
+      earn_mode: "basic",
+      basic_points_per_order: 1,
+      basic_min_amount: BASIC_TIER_AMOUNT,
+      basic_tiered_enabled: true,
+      referral_inviter_reward_enabled: true,
       referral_bonus_points: 20,
       birthday_bonus_points: 0,
     },

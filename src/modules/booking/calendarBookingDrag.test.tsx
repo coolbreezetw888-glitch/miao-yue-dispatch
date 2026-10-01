@@ -446,7 +446,12 @@ describe("三條規則的落點與送出的 MoveBookingInput(#811 #813;坑 4、�
     });
     expect(moveBookingMock.mock.calls[0]![1]).toEqual({ targetStaffName: "服務人員A" });
     await waitFor(() => expect(onMoved).toHaveBeenCalledTimes(1));
-    expect(document.body.style.userSelect).toBe("");
+    // #963:onMoved 被呼叫時,拖拉狀態機還停在 committing(isDragging 仍是 true)——要等 handleDrop 的
+    // Promise 結束 → commit(IDLE) → React 重新渲染 → effect 清掉 userSelect。這一串是在 act 之外、由
+    // React 排程器(Node 的 setImmediate)跑的,跟 waitFor 收尾的 setTimeout(0) 誰先誰後不固定 ⇒
+    // 原本這裡「立刻」斷言 userSelect === "" 偶爾會讀到還沒清掉的 "none"。改成等狀態真的回到 idle。
+    await waitFor(() => expect(screen.getByTestId("grid-root").dataset["dragPhase"]).toBe("idle"));
+    await waitFor(() => expect(document.body.style.userSelect).toBe(""));
   });
 
   it("規則 2:主色塊拖到 C 欄同一列 → 小字「轉派給 服務人員C」,targetStaffId = C、時間不變", async () => {

@@ -58,7 +58,12 @@ export function PageHeader({
           {title}
         </h1>
         {description ? (
-          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{description}</p>
+          // #947:用 <div> 不用 <p>。description 是 ReactNode,呼叫端可能放 StatusTag(底層 Badge 是 <div>),
+          // 放在 <p> 裡會變成「<div> 在 <p> 裡」的 HTML 結構錯誤(React 主控台警告)。Tailwind preflight 已把
+          // <p> 的預設外距歸零,<div> 跟 <p> 一樣是區塊元素 ⇒ 畫面完全不變。
+          <div className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+            {description}
+          </div>
         ) : null}
       </div>
       {action ? (

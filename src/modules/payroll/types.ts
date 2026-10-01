@@ -182,6 +182,12 @@ export interface MerchantBillingSummary {
     is_active_as_of: boolean;
   }>;
   salary_estimation_applied: boolean;
+  /** 紅利系統重構 §3.15(#848):期間內已完成訂單的紅利折抵金額加總(points_redeem_amount_snapshot)。
+   * 資訊欄,營收 / 抽成 / 淨利都**不扣**它(§2.11)。 */
+  total_points_redeem_amount: number;
+  /** 紅利系統重構 §3.15:商家目前紅利功能是否開啟(SECURITY DEFINER 讀的,查無設定列 = true)。
+   * 只有 billing 鑰匙的客服讀不到 merchant_member_settings,所以「紅利折抵金額」卡片的開關只能看這個。 */
+  points_feature_enabled: boolean;
   /** 這次查詢的區間是不是「完整月份」(起始日是某月 1 號 且 結束日是某月最後一天,可跨多月,
    * 例如 2/1~4/30 也算)。按年月查詢的 get_merchant_billing_summary 永遠是完整月份,固定 true。
    *

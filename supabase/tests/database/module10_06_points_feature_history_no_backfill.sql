@@ -19,9 +19,18 @@
 --   ② ⚠️ 但是「商家只是把開關關掉幾分鐘測試一下」**不可以**吃掉當天生日會員的獎勵。
 --      這是這次實作刻意避開的不可逆副作用(否決了「關閉時就寫入已發放標記」那個做法的唯一理由),
 --      所以它跟 ① 一樣是核心斷言,不是附加的 nice-to-have。
+-- 【紅利系統重構 批次 5(20261001060000)改寫】
+--   grant_pending_birthday_bonuses(打開會員列表頁、以「當月」容錯)已廢止,改由排程
+--   run_birthday_bonus_grants(p_run_date)(台北日期、7 天補發窗口)發放。本檔「關閉期間不補發」
+--   與「關五分鐘不吃掉獎勵」兩組保護**原樣保留**,只把呼叫改成新函式並明確指定台北日期:
+--   ・本月 = 台北時間的本月(不用 current_date,避免每月 1 號台北 00:00~08:00 跑到 UTC 上個月)
+--   ・新函式不看呼叫者權限(排程以 postgres 執行),所以呼叫時先 test_clear_auth()
+--   ・新函式要求 birthday_bonus_enabled = true(§2.9 第 2 點),fixture 補上
 begin;
 
 select plan(20);
+
+select date_trunc('month', (now() at time zone 'Asia/Taipei'))::date as m1 \gset
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -57,8 +66,8 @@ values ('da060000-0000-4000-8000-000000000020', 'da060000-0000-4000-8000-0000000
 -- 生日贈點 30 點,不設資格條件(讓這份測試只變動「開關歷史」這一個變數)。
 -- 這個 insert 會觸發 §2 的觸發器,種下這個商家的第一筆歷史(enabled=true)。
 insert into merchant_member_settings (
-  merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points
-) values ('da060000-0000-4000-8000-000000000020', 100, 50, 30);
+  merchant_id, referral_bonus_points, birthday_bonus_points, birthday_bonus_enabled
+) values ('da060000-0000-4000-8000-000000000020', 50, 30, true);
 
 -- =========================================================================
 -- ① 觸發器與歷史表本身:第一次建立設定列就要種下一筆「目前生效中」的歷史。
@@ -124,14 +133,14 @@ where merchant_id = 'da060000-0000-4000-8000-000000000020';
 insert into merchant_points_feature_history (merchant_id, enabled, effective_from, effective_to, is_backfill_seed) values
   ('da060000-0000-4000-8000-000000000020', true,
    '2025-01-01 00:00:00+08'::timestamptz,
-   (date_trunc('month', current_date)::date::text || ' 00:00:00+08')::timestamptz,
+   ((:'m1'::date)::text || ' 00:00:00+08')::timestamptz,
    true),
   ('da060000-0000-4000-8000-000000000020', false,
-   (date_trunc('month', current_date)::date::text || ' 00:00:00+08')::timestamptz,
-   ((date_trunc('month', current_date)::date + 19)::text || ' 00:00:00+08')::timestamptz,
+   ((:'m1'::date)::text || ' 00:00:00+08')::timestamptz,
+   (((:'m1'::date) + 19)::text || ' 00:00:00+08')::timestamptz,
    false),
   ('da060000-0000-4000-8000-000000000020', true,
-   ((date_trunc('month', current_date)::date + 19)::text || ' 00:00:00+08')::timestamptz,
+   (((:'m1'::date) + 19)::text || ' 00:00:00+08')::timestamptz,
    null,
    false);
 
@@ -140,7 +149,7 @@ insert into merchant_points_feature_history (merchant_id, enabled, effective_fro
 -- =========================================================================
 select is(
   private.was_points_feature_enabled_on(
-    'da060000-0000-4000-8000-000000000020', (date_trunc('month', current_date)::date + 4)
+    'da060000-0000-4000-8000-000000000020', ((:'m1'::date) + 4)
   ),
   false,
   '§3(核心):本月 5 號落在關閉區間(1 號~20 號)內 → was_points_feature_enabled_on 回傳 false'
@@ -148,7 +157,7 @@ select is(
 
 select is(
   private.was_points_feature_enabled_on(
-    'da060000-0000-4000-8000-000000000020', (date_trunc('month', current_date)::date + 24)
+    'da060000-0000-4000-8000-000000000020', ((:'m1'::date) + 24)
   ),
   true,
   '§3:本月 25 號在重新打開之後 → 回傳 true'
@@ -166,7 +175,7 @@ select is(
 -- 20 號當天有一刻是開著的(00:00 起就開了)→ 算開著。
 select is(
   private.was_points_feature_enabled_on(
-    'da060000-0000-4000-8000-000000000020', (date_trunc('month', current_date)::date + 18)
+    'da060000-0000-4000-8000-000000000020', ((:'m1'::date) + 18)
   ),
   false,
   '§3(邊界):本月 19 號是關閉區間的最後一整天 → false'
@@ -174,7 +183,7 @@ select is(
 
 select is(
   private.was_points_feature_enabled_on(
-    'da060000-0000-4000-8000-000000000020', (date_trunc('month', current_date)::date + 19)
+    'da060000-0000-4000-8000-000000000020', ((:'m1'::date) + 19)
   ),
   true,
   '§3(邊界):本月 20 號當天 00:00 就重新打開了 → 該日有開著的時刻 → true'
@@ -189,17 +198,20 @@ select pg_temp.test_set_auth('da060000-0000-4000-8000-000000000001');
 -- 會員 X:生日 = 本月 5 號(落在關閉區間 1~20 號內)。
 select id from create_member(
   'da060000-0000-4000-8000-000000000020', '生日在關閉期間的會員', '0955100601',
-  p_birthday => (date_trunc('month', current_date)::date + 4)
+  p_birthday => ((:'m1'::date) + 4)
 ) \gset member_x_
 
 -- 會員 Y:生日 = 本月 25 號(在重新打開之後)——對照組,證明生日贈點整體是正常運作的。
 select id from create_member(
   'da060000-0000-4000-8000-000000000020', '生日在重新打開後的會員', '0955100602',
-  p_birthday => (date_trunc('month', current_date)::date + 24)
+  p_birthday => ((:'m1'::date) + 24)
 ) \gset member_y_
 
+select pg_temp.test_clear_auth();
+
+-- 分別在 X、Y 的生日當天(台北)各跑一次排程:X 那天在補發窗口內但功能關著 ⇒ 0;Y ⇒ 1。
 select is(
-  grant_pending_birthday_bonuses('da060000-0000-4000-8000-000000000020'),
+  run_birthday_bonus_grants((:'m1'::date) + 4) + run_birthday_bonus_grants((:'m1'::date) + 24),
   1,
   '任務 5(核心):兩位本月生日的會員,只有 1 位被核發——生日落在關閉區間內的那位被略過(使用者裁決:「這個機制關閉的時候代表根本不存在」)'
 );
@@ -223,9 +235,9 @@ select ok(
 
 -- 再跑一次:必須冪等,而且會員 X 永遠不會突然被補發(因為判斷依據是歷史,跟現在開關無關)。
 select is(
-  grant_pending_birthday_bonuses('da060000-0000-4000-8000-000000000020'),
+  run_birthday_bonus_grants((:'m1'::date) + 4) + run_birthday_bonus_grants((:'m1'::date) + 24),
   0,
-  '任務 5:重複執行冪等——Y 已經發過(last_birthday_bonus_year 已標記),X 則是因為生日那天功能關著而永久略過,兩者都不會再處理'
+  '任務 5:重複執行冪等——Y 已經發過(member_birthday_bonus_grants 已有今年一列),X 則是因為生日那天功能關著而永久略過,兩者都不會再處理'
 );
 
 select is(
@@ -233,8 +245,6 @@ select is(
   0,
   '任務 5(核心):重複執行後會員 X 的餘額還是 0——「不補發」是永久的,不是延後發(這個略過不需要靠標記就永遠穩定)'
 );
-
-select pg_temp.test_clear_auth();
 
 -- =========================================================================
 -- ④ ⚠️ 副作用防護(跟 ③ 同等重要):商家只是把開關關掉「一小段時間」測試一下,
@@ -250,22 +260,22 @@ insert into merchant_points_feature_history (merchant_id, enabled, effective_fro
   -- 一直開著,直到本月 10 號 10:00
   ('da060000-0000-4000-8000-000000000020', true,
    '2025-01-01 00:00:00+08'::timestamptz,
-   ((date_trunc('month', current_date)::date + 9)::text || ' 10:00:00+08')::timestamptz,
+   (((:'m1'::date) + 9)::text || ' 10:00:00+08')::timestamptz,
    true),
   -- 本月 10 號 10:00 ~ 10:05 關掉五分鐘(商家測試一下畫面)
   ('da060000-0000-4000-8000-000000000020', false,
-   ((date_trunc('month', current_date)::date + 9)::text || ' 10:00:00+08')::timestamptz,
-   ((date_trunc('month', current_date)::date + 9)::text || ' 10:05:00+08')::timestamptz,
+   (((:'m1'::date) + 9)::text || ' 10:00:00+08')::timestamptz,
+   (((:'m1'::date) + 9)::text || ' 10:05:00+08')::timestamptz,
    false),
   -- 之後又開著
   ('da060000-0000-4000-8000-000000000020', true,
-   ((date_trunc('month', current_date)::date + 9)::text || ' 10:05:00+08')::timestamptz,
+   (((:'m1'::date) + 9)::text || ' 10:05:00+08')::timestamptz,
    null,
    false);
 
 select is(
   private.was_points_feature_enabled_on(
-    'da060000-0000-4000-8000-000000000020', (date_trunc('month', current_date)::date + 9)
+    'da060000-0000-4000-8000-000000000020', ((:'m1'::date) + 9)
   ),
   true,
   '任務 5(核心副作用防護):商家在本月 10 號只把開關關掉五分鐘 → 該日仍然算「功能開著」(判斷粒度是「那天有任何一刻開著」),不會因此永久吃掉當天生日會員的獎勵'
@@ -275,7 +285,7 @@ select pg_temp.test_set_auth('da060000-0000-4000-8000-000000000001');
 
 select id from create_member(
   'da060000-0000-4000-8000-000000000020', '生日當天商家關了五分鐘的會員', '0955100603',
-  p_birthday => (date_trunc('month', current_date)::date + 9)
+  p_birthday => ((:'m1'::date) + 9)
 ) \gset member_z_
 
 -- ⚠️ 這裡期望值是 2 而不是 1,原因很重要,而且本身就是一條有價值的證據:
@@ -284,8 +294,11 @@ select id from create_member(
 --    這證明了 ③ 對 X 的略過**完全沒有在會員身上留下任何持久化痕跡**:判斷 100% 來自開關歷史,
 --    歷史一改、結論就跟著改。如果當初採用的是「關閉時寫入 last_birthday_bonus_year 假標記」
 --    那個被否決的做法,X 這時候就永遠回不來了(而且資料庫裡還躺著一筆從沒發出去的「已發過」紀錄)。
+select pg_temp.test_clear_auth();
+
+-- 在 Z 的生日(本月 10 號)跑排程:X 的生日(本月 5 號)也在 7 天補發窗口 [4 號, 10 號] 內。
 select is(
-  grant_pending_birthday_bonuses('da060000-0000-4000-8000-000000000020'),
+  run_birthday_bonus_grants((:'m1'::date) + 9),
   2,
   '任務 5(核心副作用防護):生日當天商家只關了五分鐘的會員 Z 照樣被核發;同時會員 X 也回來了(這一段的歷史裡本月 5 號是開著的)——證明 ③ 對 X 的略過純粹由開關歷史決定,沒有在會員身上寫下任何不可逆的假標記'
 );

@@ -62,8 +62,13 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
 insert into payment_methods (id, merchant_id, name) values
   ('ee000000-0000-4000-8000-000000000071', 'ee000000-0000-4000-8000-000000000021', '現場付款');
 
-insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
-values ('ee000000-0000-4000-8000-000000000021', 100, 0, 0);
+-- 🔴 紅利系統重構 批次 4(2026-10-01):完成時改入帳建單定案的 points_planned 快照,不再讀舊的「消費點數比例」欄位。
+-- 這裡用等價的基本模式設定(每滿 100 元 1 點,與舊的「每 100 元 1 點」算出相同點數);推薦獎勵要開關 1。
+-- (批次 6 已 drop 舊欄位,fixture 一併拿掉。)
+insert into merchant_member_settings (
+  merchant_id, referral_bonus_points, birthday_bonus_points,
+  earn_mode, basic_min_amount, basic_points_per_order, basic_tiered_enabled, referral_inviter_reward_enabled
+) values ('ee000000-0000-4000-8000-000000000021', 0, 0, 'basic', 100, 1, true, true);
 
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001');
 

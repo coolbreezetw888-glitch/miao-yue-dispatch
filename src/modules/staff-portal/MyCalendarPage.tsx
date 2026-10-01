@@ -45,6 +45,7 @@ import {
   useMyBookingSchedule,
   useMyBookingStatusColors,
   useMyStaffPermission,
+  useStaffScheduleLiveSync,
 } from "./context";
 import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
 import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
@@ -184,6 +185,11 @@ export default function MyCalendarPage() {
     useMyStaffPermission("staff_calendar_view");
   const { data: staffRow, isLoading: staffLoading } = useActiveMyStaffRecord(merchantId);
 
+  // SPECS-INDEX #874(#895):商家端改單時自動更新這一頁,不用手動重新整理。
+  // 一定要在下面任何 early return 之前呼叫(hook 規則)。沒有行事曆檢視權限 / staff_id 還沒解出來時
+  // hook 內部不會訂閱;即時同步失敗也只記 console,不影響這一頁(#899)。
+  useStaffScheduleLiveSync(staffRow?.id ?? null, { hasCalendarView: hasCalendarAccess });
+
   const [monthAnchor, setMonthAnchor] = useState<Date>(() => startOfMonth(getTaipeiNow()));
   const [selectedDateKey, setSelectedDateKey] = useState<string>(() => toDateKey(getTaipeiNow()));
   // v2 §10.2.4:「卡片列表」/「時間軸格線」切換,預設卡片列表(維持 v1 既有行為)。
@@ -252,7 +258,7 @@ export default function MyCalendarPage() {
   // 要隱藏——包含服務人員端這兩處(當天預約清單的卡片、唯讀詳情彈窗)。判斷用商家**目前**的
   // 產業設定(industry_type 現在可以隨時切換,見 modules/merchant/api.ts 2026-09-23 的說明),
   // 不是只看「這筆預約有沒有地址值」,否則到府派工時期建立的舊預約,切成到店服務之後客戶的住家
-  // 地址還是會出現在師傅的手機上。
+  // 地址還是會出現在服務人員的手機上。
   //
   // 服務人員端拿得到 industry_type:merchants_select 這條 RLS 政策已經疊加
   // private.is_merchant_staff(id)(見 supabase/migrations/20260921100200_staff_portal_

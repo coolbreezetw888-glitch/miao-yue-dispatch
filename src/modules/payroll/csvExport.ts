@@ -2,15 +2,10 @@
 // 只把畫面上已經抓到的資料轉成 CSV 字串,不呼叫額外的匯出 API,不建立任何匯出排程/範本系統
 // (第〇節判斷 10——這是陽春版本,更完整的報表匯出中心留給模組 12)。
 
-/** 把一格內容轉成安全的 CSV 欄位:含逗號/雙引號/換行時要用雙引號包起來,並把內部雙引號跳脫成
- * 兩個雙引號(RFC 4180 標準做法)。 */
-function escapeCsvCell(value: string | number | null | undefined): string {
-  const text = value === null || value === undefined ? "" : String(value);
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
-}
+// SPECS-INDEX #925:儲存格跳脫一律用全專案共用的那一支(含公式注入防護 + RFC 4180)。
+// 這裡原本有一份自己的 escapeCsvCell,只做 RFC 4180、沒有公式注入防護;兩份各寫各的正是
+// 這個缺陷能存在的原因,所以拿掉、改 import,不要再在這裡另寫一份。
+import { escapeCsvCell } from "@/lib/csv";
 
 /**
  * 把一整組列組成完整的 CSV 字串(含 UTF-8 BOM,避免 Excel 開啟中文亂碼)。

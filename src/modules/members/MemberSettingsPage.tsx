@@ -47,6 +47,11 @@
 //
 // **只動外觀,不動行為**:整列 upsert 的 saveSettings(把這頁沒有 UI 的欄位原樣回填)、
 // 等級的新增 / 編輯 / 下架 / 重新上架 API、政策內容的自動長高、toast 文案全部照舊。
+//
+// 🔴 紅利系統重構 批次 6(2026-10-01,規格書 §3.14):上面那段「整列 upsert + 只讀回填 state」**已改掉**。
+//   原因:紅利設定多了 13 個欄位,這頁如果繼續把「自己手上讀到的值」整列送回去,只要漏帶一欄就會把
+//   紅利點數管理頁存的設定默默寫回預設值(或拿到過時的值蓋回去)。現在這頁只送「會員政策」兩個欄位
+//   (saveMerchantMemberSettings 局部 patch),其他欄位資料庫原樣保留 —— 那些只讀回填的 state 全部拿掉。
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
@@ -89,12 +94,12 @@ import {
   reactivateMemberTier,
   removeMemberTier,
   updateMemberTier,
-  upsertMerchantMemberSettings,
+  saveMerchantMemberSettings,
   useMerchantMemberSettings,
   type UpsertMemberTierInput,
 } from "./api";
 import { RequireMemberSettingsAccess } from "./RequireMemberSettingsAccess";
-import { type MerchantMemberTier, type RewardConditionMode } from "./types";
+import { type MerchantMemberTier } from "./types";
 
 const memberSettingsQueryKey = (merchantId: string) =>
   ["members-module", "merchant-member-settings", merchantId] as const;
@@ -451,42 +456,22 @@ function MemberSettingsPageInner() {
     refetch: refetchSettings,
   } = useMerchantMemberSettings(merchantId);
 
-  // #642 + 2026-09-24 使用者裁決:這幾個欄位這頁已經沒有任何 UI 可以編輯(點數三個數字欄位、
-  // 啟用開關、核發獎勵資格條件都在 MemberPointsPage.tsx 維護),只保留「讀出來原樣回填」的
-  // state,避免這頁儲存「會員政策」時把那頁維護的值覆蓋掉
-  // (upsertMerchantMemberSettings 是整列 upsert,不是局部更新)。
-  const [pointsFeatureEnabled, setPointsFeatureEnabled] = useState(true);
-  const [pointsEarnRate, setPointsEarnRate] = useState(0);
-  const [referralBonusPoints, setReferralBonusPoints] = useState(0);
-  const [birthdayBonusPoints, setBirthdayBonusPoints] = useState(0);
-  const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
+  // 紅利系統重構批次 6:這頁只編輯「會員政策」兩個欄位,也**只送這兩個欄位**(局部 patch)。
+  // 原本那幾個「讀出來原樣回填」的紅利欄位 state 已移除 —— 不送就不會蓋掉紅利點數管理頁的設定。
   const [policyEnabled, setPolicyEnabled] = useState(false);
   const [policyContent, setPolicyContent] = useState("");
   const [savingPolicy, setSavingPolicy] = useState(false);
 
   useEffect(() => {
     if (!settings) return;
-    setPointsFeatureEnabled(settings.points_feature_enabled);
-    setPointsEarnRate(settings.points_earn_rate);
-    setReferralBonusPoints(settings.referral_bonus_points);
-    setBirthdayBonusPoints(settings.birthday_bonus_points);
     setPolicyEnabled(settings.policy_enabled);
     setPolicyContent(settings.policy_content ?? "");
-    setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
   }, [settings]);
 
-  async function saveSettings(
-    overrides: Partial<Parameters<typeof upsertMerchantMemberSettings>[1]>,
-  ) {
-    await upsertMerchantMemberSettings(merchantId, {
-      pointsEarnRate,
-      referralBonusPoints,
-      birthdayBonusPoints,
-      pointsFeatureEnabled,
-      rewardConditionMode,
+  async function saveSettings() {
+    await saveMerchantMemberSettings(merchantId, {
       policyEnabled,
       policyContent: policyContent.trim() ? policyContent : null,
-      ...overrides,
     });
     await queryClient.invalidateQueries({ queryKey: memberSettingsQueryKey(merchantId) });
   }
@@ -494,7 +479,7 @@ function MemberSettingsPageInner() {
   async function handleSavePolicy() {
     setSavingPolicy(true);
     try {
-      await saveSettings({});
+      await saveSettings();
       toast.success("已更新會員政策");
     } catch (err) {
       toast.error("更新失敗", { description: getErrorMessage(err) });
@@ -508,7 +493,7 @@ function MemberSettingsPageInner() {
       <PageHeader
         backTo="/app/manage"
         title="會員系統設定"
-        description={`「${merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、消費點數比例、推薦獎勵、生日贈點)請到「功能」選單的「紅利點數管理」獨立頁面調整。`}
+        description={`「${merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、紅利計算、點數使用、推薦系統、生日獎勵)請到「功能」選單的「紅利點數管理」獨立頁面調整。`}
       />
 
       {/* #618 §10.6 第 3 點:「基本政策」改名「會員政策」,啟用開關 + 政策內容欄位(自動調整高度)

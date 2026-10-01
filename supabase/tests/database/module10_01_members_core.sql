@@ -69,10 +69,10 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
 -- ① §1.1:merchant_member_settings CHECK 約束 + 預設值(以 postgres 超級使用者身分測)。
 -- =========================================================================
 select throws_ok(
-  $$insert into merchant_member_settings (merchant_id, points_earn_rate)
+  $$insert into merchant_member_settings (merchant_id, basic_points_per_order)
     values ('ea000000-0000-4000-8000-000000000021', -1)$$,
   '23514', null,
-  '1.1:points_earn_rate >= 0,負值被 CHECK 約束擋下'
+  '1.1(紅利系統重構批次 6:原 points_earn_rate 已 drop,改測取代它的 basic_points_per_order):>= 0,負值被 CHECK 約束擋下'
 );
 
 select throws_ok(
@@ -100,9 +100,9 @@ select is(
 );
 
 select is(
-  (select row(points_earn_rate, referral_bonus_points, birthday_bonus_points, reward_condition_mode, policy_enabled, policy_content)
+  (select row(basic_points_per_order, redeem_points_unit, referral_bonus_points, birthday_bonus_points, reward_condition_mode, policy_enabled, policy_content)
    from merchant_member_settings where merchant_id = 'ea000000-0000-4000-8000-000000000021')::text,
-  row(0.00, 0, 0, 'none', false, null)::text,
+  row(0, 0, 0, 0, 'none', false, null)::text,
   '1.1:查無資料時前端/後端一律套用的預設值正確(第〇節判斷 3:點數相關全部預設 0;#618/#619 新欄位:reward_condition_mode 預設 none、policy_enabled 預設 false、policy_content 預設 null)'
 );
 

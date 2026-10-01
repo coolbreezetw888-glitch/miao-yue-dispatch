@@ -70,10 +70,15 @@ insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) va
 insert into payment_methods (id, merchant_id, name) values
   ('da080000-0000-4000-8000-000000000071', 'da080000-0000-4000-8000-000000000020', '現場付款');
 
--- ⚠️ 核心 fixture:points_earn_rate = 0(不做消費累點),referral_bonus_points = 50(要做推薦獎勵)。
+-- ⚠️ 核心 fixture:原本是 points_earn_rate = 0(不做消費累點;批次 6 已 drop 這個欄位),referral_bonus_points = 50(要做推薦獎勵)。
+-- 🔴 紅利系統重構 批次 4(2026-10-01):完成時改入帳建單定案的 points_planned,不再讀 points_earn_rate。
+--    「不做消費累點」改用新設定表達:基本模式 basic_points_per_order = 0(= 尚未設定,每筆派 0 點);
+--    推薦獎勵要開關 1 referral_inviter_reward_enabled = true。這份測試要守的「推薦獎勵跟消費累點脫鉤」
+--    精神不變,只是「消費累點」的設定換了欄位。
 insert into merchant_member_settings (
-  merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points
-) values ('da080000-0000-4000-8000-000000000020', 0, 50, 0);
+  merchant_id, referral_bonus_points, birthday_bonus_points,
+  earn_mode, basic_points_per_order, referral_inviter_reward_enabled
+) values ('da080000-0000-4000-8000-000000000020', 50, 0, 'basic', 0, true);
 
 select pg_temp.test_set_auth('da080000-0000-4000-8000-000000000001');
 
@@ -103,7 +108,7 @@ select complete_booking(:'booking_id'::uuid);
 select is(
   (select points_balance from members where id = :'referrer_id'::uuid),
   50,
-  '核心(主腦裁決):商家 points_earn_rate = 0(刻意不做消費累點)但 referral_bonus_points = 50 → 推薦人仍然拿到 50 點。原本步驟 4 的 `if v_earn_rate <= 0 then return` 會讓推薦獎勵永遠發不出去'
+  '核心(主腦裁決):商家刻意不做消費累點(本單派 0 點)但 referral_bonus_points = 50 → 推薦人仍然拿到 50 點(第 7 題:首次推薦獎勵不看本單有沒有派到點)'
 );
 
 select is(
@@ -122,7 +127,7 @@ select ok(
 select is(
   (select points_balance from members where id = :'referred_id'::uuid),
   0,
-  '脫鉤不是把兩件事都打開:points_earn_rate = 0 時被推薦人自己的消費累點仍然是 0 點(該不發的還是不發)'
+  '脫鉤不是把兩件事都打開:不做消費累點(本單派 0 點)時被推薦人自己的消費累點仍然是 0 點(該不發的還是不發)'
 );
 
 select is(
@@ -157,7 +162,9 @@ select pg_temp.test_set_auth('da080000-0000-4000-8000-000000000001');
 -- ② 情境 (b):被推薦人第一筆訂單在 earn_rate=0 時完成,商家後來才把 earn_rate 設起來。
 --    脫鉤之後推薦獎勵在**第一筆**就發掉了,所以不會出現「永久失去」的情況。
 -- =========================================================================
-update merchant_member_settings set points_earn_rate = 100
+-- 批次 4:原本改 points_earn_rate = 100,改成等價的「每滿 100 元 1 點」基本模式設定。
+update merchant_member_settings
+set basic_min_amount = 100, basic_points_per_order = 1, basic_tiered_enabled = true
 where merchant_id = 'da080000-0000-4000-8000-000000000020';
 
 select id from create_booking(
@@ -177,13 +184,13 @@ select complete_booking(:'booking2_id'::uuid);
 select is(
   (select points_balance from members where id = :'referrer_id'::uuid),
   50,
-  '情境(b):商家之後把 points_earn_rate 設成 100,被推薦人完成第二筆訂單 → 推薦人餘額仍然是 50,不會再多發一次(獎勵已經在第一筆就正確發掉了,不是「永久失去」也不是「重複發」)'
+  '情境(b):商家之後才設定消費累點(每滿 100 元 1 點),被推薦人完成第二筆訂單 → 推薦人餘額仍然是 50,不會再多發首次獎勵(後續獎勵 referral_subsequent_bonus_points 維持 0,不發)'
 );
 
 select is(
   (select points_balance from members where id = :'referred_id'::uuid),
   10,
-  '情境(b):被推薦人第二筆訂單正常累到 10 點(1000/100)——消費累點在 earn_rate 設起來之後照常運作'
+  '情境(b):被推薦人第二筆訂單正常累到 10 點(1000/100)——消費累點設起來之後建單定案、完成入帳照常運作'
 );
 
 select pg_temp.test_clear_auth();

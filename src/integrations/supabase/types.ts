@@ -199,6 +199,99 @@ export type Database = {
           },
         ]
       }
+      booking_completion_reversals: {
+        Row: {
+          action: string
+          actor_name_snapshot: string
+          actor_user_id: string | null
+          booking_id: string
+          commission_amount_reversed: number
+          commission_record_snapshot: Json | null
+          created_at: string
+          frozen_points_refunded: number
+          id: string
+          is_cross_month: boolean
+          merchant_id: string
+          notified: boolean
+          original_completed_at: string
+          points_due: number
+          points_recovered: number
+          points_shortfall: number
+          reason: string
+          referral_due: number
+          referral_recovered: number
+          referral_shortfall: number
+          referrer_member_id: string | null
+          report_month: string
+          shortfall_hint: string | null
+        }
+        Insert: {
+          action: string
+          actor_name_snapshot: string
+          actor_user_id?: string | null
+          booking_id: string
+          commission_amount_reversed?: number
+          commission_record_snapshot?: Json | null
+          created_at?: string
+          frozen_points_refunded?: number
+          id?: string
+          is_cross_month: boolean
+          merchant_id: string
+          notified?: boolean
+          original_completed_at: string
+          points_due?: number
+          points_recovered?: number
+          points_shortfall?: number
+          reason: string
+          referral_due?: number
+          referral_recovered?: number
+          referral_shortfall?: number
+          referrer_member_id?: string | null
+          report_month: string
+          shortfall_hint?: string | null
+        }
+        Update: {
+          action?: string
+          actor_name_snapshot?: string
+          actor_user_id?: string | null
+          booking_id?: string
+          commission_amount_reversed?: number
+          commission_record_snapshot?: Json | null
+          created_at?: string
+          frozen_points_refunded?: number
+          id?: string
+          is_cross_month?: boolean
+          merchant_id?: string
+          notified?: boolean
+          original_completed_at?: string
+          points_due?: number
+          points_recovered?: number
+          points_shortfall?: number
+          reason?: string
+          referral_due?: number
+          referral_recovered?: number
+          referral_shortfall?: number
+          referrer_member_id?: string | null
+          report_month?: string
+          shortfall_hint?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_completion_reversals_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "booking_completion_reversals_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_material_costs: {
         Row: {
           amount_snapshot: number
@@ -371,6 +464,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -416,6 +516,13 @@ export type Database = {
           notes?: string | null
           payment_method_id?: string | null
           payment_method_name_snapshot?: string | null
+          points_planned?: number
+          points_planned_auto?: number
+          points_planned_breakdown?: Json
+          points_planned_overridden?: boolean
+          points_redeem_amount_snapshot?: number
+          points_redeemed?: number
+          points_review_required?: boolean
           service_description_snapshot?: string | null
           source?: string
           staff_id: string
@@ -461,6 +568,13 @@ export type Database = {
           notes?: string | null
           payment_method_id?: string | null
           payment_method_name_snapshot?: string | null
+          points_planned?: number
+          points_planned_auto?: number
+          points_planned_breakdown?: Json
+          points_planned_overridden?: boolean
+          points_redeem_amount_snapshot?: number
+          points_redeemed?: number
+          points_review_required?: boolean
           service_description_snapshot?: string | null
           source?: string
           staff_id?: string
@@ -783,6 +897,83 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_birthday_bonus_grants: {
+        Row: {
+          anchor_date: string
+          bonus_year: number
+          granted_at: string
+          id: string
+          line_attempted_at: string | null
+          line_error: string | null
+          line_notification_log_id: string | null
+          line_status: string
+          member_id: string
+          member_name_snapshot: string
+          merchant_id: string
+          point_transaction_id: string
+          points: number
+        }
+        Insert: {
+          anchor_date: string
+          bonus_year: number
+          granted_at?: string
+          id?: string
+          line_attempted_at?: string | null
+          line_error?: string | null
+          line_notification_log_id?: string | null
+          line_status?: string
+          member_id: string
+          member_name_snapshot: string
+          merchant_id: string
+          point_transaction_id: string
+          points: number
+        }
+        Update: {
+          anchor_date?: string
+          bonus_year?: number
+          granted_at?: string
+          id?: string
+          line_attempted_at?: string | null
+          line_error?: string | null
+          line_notification_log_id?: string | null
+          line_status?: string
+          member_id?: string
+          member_name_snapshot?: string
+          merchant_id?: string
+          point_transaction_id?: string
+          points?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_birthday_bonus_grants_line_notification_log_id_fkey"
+            columns: ["line_notification_log_id"]
+            isOneToOne: false
+            referencedRelation: "line_notification_log"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_birthday_bonus_grants_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_birthday_bonus_grants_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_birthday_bonus_grants_point_transaction_id_fkey"
+            columns: ["point_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "member_point_transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -1525,38 +1716,74 @@ export type Database = {
       }
       merchant_member_settings: {
         Row: {
+          basic_min_amount: number
+          basic_points_per_order: number
+          basic_tiered_enabled: boolean
+          birthday_bonus_enabled: boolean
           birthday_bonus_points: number
+          birthday_line_message: string
           created_at: string
+          earn_mode: string
           merchant_id: string
-          points_earn_rate: number
           points_feature_enabled: boolean
           policy_content: string | null
           policy_enabled: boolean
+          redeem_amount_unit: number
+          redeem_max_ratio_percent: number
+          redeem_points_unit: number
           referral_bonus_points: number
+          referral_invitee_earning_enabled: boolean
+          referral_inviter_earning_enabled: boolean
+          referral_inviter_reward_enabled: boolean
+          referral_subsequent_bonus_points: number
           reward_condition_mode: string
           updated_at: string
         }
         Insert: {
+          basic_min_amount?: number
+          basic_points_per_order?: number
+          basic_tiered_enabled?: boolean
+          birthday_bonus_enabled?: boolean
           birthday_bonus_points?: number
+          birthday_line_message?: string
           created_at?: string
+          earn_mode?: string
           merchant_id: string
-          points_earn_rate?: number
           points_feature_enabled?: boolean
           policy_content?: string | null
           policy_enabled?: boolean
+          redeem_amount_unit?: number
+          redeem_max_ratio_percent?: number
+          redeem_points_unit?: number
           referral_bonus_points?: number
+          referral_invitee_earning_enabled?: boolean
+          referral_inviter_earning_enabled?: boolean
+          referral_inviter_reward_enabled?: boolean
+          referral_subsequent_bonus_points?: number
           reward_condition_mode?: string
           updated_at?: string
         }
         Update: {
+          basic_min_amount?: number
+          basic_points_per_order?: number
+          basic_tiered_enabled?: boolean
+          birthday_bonus_enabled?: boolean
           birthday_bonus_points?: number
+          birthday_line_message?: string
           created_at?: string
+          earn_mode?: string
           merchant_id?: string
-          points_earn_rate?: number
           points_feature_enabled?: boolean
           policy_content?: string | null
           policy_enabled?: boolean
+          redeem_amount_unit?: number
+          redeem_max_ratio_percent?: number
+          redeem_points_unit?: number
           referral_bonus_points?: number
+          referral_invitee_earning_enabled?: boolean
+          referral_inviter_earning_enabled?: boolean
+          referral_inviter_reward_enabled?: boolean
+          referral_subsequent_bonus_points?: number
           reward_condition_mode?: string
           updated_at?: string
         }
@@ -1633,6 +1860,60 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: true
             referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_point_formulas: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          id: string
+          merchant_id: string
+          min_unit_price: number
+          name: string
+          points_per_unit: number
+          service_item_id: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          merchant_id: string
+          min_unit_price?: number
+          name: string
+          points_per_unit: number
+          service_item_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          merchant_id?: string
+          min_unit_price?: number
+          name?: string
+          points_per_unit?: number
+          service_item_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_point_formulas_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "merchant_point_formulas_service_item_id_fkey"
+            columns: ["service_item_id"]
+            isOneToOne: false
+            referencedRelation: "service_items"
             referencedColumns: ["id"]
           },
         ]
@@ -2758,6 +3039,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -2776,6 +3064,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      cancel_completed_booking: {
+        Args: {
+          p_booking_id: string
+          p_notify_requested?: boolean
+          p_reason: string
+        }
+        Returns: Json
       }
       cancel_staff_leave: {
         Args: { p_leave_id: string }
@@ -2799,6 +3095,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      claim_birthday_line_pending: {
+        Args: { p_limit?: number }
+        Returns: Json[]
       }
       clear_agent_pending_login_email: {
         Args: { p_agent_id: string }
@@ -2852,6 +3152,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -2914,6 +3221,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -2962,6 +3276,9 @@ export type Database = {
           p_merchant_id: string
           p_notes?: string
           p_payment_method_id?: string
+          p_points_override?: number
+          p_points_redeem_member_id?: string
+          p_points_redeemed?: number
           p_service_items: Json
           p_staff_id: string
           p_start_at: string
@@ -3002,6 +3319,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -3210,12 +3534,31 @@ export type Database = {
           pending_confirmation_sent_at: string
         }[]
       }
+      get_birthday_bonus_grants: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          anchor_date: string
+          bonus_year: number
+          granted_at: string
+          id: string
+          line_attempted_at: string
+          line_error: string
+          line_status: string
+          member_id: string
+          member_name: string
+          points: number
+        }[]
+      }
       get_booking_actor_names: {
         Args: { p_merchant_id: string; p_user_ids: string[] }
         Returns: {
           display_name: string
           user_id: string
         }[]
+      }
+      get_booking_points_ledger: {
+        Args: { p_booking_id: string }
+        Returns: Json
       }
       get_booking_status_change_logs: {
         Args: { p_booking_id: string }
@@ -3225,8 +3568,13 @@ export type Database = {
           created_at: string
           from_status: string
           id: string
+          note: string
           to_status: string
         }[]
+      }
+      get_completed_booking_reversal_preview: {
+        Args: { p_booking_id: string }
+        Returns: Json
       }
       get_customer_related_bookings: {
         Args: {
@@ -3238,7 +3586,6 @@ export type Database = {
         Returns: {
           end_at: string
           final_amount_snapshot: number
-          hide_notes_from_staff: boolean
           id: string
           service_item_names: string[]
           start_at: string
@@ -3306,8 +3653,11 @@ export type Database = {
         Returns: {
           earned_points: number
           final_amount_snapshot: number
-          hide_notes_from_staff: boolean
           id: string
+          points_planned: number
+          points_planned_overridden: boolean
+          points_redeemed: number
+          reversed_points: number
           service_item_names: string[]
           start_at: string
           status: string
@@ -3382,6 +3732,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      get_merchant_points_feature_enabled: {
+        Args: { p_merchant_id: string }
+        Returns: boolean
+      }
       get_merchant_push_event_enabled_map: {
         Args: { p_merchant_id: string }
         Returns: {
@@ -3410,6 +3764,15 @@ export type Database = {
         Returns: Json
       }
       get_my_push_identity: { Args: { p_merchant_id: string }; Returns: Json }
+      get_point_formula_service_items: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          id: string
+          name: string
+          price: number
+          status: string
+        }[]
+      }
       get_staff_commission_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
@@ -3443,10 +3806,6 @@ export type Database = {
           p_start_date: string
         }
         Returns: Json
-      }
-      grant_pending_birthday_bonuses: {
-        Args: { p_merchant_id: string }
-        Returns: number
       }
       hard_delete_merchant_agent: {
         Args: { p_agent_id: string }
@@ -3482,6 +3841,15 @@ export type Database = {
       }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }
+      mark_birthday_line_result: {
+        Args: {
+          p_error?: string
+          p_grant_id: string
+          p_log_id?: string
+          p_status: string
+        }
+        Returns: boolean
+      }
       mark_my_notifications_read: {
         Args: { p_ids?: string[] }
         Returns: number
@@ -3584,6 +3952,24 @@ export type Database = {
       platform_set_group_admin: {
         Args: { p_group_id: string; p_user_email: string }
         Returns: undefined
+      }
+      preview_booking_points: {
+        Args: {
+          p_booking_id: string
+          p_custom_total_amount: number
+          p_custom_total_amount_enabled: boolean
+          p_customer_phone: string
+          p_discount_enabled: boolean
+          p_discount_mode: string
+          p_discount_value: number
+          p_member_id: string
+          p_merchant_id: string
+          p_service_items: Json
+          p_tax_enabled: boolean
+          p_tax_mode: string
+          p_tax_value: number
+        }
+        Returns: Json
       }
       preview_line_notification_targets: {
         Args: { p_booking_id: string; p_event_type: string }
@@ -3800,9 +4186,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      revert_completed_booking: {
+        Args: { p_booking_id: string; p_reason: string }
+        Returns: Json
+      }
       rollback_bulk_operation: {
         Args: { p_operation_id: string }
         Returns: Json
+      }
+      run_birthday_bonus_grants: {
+        Args: { p_run_date?: string }
+        Returns: number
       }
       seed_default_booking_status_colors: {
         Args: { p_merchant_id: string }
@@ -3993,6 +4387,10 @@ export type Database = {
           p_member_id?: string
           p_notes?: string
           p_payment_method_id?: string
+          p_points_override?: number
+          p_points_override_reset?: boolean
+          p_points_redeem_member_id?: string
+          p_points_redeemed?: number
           p_service_items: Json
           p_staff_id: string
           p_start_at: string
@@ -4033,6 +4431,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -4087,6 +4492,13 @@ export type Database = {
           notes: string | null
           payment_method_id: string | null
           payment_method_name_snapshot: string | null
+          points_planned: number
+          points_planned_auto: number
+          points_planned_breakdown: Json
+          points_planned_overridden: boolean
+          points_redeem_amount_snapshot: number
+          points_redeemed: number
+          points_review_required: boolean
           service_description_snapshot: string | null
           source: string
           staff_id: string
@@ -4310,6 +4722,27 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      upsert_member_point_formulas: {
+        Args: { p_formulas: Json; p_merchant_id: string }
+        Returns: {
+          created_at: string
+          enabled: boolean
+          id: string
+          merchant_id: string
+          min_unit_price: number
+          name: string
+          points_per_unit: number
+          service_item_id: string | null
+          sort_order: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "merchant_point_formulas"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       upsert_my_push_subscription: {
         Args: {
           p_auth_key: string
@@ -4469,3 +4902,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

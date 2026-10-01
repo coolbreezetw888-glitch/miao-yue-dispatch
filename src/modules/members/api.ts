@@ -10,7 +10,11 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import type {
+  BirthdayBonusGrant,
+  BirthdayLineStatus,
+  EarnMode,
   Member,
   MemberDetail,
   MemberPhoneMatchCandidate,
@@ -23,9 +27,12 @@ import type {
   MemberTierStatus,
   MerchantMemberSettings,
   MerchantMemberTier,
+  MerchantPointFormula,
+  PointFormulaServiceItem,
   RewardConditionMode,
 } from "./types";
 import { DEFAULT_MERCHANT_MEMBER_SETTINGS } from "./types";
+import { stabilizePointHistoryOrder } from "./memberPointHistoryOrder";
 
 // =========================================================================
 // §3.2/§5.x:merchant_member_settings 讀寫。不包 RPC,直接開放 RLS,前端 upsert。
@@ -56,38 +63,256 @@ export function useMerchantMemberSettings(
   });
 }
 
-/** #618/#619(SPECS-INDEX)疊加:phoneRequiredToCreate/requireVerifiedPhoneForRewards 兩個欄位
- * 已移除,新增 rewardConditionMode(五選一,取代原本單一開關)、policyEnabled/policyContent
- * (「基本政策」改名「會員政策」)。 */
-export interface UpsertMerchantMemberSettingsInput {
-  pointsEarnRate: number;
-  referralBonusPoints: number;
-  birthdayBonusPoints: number;
-  /** #617(.project/specs/會員與紅利.md §10.5):商家是否啟用紅利點數功能。 */
-  pointsFeatureEnabled: boolean;
-  rewardConditionMode: RewardConditionMode;
-  policyEnabled: boolean;
-  policyContent: string | null;
+/**
+ * 紅利系統重構 批次 7(v2.4 裁決 21 ①):會員詳情頁判斷「紅利功能開沒開」的唯一來源。
+ *
+ * 🔴 為什麼不能用 useMerchantMemberSettings:merchant_member_settings 的 SELECT 政策只放行
+ *    member_points / member_settings 這類「規則」鑰匙,**不放行 members 鑰匙**。只有 members 鑰匙的客服
+ *    打開會員詳情頁時,RLS 查無列 ⇒ hook 退回預設值 points_feature_enabled = true ⇒ 功能明明關了,
+ *    點數卡片卻顯示出來(QA 2026-10-01 截圖重現,正式庫現況即如此)。
+ *    改由 SECURITY DEFINER 的 get_merchant_points_feature_enabled 回傳一個布林(members 或
+ *    member_points 鑰匙任一即可),不放寬表政策。
+ */
+export async function fetchMerchantPointsFeatureEnabled(merchantId: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("get_merchant_points_feature_enabled", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
-export async function upsertMerchantMemberSettings(
+export function useMerchantPointsFeatureEnabled(
+  merchantId: string | null | undefined,
+): UseQueryResult<boolean> {
+  return useQuery({
+    queryKey: ["members-module", "points-feature-enabled", merchantId],
+    queryFn: () => fetchMerchantPointsFeatureEnabled(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+/**
+ * 紅利系統重構 批次 6(§3.14):`merchant_member_settings` 的寫入改成**局部 patch**。
+ *
+ * 🔴 為什麼不再是「整列 upsert」:原本的 `upsertMerchantMemberSettings` 要求呼叫端把**每一個**欄位都帶上,
+ *    兩個頁面(紅利點數管理 / 會員系統設定)各自從自己手上的 settings 抄一份整列送回去。紅利系統重構一口氣
+ *    多了 13 個欄位,只要任何一頁漏帶一欄,整列 upsert 就會把那一欄**默默寫回預設值**(規格書 §3.14 點名的
+ *    「整列 upsert 模式的固有陷阱」)。
+ *    改成:呼叫端只送「這次真的要改的欄位」。PostgREST 的 upsert(merge-duplicates)只會更新 payload 裡有的
+ *    欄位,沒帶的欄位維持資料庫裡的值 —— 達到規格書要的「先讀再寫」效果(不會把別的欄位洗回預設),
+ *    而且連「拿過時的值整列寫回去」的競態都一起消失(兩個分頁各存各的欄位,不會互相蓋掉)。
+ *    第一次存(還沒有設定列)時走 INSERT,沒帶的欄位吃 schema 預設值 —— 跟 seed_default_member_settings 一致。
+ *
+ * ⚠️ 權限邊界不變:資料庫的 protect_merchant_member_settings_rule_columns trigger 只看「值有沒有真的變」,
+ *    會員系統設定頁只送政策兩欄,本來就不會碰到規則欄位的檢查。
+ */
+export interface MerchantMemberSettingsPatch {
+  /** #617:商家是否啟用紅利點數功能。 */
+  pointsFeatureEnabled?: boolean;
+  rewardConditionMode?: RewardConditionMode;
+  // §1.1 A 紅利計算
+  earnMode?: EarnMode;
+  basicPointsPerOrder?: number;
+  basicMinAmount?: number;
+  basicTieredEnabled?: boolean;
+  // §1.1 B 點數使用
+  redeemPointsUnit?: number;
+  redeemAmountUnit?: number;
+  redeemMaxRatioPercent?: number;
+  // §1.1 C 推薦系統
+  referralInviterRewardEnabled?: boolean;
+  referralBonusPoints?: number;
+  referralSubsequentBonusPoints?: number;
+  referralInviterEarningEnabled?: boolean;
+  referralInviteeEarningEnabled?: boolean;
+  // §1.1 D 生日獎勵
+  birthdayBonusEnabled?: boolean;
+  birthdayBonusPoints?: number;
+  birthdayLineMessage?: string;
+  // 會員政策(會員系統設定頁)
+  policyEnabled?: boolean;
+  policyContent?: string | null;
+}
+
+const SETTINGS_PATCH_COLUMNS: Record<
+  keyof MerchantMemberSettingsPatch,
+  keyof TablesInsert<"merchant_member_settings">
+> = {
+  pointsFeatureEnabled: "points_feature_enabled",
+  rewardConditionMode: "reward_condition_mode",
+  earnMode: "earn_mode",
+  basicPointsPerOrder: "basic_points_per_order",
+  basicMinAmount: "basic_min_amount",
+  basicTieredEnabled: "basic_tiered_enabled",
+  redeemPointsUnit: "redeem_points_unit",
+  redeemAmountUnit: "redeem_amount_unit",
+  redeemMaxRatioPercent: "redeem_max_ratio_percent",
+  referralInviterRewardEnabled: "referral_inviter_reward_enabled",
+  referralBonusPoints: "referral_bonus_points",
+  referralSubsequentBonusPoints: "referral_subsequent_bonus_points",
+  referralInviterEarningEnabled: "referral_inviter_earning_enabled",
+  referralInviteeEarningEnabled: "referral_invitee_earning_enabled",
+  birthdayBonusEnabled: "birthday_bonus_enabled",
+  birthdayBonusPoints: "birthday_bonus_points",
+  birthdayLineMessage: "birthday_line_message",
+  policyEnabled: "policy_enabled",
+  policyContent: "policy_content",
+};
+
+/** 純函式:把 patch 轉成資料庫欄位。`undefined` 的欄位**不放進 payload**(那就是「不改」)。 */
+export function buildMerchantMemberSettingsPayload(
   merchantId: string,
-  input: UpsertMerchantMemberSettingsInput,
+  patch: MerchantMemberSettingsPatch,
+): TablesInsert<"merchant_member_settings"> {
+  const row: Record<string, unknown> = { merchant_id: merchantId };
+  for (const key of Object.keys(SETTINGS_PATCH_COLUMNS) as (keyof MerchantMemberSettingsPatch)[]) {
+    const value = patch[key];
+    if (value !== undefined) row[SETTINGS_PATCH_COLUMNS[key]] = value;
+  }
+  return row as TablesInsert<"merchant_member_settings">;
+}
+
+export async function saveMerchantMemberSettings(
+  merchantId: string,
+  patch: MerchantMemberSettingsPatch,
 ): Promise<void> {
-  const { error } = await supabase.from("merchant_member_settings").upsert(
-    {
-      merchant_id: merchantId,
-      points_earn_rate: input.pointsEarnRate,
-      referral_bonus_points: input.referralBonusPoints,
-      birthday_bonus_points: input.birthdayBonusPoints,
-      points_feature_enabled: input.pointsFeatureEnabled,
-      reward_condition_mode: input.rewardConditionMode,
-      policy_enabled: input.policyEnabled,
-      policy_content: input.policyContent,
-    },
-    { onConflict: "merchant_id" },
-  );
+  const { error } = await supabase
+    .from("merchant_member_settings")
+    .upsert(buildMerchantMemberSettingsPayload(merchantId, patch), { onConflict: "merchant_id" });
   if (error) throw error;
+}
+
+// =========================================================================
+// 紅利系統重構 §3.9 / §4.2:進階派點公式(merchant_point_formulas)。
+// 讀:RLS 直讀(SELECT 要 member_points 鑰匙);寫:一律走 upsert_member_point_formulas 批次儲存,
+// 不在前端逐列 insert/update/delete(重複檢查、原子性、IDOR 檢查都在那支函式裡)。
+// =========================================================================
+export async function fetchMerchantPointFormulas(
+  merchantId: string,
+): Promise<MerchantPointFormula[]> {
+  const { data, error } = await supabase
+    .from("merchant_point_formulas")
+    .select(
+      "id, merchant_id, name, enabled, service_item_id, min_unit_price, points_per_unit, sort_order, created_at, updated_at",
+    )
+    .eq("merchant_id", merchantId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ ...row, min_unit_price: Number(row.min_unit_price) }));
+}
+
+export function pointFormulasQueryKey(merchantId: string | null | undefined) {
+  return ["members-module", "point-formulas", merchantId] as const;
+}
+
+export function useMerchantPointFormulas(
+  merchantId: string | null | undefined,
+  enabled = true,
+): UseQueryResult<MerchantPointFormula[]> {
+  return useQuery({
+    queryKey: pointFormulasQueryKey(merchantId),
+    queryFn: () => fetchMerchantPointFormulas(merchantId as string),
+    enabled: Boolean(merchantId) && enabled,
+  });
+}
+
+export interface PointFormulaInput {
+  id: string | null;
+  name: string;
+  enabled: boolean;
+  serviceItemId: string | null;
+  minUnitPrice: number;
+  pointsPerUnit: number;
+  sortOrder: number;
+}
+
+export async function upsertMemberPointFormulas(
+  merchantId: string,
+  formulas: PointFormulaInput[],
+): Promise<MerchantPointFormula[]> {
+  const { data, error } = await supabase.rpc("upsert_member_point_formulas", {
+    p_merchant_id: merchantId,
+    p_formulas: formulas.map((f) => ({
+      id: f.id,
+      name: f.name,
+      enabled: f.enabled,
+      service_item_id: f.serviceItemId,
+      min_unit_price: f.minUnitPrice,
+      points_per_unit: f.pointsPerUnit,
+      sort_order: f.sortOrder,
+    })),
+  });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ ...row, min_unit_price: Number(row.min_unit_price) }));
+}
+
+/** 公式下拉要列的服務項目(只有 id / 名稱 / 現價 / 狀態)。走窄函式,不放寬 service_items 表層政策。 */
+export async function fetchPointFormulaServiceItems(
+  merchantId: string,
+): Promise<PointFormulaServiceItem[]> {
+  const { data, error } = await supabase.rpc("get_point_formula_service_items", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    price: Number(row.price),
+    status: row.status === "removed" ? "removed" : "active",
+  }));
+}
+
+export function pointFormulaServiceItemsQueryKey(merchantId: string | null | undefined) {
+  return ["members-module", "point-formula-service-items", merchantId] as const;
+}
+
+export function usePointFormulaServiceItems(
+  merchantId: string | null | undefined,
+  enabled = true,
+): UseQueryResult<PointFormulaServiceItem[]> {
+  return useQuery({
+    queryKey: pointFormulaServiceItemsQueryKey(merchantId),
+    queryFn: () => fetchPointFormulaServiceItems(merchantId as string),
+    enabled: Boolean(merchantId) && enabled,
+  });
+}
+
+// =========================================================================
+// 紅利系統重構 §3.8 / §4.5:生日點數發送紀錄(最近 50 筆)。
+// 權限:members 或 member_points 任一(第 10 題);「重新整理」只是重新查這支,不會觸發發送。
+// =========================================================================
+export async function fetchBirthdayBonusGrants(merchantId: string): Promise<BirthdayBonusGrant[]> {
+  const { data, error } = await supabase.rpc("get_birthday_bonus_grants", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    memberName: row.member_name,
+    points: row.points,
+    bonusYear: row.bonus_year,
+    anchorDate: row.anchor_date,
+    lineStatus: row.line_status as BirthdayLineStatus,
+    lineError: row.line_error ?? null,
+    grantedAt: row.granted_at,
+    lineAttemptedAt: row.line_attempted_at ?? null,
+  }));
+}
+
+export function birthdayBonusGrantsQueryKey(merchantId: string | null | undefined) {
+  return ["members-module", "birthday-bonus-grants", merchantId] as const;
+}
+
+export function useBirthdayBonusGrants(
+  merchantId: string | null | undefined,
+  enabled = true,
+): UseQueryResult<BirthdayBonusGrant[]> {
+  return useQuery({
+    queryKey: birthdayBonusGrantsQueryKey(merchantId),
+    queryFn: () => fetchBirthdayBonusGrants(merchantId as string),
+    enabled: Boolean(merchantId) && enabled,
+  });
 }
 
 // =========================================================================
@@ -517,17 +742,6 @@ export async function adjustMemberPoints(
 }
 
 // =========================================================================
-// §3.11:生日贈點被動核發。4.1 會員管理列表頁載入時呼叫。
-// =========================================================================
-export async function grantPendingBirthdayBonuses(merchantId: string): Promise<number> {
-  const { data, error } = await supabase.rpc("grant_pending_birthday_bonuses", {
-    p_merchant_id: merchantId,
-  });
-  if (error) throw error;
-  return (data as number) ?? 0;
-}
-
-// =========================================================================
 // §3.12/§5.2:點數異動歷史。
 // =========================================================================
 interface RawMemberPointHistoryRow {
@@ -549,7 +763,15 @@ export async function fetchMemberPointHistory(
 ): Promise<MemberPointHistoryEntry[]> {
   const { data, error } = await supabase.rpc("get_member_point_history", { p_member_id: memberId });
   if (error) throw error;
-  return ((data ?? []) as unknown as RawMemberPointHistoryRow[]).map((row) => ({
+  // #946:RPC 只依 created_at desc 排;同一交易寫入的多筆時間完全相同,先後不固定 ⇒
+  // 用 stabilizePointHistoryOrder 依「餘額接龍」把那幾筆排回真實寫入順序(理由見該檔檔頭)。
+  return stabilizePointHistoryOrder(
+    ((data ?? []) as unknown as RawMemberPointHistoryRow[]).map(toMemberPointHistoryEntry),
+  );
+}
+
+function toMemberPointHistoryEntry(row: RawMemberPointHistoryRow): MemberPointHistoryEntry {
+  return {
     id: row.id,
     transactionType: row.transaction_type,
     pointsDelta: row.points_delta,
@@ -561,7 +783,7 @@ export async function fetchMemberPointHistory(
     relatedMemberName: row.related_member_name ?? null,
     createdByUserId: row.created_by_user_id ?? null,
     createdAt: row.created_at,
-  }));
+  };
 }
 
 /** §5.2 對外介面:也是模組 13(客戶端自助預約)之後「我的紅利點數」直接依賴的介面。 */
@@ -585,6 +807,12 @@ interface RawMemberRelatedBookingRow {
   final_amount_snapshot: number;
   service_item_names: string[] | null;
   earned_points: number | null;
+  // 紅利系統重構 §3.13(批次 7)
+  points_planned: number | null;
+  points_redeemed: number | null;
+  points_planned_overridden: boolean | null;
+  // #844 §4.8(migration C):earned_points 改成本單本會員的有效入帳;新增被收回點數
+  reversed_points: number | null;
 }
 
 export async function fetchMemberRelatedBookings(
@@ -601,6 +829,10 @@ export async function fetchMemberRelatedBookings(
     finalAmountSnapshot: Number(row.final_amount_snapshot),
     serviceItemNames: row.service_item_names ?? [],
     earnedPoints: row.earned_points ?? null,
+    pointsPlanned: row.points_planned ?? 0,
+    pointsRedeemed: row.points_redeemed ?? 0,
+    pointsPlannedOverridden: row.points_planned_overridden === true,
+    reversedPoints: row.reversed_points ?? 0,
   }));
 }
 

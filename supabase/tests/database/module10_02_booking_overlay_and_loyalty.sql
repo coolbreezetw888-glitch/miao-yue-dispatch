@@ -76,8 +76,15 @@ insert into staff_service_commission_rates (staff_id, service_item_id, commissio
 values ('eb000000-0000-4000-8000-000000000041', 'eb000000-0000-4000-8000-000000000031', 'percentage', 10);
 
 -- 模組 10 會員設定:每消費 100 元得 1 點,推薦獎勵 50 點。
-insert into merchant_member_settings (merchant_id, points_earn_rate, referral_bonus_points, birthday_bonus_points)
-values ('eb000000-0000-4000-8000-000000000021', 100, 50, 0);
+-- 🔴 紅利系統重構 批次 4(2026-10-01):compute_member_loyalty_points 改成入帳建單時的 points_planned
+--    快照,不再讀 points_earn_rate。這裡改用「基本模式 + 每滿額累計」(每滿 100 元 1 點)表達同一個
+--    規則 —— 算出來的點數跟舊的 floor(final/100) 完全相同,所以下面各斷言的數字都不用改。
+--    推薦獎勵要開關 1 referral_inviter_reward_enabled(批次 1 回填只作用在既有資料列,測試資料要自己開)。
+insert into merchant_member_settings (
+  merchant_id, referral_bonus_points, birthday_bonus_points,
+  earn_mode, basic_min_amount, basic_points_per_order, basic_tiered_enabled, referral_inviter_reward_enabled
+)
+values ('eb000000-0000-4000-8000-000000000021', 50, 0, 'basic', 100, 1, true, true);
 
 select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 
@@ -301,7 +308,7 @@ select is(
 select is(
   (select points_delta from member_point_transactions where booking_id = :'booking1_id'::uuid and transaction_type = 'earn_booking'),
   10,
-  '規則 2.1(核心):紅利點數計算基準採含稅總額 final_amount_snapshot(1050),floor(1050/100)=10 點,跟模組 8 抽成基準(排除稅金)刻意不同'
+  '規則 2.1 / 紅利重構 §2.2(核心):派點基準採含稅應付總額(1050),每滿 100 元 1 點 = 10 點,建單時定案、完成時入帳 points_planned;跟模組 8 抽成基準(排除稅金)刻意不同'
 );
 
 select is(
@@ -340,15 +347,17 @@ select is(
 );
 
 -- =========================================================================
--- ④ 規則 2.2(核心必測):快照建立後不自動重算 + on conflict do nothing 防呆生效驗證。
+-- ④ 規則 2.2(核心必測):快照建立後不自動重算 + 重複呼叫不重複入帳的防呆生效驗證
+--    (#844 migration C 起防呆從「唯一索引 + on conflict do nothing」改成「鎖會員列後的淨額判斷」)。
 -- =========================================================================
-update merchant_member_settings set points_earn_rate = 10
+-- 批次 4:原本改 points_earn_rate = 10,改成等價的「每滿 10 元 1 點」。
+update merchant_member_settings set basic_min_amount = 10
 where merchant_id = 'eb000000-0000-4000-8000-000000000021';
 
 select is(
   (select points_delta from member_point_transactions where booking_id = :'booking1_id'::uuid and transaction_type = 'earn_booking'),
   10,
-  '規則 2.2(核心):調整 points_earn_rate 後,booking1 的舊紀錄 points_delta 完全沒有變動(仍是 10)'
+  '規則 2.2(核心):調整派點規則後,booking1 的舊紀錄 points_delta 完全沒有變動(仍是 10)'
 );
 
 select id from create_booking(
@@ -370,7 +379,7 @@ select complete_booking(:'booking_new_rate_id'::uuid);
 select is(
   (select points_delta from member_point_transactions where booking_id = :'booking_new_rate_id'::uuid and transaction_type = 'earn_booking'),
   100,
-  '規則 2.2:新完成的訂單採用調整後的新比例(1000/10=100 點)'
+  '規則 2.2:調整後新建立並完成的訂單採用新規則(每滿 10 元 1 點,1000/10=100 點)'
 );
 
 -- 沒有連結會員的訂單完全不會產生任何分類帳紀錄(補一筆真正沒有連結會員的訂單來測)。
@@ -408,7 +417,8 @@ select is(
 );
 
 -- 驗證測試真的有效:直接對 booking1 再呼叫一次 compute_member_loyalty_points(模擬萬一被重複
--- 觸發的極端情境),確認 on conflict do nothing 這道防呆真的生效,不會重複核發。以 postgres 身分
+-- 觸發的極端情境),確認防呆真的生效,不會重複核發。#844 migration C(20261001090200)起唯一索引已移除,
+-- 防呆改成淨額判斷(本單本會員有效入帳 = points_planned ⇒ 補 0 點、不寫);斷言內容不變。以 postgres 身分
 -- 呼叫(bypass 刻意加上的 revoke)。
 select pg_temp.test_clear_auth();
 

@@ -1,5 +1,5 @@
-// 這頁目前(SPECS-INDEX #830 之後)只剩紅利點數的「規則設定」:核發獎勵資格條件 + 點數設定(啟用開關
-// /消費點數比例/推薦獎勵/生日贈點)。個別會員的點數餘額、異動歷史、手動調整、登記兌換這些「交易」
+// 這頁目前(SPECS-INDEX #830 之後)只剩紅利點數的「規則設定」。紅利系統重構批次 6(#836~#841)之後的
+// 結構見本段最後的「紅利系統重構 批次 6」說明(核發獎勵資格條件 → 啟用開關獨立區塊 → 四個分頁)。個別會員的點數餘額、異動歷史、手動調整、登記兌換這些「交易」
 // 操作都不在這頁,在「會員管理 > 點擊某位會員」的詳情頁(MemberDetailPage.tsx + MemberPointsPanel.tsx)。
 // 下面依時間順序保留這頁演變的來龍去脈,方便理解為什麼權限守衛跟卡片是現在這個樣子。
 //
@@ -96,6 +96,17 @@
 //
 // **只動外觀,不動行為**:兩段權限的判斷(canManagePointsRules)、整列 upsert 的 saveSettingsRow、
 // 選了就直接存的核發資格條件、三個數字欄位的驗證與儲存、所有文案的意思全部照舊。
+//
+// 🔴 紅利系統重構 批次 6(2026-10-01,規格書 .project/specs/紅利系統重構.md §4.1,#836):
+//   - 原本的「點數設定」卡片**整張移除**,內容分散到四個橫向分頁(MemberPointsSettingsTabs.tsx):
+//     紅利計算 / 點數使用 / 推薦系統 / 生日獎勵。舊的「消費點數比例(元/點)」欄位已 drop,
+//     它的語意由「紅利計算」(怎麼賺點)與「點數使用」(怎麼折抵)兩個分頁取代。
+//   - 「啟用紅利點數功能」從點數設定卡片搬出,**自成獨立區塊**,放在「核發獎勵資格條件」正下方;開關文案沿用。
+//   - 四個分頁只在 points_feature_enabled = true 時渲染;關閉時只剩黃色常駐提醒(skill 二 `!`)。
+//   - 權限判斷 canManagePointsRules 一個字都沒動;整頁守衛 RequireMemberPointsAccess 也沒動(#830 裁決)。
+//   - 寫入改走 saveMerchantMemberSettings 局部 patch(只送這次要改的欄位),不再整列 upsert(§3.14)。
+//   - ⚠️ 這頁本來就在 members / member_points 鑰匙底下,所以用 useMerchantMemberSettings 判斷開關是安全的;
+//     **建單頁、帳務報表頁不能照抄**(規格書 §〇.3 判斷 13:沒有鑰匙時 hook 會靜默回 true)。
 
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -106,12 +117,10 @@ import {
   AlertNote,
   EmptyState,
   ErrorState,
-  FieldInput,
   FieldSelect,
   FormField,
   LoadingSkeleton,
   PageHeader,
-  parseAmountInput,
   SwitchRow,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
@@ -123,11 +132,12 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
-  upsertMerchantMemberSettings,
+  saveMerchantMemberSettings,
   useMerchantMemberSettings,
-  type UpsertMerchantMemberSettingsInput,
+  type MerchantMemberSettingsPatch,
 } from "./api";
-import { previewLoyaltyPoints } from "./previewCalculators";
+import { shouldRenderPointsTabs } from "./memberPointsSettingsLogic";
+import { MemberPointsSettingsTabs } from "./MemberPointsSettingsTabs";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
 import { REWARD_CONDITION_MODE_LABELS, type RewardConditionMode } from "./types";
 
@@ -136,12 +146,6 @@ function MemberPointsPageInner() {
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
   const [savingFeatureToggle, setSavingFeatureToggle] = useState(false);
-
-  // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的編輯 state,從 MemberSettingsPage.tsx 搬過來。
-  const [pointsEarnRate, setPointsEarnRate] = useState("0");
-  const [referralBonusPoints, setReferralBonusPoints] = useState("0");
-  const [birthdayBonusPoints, setBirthdayBonusPoints] = useState("0");
-  const [savingPoints, setSavingPoints] = useState(false);
 
   // 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 搬過來。這個 state 是
   // 「顯示用 + 立即回饋用」的本地值——下拉選單改值後要馬上反映在畫面上,不能等 invalidateQueries
@@ -153,46 +157,19 @@ function MemberPointsPageInner() {
   // 2026-09-24 使用者裁決(紅利點數管理頁分成「交易」與「規則」兩段權限)。使用者原文:
   //   餘額總覽、手動調整、登記兌換、異動歷史 = 會員管理(members)
   //   核發獎勵資格條件、點數設定(啟用開關/比例/推薦/生日) = 紅利點數管理(member_points)
-  // 當時是同一頁由兩把鑰匙共管:交易歸既有的 members,規則歸新增的 member_points。
   // (#830 之後「交易」那四項已經不在這頁、搬到會員詳情頁,這頁只剩「規則」;鑰匙歸屬沒變。)
-  // 整頁的進入守衛(RequireMemberPointsAccess)刻意「維持只認 members」——否則只有交易權限的
-  // 客服連這一頁都進不去,就違反使用者「客服可以處理會員管理內的資料包含紅利點數異動等等」的裁決。
-  // (SPECS-INDEX #830 之後「交易」那一半已搬到會員詳情頁,這頁只剩規則;守衛仍維持不變的理由
-  //  改見檔案開頭的 #830 說明。下面 canManagePointsRules 的判斷本身一個字都沒動。)
-  //
-  // 判斷寫法沿用專案既有慣例(CalendarPage.tsx canManageDayOverride、LeaveTypesPage.tsx
-  // showDeductionRuleButton 這兩處「頁面層一把鑰匙、區塊層另一把鑰匙」的先例),不自創新寫法:
-  // merchantRole === 'admin' 一律放行,agent 才需要 useAgentPermission 為 true。
-  // ⚠️ 這行就是使用者特別交代「商家管理員一定要全部看得到」那一點的落實處:admin 直接短路,
-  //    完全不看 member_points 開關(客服權限開關只對 agent 生效);merchantRole === 'staff' 或
-  //    null 的人本來就過不了頁面守衛,到不了這裡。
-  //
-  // ✅ 資料庫端已上線(migration 20260924040400_member_points_permission_and_rules_guard,
-  //    private.can_manage_member_points() 與規則欄位的寫入鎖),所以前後端兩層防線都在。
-  //    但這裡仍然刻意「不」依賴那支函式——useAgentPermission() 讀的是 merchant_agent_permissions
-  //    這張表(section_key = 'member_points'),那張表今天就已經存在、也沒有 section_key 白名單
-  //    約束,所以前端這一半是獨立成立的。查不到權限列時 useAgentPermission 的
-  //    既有行為是 `data?.granted ?? false`,也就是 fail-closed(預設關閉):在商家管理員實際去
-  //    勾選這把新鑰匙之前,客服只看得到交易那一半。刻意選 fail-closed 而不是 fail-open,理由是
-  //    「規則」會直接影響之後每一筆訂單發出去的點數,寧可讓商家多勾一次開關,也不要讓從來沒被
-  //    明確授權過的客服默默保有改規則的能力。
+  // 判斷寫法沿用專案既有慣例:merchantRole === 'admin' 一律放行,agent 才需要 useAgentPermission 為 true。
+  // ⚠️ admin 直接短路,完全不看 member_points 開關(使用者交代「商家管理員一定要全部看得到」)。
+  // ✅ 資料庫端另有 private.can_manage_member_points() 與規則欄位的寫入鎖(migration
+  //    20260924040400 / 紅利重構批次 1、6 的 trigger),前後端兩層防線都在。前端這一半 fail-closed:
+  //    查不到權限列時 useAgentPermission 是 false。
   const { data: merchantRole } = useCurrentMerchantRole();
   const { data: canManageMemberPointsRules } = useAgentPermission("member_points");
   const canManagePointsRules =
     merchantRole === "admin" || (merchantRole === "agent" && canManageMemberPointsRules === true);
 
-  // 🔴 2026-09-30(使用者實機巡檢批,QA D-2「假成功」):原本只取 data + isLoading,**沒有取
-  // isError**。查詢失敗時的實際後果是:
-  //   ・三個數字欄位停在 useState("0") 的初始值、開關因為 `settings ? … : true` 顯示成「已啟用」
-  //     ⇒ 商家以為那就是自己存過的設定。
-  //   ・按儲存會走到 saveSettingsRow 的 `if (!settings) return`,**什麼都沒寫**(這一點是安全的,
-  //     不會覆寫真實設定,不要改壞它)——但外層照樣跑 toast.success("已更新紅利點數設定"),
-  //     ⇒ **畫面說已更新,其實一個字都沒存**。開關那條(「已啟用紅利點數功能」)是同一個寫法。
-  // 修法兩件事一起做,缺一不可:
-  //   ① 讀不到設定時**不顯示表單**,改顯示 ErrorState(跟 MemberSettingsPage / PaymentMethodsPage
-  //      稅金卡同一個處理方式,理由也一樣:顯示預設值會讓商家以為那就是自己的設定)。
-  //   ② saveSettingsRow 沒有 settings 時**改成丟錯**,不要靜默 return ——
-  //      這樣呼叫端的 catch 會跳「更新失敗」,假成功的 toast 從根上不可能再出現。
+  // 🔴 2026-09-30(QA D-2「假成功」):一定要接 isError。讀不到設定時整組表單都不顯示,改 ErrorState;
+  // 否則欄位會停在預設值、開關顯示「已啟用」,商家會把預設值當成自己的設定。
   const {
     data: settings,
     isLoading: settingsLoading,
@@ -202,60 +179,18 @@ function MemberPointsPageInner() {
 
   useEffect(() => {
     if (!settings) return;
-    setPointsEarnRate(String(settings.points_earn_rate));
-    setReferralBonusPoints(String(settings.referral_bonus_points));
-    setBirthdayBonusPoints(String(settings.birthday_bonus_points));
     setRewardConditionMode(settings.reward_condition_mode as RewardConditionMode);
   }, [settings]);
 
-  // 🔴 2026-09-30(品管第二次打回,🟡 第 1 項):這三欄原本是 `Number(x)` + `Number.isNaN` /
-  // `Number.isInteger`,實測放行了:
-  //   ・消費點數比例填 `Infinity` ⇒ `Number.isNaN(Infinity)` 是 false、`Infinity < 0` 也是 false
-  //     ⇒ **比例被存成 Infinity**
-  //   ・`1e3` ⇒ 靜默變 1000、`0x10` ⇒ 靜默變 16(三欄都會)
-  //   ・清空欄位 ⇒ `Number("")` = 0 ⇒ 靜默存成 0
-  // 改走全站共用的 parseAmountInput(規則與白話錯誤訊息都在那支函式裡)。
-  // 推薦獎勵 / 生日贈點是**點數**,一定是整數 ⇒ 傳 integerOnly;消費點數比例是「幾元換 1 點」,
-  // 本來就允許小數(原本用的是 Number.isNaN 而不是 Number.isInteger),所以不傳。
-  // 錯誤訊息從目前輸入內容即時算出來 ⇒ 改成正確的數字就會自己消失。
-  // 🔴 2026-09-30:兩個**點數**欄位傳 noun: "點數",訊息才會是「請輸入點數」「點數不能是負數」——
-  // 原本沿用預設的「金額」,點數欄位下面出現「請輸入金額」,讀起來像系統搞錯在驗哪一格。
-  // 「消費點數比例(元/點)」那一欄填的**確實是金額**(幾元換 1 點),所以維持預設值,不要一起改。
-  const parsedRate = parseAmountInput(pointsEarnRate);
-  const parsedReferral = parseAmountInput(referralBonusPoints, {
-    integerOnly: true,
-    noun: "點數",
-  });
-  const parsedBirthday = parseAmountInput(birthdayBonusPoints, {
-    integerOnly: true,
-    noun: "點數",
-  });
-  const hasPointsFieldError = !parsedRate.ok || !parsedReferral.ok || !parsedBirthday.ok;
-
-  // #639/#642(.project/specs/會員與紅利.md §10.5):「點數設定」卡片現在一次管理 4 個欄位(啟用
-  // 開關+消費點數比例+推薦獎勵+生日贈點),但 upsertMerchantMemberSettings 是整列 upsert,不是
-  // 局部更新——不管改的是哪一格,都要把 settings 目前其他欄位(含核發資格條件/會員政策)原樣
-  // 帶回去,只換有異動的那幾格,否則會把其他設定值覆蓋掉。
-  async function saveSettingsRow(overrides: Partial<UpsertMerchantMemberSettingsInput>) {
-    // 🔴 沒有 settings 就**不能寫**(整列 upsert,少帶任何一欄都會把別的設定覆寫掉),
-    // 但也**不能靜默 return** —— 那會讓呼叫端以為存成功、跳出「已更新」的假成功 toast
-    // (2026-09-30 QA D-2)。丟錯才會走到呼叫端的 catch,顯示「更新失敗」。
-    // 正常情況下走不到這裡(讀不到設定時整組表單根本不渲染),這是最後一道防線。
+  // 紅利系統重構批次 6:改成局部 patch(只送這次要改的欄位)。沒有 settings(讀不到)時仍然**丟錯**
+  // 而不是靜默 return —— 那會讓呼叫端跳出「已更新」的假成功 toast(2026-09-30 QA D-2)。
+  async function saveSettingsPatch(patch: MerchantMemberSettingsPatch) {
     if (!settings) {
       throw new Error(
         "目前讀不到這間商家的會員設定,為了不覆寫原本的設定,這次沒有儲存。請重新載入再試一次。",
       );
     }
-    await upsertMerchantMemberSettings(merchantId, {
-      pointsEarnRate: settings.points_earn_rate,
-      referralBonusPoints: settings.referral_bonus_points,
-      birthdayBonusPoints: settings.birthday_bonus_points,
-      pointsFeatureEnabled: settings.points_feature_enabled,
-      rewardConditionMode: settings.reward_condition_mode as RewardConditionMode,
-      policyEnabled: settings.policy_enabled,
-      policyContent: settings.policy_content,
-      ...overrides,
-    });
+    await saveMerchantMemberSettings(merchantId, patch);
     await queryClient.invalidateQueries({
       queryKey: ["members-module", "merchant-member-settings", merchantId],
     });
@@ -264,7 +199,7 @@ function MemberPointsPageInner() {
   async function handleToggleFeatureEnabled(next: boolean) {
     setSavingFeatureToggle(true);
     try {
-      await saveSettingsRow({ pointsFeatureEnabled: next });
+      await saveSettingsPatch({ pointsFeatureEnabled: next });
       toast.success(next ? "已啟用紅利點數功能" : "已停用紅利點數功能");
     } catch (err) {
       toast.error("更新失敗", { description: getErrorMessage(err) });
@@ -273,15 +208,12 @@ function MemberPointsPageInner() {
     }
   }
 
-  // 2026-09-24 使用者裁決:核發獎勵資格條件的儲存邏輯,從 MemberSettingsPage.tsx 的
-  // handleSaveRewardCondition() 搬過來,改接這頁既有的 saveSettingsRow() 整列 upsert helper
-  // (原本在會員系統設定頁走的是那頁自己的 saveSettings())。沿用「選了就直接存」的既有行為,
-  // 這張卡片不另外放儲存按鈕。存檔失敗時把選單退回資料庫目前的值,避免畫面停在沒存進去的選項。
+  // 「選了就直接存」的既有行為;存檔失敗時把選單退回資料庫目前的值。
   async function handleSaveRewardCondition(next: RewardConditionMode) {
     setRewardConditionMode(next);
     setSavingRewardCondition(true);
     try {
-      await saveSettingsRow({ rewardConditionMode: next });
+      await saveSettingsPatch({ rewardConditionMode: next });
       toast.success("已更新核發獎勵資格條件");
     } catch (err) {
       setRewardConditionMode(
@@ -293,42 +225,17 @@ function MemberPointsPageInner() {
     }
   }
 
-  // #642:消費點數比例/推薦獎勵/生日贈點三個欄位的驗證+儲存邏輯,從 MemberSettingsPage.tsx 的
-  // handleSavePoints() 原樣搬過來。
-  async function handleSavePoints() {
-    // 🔴 2026-09-30:三欄的錯誤已經即時顯示在各自欄位下面、儲存鈕也 disabled,這裡是防呆。
-    if (!parsedRate.ok || !parsedReferral.ok || !parsedBirthday.ok) {
-      toast.error("有欄位填錯了", { description: "請看標紅的欄位,只能填數字。" });
-      return;
-    }
-    setSavingPoints(true);
-    try {
-      await saveSettingsRow({
-        pointsEarnRate: parsedRate.value,
-        referralBonusPoints: parsedReferral.value,
-        birthdayBonusPoints: parsedBirthday.value,
-      });
-      toast.success("已更新紅利點數設定");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSavingPoints(false);
-    }
-  }
+  const showTabs = shouldRenderPointsTabs({ canManagePointsRules, settings });
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
-      {/* 2026-09-24 使用者裁決:這頁分成「交易」與「規則」兩段權限之後,頁面描述也要跟著分流。
-          SPECS-INDEX #830 之後「交易」那一半已搬到會員管理的會員詳情頁,這頁只剩規則,描述照實改寫:
-          有規則權限的人看到的是規則說明;沒有的人要被明確告知這頁沒有他能操作的東西、以及點數
-          交易現在去哪裡做,不要讓他在頁面上找一個看不到的東西。 */}
       <PageHeader
         backTo="/app/manage"
         title="紅利點數管理"
         description={
           canManagePointsRules
-            ? `「${merchant!.name}」的紅利點數核發規則:核發獎勵資格條件、點數設定(啟用開關、消費點數比例、推薦獎勵、生日贈點)。個別會員的點數餘額、手動調整、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
-            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、消費點數比例、推薦獎勵、生日贈點),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
+            ? `「${merchant!.name}」的紅利點數核發規則:核發獎勵資格條件、啟用開關,以及紅利計算、點數使用、推薦系統、生日獎勵四個分頁。個別會員的點數餘額、手動調整、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
+            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、紅利計算、點數使用、推薦系統、生日獎勵),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
         }
       />
 
@@ -339,33 +246,15 @@ function MemberPointsPageInner() {
           ,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
           建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空,
           重新開啟後會完整還原顯示。
-          {/* 2026-09-29 第三輪使用者裁決(#830 修正):功能關閉時會員詳情頁的「點數」卡片整張隱藏,
-              所以這裡不能再寫「你仍然可以到會員管理點進某位會員手動調整/登記兌換」——那個入口關閉
-              期間不存在,寫了就是說謊。要結清點數請先重新開啟功能。後端關閉時仍放行 adjust/redeem
-              的設計(migration 20260924030000)不動,只是前端沒有入口。 */}
-          {/* 2026-09-24 使用者裁決:這句「要重新開啟請到下方點數設定」只有看得到那張卡片的人適用。
-              沒有 member_points 權限的客服看不到那張卡片,對他們說「去下方切換開關」等於叫他們去找
-              一個畫面上不存在的東西,所以改成告訴他們該找誰。 */}
           {canManagePointsRules
-            ? "要重新開啟,請到下方「點數設定」切換開關。"
+            ? "要重新開啟,請到下方「啟用紅利點數功能」切換開關。"
             : "要重新開啟這個功能需要「紅利點數管理」權限,請找商家管理員處理。"}
         </AlertNote>
       ) : null}
 
-      {/* 2026-09-24 使用者裁決(交易/規則權限分離):下面這兩張卡片就是「規則」那一半,整組需要
-          member_points 權限。
-          呈現方式選「整張卡片不渲染」而不是「渲染成 disabled」:這是專案既有慣例——
-          LeaveTypesPage.tsx 的「扣款規則」按鈕(需要 commission_settings)、CalendarPage.tsx 的
-          「開啟/關閉時段」選項(需要 business_hours)、AgentPermissionsPage 描述文字裡寫的
-          「關掉的區塊會直接看不到對應的入口」,全部都是條件式不渲染,專案裡沒有任何一處是把
-          沒權限的區塊留在畫面上灰掉。一致性之外也比較不會誤導:灰掉的欄位會讓客服以為「這個值
-          就是目前設定」而據此回答客人,不渲染則不會產生這種誤解。 */}
+      {/* 規則那一半整組需要 member_points 權限;沒有權限時整張卡片不渲染(專案既有慣例:條件式不渲染,
+          不是灰掉 —— 灰掉的欄位會讓客服以為「這個值就是目前設定」)。 */}
       {canManagePointsRules && isSettingsError ? (
-        /* 🔴 2026-09-30(QA D-2):讀不到設定時**整組表單都不給**,只顯示一個出錯區塊。
-           為什麼不是「兩張卡各自顯示 ErrorState」:同一個查詢壞掉、同一個重試動作,講兩次只是變吵;
-           而且使用者要的資訊是「這一頁的設定現在讀不到」,不是「這兩張卡各自讀不到」。
-           為什麼不顯示表單(這是重點,不只是美觀問題):三個數字欄位會停在 useState("0")、
-           開關會顯示成「已啟用」,商家會把那些預設值當成自己存過的設定,據此回答客人或決定要不要改。 */
         <Card>
           <CardContent className="pt-6">
             <ErrorState
@@ -377,9 +266,6 @@ function MemberPointsPageInner() {
         </Card>
       ) : canManagePointsRules ? (
         <>
-          {/* 2026-09-24 使用者裁決:「核發獎勵資格條件」從 MemberSettingsPage.tsx 整塊搬過來,放在
-          「點數設定」卡片上方——這個欄位決定的是「什麼樣的會員才拿得到點數」,本質上屬於點數
-          設定的一部分,留在會員系統設定頁本來就不合理。 */}
           <Card>
             <CardHeader>
               <CardTitle>核發獎勵資格條件</CardTitle>
@@ -393,10 +279,8 @@ function MemberPointsPageInner() {
               ) : (
                 <>
                   <FormField label="資格條件" htmlFor="reward-condition-mode">
-                    {/* guardPhantomEmptyChange:這個 value 是掛載後才由上面的 useEffect 從 settings
-                    灌進來的,不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉
-                    (見 src/lib/radixSelectGuard.ts)。合法值是 REWARD_CONDITION_MODE_LABELS
-                    這份固定列舉,所以判斷條件用白名單。 */}
+                    {/* guardPhantomEmptyChange:value 是掛載後才由 useEffect 從 settings 灌進來的,
+                        不套防護會被 Radix 隱藏原生 select 補發的空字串事件洗掉(src/lib/radixSelectGuard.ts)。 */}
                     <FieldSelect<RewardConditionMode>
                       id="reward-condition-mode"
                       value={rewardConditionMode}
@@ -413,8 +297,6 @@ function MemberPointsPageInner() {
                       }))}
                     />
                   </FormField>
-                  {/* 🟡 常駐 `!`:現在的狀態跟使用者以為的不一樣 —— 商家會以為這個選項能擋掉
-                      用假電話註冊的人(skill 二,第三類)。 */}
                   <AlertNote>
                     「電話已驗證」只是<strong>客服人工標記</strong>
                     ,不是真的簡訊驗證,無法擋住用假電話註冊的人。
@@ -424,128 +306,43 @@ function MemberPointsPageInner() {
             </CardContent>
           </Card>
 
-          {/* #639/#642(.project/specs/會員與紅利.md §10.5):「啟用紅利點數功能」開關,以及消費點數
-          比例/推薦獎勵/生日贈點三個數字欄位,都從 MemberSettingsPage.tsx 搬過來這裡一次操作,
-          不再需要連結導去會員系統設定頁調整。 */}
+          {/* §4.1 第 3 點(#836):「啟用紅利點數功能」自成獨立區塊,放在核發獎勵資格條件正下方。
+              開關文案沿用(含「要結清剩餘點數請先重新開啟」那段)。 */}
           <Card>
-            <CardHeader>
-              <CardTitle>點數設定</CardTitle>
-              <CardDescription>
-                啟用/停用紅利點數功能,以及消費點數比例、推薦獎勵、生日贈點,都在這裡一次設定。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-5">
+            <CardContent className="pt-6">
               {settingsLoading ? (
-                <LoadingSkeleton variant="lines" rows={4} />
+                <LoadingSkeleton variant="lines" rows={1} />
               ) : (
-                <>
-                  {/* skill 二之七:開關做成一整列;長說明拆成一行摘要 + 一條常駐 `!`
-                      (「關閉後系統不再自動給點數」是 skill 二點名的第二類)。 */}
-                  <SwitchRow
-                    id="points-feature-enabled"
-                    title="啟用紅利點數功能"
-                    description="控制整間店要不要跑紅利點數。"
-                    checked={settings ? settings.points_feature_enabled : true}
-                    disabled={savingFeatureToggle}
-                    onCheckedChange={handleToggleFeatureEnabled}
-                  >
-                    <AlertNote>
-                      關閉後<strong>系統就不再自動給點數了</strong>
-                      :客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
-                      顯示任何點數相關的數字與入口(要結清某位會員剩下的點數,請先重新開啟功能、
-                      結清後再關閉);既有的點數餘額與異動歷史不會被清空,重新開啟後會完整還原顯示。
-                    </AlertNote>
-                  </SwitchRow>
-
-                  <FormField
-                    label="消費點數比例(元/點)"
-                    htmlFor="points-earn-rate"
-                    error={parsedRate.ok ? null : parsedRate.error}
-                    help="每消費 N 元累積 1 點。目前是 0,代表還沒設定——請填入實際比例,系統不會自動幫你套用任何數字。只能填數字和小數點。"
-                    helpLabel="說明:消費點數比例怎麼設定"
-                  >
-                    <FieldInput
-                      id="points-earn-rate"
-                      type="text"
-                      inputMode="decimal"
-                      className="tabular-nums sm:w-40"
-                      value={pointsEarnRate}
-                      onChange={(e) => setPointsEarnRate(e.target.value)}
-                    />
-                  </FormField>
-                  {parsedRate.ok ? (
-                    // 即時回饋(不是可以收起來的補充)⇒ 常駐的預覽框,不收進 `?`。
-                    // 🔴 2026-09-30:守門從 `!Number.isNaN(numericRate)` 換成 parsedRate.ok ——
-                    // 舊條件在填 `Infinity` 時是 true,試算框會照著算出一個沒有意義的數字。
-                    <p className="-mt-3 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                      範例試算:一筆 1000 元的訂單,這位會員可以拿到{" "}
-                      <strong className="tabular-nums">
-                        {previewLoyaltyPoints(1000, parsedRate.value)}
-                      </strong>{" "}
-                      點(僅供參考,實際點數以訂單完成時系統計算為準,計算基準是含稅總額)。
-                    </p>
-                  ) : null}
-
-                  <FormField
-                    label="推薦獎勵點數"
-                    htmlFor="referral-bonus-points"
-                    error={parsedReferral.ok ? null : parsedReferral.error}
-                    help="被推薦人完成第一筆訂單時,推薦人可以拿到的點數。填 0 就是不發推薦獎勵。點數只能填整數。"
-                    helpLabel="說明:推薦獎勵什麼時候發"
-                  >
-                    <FieldInput
-                      id="referral-bonus-points"
-                      type="text"
-                      inputMode="numeric"
-                      className="tabular-nums sm:w-40"
-                      value={referralBonusPoints}
-                      onChange={(e) => setReferralBonusPoints(e.target.value)}
-                    />
-                  </FormField>
-
-                  <FormField
-                    label="生日贈點"
-                    htmlFor="birthday-bonus-points"
-                    error={parsedBirthday.ok ? null : parsedBirthday.error}
-                    help="生日當月核發的點數(以月為單位容錯,不是精確當天準時發放——商家下次打開會員管理列表頁時系統才會補發)。填 0 就是不發生日贈點。點數只能填整數。"
-                    helpLabel="說明:生日贈點什麼時候發"
-                  >
-                    <FieldInput
-                      id="birthday-bonus-points"
-                      type="text"
-                      inputMode="numeric"
-                      className="tabular-nums sm:w-40"
-                      value={birthdayBonusPoints}
-                      onChange={(e) => setBirthdayBonusPoints(e.target.value)}
-                    />
-                  </FormField>
-
-                  {/* 🔴 2026-09-30:有欄位填錯時擋住儲存,不能只顯示紅字。按鈕變灰就要說明原因
-                      (skill 二之三),所以配一條常駐 `!`。 */}
-                  {hasPointsFieldError ? (
-                    <AlertNote>
-                      上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。點數只能填整數,比例可以有小數點。
-                    </AlertNote>
-                  ) : null}
-                  {/* 這一頁唯一的 ① 主要按鈕(核發資格條件是選了就直接存,沒有按鈕)。 */}
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="touch"
-                    className="self-start"
-                    disabled={savingPoints || hasPointsFieldError}
-                    onClick={handleSavePoints}
-                  >
-                    {savingPoints ? "儲存中⋯" : "儲存"}
-                  </Button>
-                </>
+                <SwitchRow
+                  id="points-feature-enabled"
+                  title="啟用紅利點數功能"
+                  description="控制整間店要不要跑紅利點數。開啟後下方會出現四個設定分頁。"
+                  checked={settings ? settings.points_feature_enabled : false}
+                  disabled={savingFeatureToggle || !settings}
+                  onCheckedChange={(next) => void handleToggleFeatureEnabled(next)}
+                >
+                  <AlertNote>
+                    關閉後<strong>系統就不再自動給點數了</strong>
+                    :客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
+                    顯示任何點數相關的數字與入口(要結清某位會員剩下的點數,請先重新開啟功能、
+                    結清後再關閉);既有的點數餘額與異動歷史不會被清空,重新開啟後會完整還原顯示。
+                  </AlertNote>
+                </SwitchRow>
               )}
             </CardContent>
           </Card>
+
+          {showTabs && settings ? (
+            <MemberPointsSettingsTabs
+              merchantId={merchantId}
+              merchantName={merchant!.name}
+              settings={settings}
+            />
+          ) : null}
         </>
       ) : (
-        /* SPECS-INDEX #830:交易那一半搬走之後,只有 members、沒有 member_points 權限的客服打開這頁
-           會什麼卡片都看不到(守衛刻意不改,見檔案開頭)。這裡補一段說明,避免看起來像壞掉。 */
+        /* SPECS-INDEX #830:只有 members、沒有 member_points 權限的客服打開這頁會什麼卡片都看不到
+           (守衛刻意不改)。這裡補一段說明,避免看起來像壞掉。 */
         <Card>
           <CardContent className="pt-6">
             <EmptyState
