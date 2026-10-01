@@ -35,14 +35,27 @@
  * null 代表目前沒有待套用的新版本。 */
 let pendingWorker: ServiceWorker | null = null;
 
-type UpdateAvailableListener = () => void;
+/** 2026-10-01(#966 更新提示改成可按「稍後」收起的浮動卡片)新增:回呼時一併告訴訂閱者
+ * 「這是不是一個**剛剛才偵測到**的新版本」。
+ *   - `true`:這個分頁開著的期間,`updatefound` 真的裝好了一個新版本 —— 就算使用者剛才按過「稍後」,
+ *     這也是**又一個**新版本,卡片要再跳出來。
+ *   - `false`:只是「早就在等待中」的那一個 —— 訂閱當下立刻補發的那一次,或頁面載入時發現
+ *     `registration.waiting` 已經有東西(使用者上次按了「稍後」之後重新整理頁面)。
+ *     使用者在這次瀏覽期間已經按過「稍後」的話,這種不該再跳。
+ * 既有的呼叫端不看這個參數也完全不受影響。 */
+export interface UpdateAvailableInfo {
+  isNewDetection: boolean;
+}
+
+type UpdateAvailableListener = (info: UpdateAvailableInfo) => void;
 const updateAvailableListeners = new Set<UpdateAvailableListener>();
 
 /** 訂閱「有新版本待套用」這個狀態。訂閱當下如果已經有一個在等待中的新版本(例如元件是在
- * updatefound 事件觸發之後才掛載的),立刻回呼一次,不會漏接。回傳取消訂閱函式。 */
+ * updatefound 事件觸發之後才掛載的),立刻回呼一次(`isNewDetection: false`),不會漏接。
+ * 回傳取消訂閱函式。 */
 export function onServiceWorkerUpdateAvailable(listener: UpdateAvailableListener): () => void {
   updateAvailableListeners.add(listener);
-  if (pendingWorker) listener();
+  if (pendingWorker) listener({ isNewDetection: false });
   return () => {
     updateAvailableListeners.delete(listener);
   };
@@ -59,9 +72,9 @@ export function applyPendingServiceWorkerUpdate(): void {
   worker.postMessage({ type: "SKIP_WAITING" });
 }
 
-function markUpdateAvailable(worker: ServiceWorker): void {
+function markUpdateAvailable(worker: ServiceWorker, isNewDetection: boolean): void {
   pendingWorker = worker;
-  updateAvailableListeners.forEach((listener) => listener());
+  updateAvailableListeners.forEach((listener) => listener({ isNewDetection }));
 }
 
 export function registerServiceWorkerAutoUpdate(): void {
@@ -73,7 +86,7 @@ export function registerServiceWorkerAutoUpdate(): void {
       // 「重新整理」),視同「偵測到新版本」,通知訂閱者顯示提示條——不再像舊版一樣立刻自動送出
       // SKIP_WAITING。
       if (registration.waiting) {
-        markUpdateAvailable(registration.waiting);
+        markUpdateAvailable(registration.waiting, false);
       }
 
       // 監聽這個 registration 之後偵測到的任何新版本(不論是瀏覽器自己在導覽時檢查到的,
@@ -86,7 +99,7 @@ export function registerServiceWorkerAutoUpdate(): void {
           // 「第一次安裝」,而是「已經有舊版本在跑,新版本裝好了」——這才是需要提示使用者更新的
           // 情境。只記錄狀態、通知訂閱者,不自動套用。
           if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-            markUpdateAvailable(installingWorker);
+            markUpdateAvailable(installingWorker, true);
           }
         });
       });

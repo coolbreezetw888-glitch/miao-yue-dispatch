@@ -19,9 +19,20 @@
  */
 
 @theme inline {
+  /*
+   * 2026-10-01(SPECS-INDEX #968)全站字體改成跟參考系統(ac-booking.zeabur.app)同一套「系統字」堆疊,
+   * 數值直接從對方的 CSS(body 規則)抓下來:
+   *   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+   *                "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif
+   * 實際會用到的字:iPhone / Mac = 蘋方(PingFang TC)+ SF;Windows 11 = 系統內建的 Noto Sans TC
+   * (可變字重,600 半粗體是真的 600,不是瀏覽器用 700 硬湊);Android = 系統的 Noto Sans CJK。
+   * 原本是 Inter(英數)+ Google Fonts 下載的 Noto Sans TC(只載了 400/500/700/900,所以全站大量的
+   * font-semibold 600 其實被渲染成 700,字看起來偏粗偏擠)。index.html 的 Google Fonts 連結已一併拿掉
+   * ⇒ 不再下載任何網路字型,首頁少一次跨網域請求。
+   */
   --font-sans:
-    "Inter", ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang TC",
+    "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
   --color-brand-foreground: var(--brand-foreground);
@@ -205,5 +216,11 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    /* 2026-10-01(#968)照參考系統的 body:字距 -0.01em(中文字稍微收緊,看起來比較「緊實」)、
+       灰階反鋸齒(Mac / iOS 上字比較細緻;Windows 不支援這兩個屬性,自動忽略)。
+       行高沿用 Tailwind 預設 1.5,跟參考系統相同。 */
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }

@@ -426,9 +426,8 @@ export default function AppLayout() {
           </div>
         </header>
 
-        {/* 模組 7 §6.4 修正(2026-09-20 主腦複查):新版本待套用時的提示條。
-            2026-09-24:從 `fixed top-0` 改成排在頁首正下方、跟著頁首一起吸頂,原因見上方 ⚠️。 */}
-        <UpdateAvailableHint />
+        {/* 2026-10-01(#966):新版本提示已經從這裡(頁首正下方)搬到畫面底部的浮動卡片,
+            見下方 <UpdateAvailableHint /> 與該元件檔頭說明。上面 ⚠️ 那段是搬走之前的歷史脈絡。 */}
       </div>
 
       {/* 2026-09-24 線上故障修正:雙重身分的切換入口從「只在商家切換器下拉選單最底部」改成
@@ -447,11 +446,34 @@ export default function AppLayout() {
           PWA 這次疊加在既有 /app 殼層上,不是獨立服務人員端)。 */}
       <InstallPwaHint />
 
+      {/* 2026-10-01(#966):新版本提示改成底部深色浮動卡片,浮在分頁籤列上方、不蓋住分頁籤列。
+          位置由元件自己從 src/lib/fixedLayers.ts 取(有動作列時自動往上讓),跟 InstallPwaHint
+          共用同一套堆疊訊號,兩者同時出現時安裝提示會排到卡片上方。 */}
+      <UpdateAvailableHint />
+
       {/* 位置/層級取自 src/lib/fixedLayers.ts 的 BOTTOM_LAYER_TAB_BAR,不在這裡寫死
           `fixed inset-x-0 bottom-0 z-50`(2026-09-24 的待辦:那個常數原本只是登記在該檔案裡當
-          文件,這次改由這裡真的 import 它,行為完全一樣)。 */}
-      <nav className={cn(BOTTOM_LAYER_TAB_BAR, "border-t border-border bg-background")}>
-        <div className="mx-auto flex max-w-5xl items-stretch justify-around">
+          文件,這次改由這裡真的 import 它,行為完全一樣)。
+
+          2026-10-01(#967)外觀照參考系統(ac-booking.zeabur.app 的 JS bundle 實際抓到的 class:
+          nav `h-16 box-content` + 安全區 padding;每格 `flex-col items-center justify-center gap-0.5`;
+          圖示 20px(未選中線條 1.8、選中實心);文字 `text-[10px] font-medium leading-none`)。
+          只改外觀,分頁籤項目 / 順序 / 路由 / 權限邏輯一律不動(resolveTabs 沒碰)。
+            改前:每格 py-2.5、gap-1(4px)、圖示 20px 線條 2、文字 12px(選中 600 / 未選中 400)、
+                  選單總高約 61px(含 1px 上框線)。
+            改後:選單固定 64px(內容 63px + 1px 上框線)、內容垂直置中、gap-0.5(2px)、
+                  圖示 20px(未選中線條 1.8;選中線條 2 + 20% 品牌色填色,模擬參考系統的實心圖示)、
+                  文字 10px / font-medium(500)/ leading-none,選中與未選中同字重(靠顏色區分)。
+          ⚠️ 高度刻意是 64px:src/lib/fixedLayers.ts 的動作列 / 提示條都用 bottom-16(64px)讓開分頁籤列,
+          高度改了那邊要一起改。底部安全區用 padding 外加(env(...) 目前因為沒有 viewport-fit=cover
+          恆為 0,見 UpdateAvailableHint.tsx 說明)。 */}
+      <nav
+        className={cn(
+          BOTTOM_LAYER_TAB_BAR,
+          "border-t border-border bg-background pb-[env(safe-area-inset-bottom)]",
+        )}
+      >
+        <div className="mx-auto flex h-[63px] max-w-5xl items-stretch justify-around">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = tab.isActive(location.pathname);
@@ -460,14 +482,16 @@ export default function AppLayout() {
                 key={tab.to}
                 to={tab.to}
                 className={cn(
-                  "flex flex-1 flex-col items-center gap-1 py-2.5 text-xs transition-colors",
-                  active
-                    ? "font-semibold text-brand"
-                    : "text-muted-foreground hover:text-foreground",
+                  "flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
+                  active ? "text-brand" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Icon className="h-5 w-5" />
-                <span>{tab.label}</span>
+                <Icon
+                  aria-hidden="true"
+                  className={cn("size-5", active && "fill-brand/20")}
+                  strokeWidth={active ? 2 : 1.8}
+                />
+                <span className="text-[10px] leading-none font-medium">{tab.label}</span>
               </Link>
             );
           })}

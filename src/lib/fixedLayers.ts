@@ -41,23 +41,30 @@
 //         這兩個刻意用同一個數字:一個永遠貼在畫面最上面(高 56px),一個永遠貼在畫面下緣,
 //         幾何上不可能重疊,所以不需要分出先後;真正要表達的是「它們同屬『使用者當下要操作的
 //         東西』這一級,都比提示條高」。
-//   z-30  提示條(BOTTOM_LAYER_HINT / BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR)
+//   z-30  提示條(BOTTOM_LAYER_HINT* / BOTTOM_LAYER_UPDATE_CARD*)
 //         最低優先,重疊時該被蓋住的是它。
 //
 // ⚠️ 頁首刻意用 `sticky` 而不是 `fixed`:sticky 元件仍然佔著文件流裡的高度,所以 <main> 不需要
 // 另外補 padding-top;改成 fixed 的話,忘記補 padding 就會讓每一頁的第一行內容被頁首蓋掉
 // (而且是「只有捲到最上面時看不到」這種很容易在開發機上漏掉的症狀)。
 //
-// ⚠️ 頂部沒有「提示條」這一層是刻意的:新版本提示(src/components/UpdateAvailableHint.tsx)
-// 2026-09-24 已經從 `fixed top-0` 改成「在文件流裡、排在頁首正下方、跟著頁首一起吸頂」,
-// 它自己不再需要任何 top-*/z-* —— 一個排在文件流裡的元件不可能蓋住別人,這是比「小心挑 z-index」
-// 更根本的解法。詳見該檔案與 AppLayout.tsx 的說明。
+// ⚠️ 頂部沒有「提示條」這一層是刻意的。新版本提示(src/components/UpdateAvailableHint.tsx)
+// 2026-09-24 曾經從 `fixed top-0` 改成「在文件流裡、排在頁首正下方」;**2026-10-01(#966)使用者
+// 指定改成參考系統那種「底部深色浮動卡片」**,回到底部,所以在下面「底部」區新增了
+// BOTTOM_LAYER_UPDATE_CARD 這一組(這次它有「稍後」可以收起,不會再發生「關不掉又蓋住東西」)。
 //
 // 版面數字(Tailwind 間距,1 = 0.25rem = 4px):
 //   top-0     = 0px    頁首吸頂位置(頁首本體高 h-14 = 56px)
-//   bottom-0  = 0px    分頁籤列本體(高約 60px)
+//   bottom-0  = 0px    分頁籤列本體(2026-10-01 #967 起固定 h-16 = 64px,含上框線)
 //   bottom-16 = 64px   剛好讓開分頁籤列的高度
 //   bottom-36 = 144px  讓開分頁籤列(64px)+ 一條動作列(約 64px)+ 16px 呼吸空間
+//   bottom-40 = 160px  讓開分頁籤列(64px)+ 更新卡片(含上下留白,320px 寬時最高約 86px)+ 呼吸空間
+//   bottom-60 = 240px  讓開分頁籤列 + 動作列 + 更新卡片 + 呼吸空間(三樣同時出現的最壞情況)
+//
+// 底部「同時可能出現」的東西,由下往上的固定順序(2026-10-01 #966 定案):
+//   分頁籤列 → 動作列(若有)→ 新版本卡片(若有)→ PWA 安裝提示(若有)
+// 每一層要往上讓多少,由「它下面那幾層現在有沒有出現」決定,訊號一律用本檔下方的
+// acquire*Slot / useHas* 這一套(同一個小型訂閱器,不另起一套)。
 
 import { useSyncExternalStore } from "react";
 
@@ -94,6 +101,47 @@ export const BOTTOM_LAYER_HINT = "fixed inset-x-0 bottom-16 z-30";
  * 不會是使用者正要按的那顆儲存按鈕。 */
 export const BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR = "fixed inset-x-0 bottom-36 z-30";
 
+/** 第 3 層的「讓位版本」之二(2026-10-01 #966):畫面上有「新版本」卡片時,安裝提示要排到卡片上方。 */
+export const BOTTOM_LAYER_HINT_ABOVE_UPDATE_CARD = "fixed inset-x-0 bottom-40 z-30";
+
+/** 第 3 層的「讓位版本」之三:動作列 + 新版本卡片都在時,安裝提示排在最上面。 */
+export const BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR_AND_UPDATE_CARD = "fixed inset-x-0 bottom-60 z-30";
+
+/** 依「下面現在有哪些東西」挑安裝提示的位置。純函式,方便單元測試直接驗。 */
+export function pickBottomHintLayer(opts: {
+  hasActionBar: boolean;
+  hasUpdateCard: boolean;
+}): string {
+  if (opts.hasActionBar && opts.hasUpdateCard) {
+    return BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR_AND_UPDATE_CARD;
+  }
+  if (opts.hasUpdateCard) return BOTTOM_LAYER_HINT_ABOVE_UPDATE_CARD;
+  if (opts.hasActionBar) return BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR;
+  return BOTTOM_LAYER_HINT;
+}
+
+/** 新版本卡片(2026-10-01 #966,src/components/UpdateAvailableHint.tsx)——**浮在分頁籤列上方,
+ * 絕對不可蓋住分頁籤列**(主腦裁定)。跟安裝提示同屬「提示」等級(z-30),所以就算哪天數字沒算準,
+ * 被蓋住的也是它,不會是分頁籤或儲存按鈕。卡片跟分頁籤之間的 8px 留白由元件自己的 padding 負責。 */
+export const BOTTOM_LAYER_UPDATE_CARD = "fixed inset-x-0 bottom-16 z-30";
+
+/** 新版本卡片的「讓位版本」:畫面上有動作列(例如「尚未儲存變更 / 儲存變更」)時,排到動作列上方。 */
+export const BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR = "fixed inset-x-0 bottom-36 z-30";
+
+/** 新版本卡片的「沒有分頁籤列」版本:頁面本身沒有底部選單時(目前只有 AppLayout 會掛這張卡片,
+ * 而 AppLayout 在所有寬度都有分頁籤,所以這個版本暫時沒有使用端;預留給之後掛到登入頁/客戶端時用)。
+ * 貼齊畫面底部,安全區(iPhone 底部橫條)由元件自己用 env(safe-area-inset-bottom) 補 padding。 */
+export const BOTTOM_LAYER_UPDATE_CARD_NO_TAB_BAR = "fixed inset-x-0 bottom-0 z-30";
+
+/** 依「下面現在有哪些東西」挑新版本卡片的位置。 */
+export function pickBottomUpdateCardLayer(opts: {
+  hasTabBar: boolean;
+  hasActionBar: boolean;
+}): string {
+  if (!opts.hasTabBar) return BOTTOM_LAYER_UPDATE_CARD_NO_TAB_BAR;
+  return opts.hasActionBar ? BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR : BOTTOM_LAYER_UPDATE_CARD;
+}
+
 // ---------------------------------------------------------------------------
 // 「畫面上現在有沒有動作列」的共用訊號。
 //
@@ -104,12 +152,46 @@ export const BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR = "fixed inset-x-0 bottom-36 z-3
 // 標準做法,不需要任何共同祖先,也不會在每次 render 時重新建立物件。
 // ---------------------------------------------------------------------------
 
-let activeBottomActionBarCount = 0;
-const bottomActionBarListeners = new Set<() => void>();
-
-function emitBottomActionBarChange() {
-  for (const listener of bottomActionBarListeners) listener();
+// 2026-10-01(#966)起同一套訂閱器要管兩種訊號(動作列、新版本卡片),所以抽成一個小工廠,
+// 兩種訊號共用同一份實作 —— 行為跟原本只有動作列時完全一樣(計數、重複 release 不重複扣)。
+function createSlotSignal() {
+  let count = 0;
+  const listeners = new Set<() => void>();
+  const emit = () => {
+    for (const listener of listeners) listener();
+  };
+  const subscribe = (onStoreChange: () => void) => {
+    listeners.add(onStoreChange);
+    return () => {
+      listeners.delete(onStoreChange);
+    };
+  };
+  const getSnapshot = () => count > 0;
+  return {
+    acquire(): () => void {
+      count += 1;
+      emit();
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        count -= 1;
+        emit();
+      };
+    },
+    useHas(): boolean {
+      // 伺服器端渲染 / 預先渲染時永遠當作「沒有」(那時候本來就不會有使用者正在編輯的表單或待套用的新版本)。
+      return useSyncExternalStore(subscribe, getSnapshot, () => false);
+    },
+    reset(): void {
+      count = 0;
+      emit();
+    },
+  };
 }
+
+const bottomActionBarSignal = createSlotSignal();
+const bottomUpdateCardSignal = createSlotSignal();
 
 /**
  * 宣告「我現在有一條底部動作列」。回傳一個「收回宣告」的函式,直接當成 useEffect 的 cleanup 用:
@@ -125,40 +207,26 @@ function emitBottomActionBarChange() {
  * 不會把還在畫面上的另一條一起「關掉」。重複呼叫回傳的收回函式不會重複扣數。
  */
 export function acquireBottomActionBarSlot(): () => void {
-  activeBottomActionBarCount += 1;
-  emitBottomActionBarChange();
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    activeBottomActionBarCount -= 1;
-    emitBottomActionBarChange();
-  };
-}
-
-function subscribeBottomActionBar(onStoreChange: () => void): () => void {
-  bottomActionBarListeners.add(onStoreChange);
-  return () => {
-    bottomActionBarListeners.delete(onStoreChange);
-  };
-}
-
-function getBottomActionBarSnapshot(): boolean {
-  return activeBottomActionBarCount > 0;
+  return bottomActionBarSignal.acquire();
 }
 
 /** 畫面上目前是不是有一條底部動作列。提示條用這個值決定要不要往上讓開。 */
 export function useHasBottomActionBar(): boolean {
-  return useSyncExternalStore(
-    subscribeBottomActionBar,
-    getBottomActionBarSnapshot,
-    // 伺服器端渲染 / 預先渲染時永遠當作沒有動作列(那時候本來就不會有使用者正在編輯的表單)。
-    () => false,
-  );
+  return bottomActionBarSignal.useHas();
+}
+
+/** 宣告「畫面上現在有新版本卡片」(#966)。用法同 acquireBottomActionBarSlot。 */
+export function acquireBottomUpdateCardSlot(): () => void {
+  return bottomUpdateCardSignal.acquire();
+}
+
+/** 畫面上目前是不是有新版本卡片。PWA 安裝提示用這個值決定要不要排到卡片上方。 */
+export function useHasBottomUpdateCard(): boolean {
+  return bottomUpdateCardSignal.useHas();
 }
 
 /** 測試專用:把計數歸零,避免某個測試沒收乾淨影響到下一個測試。正式程式碼不要呼叫。 */
 export function resetBottomActionBarsForTest(): void {
-  activeBottomActionBarCount = 0;
-  emitBottomActionBarChange();
+  bottomActionBarSignal.reset();
+  bottomUpdateCardSignal.reset();
 }

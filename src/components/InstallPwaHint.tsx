@@ -23,11 +23,13 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { isMobileDevice } from "@/lib/deviceDetection";
+// 2026-10-01(#966):位置改由 pickBottomHintLayer 依「下面有沒有動作列 / 新版本卡片」挑選,
+// 直接從 fixedLayers.ts 取(bottomFixedLayers.ts 只是舊路徑的相容外殼)。
 import {
-  BOTTOM_LAYER_HINT,
-  BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR,
+  pickBottomHintLayer,
   useHasBottomActionBar,
-} from "@/lib/bottomFixedLayers";
+  useHasBottomUpdateCard,
+} from "@/lib/fixedLayers";
 import { cn } from "@/lib/utils";
 
 const DISMISS_STORAGE_KEY = "miaoyue_pwa_install_hint_dismissed_at";
@@ -48,6 +50,8 @@ export default function InstallPwaHint() {
   const [dismissed, setDismissed] = useState(true);
   // 畫面上同時有動作列(目前是商家設定頁的「尚未儲存變更」提示列)時,這條提示往上讓開。
   const hasBottomActionBar = useHasBottomActionBar();
+  // 畫面上同時有「新版本」卡片(UpdateAvailableHint)時,這條提示排到卡片上方,兩者不互相遮擋。
+  const hasBottomUpdateCard = useHasBottomUpdateCard();
 
   useEffect(() => {
     setIsStandalone(isRunningStandalone());
@@ -96,7 +100,10 @@ export default function InstallPwaHint() {
   return (
     <div
       className={cn(
-        hasBottomActionBar ? BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR : BOTTOM_LAYER_HINT,
+        pickBottomHintLayer({
+          hasActionBar: hasBottomActionBar,
+          hasUpdateCard: hasBottomUpdateCard,
+        }),
         "mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3 shadow-lg",
       )}
     >

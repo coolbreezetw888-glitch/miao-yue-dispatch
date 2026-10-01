@@ -22,6 +22,13 @@ import {
   BOTTOM_LAYER_TAB_BAR,
   resetBottomActionBarsForTest,
 } from "./bottomFixedLayers";
+import {
+  acquireBottomUpdateCardSlot,
+  BOTTOM_LAYER_HINT_ABOVE_UPDATE_CARD,
+  BOTTOM_LAYER_UPDATE_CARD,
+  BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR,
+  pickBottomHintLayer,
+} from "./fixedLayers";
 
 /** 從 class 字串裡讀出 `bottom-N` 的 N(Tailwind 間距單位,1 = 4px)。 */
 function bottomOf(className: string): number {
@@ -126,5 +133,54 @@ describe("useHasBottomActionBar / acquireBottomActionBarSlot", () => {
     expect(bottomOf(container?.className ?? "")).toBe(bottomOf(BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR));
 
     releaseB();
+  });
+});
+
+// 2026-10-01(#966):新版本卡片改到底部之後,底部多了一層。由下往上固定是
+// 分頁籤列 → 動作列 → 新版本卡片 → PWA 安裝提示,這裡守「安裝提示會讓開卡片」。
+describe("新版本卡片與 PWA 安裝提示的堆疊(#966)", () => {
+  afterEach(() => {
+    cleanup();
+    resetBottomActionBarsForTest();
+    window.localStorage.clear();
+  });
+
+  it("pickBottomHintLayer:有卡片 / 有動作列 / 兩者都有時,安裝提示的 bottom 依序往上,而且都高於卡片", () => {
+    const none = bottomOf(pickBottomHintLayer({ hasActionBar: false, hasUpdateCard: false }));
+    const bar = bottomOf(pickBottomHintLayer({ hasActionBar: true, hasUpdateCard: false }));
+    const card = bottomOf(pickBottomHintLayer({ hasActionBar: false, hasUpdateCard: true }));
+    const both = bottomOf(pickBottomHintLayer({ hasActionBar: true, hasUpdateCard: true }));
+    expect(none).toBe(bottomOf(BOTTOM_LAYER_HINT));
+    expect(bar).toBe(bottomOf(BOTTOM_LAYER_HINT_ABOVE_ACTION_BAR));
+    // 卡片本身(含上下 8px 留白)在 320px 寬時最高約 86px ⇒ 安裝提示至少要比卡片的 bottom 高 20 個單位(80px)。
+    expect(card).toBeGreaterThanOrEqual(bottomOf(BOTTOM_LAYER_UPDATE_CARD) + 20);
+    expect(both).toBeGreaterThanOrEqual(bottomOf(BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR) + 20);
+    expect(both).toBeGreaterThan(card);
+    expect(both).toBeGreaterThan(bar);
+  });
+
+  it("新版本卡片的 z-index 跟安裝提示同級(都是提示),低於動作列與分頁籤列", () => {
+    for (const layer of [BOTTOM_LAYER_UPDATE_CARD, BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR]) {
+      expect(zIndexOf(layer)).toBeLessThan(zIndexOf(BOTTOM_LAYER_ACTION_BAR));
+      expect(zIndexOf(layer)).toBeLessThan(zIndexOf(BOTTOM_LAYER_TAB_BAR));
+    }
+    expect(bottomOf(BOTTOM_LAYER_UPDATE_CARD_ABOVE_ACTION_BAR)).toBeGreaterThanOrEqual(
+      bottomOf(BOTTOM_LAYER_ACTION_BAR) + 16,
+    );
+  });
+
+  it("畫面上有新版本卡片時,實際渲染出來的安裝提示排到卡片上方", async () => {
+    Object.defineProperty(navigator, "userAgent", { configurable: true, value: IOS_SAFARI_UA });
+    const release = acquireBottomUpdateCardSlot();
+    render(<InstallPwaHint />);
+    const hint = await screen.findByText(/加入主畫面/);
+    const container = hint.closest("div.fixed");
+    expect(bottomOf(container?.className ?? "")).toBe(
+      bottomOf(BOTTOM_LAYER_HINT_ABOVE_UPDATE_CARD),
+    );
+    expect(bottomOf(container?.className ?? "")).toBeGreaterThan(
+      bottomOf(BOTTOM_LAYER_UPDATE_CARD),
+    );
+    release();
   });
 });

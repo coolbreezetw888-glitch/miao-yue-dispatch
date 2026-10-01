@@ -16,12 +16,9 @@
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="/favicon.ico" type="image/x-icon" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap"
-    />
+    <!-- 2026-10-01(#968):不再載入 Google Fonts(原本是 Inter + Noto Sans TC)。全站改用跟參考系統
+         相同的系統字堆疊(蘋方 / SF / 系統內建 Noto Sans TC / 微軟正黑體),定義在 src/styles.css 的
+         --font-sans,說明也在那裡。 -->
     <!-- 模組 7(排班與休假管理)§6.3:PWA 可安裝性。manifest 內容參考 public/manifest.json,
          start_url/scope 都指到 /app(後台殼層),不是行銷首頁——安裝這個動作的使用者絕大多數
          已經是商家/客服。iOS Safari 對標準 manifest 支援不完整,以下幾個 iOS 專屬 meta/link 標籤

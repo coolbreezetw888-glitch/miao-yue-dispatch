@@ -627,7 +627,12 @@ function OrderCard({
             ? "inactive"
             : "default"
       }
-      className="border-l-4 hover:border-[color:var(--order-card-hover-border)]"
+      // 🔴 2026-10-01(SPECS-INDEX #970)使用者要求:訂單管理列表的卡片**所有狀態一律白底**
+      // (參考圖 .project/notes/ui-ref-2026-10-01/59-訂單管理卡片底色-改回白底.png)。
+      // 只覆寫背景(bg-card,cn 是 tailwind-merge,後寫的 bg-* 會蓋掉 ListCard state 帶的
+      // bg-warn-soft / bg-muted/50);state 仍照舊傳,所以待確認的黃框、已取消的淡色標題、
+      // 左側狀態色條、狀態膠囊顏色都維持不變。只限這個列表,其他頁的 ListCard 不受影響。
+      className="border-l-4 bg-card hover:border-[color:var(--order-card-hover-border)]"
       style={
         {
           ...bookingCardAccentBorderStyle(statusColors, status),
