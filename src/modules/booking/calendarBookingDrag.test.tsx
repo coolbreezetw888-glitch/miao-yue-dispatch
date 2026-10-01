@@ -156,7 +156,7 @@ function Harness({
 }: {
   dateKey: string;
   staffBlocks: DayScheduleStaffBlock[];
-  onOpenDetail: (id: string) => void;
+  onOpenDetail: (id: string, opener: { role: "main" | "assistant"; staffId: string }) => void;
   onMoved: () => void;
 }) {
   const controller = useCalendarBookingDrag({
@@ -374,7 +374,19 @@ describe("點擊 vs 拖曳(#812;坑 2、坑 3)", () => {
   it("按下後移動 ≤ 10px 就放開 = 點擊 → 開詳情,不打 RPC", () => {
     renderHarness();
     mouseDrag(mainBlock(), T1_MAIN_CENTER, { x: 175, y: 195 });
-    expect(onOpenDetail).toHaveBeenCalledWith("t1");
+    expect(onOpenDetail).toHaveBeenCalledWith("t1", { role: "main", staffId: A });
+    expect(moveBookingMock).not.toHaveBeenCalled();
+  });
+
+  // SPECS-INDEX #873:從「(協助)」色塊點開詳情時,要告訴詳情「是協助卡、是哪一欄」,
+  // 詳情才會給「移除協助人員」而不是「取消預約」(原本只傳 booking id,協助卡按取消 = 整張單被取消)。
+  it("#873 點「(協助)」色塊 → 開詳情時帶 role=assistant + 那一欄的服務人員 id", () => {
+    renderHarness();
+    mouseDrag(assistantBlock(), T1_ASSISTANT_CENTER, {
+      x: T1_ASSISTANT_CENTER.x + 3,
+      y: T1_ASSISTANT_CENTER.y + 3,
+    });
+    expect(onOpenDetail).toHaveBeenCalledWith("t1", { role: "assistant", staffId: B });
     expect(moveBookingMock).not.toHaveBeenCalled();
   });
 
@@ -408,7 +420,7 @@ describe("點擊 vs 拖曳(#812;坑 2、坑 3)", () => {
     expect(setPointerCaptureSpy).not.toHaveBeenCalled();
     expect(moveBookingMock).not.toHaveBeenCalled();
     fireEvent.click(done);
-    expect(onOpenDetail).toHaveBeenCalledWith("t2");
+    expect(onOpenDetail).toHaveBeenCalledWith("t2", { role: "main", staffId: A });
   });
 
   it("滑鼠右鍵按下不啟動拖拉", () => {
@@ -834,7 +846,7 @@ describe("手機觸控:長按才拖,長按前滑動 = 捲動(#817 Q4=B;坑 1、�
       vi.advanceTimersByTime(120);
     });
     fireEvent.pointerUp(el, ptr({ pointerType: "touch", ...T1_MAIN_CENTER }));
-    expect(onOpenDetail).toHaveBeenCalledWith("t1");
+    expect(onOpenDetail).toHaveBeenCalledWith("t1", { role: "main", staffId: A });
   });
 
   it("坑 6:色塊 contextmenu 被 preventDefault,且有 select-none / -webkit-touch-callout 靜態 class", () => {

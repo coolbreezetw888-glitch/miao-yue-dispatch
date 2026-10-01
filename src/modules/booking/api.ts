@@ -610,6 +610,34 @@ export async function updateBookingPaymentMethod(
   return data as Booking;
 }
 
+/** SPECS-INDEX #873:remove_booking_assistant 的回傳。 */
+export interface RemoveBookingAssistantResult {
+  booking_id: string;
+  booking_status: string;
+  removed_staff_id: string;
+  removed_staff_name: string | null;
+  primary_staff_id: string;
+  primary_staff_name: string | null;
+  remaining_assistant_count: number;
+}
+
+/**
+ * SPECS-INDEX #873:只移除一位協助人員(副服務人員),訂單本身與主服務人員的單完全不動。
+ * 🔴 刻意**不**發任何 LINE / 推播:訂單沒有取消,不能發「訂單取消」;系統也沒有「指派變更」這種通知事件。
+ * 被移除那位的服務人員端行事曆,由資料庫 #874 的 booking_assistants trigger 發「請重查」訊號。
+ */
+export async function removeBookingAssistant(
+  bookingId: string,
+  staffId: string,
+): Promise<RemoveBookingAssistantResult> {
+  const { data, error } = await supabase.rpc("remove_booking_assistant", {
+    p_booking_id: bookingId,
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+  return data as unknown as RemoveBookingAssistantResult;
+}
+
 /** 建單功能擴充 4.8/決策記錄 5(新增):把 pending_confirmation 轉成 accepted。 */
 export async function confirmBooking(bookingId: string): Promise<Booking> {
   const { data, error } = await supabase.rpc("confirm_booking", {

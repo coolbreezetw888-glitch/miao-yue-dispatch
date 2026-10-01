@@ -121,6 +121,9 @@ import {
   type BookingServiceItemSelectionInput,
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+// SPECS-INDEX #873:移除協助人員後「維持現狀 / 再加助手」的擋流程提示。
+import { AssistantRemovedPrompt } from "./assistantRemoval";
+import { assistantRemovedInfoAfterEdit, type AssistantRemovedInfo } from "./assistantRemovalLogic";
 // 紅利系統重構 批次 7(§4.6,#842/#799):建單 / 編輯表單的紅利區塊。判斷邏輯在 bookingPointsLogic.ts,
 // 預覽 hook 在 useBookingPointsPreview.ts,畫面在 BookingPointsSection.tsx。
 import { BookingPointsSection } from "./BookingPointsSection";
@@ -183,6 +186,7 @@ import {
   DraggableBookingBlock,
   PastDropConfirmDialog,
   useCalendarBookingDrag,
+  type BookingDetailOpener,
 } from "./calendarBookingDrag";
 // 2026-09-24 稽核修正(問題 1):數量欄位清空時三處 fallback 不一致(畫面顯示 $0、實際送出全額),
 // 統一走這支共用解析函式,見該檔案開頭的完整說明。
@@ -392,6 +396,7 @@ export function BookingFormDialog({
   prefill,
   editingBookingId,
   onSaved,
+  focusAssistants = false,
 }: {
   merchantId: string;
   industryType: IndustryType;
@@ -400,8 +405,17 @@ export function BookingFormDialog({
   prefill: BookingFormPrefill;
   editingBookingId: string | null;
   onSaved: () => void;
+  /** SPECS-INDEX #873:「再加助手」打開編輯表單時,載入後自動捲到「助手」欄位。 */
+  focusAssistants?: boolean;
 }) {
   const isEdit = Boolean(editingBookingId);
+  // SPECS-INDEX #873 路徑 (b):編輯表單把助手拿掉(而且沒加新的)儲存成功後,跳擋流程二選一提示。
+  // 提示放在表單元件自己身上(表單關掉後元件還掛著),行事曆與訂單管理兩個入口都會有,不用各接一次。
+  const [editAssistantRemoved, setEditAssistantRemoved] = useState<AssistantRemovedInfo | null>(
+    null,
+  );
+  const [reopenFocusAssistants, setReopenFocusAssistants] = useState(false);
+  const assistantsFieldRef = useRef<HTMLDivElement>(null);
   const { data: staffList } = useMerchantStaffList(merchantId);
   const { data: serviceItems } = useMerchantServiceItems(merchantId);
   // SPECS-INDEX #598(訂單管理.md §9.2):服務項目勾選區塊上方的分類篩選下拉選單,純前端依既有
@@ -1241,6 +1255,15 @@ export function BookingFormDialog({
           ...(changeSummary ? { changeSummary } : {}),
         });
         toast.success("已更新預約");
+        if (editingDetail) {
+          const removedInfo = assistantRemovedInfoAfterEdit({
+            bookingId: editingBookingId,
+            originalAssistants: editingDetail.assistants,
+            nextAssistantStaffIds: assistantStaffIds,
+            primaryName: staffList?.find((s) => s.id === staffId)?.name ?? "(未知人員)",
+          });
+          if (removedInfo) setEditAssistantRemoved(removedInfo);
+        }
       } else {
         const created = await createBooking({
           merchantId,
@@ -1275,6 +1298,19 @@ export function BookingFormDialog({
 
   const assistantCandidates = (staffList ?? []).filter((s) => s.id !== staffId);
 
+  // SPECS-INDEX #873:「再加助手」進來的編輯表單,資料載入後捲到「助手」欄位(沿用既有加助手 UI)。
+  const wantFocusAssistants = focusAssistants || reopenFocusAssistants;
+  useEffect(() => {
+    if (!open || !wantFocusAssistants || !editingDetail) return;
+    const raf = requestAnimationFrame(() => {
+      assistantsFieldRef.current?.scrollIntoView?.({ block: "center" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, wantFocusAssistants, editingDetail]);
+  useEffect(() => {
+    if (!open) setReopenFocusAssistants(false);
+  }, [open]);
+
   // skill 二之九:選中的服務項目展開成卡片(永遠顯示,不受分類篩選影響),沒選的縮成小方塊排在下面
   // (受分類篩選影響)。已勾選但目前不在上架清單裡的項目(編輯舊訂單時遇到已下架項目)維持改版前的
   // 行為:表單上看不到、但送出時仍原封不動帶回去。
@@ -1301,7 +1337,9 @@ export function BookingFormDialog({
         ? pointsOriginal.planned
         : pointsSuggested;
 
-  return (
+  // SPECS-INDEX #873:全頁層先存成變數再跟擋流程提示並排回傳(表單關掉後提示還要掛著),
+  // 刻意不包一層 <> 直接回傳,避免整個表單 JSX 重新縮排、diff 爆量。
+  const formLayer = (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
         title={isEdit ? "編輯預約" : "新增預約"}
@@ -1420,7 +1458,11 @@ export function BookingFormDialog({
                 因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。
                 skill 二之七:多選用可點的方塊(ChoiceChip),不用打勾方框。 */}
             <FormField label="助手(可留空,可多選)">
-              <div className="flex flex-col gap-2.5">
+              <div
+                ref={assistantsFieldRef}
+                data-testid="booking-form-assistants"
+                className="flex flex-col gap-2.5"
+              >
                 {!staffId ? <AlertNote>請先選擇服務人員,才能指派助手。</AlertNote> : null}
                 {assistantCandidates.length === 0 ? (
                   <p className="text-[13px] text-muted-foreground">沒有其他可指派的服務人員。</p>
@@ -2032,6 +2074,23 @@ export function BookingFormDialog({
       </FullPageLayerContent>
     </FullPageLayer>
   );
+
+  return (
+    <>
+      {formLayer}
+      {/* SPECS-INDEX #873 路徑 (b):表單已經關掉之後才出現(單層,不是兩層重疊)。
+          「再加助手」= 重新打開同一張單的編輯表單並捲到助手欄位;「維持現狀」= 只關掉提示。 */}
+      <AssistantRemovedPrompt
+        info={editAssistantRemoved}
+        onKeep={() => setEditAssistantRemoved(null)}
+        onAddAnother={() => {
+          setEditAssistantRemoved(null);
+          setReopenFocusAssistants(true);
+          onOpenChange(true);
+        }}
+      />
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2327,18 +2386,31 @@ function CalendarPageInner() {
   const [formPrefill, setFormPrefill] = useState<BookingFormPrefill>({});
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
   const [detailBookingId, setDetailBookingId] = useState<string | null>(null);
+  // SPECS-INDEX #873:詳情是從「(協助)」色塊打開時,那一欄的服務人員 id(主卡打開 = null)。
+  const [detailAssistantStaffId, setDetailAssistantStaffId] = useState<string | null>(null);
+  // SPECS-INDEX #873 路徑 (a):從協助卡移除協助人員之後的擋流程二選一提示。
+  const [assistantRemoved, setAssistantRemoved] = useState<AssistantRemovedInfo | null>(null);
+  // 「再加助手」打開的編輯表單要捲到助手欄位。
+  const [formFocusAssistants, setFormFocusAssistants] = useState(false);
+
+  function openDetailFromBlock(bookingId: string, opener: BookingDetailOpener) {
+    setDetailAssistantStaffId(opener.role === "assistant" ? opener.staffId : null);
+    setDetailBookingId(bookingId);
+  }
 
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ["booking-module"] });
   }
 
   function openCreateForm(prefill: BookingFormPrefill) {
+    setFormFocusAssistants(false);
     setEditingBookingId(null);
     setFormPrefill(prefill);
     setFormOpen(true);
   }
 
-  function openEditForm(bookingId: string) {
+  function openEditForm(bookingId: string, options?: { focusAssistants?: boolean }) {
+    setFormFocusAssistants(options?.focusAssistants === true);
     setDetailBookingId(null);
     setEditingBookingId(bookingId);
     setFormPrefill({});
@@ -2404,7 +2476,7 @@ function CalendarPageInner() {
     slotMinutes: SLOT_MINUTES,
     slotPx: SLOT_PX,
     thresholdPx: SLOT_TAP_VS_DRAG_THRESHOLD_PX,
-    onOpenDetail: setDetailBookingId,
+    onOpenDetail: openDetailFromBlock,
     onMoved: refetchAll,
   });
 
@@ -2947,6 +3019,7 @@ function CalendarPageInner() {
         prefill={formPrefill}
         editingBookingId={editingBookingId}
         onSaved={refetchAll}
+        focusAssistants={formFocusAssistants}
       />
 
       <BookingDetailDialog
@@ -2957,7 +3030,19 @@ function CalendarPageInner() {
           if (!open) setDetailBookingId(null);
         }}
         onChanged={refetchAll}
-        onEdit={openEditForm}
+        onEdit={(id) => openEditForm(id)}
+        openedAsAssistantStaffId={detailAssistantStaffId}
+        onAssistantRemoved={setAssistantRemoved}
+      />
+
+      {/* SPECS-INDEX #873 路徑 (a):詳情已經關掉之後才出現(單層)。不能用 Esc / 背景關,必須二選一。 */}
+      <AssistantRemovedPrompt
+        info={assistantRemoved}
+        onKeep={() => setAssistantRemoved(null)}
+        onAddAnother={(id) => {
+          setAssistantRemoved(null);
+          openEditForm(id, { focusAssistants: true });
+        }}
       />
     </main>
   );

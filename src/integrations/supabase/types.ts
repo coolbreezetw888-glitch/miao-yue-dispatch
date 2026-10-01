@@ -4111,6 +4111,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      remove_booking_assistant: {
+        Args: { p_booking_id: string; p_staff_id: string }
+        Returns: Json
+      }
       remove_merchant_admin: {
         Args: { p_merchant_id: string; p_user_id: string }
         Returns: undefined

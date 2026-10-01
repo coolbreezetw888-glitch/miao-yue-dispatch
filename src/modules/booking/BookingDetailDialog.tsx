@@ -74,8 +74,10 @@ import {
   getBooking,
   getBookingPointsLedger,
   getCustomerRelatedBookings,
+  removeBookingAssistant,
   revertCompletedBooking,
 } from "./api";
+import type { AssistantRemovedInfo } from "./assistantRemovalLogic";
 // #844 批次 4:已完成訂單的「還原完成 / 取消訂單」確認子畫面(§五 5.1~5.4)。
 import {
   AGENT_CANNOT_REVERSE_NOTE,
@@ -182,6 +184,8 @@ export function BookingDetailDialog({
   onOpenChange,
   onChanged,
   onEdit,
+  openedAsAssistantStaffId = null,
+  onAssistantRemoved,
 }: {
   bookingId: string | null;
   staffNameById: Map<string, string>;
@@ -189,6 +193,11 @@ export function BookingDetailDialog({
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
   onEdit: (bookingId: string) => void;
+  /** SPECS-INDEX #873:從行事曆「(協助)」色塊打開時,那一欄的服務人員 id;其他入口(主卡、訂單管理)不傳。
+   *  有值時底部最左那顆從「取消預約」換成「移除協助人員」—— 只移除這一位,不取消整張單。 */
+  openedAsAssistantStaffId?: string | null;
+  /** SPECS-INDEX #873:移除成功後呼叫,由呼叫端跳「維持現狀 / 再加助手」的擋流程提示。 */
+  onAssistantRemoved?: (info: AssistantRemovedInfo) => void;
 }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -490,6 +499,37 @@ export function BookingDetailDialog({
     }
   }
 
+  // SPECS-INDEX #873:只移除這一位協助人員(remove_booking_assistant),訂單本身與主服務人員的單完全不動。
+  // 不發任何通知(訂單沒有取消)。成功後關掉詳情,交給呼叫端跳擋流程二選一提示。
+  async function handleRemoveAssistant() {
+    if (!booking || !openedAsAssistantStaffId) return;
+    const fallbackName =
+      booking.assistants.find((a) => a.staffId === openedAsAssistantStaffId)?.staffName ??
+      staffNameById.get(openedAsAssistantStaffId) ??
+      "協助人員";
+    setBusy(true);
+    try {
+      const result = await removeBookingAssistant(booking.id, openedAsAssistantStaffId);
+      onOpenChange(false);
+      onChanged();
+      onAssistantRemoved?.({
+        bookingId: booking.id,
+        assistantNames: [result.removed_staff_name ?? fallbackName],
+        primaryName:
+          result.primary_staff_name ?? staffNameById.get(booking.staff_id) ?? "(未知人員)",
+      });
+    } catch (err) {
+      toast.error("移除協助人員失敗", { description: getErrorMessage(err) });
+      // 40001(這位已經不在單上 / 畫面過期):關掉詳情並重抓,讓行事曆直接顯示最新狀態。
+      if ((err as { code?: string } | null)?.code === "40001") {
+        onOpenChange(false);
+        onChanged();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!bookingId) return null;
 
   // 5.2 第 3 點:操作按鈕依狀態調整(這幾個按鈕只對「目前傳入的這一筆」有效,切去看相關訂單時
@@ -506,6 +546,14 @@ export function BookingDetailDialog({
   const showReversalButtons = isCompletedOriginal && merchantRole === "admin";
   const showAgentReversalNote =
     isCompletedOriginal && merchantRole !== undefined && merchantRole !== "admin";
+  // SPECS-INDEX #873:從「(協助)」色塊打開的(只看原本那一筆;切去看相關訂單時不算)。
+  const openedAsAssistant = isViewingOriginal && Boolean(openedAsAssistantStaffId);
+  const openedAssistantName = openedAsAssistantStaffId
+    ? (booking?.assistants.find((a) => a.staffId === openedAsAssistantStaffId)?.staffName ??
+      staffNameById.get(openedAsAssistantStaffId) ??
+      "協助人員")
+    : "";
+  const primaryStaffName = booking ? (staffNameById.get(booking.staff_id) ?? "(未知人員)") : "";
 
   // ui-v1-full 階段一:外殼改用 FullPageLayer(skill 三、全頁層:手機滿版 / 電腦置中面板、標題列與
   // 按鈕列固定、只有中間捲動)。操作按鈕依 skill 二之三搬到底部固定動作列並三顆等寬(取消預約 /
@@ -560,7 +608,41 @@ export function BookingDetailDialog({
               />
             ) : booking && showActionBar ? (
               <ActionBar>
-                {showEditAndCancel ? (
+                {/* SPECS-INDEX #873:從「(協助)」色塊打開時,最左那顆換成「移除協助人員」。
+                    可以再加回來 ⇒ 不是不可逆 ⇒ 不標紅(skill 二之三);二次確認一樣用小卡窗。 */}
+                {showEditAndCancel && openedAsAssistant ? (
+                  <CardAlertDialog>
+                    <CardAlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="neutral"
+                        size="touch"
+                        disabled={busy}
+                        data-testid="remove-assistant-button"
+                      >
+                        移除協助人員
+                      </Button>
+                    </CardAlertDialogTrigger>
+                    <CardAlertDialogContent>
+                      <CardAlertDialogHeader>
+                        <CardAlertDialogTitle>
+                          確定要把 {openedAssistantName} 從這張訂單移除嗎?
+                        </CardAlertDialogTitle>
+                        <CardAlertDialogDescription>
+                          只會移除這位協助人員,主服務人員 {primaryStaffName}{" "}
+                          的訂單維持不變,不會取消。
+                        </CardAlertDialogDescription>
+                      </CardAlertDialogHeader>
+                      <CardAlertDialogFooter>
+                        <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
+                        <CardAlertDialogAction onClick={() => void handleRemoveAssistant()}>
+                          確定移除
+                        </CardAlertDialogAction>
+                      </CardAlertDialogFooter>
+                    </CardAlertDialogContent>
+                  </CardAlertDialog>
+                ) : null}
+                {showEditAndCancel && !openedAsAssistant ? (
                   <CardAlertDialog>
                     <CardAlertDialogTrigger asChild>
                       <Button type="button" variant="danger" size="touch" disabled={busy}>
@@ -696,6 +778,13 @@ export function BookingDetailDialog({
             // 數字 tabular-nums、電話/地址可點擊各佔一行、兩種備註分開。
             <div className="flex min-w-0 flex-col gap-5">
               {/* #844 §5.1 / Q4 定案 A:客服最可能是誤按完成的人,會去找「取消」找不到 ⇒ 常駐講清楚。 */}
+              {/* SPECS-INDEX #873:從協助卡打開時,「取消預約」不在這裡 ⇒ 常駐 `!` 講清楚去哪裡取消整張單。 */}
+              {openedAsAssistant && showEditAndCancel ? (
+                <AlertNote data-testid="opened-as-assistant-note">
+                  這是從協助人員 {openedAssistantName} 的卡片打開的。「移除協助人員」只會移除{" "}
+                  {openedAssistantName};要取消整張訂單,請點主服務人員 {primaryStaffName} 的卡片。
+                </AlertNote>
+              ) : null}
               {showAgentReversalNote ? (
                 <AlertNote data-testid="agent-cannot-reverse-note">
                   {AGENT_CANNOT_REVERSE_NOTE}

@@ -72,7 +72,13 @@ import {
   type MoveModeResolution,
 } from "./bookingDragMove";
 import { buildTaipeiIso, isoToTaipeiTime, timeToMinutes } from "./dateUtils";
-import type { DayScheduleOwnBooking, DayScheduleStaffBlock } from "./types";
+import type { BookingParticipantRole, DayScheduleOwnBooking, DayScheduleStaffBlock } from "./types";
+
+/** SPECS-INDEX #873:詳情是從哪一張色塊打開的(主服務人員卡 / 「(協助)」卡 + 那一欄是誰)。 */
+export interface BookingDetailOpener {
+  role: BookingParticipantRole;
+  staffId: string;
+}
 
 /** §4.5:成功 toast 存活多久,「復原」只在這段時間內提供。 */
 export const UNDO_TOAST_DURATION_MS = 8000;
@@ -97,8 +103,11 @@ export interface CalendarBookingDragParams {
   slotMinutes: number;
   slotPx: number;
   thresholdPx: number;
-  /** ≤ 閾值就放開 = 點擊 → 開詳情(取代色塊原本的 onClick)。 */
-  onOpenDetail: (bookingId: string) => void;
+  /** ≤ 閾值就放開 = 點擊 → 開詳情(取代色塊原本的 onClick)。
+   * SPECS-INDEX #873:第二個參數告訴詳情「是從哪一張色塊打開的」(主 / 協助 + 那一欄的服務人員),
+   * 從「(協助)」色塊打開時,詳情要給「移除協助人員」而不是「取消預約」(原本兩張色塊都只傳 booking id,
+   * 從協助卡按取消會把主服務人員的單一起取消)。 */
+  onOpenDetail: (bookingId: string, opener: BookingDetailOpener) => void;
   /** 移動成功、或收到 40001(畫面過期)之後呼叫 → CalendarPage 傳 refetchAll(invalidateQueries)。 */
   onMoved: () => void;
 }
@@ -451,7 +460,8 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
 
   const drag = useBookingDragState({
     thresholdPx,
-    onClick: (source) => onOpenDetail(source.bookingId),
+    onClick: (source) =>
+      onOpenDetail(source.bookingId, { role: source.role, staffId: source.staffId }),
     onDrop: handleDrop,
   });
   phaseRef.current = drag.phase;
@@ -608,7 +618,7 @@ export function DraggableBookingBlock({
       // 🔴 坑 3:可拖的色塊**沒有** onClick——放開 ≤ 閾值時由 hook 的 onClick 開詳情;
       //    否則拖完放開瀏覽器補發的那個 click 會把詳情彈出來。不可拖的色塊 hook 不會進入 pressing,
       //    所以保留原本的 onClick 讓它照舊可以點開詳情。
-      onClick={draggable ? undefined : () => controller.openDetail(b.id)}
+      onClick={draggable ? undefined : () => controller.openDetail(b.id, { role: b.role, staffId })}
       onPointerDown={
         draggable
           ? (e) =>
