@@ -21,6 +21,13 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 
 import { dispatchPushForBooking, type PushDispatchEventType } from "../_shared/pushDispatchCore.ts";
 import { buildPushDispatchDeps } from "../_shared/pushDbAdapter.ts";
+import {
+  buildNotifySubjectOwnershipLookup,
+  checkNotifySubjectsBelongToMerchant,
+  NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE,
+  NOTIFY_SUBJECT_NOT_FOUND_MESSAGE,
+  type NotifySubjectOwnershipLookup,
+} from "../_shared/notifySubjectOwnership.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(不在模組頂層算成常數)——ES module 的 import
 // 陳述式會被提升到檔案最前面執行,如果這裡在模組頂層就讀一次 Deno.env.get 存成常數,Deno 測試
@@ -75,6 +82,8 @@ export interface CallerRpcClient {
 export interface HandleRequestDeps {
   createCallerClient: (authHeader: string) => CallerRpcClient;
   createAdminClient: () => AnySupabaseClient;
+  /** #972:不帶 → 用真正查資料庫的 buildNotifySubjectOwnershipLookup(adminClient)。 */
+  createOwnershipLookup?: (adminClient: AnySupabaseClient) => NotifySubjectOwnershipLookup;
 }
 
 function buildDefaultDeps(config: ReturnType<typeof readEnvConfig>): HandleRequestDeps {
@@ -149,6 +158,22 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   }
 
   const adminClient = resolvedDeps.createAdminClient();
+
+  // SPECS-INDEX #972(跨商家 IDOR 修補):授權只確認「呼叫者能管理 merchant_id」,booking_id 是呼叫者
+  // 自己填的。這裡確認那筆訂單真的屬於 merchant_id;不符 → 404、查詢出錯 → 500,兩者都在
+  // dispatchPushForBooking 之前結束 —— 推播紀錄、站內通知一筆都不寫(dispatchPushForBooking 連
+  // event_disabled 那種跳過也會寫一列紀錄,所以這道檢查一定要放在它前面)。
+  const ownershipLookup = (resolvedDeps.createOwnershipLookup ?? buildNotifySubjectOwnershipLookup)(
+    adminClient,
+  );
+  const ownership = await checkNotifySubjectsBelongToMerchant(ownershipLookup, merchantId, {
+    bookingId,
+  });
+  if (!ownership.ok) {
+    return ownership.reason === "not_found"
+      ? jsonResponse({ error: NOTIFY_SUBJECT_NOT_FOUND_MESSAGE }, 404)
+      : jsonResponse({ error: NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE }, 500);
+  }
 
   const pushDeps = buildPushDispatchDeps(adminClient, {
     subject: config.vapidSubject,

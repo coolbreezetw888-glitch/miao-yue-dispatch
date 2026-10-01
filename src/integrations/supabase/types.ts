@@ -4124,11 +4124,11 @@ export type Database = {
         Returns: undefined
       }
       render_booking_notification_variables: {
-        Args: { p_booking_id: string }
+        Args: { p_booking_id: string; p_merchant_id: string }
         Returns: Json
       }
       render_staff_leave_notification_variables: {
-        Args: { p_staff_leave_record_id: string }
+        Args: { p_merchant_id: string; p_staff_leave_record_id: string }
         Returns: Json
       }
       request_agent_login_email_change: {

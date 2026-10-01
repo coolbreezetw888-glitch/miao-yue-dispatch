@@ -212,9 +212,9 @@ select ok(
   'A3 權限沒有被重設:入帳函式不對外;complete_booking 只給 authenticated'
 );
 select ok(
-  not has_function_privilege('anon', 'public.render_booking_notification_variables(uuid)', 'execute')
-  and not has_function_privilege('authenticated', 'public.render_booking_notification_variables(uuid)', 'execute')
-  and has_function_privilege('service_role', 'public.render_booking_notification_variables(uuid)', 'execute'),
+  not has_function_privilege('anon', 'public.render_booking_notification_variables(uuid, uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'public.render_booking_notification_variables(uuid, uuid)', 'execute')
+  and has_function_privilege('service_role', 'public.render_booking_notification_variables(uuid, uuid)', 'execute'),
   'A4 render_booking_notification_variables 仍然只給 service_role'
 );
 
@@ -496,15 +496,15 @@ reset role;
 -- =========================================================================
 -- J. render_booking_notification_variables
 -- =========================================================================
-select is(public.render_booking_notification_variables(:'topup_id'::uuid) ->> 'points_earned', '50',
+select is(public.render_booking_notification_variables(:'topup_id'::uuid, 'e8440000-0000-4000-8000-000000000321'::uuid) ->> 'points_earned', '50',
   'J1 §4.8(核心):補差額後 LINE「訂單完成」的 {{points_earned}} = 有效入帳 50,不是最後一筆的 10');
-select is(public.render_booking_notification_variables(:'less_id'::uuid) ->> 'points_earned', '40',
+select is(public.render_booking_notification_variables(:'less_id'::uuid, 'e8440000-0000-4000-8000-000000000321'::uuid) ->> 'points_earned', '40',
   'J2 邊界 21 那張 = 40');
-select is(public.render_booking_notification_variables(:'redo_id'::uuid) ->> 'points_earned', '50',
+select is(public.render_booking_notification_variables(:'redo_id'::uuid, 'e8440000-0000-4000-8000-000000000321'::uuid) ->> 'points_earned', '50',
   'J3 完成 → 還原 → 再完成 = 50');
-select is(public.render_booking_notification_variables(:'swap_id'::uuid) ->> 'points_earned', '',
+select is(public.render_booking_notification_variables(:'swap_id'::uuid, 'e8440000-0000-4000-8000-000000000321'::uuid) ->> 'points_earned', '',
   'J4 取消後全額收回 ⇒ 空字串(跟沒有入帳一樣)');
-select is(public.render_booking_notification_variables(:'zero_id'::uuid) ->> 'points_earned', '',
+select is(public.render_booking_notification_variables(:'zero_id'::uuid, 'e8440000-0000-4000-8000-000000000321'::uuid) ->> 'points_earned', '',
   'J5 從未入帳 ⇒ 空字串');
 
 -- =========================================================================

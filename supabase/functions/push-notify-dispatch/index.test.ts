@@ -131,6 +131,13 @@ Deno.test(
         rpc: () => Promise.resolve({ data: {}, error: null }),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       }) as any;
+    // #972:這個測試的假 adminClient 讓所有 maybeSingle 都回 error,歸屬檢查(查 bookings)也會跟著失敗而
+    // 回 500(fail closed,這是對的)。這個測試要驗的是「歸屬檢查之後」的下游安靜處理,所以這裡注入一個
+    // 一律通過的歸屬檢查;歸屬檢查本身的行為由檔案最後的 #972 測試負責。
+    deps.createOwnershipLookup = () => ({
+      bookingBelongsToMerchant: () => Promise.resolve(true),
+      staffLeaveRecordBelongsToMerchant: () => Promise.resolve(true),
+    });
     const res = await handleRequest(req, deps);
     assertEquals(res.status, 200);
   },
@@ -247,4 +254,151 @@ Deno.test("#823:previous_staff_id 是空字串或只有空白 → 視同沒帶,�
     assertEquals(res.status, 200);
     assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new"]);
   }
+});
+
+// =========================================================================
+// SPECS-INDEX #972:跨商家訂單(IDOR)。呼叫者能管理 merchant-A(can_manage_bookings 回 true),
+// 但帶的是 merchant-B 的 booking_id。必須:回 404、不進 dispatchPushForBooking ——
+// push_notification_log、user_notifications 一筆都不寫,也不呼叫任何 RPC。
+// 不替換歸屬檢查(走真正的 buildNotifySubjectOwnershipLookup),假資料庫會依 .eq() 條件回應。
+// =========================================================================
+function makeOwnershipAwareAdminClient() {
+  const bookingsOwner: Record<string, string> = { "booking-A": "merchant-A", "booking-B": "merchant-B" };
+  const rpcCalls: string[] = [];
+  const inserts: string[] = [];
+  const bookingSelects: Record<string, unknown>[] = [];
+  const adminClient = {
+    from: (table: string) => ({
+      select: () => {
+        const filters: Record<string, unknown> = {};
+        const single = () => {
+          if (table === "bookings") {
+            bookingSelects.push({ ...filters });
+            const owner = bookingsOwner[String(filters.id)];
+            const ok = owner !== undefined &&
+              (filters.merchant_id === undefined || filters.merchant_id === owner);
+            return Promise.resolve({ data: ok ? { id: filters.id, staff_id: null } : null, error: null });
+          }
+          if (table === "merchant_push_event_settings") {
+            return Promise.resolve({
+              data: { enabled: true, message_title: "新訂單", message_body: "{{customer_name}}" },
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        const builder = {
+          eq: (column: string, value: unknown) => {
+            filters[column] = value;
+            return builder;
+          },
+          maybeSingle: single,
+          in: () => Promise.resolve({ data: [], error: null }),
+        };
+        return builder;
+      },
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      insert: () => {
+        inserts.push(table);
+        return Promise.resolve({ error: null });
+      },
+    }),
+    rpc: (fn: string) => {
+      rpcCalls.push(fn);
+      if (fn === "resolve_push_recipients") return Promise.resolve({ data: [], error: null });
+      return Promise.resolve({ data: {}, error: null });
+    },
+  };
+  return { adminClient, rpcCalls, inserts, bookingSelects };
+}
+
+Deno.test("#972(核心必測):A 商家帶 B 商家的 booking_id → 404,推播紀錄/站內通知一筆都不寫、不呼叫任何 RPC", async () => {
+  const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
+  const deps = makeDeps(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-B", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    deps,
+  );
+  assertEquals(res.status, 404);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972 正向對照:同商家的 booking_id → 照常進入派送(行為不變),歸屬查詢帶了 merchant_id 條件", async () => {
+  const { adminClient, rpcCalls, inserts, bookingSelects } = makeOwnershipAwareAdminClient();
+  const deps = makeDeps(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
+  assertEquals(inserts.includes("push_notification_log"), true);
+  // 第一筆是歸屬檢查,第二筆是 pushDbAdapter.getBookingStaffId —— 兩者都要帶 merchant_id。
+  assertEquals(bookingSelects, [
+    { id: "booking-A", merchant_id: "merchant-A" },
+    { id: "booking-A", merchant_id: "merchant-A" },
+  ]);
+});
+
+Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed),不進派送", async () => {
+  const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
+  const deps = makeDeps(true);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+  deps.createOwnershipLookup = () => ({
+    bookingBelongsToMerchant: () => Promise.reject(new Error("db down")),
+    staffLeaveRecordBelongsToMerchant: () => Promise.reject(new Error("db down")),
+  });
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    deps,
+  );
+  assertEquals(res.status, 500);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972:render_booking_notification_variables 一律帶 p_merchant_id(資料庫第二層檢查需要)", async () => {
+  const rpcArgs: { fn: string; args: Record<string, unknown> }[] = [];
+  const { adminClient } = makeOwnershipAwareAdminClient();
+  const deps = makeDeps(true);
+  deps.createAdminClient = () =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ({
+      ...adminClient,
+      rpc: (fn: string, args: Record<string, unknown>) => {
+        rpcArgs.push({ fn, args });
+        if (fn === "resolve_push_recipients") {
+          return Promise.resolve({
+            data: [{ target_type: "admin", target_id: "a1", target_user_id: "u1", target_name: "管理員" }],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: {}, error: null });
+      },
+    }) as any;
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    deps,
+  );
+  assertEquals(res.status, 200);
+  const render = rpcArgs.find((c) => c.fn === "render_booking_notification_variables");
+  assertEquals(render?.args, { p_booking_id: "booking-A", p_merchant_id: "merchant-A" });
 });

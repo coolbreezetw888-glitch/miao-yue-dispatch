@@ -349,7 +349,8 @@ select is(
 -- ⑥ 3.9 render_booking_notification_variables:變數組裝正確,缺值時回傳空字串不報錯。
 -- =========================================================================
 select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001', 'service_role');
-select render_booking_notification_variables(:'booking_id'::uuid) as r \gset vars_
+-- #972:簽章改為 (p_booking_id, p_merchant_id)。
+select render_booking_notification_variables(:'booking_id'::uuid, 'ed000000-0000-4000-8000-000000000021'::uuid) as r \gset vars_
 select pg_temp.test_clear_auth();
 
 select is(:'vars_r'::jsonb->>'customer_name', '通知測試客戶', '3.9:customer_name 正確組裝');
@@ -365,7 +366,7 @@ select ok(length(:'vars_r'::jsonb->>'booking_date') > 0, '3.9:booking_date 正�
 select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001', 'service_role');
 insert into member_point_transactions (member_id, merchant_id, transaction_type, points_delta, balance_after, booking_id)
 values (:'member_id'::uuid, 'ed000000-0000-4000-8000-000000000021', 'earn_booking', 8, 8, :'booking_id'::uuid);
-select render_booking_notification_variables(:'booking_id'::uuid) as r \gset vars2_
+select render_booking_notification_variables(:'booking_id'::uuid, 'ed000000-0000-4000-8000-000000000021'::uuid) as r \gset vars2_
 select pg_temp.test_clear_auth();
 
 select is(:'vars2_r'::jsonb->>'points_earned', '8', '3.9:有 earn_booking 紀錄時 points_earned 正確帶出');
@@ -373,7 +374,7 @@ select is(:'vars2_r'::jsonb->>'points_earned', '8', '3.9:有 earn_booking 紀錄
 -- render_booking_notification_variables 只給 service_role,一般角色呼叫被擋下。
 select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001');
 select throws_ok(
-  format($$select render_booking_notification_variables('%s')$$, (:'booking_id')),
+  format($$select render_booking_notification_variables('%s', 'ed000000-0000-4000-8000-000000000021')$$, (:'booking_id')),
   '42501', null,
   '3.9:render_booking_notification_variables 不給一般 authenticated 角色呼叫,只給 service_role'
 );

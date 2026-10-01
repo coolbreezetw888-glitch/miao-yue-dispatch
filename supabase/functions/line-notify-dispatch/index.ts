@@ -20,6 +20,13 @@
 // 修法見 resolveNotificationVariables:依實際傳入的是 booking_id 還是 staff_leave_record_id,
 // 呼叫對應的變數組裝函式(20260920160600 migration 新增 render_staff_leave_notification_variables)。
 //
+// SPECS-INDEX #972(跨商家 IDOR 修補):授權只確認「呼叫者能管理 merchant_id」還不夠——booking_id /
+// staff_leave_record_id 是呼叫者自己填的。現在授權通過之後、解析收件人之前,先確認那筆訂單/請假紀錄
+// 真的屬於 merchant_id(_shared/notifySubjectOwnership.ts);不符回 404、查詢出錯回 500,兩者都不寫任何
+// 發送記錄。資料庫那一層(resolve_line_notification_targets / render_*_notification_variables)
+// 也有同樣的檢查(migration 20261001150000),兩層都擋。為了能用 Deno 測試驗證這個分支,
+// handleRequest 比照 push-notify-dispatch 改成可注入 deps、環境變數改在執行當下讀取。
+//
 // 本模組最重要的邊界原則(對應規則 2.4 第 4 點):前端呼叫這支函式一律用「不等待、吞掉錯誤」的
 // 方式(見 src/modules/line-notifications/api.ts dispatchLineNotification),即使這支函式
 // 整個掛掉或逾時,原本的訂單/請假操作完全不受影響。這支函式本身的責任只是盡力而為地判斷/發送/
@@ -28,9 +35,23 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+import {
+  buildNotifySubjectOwnershipLookup,
+  checkNotifySubjectsBelongToMerchant,
+  NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE,
+  NOTIFY_SUBJECT_NOT_FOUND_MESSAGE,
+  type NotifySubjectOwnershipLookup,
+} from "../_shared/notifySubjectOwnership.ts";
+
+// #972:環境變數改在 handleRequest 執行當下才讀(理由同 push-notify-dispatch:模組頂層讀成常數,
+// Deno 測試在 import 之前 set 的值會讀不到)。
+function readEnvConfig() {
+  return {
+    supabaseUrl: Deno.env.get("SUPABASE_URL") ?? "",
+    supabaseAnonKey: Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    supabaseServiceRoleKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -141,12 +162,15 @@ export interface RpcClient {
  */
 export async function resolveNotificationVariables(
   adminClient: RpcClient,
+  merchantId: string,
   bookingId: string | null | undefined,
   staffLeaveRecordId: string | null | undefined,
 ): Promise<Record<string, string>> {
+  // #972:兩支變數組裝函式都必須帶 p_merchant_id,資料庫會再確認一次訂單/請假紀錄屬於這間商家。
   if (bookingId) {
     const { data, error } = await adminClient.rpc("render_booking_notification_variables", {
       p_booking_id: bookingId,
+      p_merchant_id: merchantId,
     });
     if (error) {
       console.error("[line-notify-dispatch] render_booking_notification_variables 失敗", error);
@@ -158,6 +182,7 @@ export async function resolveNotificationVariables(
   if (staffLeaveRecordId) {
     const { data, error } = await adminClient.rpc("render_staff_leave_notification_variables", {
       p_staff_leave_record_id: staffLeaveRecordId,
+      p_merchant_id: merchantId,
     });
     if (error) {
       console.error("[line-notify-dispatch] render_staff_leave_notification_variables 失敗", error);
@@ -180,14 +205,41 @@ export function shouldWriteAnyLogRow(result: ResolveTargetsResult): boolean {
   return result.targets.length > 0 || result.skipped.length > 0;
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+// deno-lint-ignore no-explicit-any
+type AnyAdminClient = any;
+
+/** #972:可注入的相依,Deno 測試傳入假的 client 驗證授權 / 歸屬檢查分支。 */
+export interface HandleRequestDeps {
+  createCallerClient: (authHeader: string) => RpcClient;
+  createAdminClient: () => AnyAdminClient;
+  /** 不帶 → 用真正查資料庫的 buildNotifySubjectOwnershipLookup(adminClient)。 */
+  createOwnershipLookup?: (adminClient: AnyAdminClient) => NotifySubjectOwnershipLookup;
+}
+
+function buildDefaultDeps(config: ReturnType<typeof readEnvConfig>): HandleRequestDeps {
+  return {
+    createCallerClient: (authHeader: string) =>
+      createClient(config.supabaseUrl, config.supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false },
+      }),
+    createAdminClient: () =>
+      createClient(config.supabaseUrl, config.supabaseServiceRoleKey, {
+        auth: { persistSession: false },
+      }),
+  };
+}
+
+export async function handleRequest(req: Request, deps?: HandleRequestDeps): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
   if (req.method !== "POST") {
     return jsonResponse({ error: "只接受 POST 請求" }, 405);
   }
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+  const config = readEnvConfig();
+  const resolvedDeps = deps ?? buildDefaultDeps(config);
+  if (!config.supabaseUrl || !config.supabaseAnonKey || !config.supabaseServiceRoleKey) {
     console.error("[line-notify-dispatch] 缺少必要的環境變數");
     return jsonResponse({ error: "伺服器設定不完整" }, 500);
   }
@@ -209,12 +261,12 @@ async function handleRequest(req: Request): Promise<Response> {
   if (!merchantId || !eventType) {
     return jsonResponse({ error: "缺少必要欄位(merchant_id/event_type)" }, 400);
   }
+  // #972:之後每一處(歸屬檢查、解析收件人、變數組裝、寫記錄)都用同一份值,不再各自讀 body。
+  const bookingId = body.booking_id?.trim() || null;
+  const staffLeaveRecordId = body.staff_leave_record_id?.trim() || null;
 
   // 步驟 1:用呼叫者自己的 JWT 驗證授權,防止濫發。
-  const callerClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false },
-  });
+  const callerClient = resolvedDeps.createCallerClient(authHeader);
 
   const { data: allowed, error: authCheckError } = await callerClient.rpc(
     "can_dispatch_line_notification",
@@ -229,9 +281,22 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "沒有權限對這個商家/訂單發送通知" }, 403);
   }
 
-  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
+  const adminClient = resolvedDeps.createAdminClient();
+
+  // 步驟 1.5(#972):傳入的訂單/請假紀錄必須屬於 merchant_id。不符 → 404、查詢出錯 → 500,
+  // 兩者都在解析收件人之前就結束,一筆發送記錄都不寫。
+  const ownershipLookup = (resolvedDeps.createOwnershipLookup ?? buildNotifySubjectOwnershipLookup)(
+    adminClient,
+  );
+  const ownership = await checkNotifySubjectsBelongToMerchant(ownershipLookup, merchantId, {
+    bookingId,
+    staffLeaveRecordId,
   });
+  if (!ownership.ok) {
+    return ownership.reason === "not_found"
+      ? jsonResponse({ error: NOTIFY_SUBJECT_NOT_FOUND_MESSAGE }, 404)
+      : jsonResponse({ error: NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE }, 500);
+  }
 
   // 步驟 2:共用邏輯,跟 3.10 preview_line_notification_targets 判斷「要不要發」完全一致。
   const { data: resolved, error: resolveError } = await adminClient.rpc(
@@ -239,8 +304,8 @@ async function handleRequest(req: Request): Promise<Response> {
     {
       p_merchant_id: merchantId,
       p_event_type: eventType,
-      p_booking_id: body.booking_id ?? null,
-      p_staff_leave_record_id: body.staff_leave_record_id ?? null,
+      p_booking_id: bookingId,
+      p_staff_leave_record_id: staffLeaveRecordId,
     },
   );
 
@@ -267,8 +332,8 @@ async function handleRequest(req: Request): Promise<Response> {
     await adminClient.from("line_notification_log").insert({
       merchant_id: merchantId,
       event_type: eventType,
-      booking_id: body.booking_id ?? null,
-      staff_leave_record_id: body.staff_leave_record_id ?? null,
+      booking_id: bookingId,
+      staff_leave_record_id: staffLeaveRecordId,
       target_type: skipped.type,
       target_id: skipped.id,
       status: "skipped",
@@ -296,8 +361,9 @@ async function handleRequest(req: Request): Promise<Response> {
 
   const variables = await resolveNotificationVariables(
     adminClient,
-    body.booking_id,
-    body.staff_leave_record_id,
+    merchantId,
+    bookingId,
+    staffLeaveRecordId,
   );
 
   const messageTemplate = (settingsRow?.message_template as string) ?? "";
@@ -318,8 +384,8 @@ async function handleRequest(req: Request): Promise<Response> {
     await adminClient.from("line_notification_log").insert({
       merchant_id: merchantId,
       event_type: eventType,
-      booking_id: body.booking_id ?? null,
-      staff_leave_record_id: body.staff_leave_record_id ?? null,
+      booking_id: bookingId,
+      staff_leave_record_id: staffLeaveRecordId,
       target_type: target.type,
       target_id: target.id,
       target_line_user_id: target.line_user_id,
@@ -339,5 +405,5 @@ async function handleRequest(req: Request): Promise<Response> {
 }
 
 if (import.meta.main) {
-  Deno.serve(handleRequest);
+  Deno.serve((req) => handleRequest(req));
 }

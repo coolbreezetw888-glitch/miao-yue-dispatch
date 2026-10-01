@@ -6,8 +6,20 @@
 // 驗證 resolve_line_notification_targets 這支「唯一一份判斷邏輯」的正確性,這裡只需要驗證
 // Edge Function 自己這一層的處理邏輯。
 
+// #972:handleRequest 改成可注入 deps 之後,下面也直接測 handler 的「跨商家訂單/請假紀錄」分支。
+// 環境變數改在執行當下讀取,這裡先設假值,避免落入「缺少必要的環境變數」的 500 分支。
+Deno.env.set("SUPABASE_URL", "http://localhost:55321");
+Deno.env.set("SUPABASE_ANON_KEY", "test-anon-key");
+Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key");
+
 import { assertEquals } from "jsr:@std/assert@1";
 import {
+  buildNotifySubjectOwnershipLookup,
+  type NotifySubjectOwnershipLookup,
+} from "../_shared/notifySubjectOwnership.ts";
+import {
+  handleRequest,
+  type HandleRequestDeps,
   pushLineMessage,
   renderMessageTemplate,
   resolveNotificationVariables,
@@ -103,11 +115,12 @@ Deno.test(
         error: null,
       },
     });
-    const variables = await resolveNotificationVariables(client, "booking-1", null);
+    const variables = await resolveNotificationVariables(client, "merchant-1", "booking-1", null);
     assertEquals(variables, { merchant_name: "測試商家", customer_name: "王小明" });
     assertEquals(calls.length, 1);
     assertEquals(calls[0].fn, "render_booking_notification_variables");
-    assertEquals(calls[0].args, { p_booking_id: "booking-1" });
+    // #972:一定要帶 p_merchant_id(資料庫會再確認訂單屬於這間商家;參數名錯了就是 PGRST202)。
+    assertEquals(calls[0].args, { p_booking_id: "booking-1", p_merchant_id: "merchant-1" });
   },
 );
 
@@ -126,10 +139,10 @@ Deno.test(
       },
     });
 
-    const variables = await resolveNotificationVariables(client, undefined, "leave-1");
+    const variables = await resolveNotificationVariables(client, "merchant-1", undefined, "leave-1");
     assertEquals(calls.length, 1);
     assertEquals(calls[0].fn, "render_staff_leave_notification_variables");
-    assertEquals(calls[0].args, { p_staff_leave_record_id: "leave-1" });
+    assertEquals(calls[0].args, { p_staff_leave_record_id: "leave-1", p_merchant_id: "merchant-1" });
 
     // 這是 bug 385 的實際情境:staff_leave_created 事件的預設文案。修好之前 variables 永遠是
     // {},渲染結果會殘留 {{staff_name}}/{{booking_date}} 沒被替換,直接送給收訊人看到。
@@ -144,7 +157,7 @@ Deno.test(
   "resolveNotificationVariables: booking_id 跟 staff_leave_record_id 都沒有時(理論上不該發生)回傳空物件,不呼叫任何 RPC",
   async () => {
     const { client, calls } = makeRpcClient({});
-    const variables = await resolveNotificationVariables(client, null, null);
+    const variables = await resolveNotificationVariables(client, "merchant-1", null, null);
     assertEquals(variables, {});
     assertEquals(calls.length, 0);
   },
@@ -156,7 +169,7 @@ Deno.test(
     const { client } = makeRpcClient({
       render_booking_notification_variables: { data: null, error: { message: "boom" } },
     });
-    const variables = await resolveNotificationVariables(client, "booking-1", null);
+    const variables = await resolveNotificationVariables(client, "merchant-1", "booking-1", null);
     assertEquals(variables, {});
   },
 );
@@ -167,7 +180,7 @@ Deno.test(
     const { client } = makeRpcClient({
       render_staff_leave_notification_variables: { data: null, error: { message: "boom" } },
     });
-    const variables = await resolveNotificationVariables(client, null, "leave-1");
+    const variables = await resolveNotificationVariables(client, "merchant-1", null, "leave-1");
     assertEquals(variables, {});
   },
 );
@@ -176,7 +189,7 @@ Deno.test("resolveNotificationVariables: 查無資料時資料庫回傳空物件
   const { client } = makeRpcClient({
     render_staff_leave_notification_variables: { data: {}, error: null },
   });
-  const variables = await resolveNotificationVariables(client, null, "leave-missing");
+  const variables = await resolveNotificationVariables(client, "merchant-1", null, "leave-missing");
   assertEquals(variables, {});
 });
 
@@ -230,4 +243,222 @@ Deno.test("shouldWriteAnyLogRow: #962 服務人員已離職/停用、未開放�
     };
     assertEquals(shouldWriteAnyLogRow(result), true);
   }
+});
+
+// =========================================================================
+// SPECS-INDEX #972:跨商家訂單 / 請假紀錄(IDOR)。
+//
+// 情境:呼叫者是 A 商家(merchant-A)的管理員/客服,授權檢查 can_dispatch_line_notification 對 A 回 true;
+// 但他帶的是 B 商家的 booking_id / staff_leave_record_id。
+// 必須:回 404、完全不呼叫 resolve_line_notification_targets / render_*、一筆 line_notification_log 都不寫。
+//
+// 用「會把所有 .from() / .rpc() / .insert() 記下來」的假 adminClient,並且**不**替換歸屬檢查
+// (createOwnershipLookup 不帶 → 走真正的 buildNotifySubjectOwnershipLookup),讓 index.ts →
+// notifySubjectOwnership.ts → adminClient.from("bookings").eq("id").eq("merchant_id") 這整條真實路徑都走到。
+// 假資料庫只認得:booking-A / leave-A(屬於 merchant-A 的服務人員 staff-A),以及
+// booking-B / leave-B(屬於 merchant-B 的服務人員 staff-B)。
+// =========================================================================
+const FAKE_BOOKINGS: Record<string, string> = { "booking-A": "merchant-A", "booking-B": "merchant-B" };
+const FAKE_LEAVES: Record<string, string> = { "leave-A": "staff-A", "leave-B": "staff-B" };
+const FAKE_STAFF: Record<string, string> = { "staff-A": "merchant-A", "staff-B": "merchant-B" };
+
+function makeFakeLineAdminClient(options: { failLookup?: boolean } = {}) {
+  const rpcCalls: string[] = [];
+  const inserts: { table: string; row: Record<string, unknown> }[] = [];
+  const selects: { table: string; filters: Record<string, unknown> }[] = [];
+
+  const adminClient = {
+    from(table: string) {
+      return {
+        select() {
+          const filters: Record<string, unknown> = {};
+          const builder = {
+            eq(column: string, value: unknown) {
+              filters[column] = value;
+              return builder;
+            },
+            maybeSingle() {
+              selects.push({ table, filters: { ...filters } });
+              if (options.failLookup && (table === "bookings" || table === "staff_leave_records")) {
+                return Promise.resolve({ data: null, error: { message: "db down" } });
+              }
+              if (table === "bookings") {
+                const owner = FAKE_BOOKINGS[String(filters.id)];
+                const ok = owner !== undefined &&
+                  (filters.merchant_id === undefined || filters.merchant_id === owner);
+                return Promise.resolve({ data: ok ? { id: filters.id } : null, error: null });
+              }
+              if (table === "staff_leave_records") {
+                const staffId = FAKE_LEAVES[String(filters.id)];
+                return Promise.resolve({ data: staffId ? { staff_id: staffId } : null, error: null });
+              }
+              if (table === "merchant_staff") {
+                const owner = FAKE_STAFF[String(filters.id)];
+                const ok = owner !== undefined &&
+                  (filters.merchant_id === undefined || filters.merchant_id === owner);
+                return Promise.resolve({ data: ok ? { id: filters.id } : null, error: null });
+              }
+              if (table === "merchant_line_configs") {
+                return Promise.resolve({ data: { channel_access_token: "token" }, error: null });
+              }
+              if (table === "merchant_line_event_settings") {
+                return Promise.resolve({ data: { message_template: "{{customer_name}}" }, error: null });
+              }
+              return Promise.resolve({ data: null, error: null });
+            },
+          };
+          return builder;
+        },
+        insert(row: Record<string, unknown>) {
+          inserts.push({ table, row });
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+    rpc(fn: string, _args: Record<string, unknown>) {
+      rpcCalls.push(fn);
+      if (fn === "resolve_line_notification_targets") {
+        // 同商家時:已連線、事件開啟,只有一個未綁定的服務人員 → 只寫一列 skipped,不打 LINE API。
+        return Promise.resolve({
+          data: {
+            connected: true,
+            event_enabled: true,
+            targets: [],
+            skipped: [{ type: "staff", id: "staff-A", reason: "target_not_bound" }],
+          },
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: {}, error: null });
+    },
+  };
+  return { adminClient, rpcCalls, inserts, selects };
+}
+
+function makeLineDeps(
+  adminClient: unknown,
+  overrides: Partial<HandleRequestDeps> = {},
+): HandleRequestDeps {
+  return {
+    // 呼叫者確實能管理 merchant-A(授權檢查通過)—— 這正是 IDOR 的前提。
+    createCallerClient: () => ({ rpc: () => Promise.resolve({ data: true, error: null }) }),
+    createAdminClient: () => adminClient,
+    ...overrides,
+  };
+}
+
+function makeLineRequest(body: Record<string, unknown>): Request {
+  return new Request("http://localhost/line-notify-dispatch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer fake-jwt" },
+    body: JSON.stringify(body),
+  });
+}
+
+Deno.test("#972(核心必測):A 商家帶 B 商家的 booking_id → 404,不解析收件人、不寫任何發送記錄", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-B", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 404);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972(核心必測):A 商家帶 B 商家的 staff_leave_record_id → 404,不解析收件人、不寫任何發送記錄", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-B", event_type: "staff_leave_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 404);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972:不存在的 booking_id 也回 404(不區分「不存在」與「別家的」),不寫記錄", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-nope", event_type: "booking_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 404);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed,不當作通過),不寫記錄", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient({ failLookup: true });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 500);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972 正向對照:同商家的 booking_id → 正常解析收件人並寫入跳過記錄(行為不變)", async () => {
+  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+  assertEquals(inserts.length, 1);
+  assertEquals(inserts[0].table, "line_notification_log");
+  assertEquals(inserts[0].row.booking_id, "booking-A");
+  // 釘住歸屬查詢真的用了 merchant_id 條件(拿掉 .eq("merchant_id") 這條會轉紅)。
+  assertEquals(selects[0], { table: "bookings", filters: { id: "booking-A", merchant_id: "merchant-A" } });
+});
+
+Deno.test("#972 正向對照:同商家的 staff_leave_record_id → 正常解析收件人並寫入跳過記錄", async () => {
+  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-A", event_type: "staff_leave_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+  assertEquals(inserts.length, 1);
+  assertEquals(inserts[0].row.staff_leave_record_id, "leave-A");
+  assertEquals(selects[1], { table: "merchant_staff", filters: { id: "staff-A", merchant_id: "merchant-A" } });
+});
+
+Deno.test("#972:授權檢查沒過時仍然是 403(歸屬檢查不會蓋掉原本的授權檢查),也不查歸屬", async () => {
+  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient, {
+      createCallerClient: () => ({ rpc: () => Promise.resolve({ data: false, error: null }) }),
+    }),
+  );
+  assertEquals(res.status, 403);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+  assertEquals(selects, []);
+});
+
+Deno.test("#972:注入的歸屬檢查回 false 時,handler 一定擋下(handler 確實依賴這道檢查)", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+  const denyAll: NotifySubjectOwnershipLookup = {
+    bookingBelongsToMerchant: () => Promise.resolve(false),
+    staffLeaveRecordBelongsToMerchant: () => Promise.resolve(false),
+  };
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient, { createOwnershipLookup: () => denyAll }),
+  );
+  assertEquals(res.status, 404);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#972:buildNotifySubjectOwnershipLookup 請假紀錄查不到時回 false,不再查服務人員", async () => {
+  const { adminClient, selects } = makeFakeLineAdminClient();
+  const lookup = buildNotifySubjectOwnershipLookup(adminClient);
+  assertEquals(await lookup.staffLeaveRecordBelongsToMerchant("leave-nope", "merchant-A"), false);
+  assertEquals(selects.map((x) => x.table), ["staff_leave_records"]);
 });

@@ -133,7 +133,8 @@ export interface PushDispatchDeps {
     merchantId: string,
     eventType: PushDispatchEventType,
   ): Promise<PushEventSettingRow | null>;
-  getBookingStaffId(bookingId: string): Promise<string | null>;
+  /** #972:一律帶 merchantId,只查這間商家的訂單(別家的訂單編號 → 視同查無 → null)。 */
+  getBookingStaffId(bookingId: string, merchantId: string): Promise<string | null>;
   /** §5.1:把「這個事件要通知誰」收斂成一支資料庫函式,不在 TypeScript 裡各自拼 SQL。 */
   resolveRecipients(
     merchantId: string,
@@ -149,7 +150,8 @@ export interface PushDispatchDeps {
     eventType: PushDispatchEventType,
   ): Promise<boolean>;
   deleteSubscription(id: string): Promise<void>;
-  renderBookingVariables(bookingId: string): Promise<Record<string, string>>;
+  /** #972:一律帶 merchantId,資料庫 render_booking_notification_variables 會確認訂單屬於這間商家。 */
+  renderBookingVariables(bookingId: string, merchantId: string): Promise<Record<string, string>>;
   writeLog(row: PushNotificationLogInsert): Promise<void>;
   /**
    * §13.4:站內通知中心(鈴鐺)的寫入。一個收件人 → 一列 log + 一列站內通知,一對一。
@@ -347,7 +349,7 @@ export async function dispatchPushForBooking(
     return { dispatched: false, reason: "event_disabled" };
   }
 
-  const bookingStaffId = await deps.getBookingStaffId(bookingId);
+  const bookingStaffId = await deps.getBookingStaffId(bookingId, merchantId);
 
   // ---------------------------------------------------------------------
   // §4.2 第 2 層 + §5.1:找出這間商家訂閱了這個事件、而且本人開關是開的所有人。
@@ -446,7 +448,7 @@ export async function dispatchPushForBooking(
   //    情境,卻剛好一片空白;之後的站內通知中心(鈴鐺)更是直接依賴這兩個值。
   //    這一段位置調換是刻意的,不要再搬回去。
   // ---------------------------------------------------------------------
-  const variables = await deps.renderBookingVariables(bookingId);
+  const variables = await deps.renderBookingVariables(bookingId, merchantId);
   if (eventType === "booking_updated" && changeSummary) {
     variables.change_summary = changeSummary;
   }

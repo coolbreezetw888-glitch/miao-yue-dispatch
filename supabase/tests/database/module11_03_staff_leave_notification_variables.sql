@@ -66,10 +66,10 @@ values (
 );
 
 -- =========================================================================
--- ① 基本組裝正確(單日)。
+-- ① 基本組裝正確(單日)。#972:簽章改為 (p_staff_leave_record_id, p_merchant_id)。
 -- =========================================================================
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001', 'service_role');
-select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid) as r \gset single_
+select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid) as r \gset single_
 select pg_temp.test_clear_auth();
 
 select is(:'single_r'::jsonb->>'merchant_name', 'LINE通知請假變數測試店', '單日請假:merchant_name 正確組裝');
@@ -81,7 +81,7 @@ select is(:'single_r'::jsonb->>'leave_type_name', '特休', '單日請假:leave_
 -- ② 跨日請假:booking_date 顯示成區間格式。
 -- =========================================================================
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001', 'service_role');
-select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000072'::uuid) as r \gset range_
+select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000072'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid) as r \gset range_
 select pg_temp.test_clear_auth();
 
 select is(:'range_r'::jsonb->>'booking_date', '2026-10-03 至 2026-10-05', '跨日請假(start_date<>end_date):booking_date 顯示為「起 至 迄」區間格式');
@@ -93,7 +93,7 @@ select is(:'range_r'::jsonb->>'booking_date', '2026-10-03 至 2026-10-05', '跨�
 update merchant_leave_types set name = '特休(已改名)' where id = 'ee000000-0000-4000-8000-000000000061';
 
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001', 'service_role');
-select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid) as r \gset renamed_
+select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid) as r \gset renamed_
 select pg_temp.test_clear_auth();
 
 select is(:'renamed_r'::jsonb->>'leave_type_name', '特休', 'leave_type_name 讀 leave_type_name_snapshot,merchant_leave_types 改名後舊紀錄的文案仍維持登記當下的名稱(已知坑)');
@@ -103,10 +103,10 @@ select is(:'renamed_r'::jsonb->>'leave_type_name', '特休', 'leave_type_name �
 -- =========================================================================
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001', 'service_role');
 select lives_ok(
-  $$select render_staff_leave_notification_variables('00000000-0000-4000-8000-000000000000'::uuid)$$,
+  $$select render_staff_leave_notification_variables('00000000-0000-4000-8000-000000000000'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid)$$,
   '查無此請假紀錄時不報錯(安靜路徑)'
 );
-select render_staff_leave_notification_variables('00000000-0000-4000-8000-000000000000'::uuid) as r \gset missing_
+select render_staff_leave_notification_variables('00000000-0000-4000-8000-000000000000'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid) as r \gset missing_
 select pg_temp.test_clear_auth();
 
 select is(:'missing_r'::text, '{}', '查無此請假紀錄時回傳空物件 {}');
@@ -116,7 +116,7 @@ select is(:'missing_r'::text, '{}', '查無此請假紀錄時回傳空物件 {}'
 -- =========================================================================
 select pg_temp.test_set_auth('ee000000-0000-4000-8000-000000000001');
 select throws_ok(
-  $$select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid)$$,
+  $$select render_staff_leave_notification_variables('ee000000-0000-4000-8000-000000000071'::uuid, 'ee000000-0000-4000-8000-000000000021'::uuid)$$,
   '42501', null,
   'render_staff_leave_notification_variables 不給一般 authenticated 角色呼叫,只給 service_role'
 );

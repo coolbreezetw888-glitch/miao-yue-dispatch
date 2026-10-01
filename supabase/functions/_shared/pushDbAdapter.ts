@@ -53,11 +53,13 @@ export function buildPushDispatchDeps(
       return (data as PushEventSettingRow | null) ?? null;
     },
 
-    async getBookingStaffId(bookingId: string) {
+    // #972:加上 merchant_id 條件,別家的訂單編號查不到任何東西。
+    async getBookingStaffId(bookingId: string, merchantId: string) {
       const { data, error } = await adminClient
         .from("bookings")
         .select("staff_id")
         .eq("id", bookingId)
+        .eq("merchant_id", merchantId)
         .maybeSingle();
       if (error) {
         console.error("[push-dispatch] getBookingStaffId 失敗", error);
@@ -136,9 +138,11 @@ export function buildPushDispatchDeps(
       if (error) console.error("[push-dispatch] deleteSubscription 失敗", error);
     },
 
-    async renderBookingVariables(bookingId: string) {
+    // #972:render_booking_notification_variables 簽章改為 (p_booking_id, p_merchant_id),必須帶商家。
+    async renderBookingVariables(bookingId: string, merchantId: string) {
       const { data, error } = await adminClient.rpc("render_booking_notification_variables", {
         p_booking_id: bookingId,
+        p_merchant_id: merchantId,
       });
       if (error) {
         console.error("[push-dispatch] render_booking_notification_variables 失敗", error);
