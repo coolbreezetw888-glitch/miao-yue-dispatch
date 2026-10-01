@@ -2521,16 +2521,22 @@ function CalendarPageInner() {
       />
 
       {viewMode === "week" ? (
-        <div className="flex items-center gap-2">
+        // #961:畫面比 480px 窄(所有手機,例如 320/375/430px)時,7 個日期鈕自己佔滿第一排、上一週/下一週移到第二排各佔一半,
+        // 不然 320px 日期鈕只剩約 9px(日期黏成「27282930」)、375px 只剩約 19px(「週日」被擠成上下兩行)。480px 以上(平板、電腦)版面不變。
+        <div
+          className="flex items-center gap-2 max-[480px]:flex-wrap"
+          data-testid="calendar-week-strip"
+        >
           <Button
             type="button"
             variant="neutral"
             size="card"
+            className="max-[480px]:flex-1"
             onClick={() => setSelectedDate((d) => addDays(d, -7))}
           >
             上一週
           </Button>
-          <div className="grid min-w-0 flex-1 grid-cols-7 gap-1.5">
+          <div className="grid min-w-0 flex-1 grid-cols-7 gap-1.5 max-[480px]:order-first max-[480px]:basis-full">
             {weekDays.map((d) => {
               const key = toDateKey(d);
               const isSelected = key === selectedDateKey;
@@ -2562,6 +2568,7 @@ function CalendarPageInner() {
             type="button"
             variant="neutral"
             size="card"
+            className="max-[480px]:flex-1"
             onClick={() => setSelectedDate((d) => addDays(d, 7))}
           >
             下一週

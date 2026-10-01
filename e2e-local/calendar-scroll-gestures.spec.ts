@@ -625,9 +625,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
   //    320px 時 7 個日期鈕被擠到內寬約 9px,兩位數日期(27、28、29、30)的寬度 13px 塞不下,
   //    畫面上看起來是「27282930」黏成一串。375px 不會發生(e2e/mobile-overflow.spec.ts 只測 375,所以沒抓到)。
   //    批次 1 規定不改產品程式 ⇒ 不改成 skip、不放寬斷言。
-  // 🔴 已知問題 #961:週列日期鈕在 320px 擠壓;修好後移除 test.fail。
-  //    (主腦 2026-10-01 裁決:320px 這條標成 test.fail(),斷言一字不改。問題修好時它會變成「意外通過」而轉紅,
-  //     提醒我們把這個標記拿掉——不是放寬斷言。375px 那條照常必須通過。)
+  // ✅ 2026-10-02 #961 已修(週列 <480px 改成日期一排、上一週/下一週一排),test.fail 標記已移除,斷言一字未改。
   for (const [w, h] of [
     [375, 667],
     [320, 568],
@@ -635,14 +633,122 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     test(`T7 版面 ${w}px:行事曆週檢視(12 位服務人員)沒有橫向溢出;滑軌不存在`, async ({
       browser,
     }) => {
-      // 已知問題 #961:週列日期鈕在 320px 擠壓;修好後移除 test.fail。
-      test.fail(w === 320, "已知問題 #961:週列日期鈕在 320px 擠壓;修好後移除 test.fail");
       const { context, page } = await openMobile(browser, fixture.many, w, h);
       try {
         await expect(page.getByTestId("calendar-scroll-rail"), "手機不顯示滑軌").toHaveCount(0);
         // 正向對照:格線本身確實比畫面寬(溢出斷言之所以通過,是因為它被收在可橫捲的容器裡,不是因為內容太窄)。
         expect((await scrollState(page)).maxLeft).toBeGreaterThan(100);
         await assertNoHorizontalOverflow(page, `行事曆週檢視(${w}px,12 位服務人員)`);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  // T8(#961,規格書最後一節;2026-10-02 主腦裁決切換寬度 <480px):週列「上一週 / 7 個日期 / 下一週」。
+  //   每個寬度:每顆日期鈕 ≥ 30px、「週X」與日期數字都完整在鈕內、相鄰鈕不重疊、整頁無水平溢出;
+  //            點日期 / 下一週 / 上一週功能照常。
+  //   320 / 375 / 430px(手機):兩排 —— 日期一排在上,上一週 / 下一週在下一排同一行。
+  //   479px 兩排、480px 一排(邊界守門,QA 2026-10-02)。
+  //   768px(平板,電腦同理):一排 —— 上一週、日期列、下一週在同一行(版面不變)。
+  // 故障注入:把 CalendarPage.tsx 週列的 max-[480px]:* 拿掉 ⇒ 手機那幾條要紅(實際紀錄見回報)。
+  for (const [w, h] of [
+    [320, 568],
+    [375, 667],
+    [430, 932],
+    [479, 932], // 邊界:Tailwind v4 的 max-[480px] = 寬度 < 480 ⇒ 479 要兩排
+    [480, 932], // 邊界:480 要一排
+    [768, 1024],
+  ] as const) {
+    test(`T8 #961 週列 ${w}px:7 個日期鈕清楚分辨、不溢出;上一週/下一週/點日期正常`, async ({
+      browser,
+    }) => {
+      const { context, page } = await openMobile(browser, fixture.many, w, h);
+      try {
+        const strip = page.getByTestId("calendar-week-strip");
+        const days = strip.getByRole("button", { name: /^切換到 / });
+        await expect(days).toHaveCount(7);
+        const m = await strip.evaluate((root) => {
+          const btns = Array.from(
+            root.querySelectorAll<HTMLElement>('button[aria-label^="切換到 "]'),
+          );
+          const r = (el: Element) => el.getBoundingClientRect();
+          return {
+            days: btns.map((b) => {
+              const br = r(b);
+              const spans = Array.from(b.querySelectorAll("span"))
+                .slice(0, 2)
+                .map((sp) => {
+                  const sr = r(sp);
+                  return { text: sp.textContent ?? "", left: sr.left, right: sr.right };
+                });
+              return {
+                left: br.left,
+                right: br.right,
+                width: br.width,
+                top: br.top,
+                bottom: br.bottom,
+                scrollW: b.scrollWidth,
+                clientW: b.clientWidth,
+                spans,
+              };
+            }),
+            prev: r(
+              Array.from(root.querySelectorAll("button")).find((b) => b.textContent === "上一週")!,
+            ),
+            next: r(
+              Array.from(root.querySelectorAll("button")).find((b) => b.textContent === "下一週")!,
+            ),
+          };
+        });
+        m.days.forEach((d, i) => {
+          expect(d.width, `第 ${i + 1} 顆日期鈕寬度`).toBeGreaterThanOrEqual(30);
+          expect(d.scrollW, `第 ${i + 1} 顆日期鈕內容溢出`).toBeLessThanOrEqual(d.clientW + 1);
+          for (const sp of d.spans) {
+            expect(sp.left, `第 ${i + 1} 顆「${sp.text}」左緣超出按鈕`).toBeGreaterThanOrEqual(
+              d.left - 0.5,
+            );
+            expect(sp.right, `第 ${i + 1} 顆「${sp.text}」右緣超出按鈕`).toBeLessThanOrEqual(
+              d.right + 0.5,
+            );
+          }
+          if (i > 0)
+            expect(d.left, `第 ${i} 與 ${i + 1} 顆日期鈕重疊`).toBeGreaterThanOrEqual(
+              m.days[i - 1]!.right,
+            );
+        });
+        expect(Math.abs(m.prev.top - m.next.top), "上一週 / 下一週在同一行").toBeLessThanOrEqual(1);
+        if (w < 480) {
+          // 手機:兩排,日期在上、上一週 / 下一週在下。
+          expect(m.prev.top, "上一週應該在日期列下面一排").toBeGreaterThanOrEqual(
+            m.days[0]!.bottom,
+          );
+          expect(m.next.top, "下一週應該在日期列下面一排").toBeGreaterThanOrEqual(
+            m.days[6]!.bottom,
+          );
+        } else {
+          // 平板 / 電腦:一排,版面不變。
+          expect(m.prev.right, "上一週在日期列左邊同一排").toBeLessThanOrEqual(m.days[0]!.left);
+          expect(m.next.left, "下一週在日期列右邊同一排").toBeGreaterThanOrEqual(m.days[6]!.right);
+          expect(m.prev.top, "上一週不該掉到日期列下面").toBeLessThan(m.days[0]!.bottom);
+        }
+        await assertNoHorizontalOverflow(page, `行事曆週列(${w}px)`);
+        // 想留截圖時設 SHOT_961_DIR(只在本機手動驗收用;不設就不截)。
+        const shotDir = process.env["SHOT_961_DIR"];
+        if (shotDir) {
+          await strip.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: `${shotDir}/req961-week-strip-${w}.png` });
+        }
+
+        // 功能不變:點最後一顆日期 → 被選中;下一週 / 上一週 → 日期往後 / 往前 7 天。
+        const lastLabel = (await days.nth(6).getAttribute("aria-label"))!;
+        await days.nth(6).click();
+        await expect(days.nth(6), "點了之後這顆變成選中樣式").toHaveClass(/bg-brand-soft/);
+        await strip.getByRole("button", { name: "下一週", exact: true }).click();
+        const afterNext = (await days.nth(6).getAttribute("aria-label"))!;
+        expect(afterNext).not.toBe(lastLabel);
+        await strip.getByRole("button", { name: "上一週", exact: true }).click();
+        await expect(days.nth(6)).toHaveAttribute("aria-label", lastLabel);
       } finally {
         await context.close();
       }
