@@ -219,3 +219,15 @@ Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,有實際目標時要�
   });
   assertEquals(shouldWriteAnyLogRow(result), true);
 });
+
+Deno.test("shouldWriteAnyLogRow: #962 服務人員已離職/停用、未開放行事曆檢視被跳過時,仍要寫跳過記錄讓商家查得到", () => {
+  for (const reason of ["staff_inactive", "staff_calendar_view_off"] as const) {
+    const result: ResolveTargetsResult = {
+      connected: true,
+      event_enabled: true,
+      targets: [],
+      skipped: [{ type: "staff", id: "s1", reason }],
+    };
+    assertEquals(shouldWriteAnyLogRow(result), true);
+  }
+});

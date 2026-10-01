@@ -68,7 +68,9 @@ export interface ResolvedTarget {
 export interface SkippedTarget {
   type: "admin" | "agent" | "staff" | "member";
   id: string | null;
-  reason: "target_not_bound" | "no_target";
+  // SPECS-INDEX #962:staff_inactive(服務人員已離職/停用)、staff_calendar_view_off(未開放行事曆檢視)
+  // 由 resolve_line_notification_targets 判斷後原樣寫進 line_notification_log.skip_reason。
+  reason: "target_not_bound" | "no_target" | "staff_inactive" | "staff_calendar_view_off";
 }
 
 export interface ResolveTargetsResult {

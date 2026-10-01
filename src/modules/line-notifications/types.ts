@@ -46,6 +46,10 @@ export const LINE_LOG_SKIP_REASON_LABELS: Record<string, string> = {
   event_disabled: "這個事件的通知開關是關閉的",
   target_not_bound: "對象尚未綁定 LINE",
   no_target: "找不到可通知的對象(例如訂單沒有連結會員)",
+  // SPECS-INDEX #962:服務人員已離職/停用(status = removed)就不寄訂單 LINE。
+  staff_inactive: "服務人員已離職或停用",
+  // SPECS-INDEX #876/#962:管理員關掉這位服務人員的「行事曆檢視」,就不寄會帶出客戶資料的訂單 LINE。
+  staff_calendar_view_off: "服務人員未開放「行事曆檢視」,不寄訂單通知",
 };
 
 export const LINE_LOG_EVENT_TYPE_LABELS: Record<string, string> = {

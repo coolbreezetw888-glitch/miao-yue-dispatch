@@ -161,8 +161,12 @@ select resolve_line_notification_targets('e8760000-0000-4000-8000-000000000021',
 
 select ok(not exists (select 1 from jsonb_array_elements(:'lineoff_r'::jsonb->'targets') t where t->>'type' = 'staff'),
   '#876 LINE(核心):行事曆檢視關掉 → 服務人員丙不在 LINE 收件人裡');
-select ok(not exists (select 1 from jsonb_array_elements(:'lineoff_r'::jsonb->'skipped') s where s->>'type' = 'staff'),
-  '#876 LINE:也不列入跳過清單(不寫一筆「未綁定」的假原因誤導商家)');
+-- #962 起改為列入跳過清單,原因寫 staff_calendar_view_off(不是誤導的「未綁定」)
+select ok(exists (select 1 from jsonb_array_elements(:'lineoff_r'::jsonb->'skipped') s
+                  where s->>'type' = 'staff' and s->>'reason' = 'staff_calendar_view_off')
+      and not exists (select 1 from jsonb_array_elements(:'lineoff_r'::jsonb->'skipped') s
+                      where s->>'type' = 'staff' and s->>'reason' = 'target_not_bound'),
+  '#876/#962 LINE:列入跳過清單,原因是「未開放行事曆檢視」,不寫「未綁定」的假原因誤導商家');
 select is(
   (select array_agg(t->>'type' order by t->>'type') from jsonb_array_elements(:'lineoff_r'::jsonb->'targets') t),
   array['admin', 'agent', 'member'],
@@ -230,8 +234,9 @@ select pg_temp.test_clear_auth();
 select resolve_line_notification_targets('e8760000-0000-4000-8000-000000000021', 'booking_confirmed', :'bkding_id'::uuid, null) as r \gset linedingoff_
 select ok(not exists (select 1 from jsonb_array_elements(:'linedingoff_r'::jsonb->'targets') t where t->>'type' = 'staff'),
   '#876 邊界:還沒登入的服務人員,管理員明確關掉行事曆檢視 → LINE 不寄');
-select ok(not exists (select 1 from jsonb_array_elements(:'linedingoff_r'::jsonb->'skipped') s where s->>'type' = 'staff'),
-  '#876 邊界:同上,也不列入跳過清單');
+select ok(exists (select 1 from jsonb_array_elements(:'linedingoff_r'::jsonb->'skipped') s
+                  where s->>'type' = 'staff' and s->>'reason' = 'staff_calendar_view_off'),
+  '#876/#962 邊界:同上,跳過原因記為「未開放行事曆檢視」');
 
 -- 他之後第一次完成登入:seed 是 on conflict do nothing,不會把管理員的「關」蓋回「開」
 select seed_default_staff_permissions('e8760000-0000-4000-8000-000000000052');
