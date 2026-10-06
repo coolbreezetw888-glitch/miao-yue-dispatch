@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { OFFICIAL_LINE_AT_URL } from "@/lib/officialContact";
 import { LINE_LOG_EVENT_TYPE_LABELS } from "@/modules/line-notifications/types";
 import {
+  AGENT_PERMISSION_SECTIONS,
   STAFF_BOOLEAN_PERMISSION_FIELDS,
   STAFF_NUMBER_PERMISSION_FIELDS,
   visibleAgentPermissionSections,
@@ -225,6 +226,30 @@ describe("#976 客服權限設定", () => {
     expect(d).toContain("抽成基準");
     expect(d).not.toContain("預設比例");
     expect(d).not.toContain("月折算天數");
+  });
+
+  // #976 補修(2026-10-06,使用者實機發現):說明裡殘留「對應模組 8」這類內部用語與半形標點。
+  // 用完整定義 AGENT_PERMISSION_SECTIONS(含隱藏中的「排班一覽」),還原隱藏項目時也不會帶著舊文字回來。
+  it("所有名稱與說明:不含內部用語(模組/規格書),不含半形 , : ( )", () => {
+    const bad = AGENT_PERMISSION_SECTIONS.flatMap((s) =>
+      [s.label, s.description]
+        .filter((t) => /模組|規格書|[,:()]/.test(t))
+        .map((t) => `${s.key}: ${t}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it("說明(#976 補修三條逐字)", () => {
+    const desc = (key: string) => AGENT_PERMISSION_SECTIONS.find((s) => s.key === key)?.description;
+    expect(desc("staff_report")).toBe(
+      "開放後客服可以查看個別服務人員的抽成／薪資報表。注意：重新計算已完成訂單抽成金額這個敏感操作，永遠只有商家管理員能做，不受這個開關影響。",
+    );
+    expect(desc("orders")).toBe(
+      "開放後客服可以在行事曆建立新預約、取消預約、把預約標記為完成。建單時可以看到系統建議派點、手動修改這筆訂單的派點，以及使用會員點數折抵（紅利點數功能開啟時）。",
+    );
+    expect(desc("scheduling")).toBe(
+      "開放後客服可以檢視跨服務人員的每週時段、單日例外、請假彙整總覽頁，是純唯讀檢視權限，跟「月薪人員假別設定」（有寫入行為）是兩把獨立的鑰匙。",
+    );
   });
 });
 
