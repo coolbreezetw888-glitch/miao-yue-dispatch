@@ -1,5 +1,12 @@
 // 對應規格書 v2 §10.2.2:服務人員自助行事曆的預約詳情彈窗。
 //
+// 🔴 SPECS-INDEX #977 第 7 批(2026-10-07,「詳情唯讀」舊決策再推翻一次):
+//   「服務人員新增編輯訂單」生效(canEditOrders)而且自己是**主要服務人員**時:
+//     待確認 ⇒ 底部三顆等寬「取消預約 / 編輯 / 確認接單」;已確認 ⇒「取消預約 / 編輯 / 標記完成」;
+//     已完成 ⇒ 跟客服同一句常駐 `!`(方案 A1:不能取消 / 還原,文字取自商家端同一個常數)。
+//   協助人員、已取消、開關沒生效:維持第 4 批現況(「關閉 / 確認接單」或只有「關閉」)。
+//   取消的二次確認用跟商家端同一個 CancelBookingConfirmButton;所有操作後端都會再擋一次(staff_ 包裝 RPC)。
+//
 // 🔴 SPECS-INDEX #977 第 4 批(2026-10-06,推翻下面「唯讀、只有關閉按鈕」的舊決策):
 //   訂單是「待確認」而且自己是**主要服務人員**時,底部多一顆主要按鈕「確認接單」
 //   (判斷在 staffConfirmLogic.canStaffConfirmBooking;協助人員、已確認、已完成、已取消都不顯示)。
@@ -40,8 +47,11 @@
 //   ② 「我的角色」那一列除了角色標籤,還要顯示自己的名字(第 3 項)
 //   ③ 「主要服務人員 / 協助」兩顆標籤要分得開、主手要更顯眼(第 4 項)
 
+import { useState } from "react";
+
 import {
   ActionBar,
+  AlertNote,
   AttributeTag,
   CustomerNote,
   DetailAddressRow,
@@ -68,11 +78,13 @@ import {
   type BookingStatusColorMap,
 } from "@/modules/booking/types";
 import { isoToTaipeiTime } from "@/modules/booking/dateUtils";
+import { CancelBookingConfirmButton } from "@/modules/booking/CancelBookingConfirmButton";
+import { AGENT_CANNOT_REVERSE_NOTE } from "@/modules/booking/completedBookingReversal";
 import { formatAmount } from "@/modules/booking/orderAmount";
 
 import type { MyBookingScheduleItem } from "./api";
-import { useStaffConfirmBooking } from "./context";
-import { canStaffConfirmBooking } from "./staffConfirmLogic";
+import { useStaffCancelBooking, useStaffCompleteBooking, useStaffConfirmBooking } from "./context";
+import { resolveStaffDetailActions } from "./staffOrderLogic";
 
 export function MyBookingDetailDialog({
   booking,
@@ -81,6 +93,8 @@ export function MyBookingDetailDialog({
   statusColors = DEFAULT_BOOKING_STATUS_COLORS,
   open,
   onOpenChange,
+  canEditOrders = false,
+  onEdit,
 }: {
   booking: MyBookingScheduleItem | null;
   /**
@@ -101,6 +115,10 @@ export function MyBookingDetailDialog({
   statusColors?: BookingStatusColorMap | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** #977 第 7 批:「服務人員新增編輯訂單」生效(前端判斷,只決定要不要顯示按鈕)。 */
+  canEditOrders?: boolean;
+  /** #977 第 7 批:按「編輯」⇒ 呼叫端打開服務人員模式的編輯畫面。 */
+  onEdit?: ((bookingId: string) => void) | undefined;
 }) {
   if (!booking) return null;
 
@@ -111,7 +129,10 @@ export function MyBookingDetailDialog({
   const startTime = isoToTaipeiTime(booking.start_at);
   const endTime = isoToTaipeiTime(booking.end_at);
   const status = booking.status as BookingStatus;
-  const showConfirm = canStaffConfirmBooking(booking);
+  const actions = resolveStaffDetailActions(booking, canEditOrders);
+  const showConfirm = actions.showConfirm;
+  // 開關生效的主要服務人員、待確認 / 已確認:三顆等寬(取消 / 編輯 / 確認或完成),沒有「關閉」(左上角 ✕ 關)。
+  const showOrderActions = actions.showCancel || actions.showEdit;
 
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
@@ -126,20 +147,55 @@ export function MyBookingDetailDialog({
           </StatusTag>
         }
         footer={
-          <ActionBar>
-            <FullPageLayerClose asChild>
-              <Button type="button" variant="neutral" size="touch">
-                關閉
-              </Button>
-            </FullPageLayerClose>
-            {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
-          </ActionBar>
+          showOrderActions ? (
+            <ActionBar>
+              {actions.showCancel ? (
+                <StaffCancelBookingButton
+                  bookingId={booking.id}
+                  onDone={() => onOpenChange(false)}
+                />
+              ) : null}
+              {actions.showEdit ? (
+                <Button
+                  type="button"
+                  variant="neutral"
+                  size="touch"
+                  data-testid="staff-edit-booking-button"
+                  onClick={() => onEdit?.(booking.id)}
+                >
+                  編輯
+                </Button>
+              ) : null}
+              {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
+              {actions.showComplete ? (
+                <StaffCompleteBookingButton
+                  bookingId={booking.id}
+                  onDone={() => onOpenChange(false)}
+                />
+              ) : null}
+            </ActionBar>
+          ) : (
+            <ActionBar>
+              <FullPageLayerClose asChild>
+                <Button type="button" variant="neutral" size="touch">
+                  關閉
+                </Button>
+              </FullPageLayerClose>
+              {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
+            </ActionBar>
+          )
         }
       >
         {/* skill 二之六 明細列:分組 + 組間留白、金額整組色塊、最重要的值放大、標籤淡值粗、
             數字 tabular-nums、電話/地址可點擊各佔一行、兩種備註分開。順序比照商家端:
             時間 → 人員 → 金額 → 客戶 → 備註。 */}
         <div className="flex min-w-0 flex-col gap-5">
+          {/* #977 第 7 批(方案 A1):已完成的單跟客服一樣不能取消 / 還原,常駐說明(文字取商家端同一個常數)。 */}
+          {actions.showCompletedNote ? (
+            <AlertNote data-testid="staff-cannot-reverse-note">
+              {AGENT_CANNOT_REVERSE_NOTE}
+            </AlertNote>
+          ) : null}
           <DetailRow label="預約時間" size="lg">
             {startTime} – {endTime}
           </DetailRow>
@@ -245,6 +301,73 @@ function StaffConfirmBookingButton({ bookingId }: { bookingId: string }) {
       data-testid="staff-confirm-booking-button"
     >
       確認接單
+    </Button>
+  );
+}
+
+/** #977 第 7 批:「取消預約」(危險樣式)+ 跟商家端同一個二次確認小卡窗。成功 ⇒ 提示、關詳情、行事曆立刻重查。 */
+function StaffCancelBookingButton({
+  bookingId,
+  onDone,
+}: {
+  bookingId: string;
+  onDone: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const cancelMutation = useStaffCancelBooking();
+  return (
+    <CancelBookingConfirmButton
+      disabled={cancelMutation.isPending}
+      reason={reason}
+      onReasonChange={setReason}
+      triggerTestId="staff-cancel-booking-button"
+      onConfirm={() =>
+        cancelMutation.mutate(
+          { bookingId, reason: reason.trim() ? reason.trim() : null },
+          {
+            onSuccess: () => {
+              toast.success("已取消預約");
+              onDone();
+            },
+            onError: (err) => {
+              toast.error("操作失敗", { description: getErrorMessage(err) });
+            },
+          },
+        )
+      }
+    />
+  );
+}
+
+/** #977 第 7 批:「標記完成」(主要按鈕,跟商家端一樣直接執行、沒有另外的確認步驟)。 */
+function StaffCompleteBookingButton({
+  bookingId,
+  onDone,
+}: {
+  bookingId: string;
+  onDone: () => void;
+}) {
+  const completeMutation = useStaffCompleteBooking();
+  return (
+    <Button
+      type="button"
+      variant="primary"
+      size="touch"
+      disabled={completeMutation.isPending}
+      data-testid="staff-complete-booking-button"
+      onClick={() =>
+        completeMutation.mutate(bookingId, {
+          onSuccess: () => {
+            toast.success("已標記完成");
+            onDone();
+          },
+          onError: (err) => {
+            toast.error("操作失敗", { description: getErrorMessage(err) });
+          },
+        })
+      }
+    >
+      標記完成
     </Button>
   );
 }

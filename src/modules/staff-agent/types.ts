@@ -125,7 +125,7 @@ export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
     key: "show_member_info",
     label: "服務人員是否顯示會員資料",
     description:
-      "關閉時，這位服務人員在自己的預約詳情只看得到客戶姓名，看不到電話、地址等聯絡資料。",
+      "關閉時，這位服務人員在自己的預約詳情只看得到客戶姓名，看不到電話、地址等聯絡資料。開啟「服務人員新增編輯訂單」時，這個開關必須開著。",
     type: "boolean",
   },
   {
@@ -138,10 +138,10 @@ export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
   {
     key: "can_create_edit_orders",
     label: "服務人員新增編輯訂單",
+    // #977 第 7 批(2026-10-07)起生效:拿掉「即將推出」,說明改成實際行為(方案 A1 / B2)。
     description:
-      "開啟後，這位服務人員可以在自己的行事曆新增預約，並編輯、取消、完成指派給自己的訂單。",
+      "開啟後，這位服務人員可以在自己的行事曆時間軸新增預約、拖拉改時間，並編輯、取消、完成自己是主要服務人員的訂單；不能指派協助人員。按件計酬、而且開了「可預約時段/休假自助調整」的服務人員，也可以在時間軸開關自己的時段。開啟時會一併開啟「服務人員是否顯示會員資料」。",
     type: "boolean",
-    comingSoon: true,
   },
   {
     key: "can_upload_construction_photos",

@@ -73,12 +73,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/utils";
 // 2026-09-24 稽核修正(問題 3):Radix Select 幽靈空值事件的共用防護,見該檔案開頭的完整說明。
@@ -92,17 +86,12 @@ import {
 } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { getFeatureFlag } from "@/modules/merchant/api";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import {
   useAgentPermission,
   useCurrentMerchantRole,
   useMerchantStaffList,
 } from "@/modules/staff-agent/context";
-import {
-  useMerchantServiceCategories,
-  useMerchantServiceItems,
-} from "@/modules/service-items/context";
 import { UNCATEGORIZED_LABEL } from "@/modules/service-items/types";
 import {
   MemberPhoneMatchPanel,
@@ -117,11 +106,23 @@ import { computeBookingChangeSummary } from "@/modules/push-notifications/change
 import {
   createBooking,
   fetchStaffBookableStartTimes,
-  getBooking,
   updateBooking,
-  MATERIAL_COST_ENABLED_FEATURE_KEY,
   type BookingServiceItemSelectionInput,
+  type PreviewBookingPointsInput,
 } from "./api";
+// SPECS-INDEX #977 第 7 批:服務人員模式(資料來源層 + staff_ 包裝 RPC)。
+import {
+  MERCHANT_BOOKING_FORM_ACTOR,
+  useBookingFormDataSource,
+  type BookingFormActor,
+} from "./useBookingFormDataSource";
+import {
+  fetchMyBookableStartTimes,
+  staffCreateBooking,
+  staffPreviewBookingPoints,
+  staffUpdateBooking,
+} from "@/modules/staff-portal/api";
+import { useMyDayScheduleState } from "@/modules/staff-portal/context";
 import { BookingDetailDialog } from "./BookingDetailDialog";
 // SPECS-INDEX #979:「選擇項目」整頁(畫面)+ 草稿 / 寫回的純邏輯。
 import { ServiceItemPickerPage } from "./ServiceItemPickerPage";
@@ -159,12 +160,8 @@ import {
   setStaffDayOverride,
   useMerchantBookings,
   useMerchantBookingStatusColors,
-  useMerchantBusinessHours,
   useMerchantCalendarStateStyles,
   useMerchantDaySchedule,
-  useMerchantMaterialCostItems,
-  useMerchantPaymentMethods,
-  useMerchantTaxSettings,
 } from "./context";
 // 建單與訂單管理介面優化 §1:拿掉 DayOverrideDialog 互動流程,不再需要 timeToMinutes/minutesToTime
 // 之外的「選時間範圍」相關計算——這兩支仍然給 BookingDateTimeField/背景格線切格使用,繼續 import。
@@ -213,6 +210,9 @@ import {
 } from "./bookingAmountFields";
 import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
+// SPECS-INDEX #977 第 7 批:背景格子元件與每格狀態的純函式搬到共用檔(服務人員端時間軸也用同一份)。
+import { DaySlotCell } from "./DaySlotCell";
+import { daySlotState, resolveDaySlot, SLOT_TAP_VS_DRAG_THRESHOLD_PX } from "./daySlotGrid";
 // 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
 // 下面給管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
 import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
@@ -282,6 +282,7 @@ function BookingDateTimeField({
   keepOriginalTime,
   timeChosenByUser,
   onChange,
+  staffMode = false,
 }: {
   id?: string | undefined;
   merchantId: string;
@@ -299,40 +300,62 @@ function BookingDateTimeField({
   timeChosenByUser: boolean;
   /** source = "user":使用者在時段清單點了一個時間;"auto":換日期(時間沿用)或自動清空。 */
   onChange: (dateKey: string, time: string, source: "user" | "auto") => void;
+  /** SPECS-INDEX #977 第 7 批:服務人員模式 ⇒ 時間清單改打 staff_list_my_bookable_start_times、
+   * 整天請假改讀 get_my_day_schedule_state(服務人員讀不到商家的整天行事曆)。 */
+  staffMode?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   // #980 第 4 點:原本選的時間變得不能選、被自動清空時,常駐提示(skill 二:狀態跟使用者以為的不一樣 ⇒ `!`)。
   const [timeClearedNotice, setTimeClearedNotice] = useState(false);
-  const { data: schedule } = useMerchantDaySchedule(merchantId, dateKey || null);
+  // #977 第 7 批:服務人員模式不查商家整天行事曆(merchantId 傳 null ⇒ 停用),改讀自己的這天狀態。
+  const { data: schedule } = useMerchantDaySchedule(staffMode ? null : merchantId, dateKey || null);
+  const { data: myDayState } = useMyDayScheduleState(staffMode ? staffId : null, dateKey || null);
 
   const staffBlock = (schedule?.staff ?? []).find((s) => s.staff_id === staffId);
 
   // 2026-09-24 稽核修正(問題 5):這位服務人員這一天是不是整天請假。有值時說明假別,
   // 不要讓客服把整張表單填完送出才被後端擋下。(清單本身也會是空的,後端同樣擋請假。)
-  const onLeave = staffBlock?.on_leave ?? null;
+  const onLeave = staffMode ? (myDayState?.on_leave ?? null) : (staffBlock?.on_leave ?? null);
 
   // SPECS-INDEX #980:「哪些起點能約」改由資料庫 list_staff_bookable_start_times 決定(逐格呼叫送出時
   // 真正擋時段的 check_staff_booking_slot),不再由前端用 available_windows 自己算 —— 舊算法沒有看
   // 既有訂單 / 無時段限制 / 單日例外開啟,跟送出時的檢查對不起來。純邏輯在 bookingTimeOptions.ts。
   const queryDuration = resolveSlotQueryDuration(totalDurationMinutes);
   const slotQuery = useQuery({
-    queryKey: [
-      "booking-module",
-      "bookable-start-times",
-      merchantId,
-      staffId,
-      dateKey,
-      queryDuration,
-      excludeBookingId,
-    ],
+    // #977 第 7 批:服務人員模式用自己的 key 前綴(staff-portal-module),不跟商家模式共用快取。
+    queryKey: staffMode
+      ? [
+          "staff-portal-module",
+          "my-bookable-start-times",
+          staffId,
+          dateKey,
+          queryDuration,
+          excludeBookingId,
+        ]
+      : [
+          "booking-module",
+          "bookable-start-times",
+          merchantId,
+          staffId,
+          dateKey,
+          queryDuration,
+          excludeBookingId,
+        ],
     queryFn: () =>
-      fetchStaffBookableStartTimes({
-        merchantId,
-        staffId,
-        date: dateKey,
-        durationMinutes: queryDuration as number,
-        excludeBookingId,
-      }),
+      staffMode
+        ? fetchMyBookableStartTimes({
+            staffId,
+            date: dateKey,
+            durationMinutes: queryDuration as number,
+            excludeBookingId,
+          })
+        : fetchStaffBookableStartTimes({
+            merchantId,
+            staffId,
+            date: dateKey,
+            durationMinutes: queryDuration as number,
+            excludeBookingId,
+          }),
     enabled: Boolean(merchantId) && Boolean(staffId) && Boolean(dateKey) && queryDuration !== null,
   });
 
@@ -490,17 +513,8 @@ function BookingDateTimeField({
   );
 }
 
-/** 建單功能擴充規格書 2.3:料錢成本功能開關(查無資料視為關閉)。跟 MaterialCostsPage.tsx
- * 的 MaterialCostEnabledToggle 共用同一個 feature key,這裡只需要唯讀查詢決定表單要不要顯示。 */
-function useMaterialCostEnabled(merchantId: string) {
-  return useQuery({
-    queryKey: ["booking-module", "material-cost-enabled", merchantId],
-    queryFn: async () => {
-      const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
-      return value ?? false;
-    },
-  });
-}
+// 建單功能擴充規格書 2.3 的料錢成本功能開關查詢(useMaterialCostEnabled),#977 第 7 批搬到
+// useBookingFormDataSource.ts(商家模式照舊查、服務人員模式不查)。
 
 // ---------------------------------------------------------------------------
 // 5.1/5.3:手動建單表單 + 編輯預約表單(共用同一個對話框元件,決策記錄 6/規格書 5.3)。
@@ -522,6 +536,7 @@ export function BookingFormDialog({
   editingBookingId,
   onSaved,
   focusAssistants = false,
+  actor = MERCHANT_BOOKING_FORM_ACTOR,
 }: {
   merchantId: string;
   industryType: IndustryType;
@@ -532,8 +547,15 @@ export function BookingFormDialog({
   onSaved: () => void;
   /** SPECS-INDEX #873:「再加助手」打開編輯表單時,載入後自動捲到「助手」欄位。 */
   focusAssistants?: boolean;
+  /**
+   * SPECS-INDEX #977 第 7 批(2026-10-07):誰在用這張表單。預設商家模式(管理員 / 客服),行為與送出參數完全不變。
+   * 服務人員模式:主要服務人員固定是自己(唯讀一行)、沒有協助人員欄位、沒有會員比對面板、沒有「不讓服務人員看到」
+   * 開關、沒有料錢;資料改讀 staff_ 唯讀 RPC、送出改打 staff_create_booking / staff_update_booking。
+   */
+  actor?: BookingFormActor;
 }) {
   const isEdit = Boolean(editingBookingId);
+  const isStaffActor = actor.kind === "staff";
   // SPECS-INDEX #873 路徑 (b):編輯表單把助手拿掉(而且沒加新的)儲存成功後,跳擋流程二選一提示。
   // 提示放在表單元件自己身上(表單關掉後元件還掛著),行事曆與訂單管理兩個入口都會有,不用各接一次。
   const [editAssistantRemoved, setEditAssistantRemoved] = useState<AssistantRemovedInfo | null>(
@@ -541,17 +563,21 @@ export function BookingFormDialog({
   );
   const [reopenFocusAssistants, setReopenFocusAssistants] = useState(false);
   const assistantsFieldRef = useRef<HTMLDivElement>(null);
-  const { data: staffList } = useMerchantStaffList(merchantId);
-  const { data: serviceItems } = useMerchantServiceItems(merchantId);
-  // SPECS-INDEX #598(訂單管理.md §9.2):服務項目勾選區塊上方的分類篩選下拉選單,純前端依既有
-  // 分類值篩選,不新增或調整任何資料結構。
-  const { data: serviceCategories } = useMerchantServiceCategories(merchantId);
-  const { data: materialCostItems } = useMerchantMaterialCostItems(merchantId);
-  const { data: materialCostEnabled } = useMaterialCostEnabled(merchantId);
-  const { data: businessHours } = useMerchantBusinessHours(merchantId);
-  // 模組 9(支付方式)v2 §5.2:建單表單下拉選單只列出商家自訂清單裡目前上架中(status='active')
-  // 的項目,商家可以自己新增/編輯/下架,不是系統固定清單。
-  const { data: paymentMethods } = useMerchantPaymentMethods(merchantId);
+  // SPECS-INDEX #977 第 7 批:取資料改走資料來源層(useBookingFormDataSource.ts)。商家模式呼叫的仍是原本那幾支
+  // hook(服務人員清單、服務項目、#598 分類、料錢、料錢開關、營業時間、模組 9 v2 上架中付款方式、稅金、getBooking),
+  // 參數與 query key 都沒變;服務人員模式改讀 staff_ 唯讀 RPC。
+  const {
+    staffList,
+    serviceItems,
+    serviceCategories,
+    materialCostItems,
+    materialCostEnabled,
+    businessHours,
+    paymentMethods,
+    merchantTaxSettings,
+    editingDetail,
+    editingNotesHidden,
+  } = useBookingFormDataSource({ actor, merchantId, open, editingBookingId });
 
   // 建單表單細節修正第二節第 2/3 點:依商家 industry_type 判斷客戶地址是否必填。
   const requiresCustomerAddress = INDUSTRY_REQUIRES_CUSTOMER_ADDRESS[industryType];
@@ -565,12 +591,6 @@ export function BookingFormDialog({
     }
     return set;
   }, [businessHours]);
-
-  const { data: editingDetail } = useQuery({
-    queryKey: ["booking-module", "edit-detail", editingBookingId],
-    queryFn: () => getBooking(editingBookingId as string),
-    enabled: open && Boolean(editingBookingId),
-  });
 
   const [staffId, setStaffId] = useState("");
   const [serviceItemIds, setServiceItemIds] = useState<string[]>([]);
@@ -670,8 +690,6 @@ export function BookingFormDialog({
     [paymentMethods, isEdit, editingDetail],
   );
 
-  const { data: merchantTaxSettings } = useMerchantTaxSettings(merchantId);
-
   // 每次開啟時重設表單:新建模式依 prefill(金額相關欄位一律回到「全部關閉」,稅金數字預設帶入
   // 商家目前設定,這是「建立當下」唯一允許讀取即時資料當作預設值的地方,§2.4 第 2 點);
   // 編輯模式等 editingDetail 載入後帶入既有的金額快照值,不重新查詢商家目前設定。
@@ -769,7 +787,8 @@ export function BookingFormDialog({
           : "",
       );
     } else {
-      setStaffId(prefill.staffId ?? "");
+      // #977 第 7 批:服務人員模式的主要服務人員固定是自己(裁決 3),不看 prefill。
+      setStaffId(actor.kind === "staff" ? actor.staffId : (prefill.staffId ?? ""));
       setServiceItemIds([]);
       setItemQuantities({});
       setItemUnitPrices({});
@@ -1028,9 +1047,32 @@ export function BookingFormDialog({
     taxEnabled,
     taxMode,
   ]);
+  // #977 第 7 批:服務人員模式改打 staff_preview_booking_points(會員由後端決定,不送 memberId)。
+  const staffPointsFetch = useMemo(
+    () =>
+      actor.kind === "staff"
+        ? (input: PreviewBookingPointsInput) =>
+            staffPreviewBookingPoints({
+              staffId: actor.staffId,
+              bookingId: input.bookingId,
+              customerPhone: input.customerPhone,
+              serviceItems: input.serviceItems,
+              customTotalAmountEnabled: input.customTotalAmountEnabled,
+              customTotalAmount: input.customTotalAmount,
+              discountEnabled: input.discountEnabled,
+              discountMode: input.discountMode,
+              discountValue: input.discountValue,
+              taxEnabled: input.taxEnabled,
+              taxMode: input.taxMode,
+              taxValue: input.taxValue,
+            })
+        : undefined,
+    [actor],
+  );
   const { query: pointsPreviewQuery, isStale: pointsPreviewStale } = useBookingPointsPreview(
     pointsPreviewInput,
     `${pointsPreviewSession}:${editingBookingId ?? "new"}`,
+    staffPointsFetch,
   );
   const pointsPreview = pointsPreviewQuery.data;
   const pointsFetchErrorMessage =
@@ -1359,7 +1401,81 @@ export function BookingFormDialog({
             : null,
       };
 
-      if (isEdit && editingBookingId) {
+      if (actor.kind === "staff") {
+        // ───── SPECS-INDEX #977 第 7 批:服務人員模式 ─────
+        // 送出改打 staff_create_booking / staff_update_booking。**不帶**協助人員、會員、隱藏備註、料錢、
+        // 其他服務人員(包裝 RPC 根本沒有這些參數;主要服務人員固定是自己、既有協助人員 / 會員 / 隱藏備註 / 料錢
+        // 由後端保留現值)。成功後的 LINE / 推播在 staff-portal/api.ts 裡,事件跟商家端相同。
+        const staffFields = {
+          serviceItems: shared.serviceItems,
+          startAt: shared.startAt,
+          customerName: shared.customerName,
+          customerPhone: shared.customerPhone,
+          customerEmail: shared.customerEmail,
+          // 內部備註被藏起來時畫面沒有這個欄位,送 null;後端一律保留原文,不會被清掉。
+          notes: editingNotesHidden ? null : shared.notes,
+          customerAddress: shared.customerAddress,
+          customerNotes: shared.customerNotes,
+          customTotalAmountEnabled: shared.customTotalAmountEnabled,
+          customTotalAmount: shared.customTotalAmount,
+          discountEnabled: shared.discountEnabled,
+          discountMode: shared.discountMode,
+          discountValue: shared.discountValue,
+          taxEnabled: shared.taxEnabled,
+          taxMode: shared.taxMode,
+          taxValue: shared.taxValue,
+          paymentMethodId: shared.paymentMethodId,
+          customDurationEnabled: shared.customDurationEnabled,
+          customDurationMinutes: shared.customDurationMinutes,
+        };
+        if (isEdit && editingBookingId) {
+          const changeSummary = editingDetail
+            ? computeBookingChangeSummary({
+                original: {
+                  startAt: editingDetail.start_at,
+                  serviceItemIds: editingDetail.serviceItems.map((item) => item.id),
+                  staffId: editingDetail.staff_id,
+                },
+                next: {
+                  startAt: shared.startAt,
+                  serviceItemIds,
+                  staffId,
+                  staffName: actor.staffName,
+                  formattedStartAt: `${dateKey} ${time}`,
+                  serviceNames: serviceItemIds
+                    .map((id) => serviceItems?.find((si) => si.id === id)?.name)
+                    .filter((name): name is string => Boolean(name)),
+                },
+              })
+            : undefined;
+          await staffUpdateBooking({
+            bookingId: editingBookingId,
+            ...staffFields,
+            ...(pointsOriginal
+              ? buildUpdatePointsParams(pointsFormState, pointsOriginal)
+              : { pointsRedeemed: null, pointsOverride: null }),
+            ...(changeSummary ? { changeSummary } : {}),
+          });
+          toast.success("已更新預約");
+        } else {
+          const created = await staffCreateBooking({
+            staffId: actor.staffId,
+            ...staffFields,
+            ...buildCreatePointsParams(pointsFormState),
+          });
+          const feedback = buildBookingCreatedToast(created);
+          toast.success(feedback.title, {
+            description: (
+              <div className="flex flex-col gap-0.5">
+                {feedback.lines.map((line) => (
+                  <span key={line}>{line}</span>
+                ))}
+              </div>
+            ),
+            duration: BOOKING_CREATED_TOAST_DURATION_MS,
+          });
+        }
+      } else if (isEdit && editingBookingId) {
         // 模組 15(服務人員推播通知)規則 4.5:送出前比較「原始訂單資料」(editingDetail,查詢
         // 當下的既有值)跟「這次要送出的新值」(shared),算出一句話摘要,RPC 成功後由
         // updateBooking 內部疊加呼叫 dispatchPushNotification 用。
@@ -1554,14 +1670,18 @@ export function BookingFormDialog({
                 電話完全相等就顯示「將連結既有客戶」(黑名單另有常駐 `!`)。會員連結由後端
                 create_booking 依送出當下的電話決定,這裡不指定。
                 編輯模式(§12.7):已連結會員 ⇒ 唯讀一行;沒連結 ⇒ 一樣列候選,點選 = 帶入 + 記為要補掛。 */}
-            <MemberPhoneMatchPanel
-              merchantId={merchantId}
-              phone={customerPhone}
-              mode={isEdit ? "edit" : "create"}
-              linkedMember={member}
-              pendingAttachMember={pendingAttachMember}
-              onApplyCandidate={handleApplyCandidate}
-            />
+            {/* #977 第 7 批:服務人員模式不顯示會員比對面板(新增時會員由後端依電話自動連結 / 建立;
+                編輯時維持原會員,不能補掛)。 */}
+            {isStaffActor ? null : (
+              <MemberPhoneMatchPanel
+                merchantId={merchantId}
+                phone={customerPhone}
+                mode={isEdit ? "edit" : "create"}
+                linkedMember={member}
+                pendingAttachMember={pendingAttachMember}
+                onApplyCandidate={handleApplyCandidate}
+              />
+            )}
             <FormField label="客戶 Email" htmlFor="booking-customer-email">
               <FieldInput
                 id="booking-customer-email"
@@ -1587,53 +1707,77 @@ export function BookingFormDialog({
 
           {/* ───────── 人員 ───────── */}
           <DetailSection label="人員" className="gap-4">
-            <FormField label="服務人員" htmlFor="booking-staff" required>
-              {/* 2026-09-24 稽核修正(問題 3):這個欄位是最容易踩到「幽靈空值事件」的地方——
-                  在行事曆點某位服務人員的空格建單時,prefill.staffId 是在掛載當下的 useEffect
-                  才灌進 staffId 的,那一刻隱藏原生 select 的選項可能還沒註冊完,會補發一次
-                  空字串把剛選好的服務人員洗掉,客服按送出才被擋下卻不知道哪裡沒選。
-                  合法值是資料庫來的動態清單(服務人員 id),所以判斷條件是「不是空字串」。 */}
-              <FieldSelect
-                id="booking-staff"
-                value={staffId}
-                onValueChange={guardPhantomEmptyChange((v) => {
-                  setStaffId(v);
-                  setAssistantStaffIds((prev) => prev.filter((id) => id !== v));
-                })}
-                placeholder="請選擇"
-                options={(staffList ?? []).map((s) => ({ value: s.id, label: s.name }))}
-              />
-            </FormField>
-
-            {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
-                的那一位,可留空;未選定主要服務人員前整個區塊停用(方塊 disabled + `!` 說明原因),
-                因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。
-                skill 二之七:多選用可點的方塊(ChoiceChip),不用打勾方框。 */}
-            <FormField label="助手(可留空，可多選)">
-              <div
-                ref={assistantsFieldRef}
-                data-testid="booking-form-assistants"
-                className="flex flex-col gap-2.5"
-              >
-                {!staffId ? <AlertNote>請先選擇服務人員，才能指派助手。</AlertNote> : null}
-                {assistantCandidates.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">沒有其他可指派的服務人員。</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {assistantCandidates.map((s) => (
-                      <ChoiceChip
-                        key={s.id}
-                        selected={assistantStaffIds.includes(s.id)}
-                        disabled={!staffId}
-                        onClick={() => setAssistantStaffIds((prev) => toggleInArray(prev, s.id))}
-                      >
-                        {s.name}
-                      </ChoiceChip>
-                    ))}
-                  </div>
-                )}
+            {isStaffActor ? (
+              /* #977 第 7 批(裁決 3 / 4):服務人員模式的主要服務人員固定是自己,唯讀一行;
+                 不顯示協助人員選擇。編輯時這張單已有協助人員 ⇒ 唯讀一行(由商家指派,儲存時原樣保留)。 */
+              <div className="flex flex-col gap-2.5" data-testid="booking-form-staff-readonly">
+                <DetailRow label="服務人員">
+                  {staffList?.find((x) => x.id === staffId)?.name ??
+                    (actor.kind === "staff" ? actor.staffName : "")}
+                </DetailRow>
+                {isEdit && editingDetail && editingDetail.assistants.length > 0 ? (
+                  <DetailRow label="協助人員">
+                    <span data-testid="booking-form-assistants-readonly">
+                      {`${editingDetail.assistants.map((x) => x.staffName).join("、")}（由商家指派）`}
+                    </span>
+                  </DetailRow>
+                ) : null}
               </div>
-            </FormField>
+            ) : (
+              <>
+                <FormField label="服務人員" htmlFor="booking-staff" required>
+                  {/* 2026-09-24 稽核修正(問題 3):這個欄位是最容易踩到「幽靈空值事件」的地方——
+                    在行事曆點某位服務人員的空格建單時,prefill.staffId 是在掛載當下的 useEffect
+                    才灌進 staffId 的,那一刻隱藏原生 select 的選項可能還沒註冊完,會補發一次
+                    空字串把剛選好的服務人員洗掉,客服按送出才被擋下卻不知道哪裡沒選。
+                    合法值是資料庫來的動態清單(服務人員 id),所以判斷條件是「不是空字串」。 */}
+                  <FieldSelect
+                    id="booking-staff"
+                    value={staffId}
+                    onValueChange={guardPhantomEmptyChange((v) => {
+                      setStaffId(v);
+                      setAssistantStaffIds((prev) => prev.filter((id) => id !== v));
+                    })}
+                    placeholder="請選擇"
+                    options={(staffList ?? []).map((s) => ({ value: s.id, label: s.name }))}
+                  />
+                </FormField>
+
+                {/* 建單功能擴充 2.2/5.1 第 2 點,建單表單細節修正第四節:助手欄位排除已選為主要服務人員
+                  的那一位,可留空;未選定主要服務人員前整個區塊停用(方塊 disabled + `!` 說明原因),
+                  因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。
+                  skill 二之七:多選用可點的方塊(ChoiceChip),不用打勾方框。 */}
+                <FormField label="助手(可留空，可多選)">
+                  <div
+                    ref={assistantsFieldRef}
+                    data-testid="booking-form-assistants"
+                    className="flex flex-col gap-2.5"
+                  >
+                    {!staffId ? <AlertNote>請先選擇服務人員，才能指派助手。</AlertNote> : null}
+                    {assistantCandidates.length === 0 ? (
+                      <p className="text-[13px] text-muted-foreground">
+                        沒有其他可指派的服務人員。
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {assistantCandidates.map((s) => (
+                          <ChoiceChip
+                            key={s.id}
+                            selected={assistantStaffIds.includes(s.id)}
+                            disabled={!staffId}
+                            onClick={() =>
+                              setAssistantStaffIds((prev) => toggleInArray(prev, s.id))
+                            }
+                          >
+                            {s.name}
+                          </ChoiceChip>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </FormField>
+              </>
+            )}
           </DetailSection>
 
           {/* ───────── 時間 ───────── */}
@@ -1660,6 +1804,7 @@ export function BookingFormDialog({
                   })
                 }
                 timeChosenByUser={timeChosenByUser}
+                staffMode={isStaffActor}
                 onChange={(d, t, source) => {
                   setDateKey(d);
                   setTime(t);
@@ -2064,25 +2209,29 @@ export function BookingFormDialog({
               (2026-09-29 使用者確認),客服可以用下面那個開關逐單關閉(SPECS-INDEX #853)。 */}
           <DetailSection label="備註" className="gap-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <FormField
-                label={
-                  <>
-                    內部備註{" "}
-                    {/* SPECS-INDEX #859:這裡刻意只寫「客戶看不到」。「服務人員看不看得到」交給
+              {/* #977 第 7 批:服務人員模式、這張單的內部備註被設成「不讓服務人員看到」⇒ 不顯示內部備註欄
+                  (也不顯示任何「有東西被藏起來」的提示;後端會保留原文)。 */}
+              {editingNotesHidden ? null : (
+                <FormField
+                  label={
+                    <>
+                      內部備註{" "}
+                      {/* SPECS-INDEX #859:這裡刻意只寫「客戶看不到」。「服務人員看不看得到」交給
                         下面那個開關自己的說明文字去講 —— 旁邊就有一個可以改變這件事的開關,
                         這裡再寫死「服務人員看得到」會變成同一個畫面上兩句話互相矛盾。 */}
-                    <span className="font-normal text-muted-foreground">(客戶看不到)</span>
-                  </>
-                }
-                htmlFor="booking-notes"
-              >
-                <FieldTextarea
-                  id="booking-notes"
-                  rows={5}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </FormField>
+                      <span className="font-normal text-muted-foreground">(客戶看不到)</span>
+                    </>
+                  }
+                  htmlFor="booking-notes"
+                >
+                  <FieldTextarea
+                    id="booking-notes"
+                    rows={5}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </FormField>
+              )}
               <FormField
                 label={
                   <>
@@ -2110,13 +2259,16 @@ export function BookingFormDialog({
                    開關被推到很窄的地方;放在下面整條寬,視覺上也很清楚它是「備註這一組」的設定。
                 🔴 說明文字一定要講「只影響這一筆」—— 使用者的需求原話是「當次如果勾選」,
                    這是逐單設定不是全店設定,不講清楚會有客服以為勾一次以後每一單都藏。 */}
-            <SwitchRow
-              id="booking-hide-notes-from-staff"
-              title="不讓服務人員看到這則內部備註"
-              description="開啟後，這一筆訂單的內部備註只有商家內部看得到，指派的服務人員在自己的手機上不會看到。只影響這一筆，不影響其他訂單。"
-              checked={hideNotesFromStaff}
-              onCheckedChange={setHideNotesFromStaff}
-            />
+            {/* #977 第 7 批:服務人員模式不顯示這個開關(後端保留現值)。 */}
+            {isStaffActor ? null : (
+              <SwitchRow
+                id="booking-hide-notes-from-staff"
+                title="不讓服務人員看到這則內部備註"
+                description="開啟後，這一筆訂單的內部備註只有商家內部看得到，指派的服務人員在自己的手機上不會看到。只影響這一筆，不影響其他訂單。"
+                checked={hideNotesFromStaff}
+                onCheckedChange={setHideNotesFromStaff}
+              />
+            )}
           </DetailSection>
         </div>
         {/* 紅利系統重構 §2.5 第 2 點:有自訂總金額 / 折扣時,送出前的人工確認。
@@ -2209,188 +2361,10 @@ export function BookingFormDialog({
 // 而且 OrdersPage.tsx 也需要用到,放在 types.ts 讓兩邊都能 import,不用互相依賴對方的內部實作)。
 
 // ---------------------------------------------------------------------------
-// SPECS-INDEX #641:服務人員時間軸單一時段格子——手機版橫向滑動誤觸建單/開關時段修復。
-//
-// 背景:格子本身是 Radix DropdownMenuTrigger(asChild 包一個 <button>),Radix 內建行為是
-// 「pointerdown 當下就開啟選單」,這是為了桌面版滑鼠點擊的即時回饋設計的。但在手機上,使用者
-// 想要左右滑動瀏覽不同服務人員時,手指一碰到格子就會被 Radix 判定成「按下」而立刻彈出選單,
-// 打斷原生的橫向捲動手勢,體驗上就是「滑動誤觸建單/開關時段」。
-//
-// 修法:把 DropdownMenu 改成受控元件(open/onOpenChange 自己管),攔下 Radix 這次自動開啟的
-// 請求,改成自己用 pointerdown/pointermove/pointerup 量測這次的移動距離——超過閾值視為「拖曳
-// 滑動」,不開啟選單(交給瀏覽器原生橫向捲動繼續跑,這裡完全不對 pointermove/touchmove 呼叫
-// preventDefault,不會擋到原生捲動);沒有超過閾值、放開時才是真正的「點擊」,這時候才真的
-// 呼叫 setOpen(true) 開啟選單。
-//
-// 2026-09-24 使用者回報後擴大適用範圍:原本這套判斷只在 pointerType==="touch" 時生效,滑鼠
-// 維持 Radix 原本「按下就開啟」的行為。實際使用後使用者明確要求滑鼠也要一致——「要放掉左鍵
-// 才出現,按住則可左右橫移」,所以現在**不分指標裝置**(滑鼠/觸控/觸控筆)一律套用同一套
-// 判斷。附帶效果:桌面用滑鼠按住格子左右拖曳時不會再彈出選單,可以直接拖曳瀏覽時間軸。
-//
-// 邊界情況(拖曳到格子外面才放開):該格子收不到 pointerup,選單不會開啟——這正是想要的行為;
-// 而且下一次重新按下時 onPointerDown 會重設狀態、放開時 onPointerUp 會直接 setOpen(true),
-// 不會被上一次殘留的攔截旗標卡住(見 onPointerUp 的實作)。
-// SPECS-INDEX #812:拖拉色塊的「點擊 vs 拖曳」閾值沿用這個數字(export 給 useCalendarBookingDrag 傳進
-// useBookingDragState),不另外定義第二個閾值。
-export const SLOT_TAP_VS_DRAG_THRESHOLD_PX = 10;
-
-/** 這裡指的「指標事件」只取用 pointerType/clientX/clientY 三個欄位,故意不寫成
- * `React.PointerEvent`——這樣 Vitest 測試(touchTapVsDragOpen.test.ts)可以直接傳一般物件
- * 呼叫這個 hook 回傳的 handler,不需要真的建立一個瀏覽器 PointerEvent 才能測。 */
-interface MinimalPointerEvent {
-  pointerType: string;
-  clientX: number;
-  clientY: number;
-}
-
-/** SPECS-INDEX #641:把「觸控點擊 vs 拖曳滑動」的判斷邏輯抽成獨立的 hook,好處是可以直接用
- * Vitest + @testing-library/react 的 renderHook 單獨測試這段手勢判斷邏輯,不需要整個渲染
- * CalendarPage(牽動大量 context/react-query mocking)。實際的行為說明見 DaySlotCell 元件
- * 上方註解。 */
-export function useTapVsDragOpenState(thresholdPx: number = SLOT_TAP_VS_DRAG_THRESHOLD_PX) {
-  const [open, setOpen] = useState(false);
-  // 這次的開啟請求是不是 Radix 對觸控 pointerdown 的內建自動反應——是的話先攔下來,改由
-  // onPointerUp 依照這次觸控實際有沒有拖曳超過閾值,再決定要不要真的開啟。
-  const suppressAutoOpenRef = useRef(false);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const draggedRef = useRef(false);
-
-  function onOpenChange(next: boolean) {
-    if (next && suppressAutoOpenRef.current) return;
-    setOpen(next);
-  }
-
-  // 2026-09-24 起不分指標裝置一律套用(見上方 DaySlotCell 區塊註解的說明),所以這三支
-  // handler 不再有 pointerType 的提前 return。
-  function onPointerDown(e: MinimalPointerEvent) {
-    suppressAutoOpenRef.current = true;
-    draggedRef.current = false;
-    touchStartRef.current = { x: e.clientX, y: e.clientY };
-  }
-
-  function onPointerMove(e: MinimalPointerEvent) {
-    if (!touchStartRef.current) return;
-    const dx = Math.abs(e.clientX - touchStartRef.current.x);
-    const dy = Math.abs(e.clientY - touchStartRef.current.y);
-    if (dx > thresholdPx || dy > thresholdPx) {
-      draggedRef.current = true;
-    }
-  }
-
-  function onPointerUp() {
-    const wasTap = touchStartRef.current !== null && !draggedRef.current;
-    touchStartRef.current = null;
-    suppressAutoOpenRef.current = false;
-    if (wasTap) setOpen(true);
-  }
-
-  function onPointerCancel() {
-    // 瀏覽器判定這次觸控變成原生捲動手勢時會直接發 pointercancel,不會再有 pointerup——
-    // 一併重置狀態,避免下一次觸控被誤判成延續上一次的拖曳/攔截狀態。
-    touchStartRef.current = null;
-    suppressAutoOpenRef.current = false;
-    draggedRef.current = false;
-  }
-
-  return { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel };
-}
-
-/** 2026-09-24 新增(可測試性):每一格背景格線目前是哪一種狀態。
- *
- * 2026-09-24 使用者要求「例外開啟/例外關閉這個色塊不需要文字說明,只有跨店占用需要文字」之後
- * (見下方 badgeText="" 的說明),這幾種狀態在畫面上只剩下底色/斜線圖樣的差別,而圖樣本身是
- * 商家可自訂的動態 inline style(SPECS-INDEX #644),沒有任何穩定的 class 或文字可以選取。
- * e2e 測試(e2e/staff-portal-v2.spec.ts 10.3.2/10.3.3 核心必測項目)需要驗證「整天/單一時段
- * 排休之後,商家管理員視角這幾格確實呈現成例外關閉」,所以把狀態本身以 data-slot-state 屬性
- * 明確標出來,改成斷言狀態而不是斷言文字。這是純粹的可測試性標記,不影響任何畫面呈現。 */
-type DaySlotState =
-  /** 落在可預約時段內,沒有單日例外。 */
-  | "available"
-  /** 不在可預約時段內,也沒有單日例外(預設關閉)。 */
-  | "unavailable"
-  /** 單日例外把這一格「開啟」成可預約。 */
-  | "override-open"
-  /** 單日例外把這一格「關閉」(時段排休/整天排休都走這個狀態)。 */
-  | "override-closed"
-  /** 這位服務人員在同一時段被別家商家的預約佔用。 */
-  | "cross-store-occupied";
-
-function daySlotState(isOverride: boolean, finalAvailable: boolean): DaySlotState {
-  if (isOverride) return finalAvailable ? "override-open" : "override-closed";
-  return finalAvailable ? "available" : "unavailable";
-}
-
-function DaySlotCell({
-  top,
-  height,
-  cellClassName,
-  cellStyle,
-  ariaLabel,
-  slotState,
-  badgeText,
-  showCreateOption,
-  onCreateBooking,
-  showOverrideOption,
-  overrideOptionLabel,
-  onToggleOverride,
-}: {
-  top: number;
-  height: number;
-  cellClassName: string;
-  // SPECS-INDEX #644:時段排休(單日例外關閉)這一格改讀商家自訂顏色 + 圖樣,不能只靠
-  // Tailwind class(build-time 就固定,無法接受任意動態色碼),所以額外開這個可選的 inline style
-  // 插槽,查無資料的其他分支繼續維持純 className,不受影響。
-  cellStyle?:
-    | { backgroundColor: string; backgroundImage: string; borderColor: string; color: string }
-    | undefined;
-  ariaLabel: string;
-  /** 見上方 DaySlotState 的說明:輸出成 data-slot-state 屬性,給 e2e 測試穩定選取用。 */
-  slotState: DaySlotState;
-  badgeText: string;
-  showCreateOption: boolean;
-  onCreateBooking: () => void;
-  showOverrideOption: boolean;
-  overrideOptionLabel: string;
-  onToggleOverride: () => void;
-}) {
-  const { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
-    useTapVsDragOpenState();
-
-  return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
-            cellClassName,
-          )}
-          style={{ top, height, ...cellStyle }}
-          aria-label={ariaLabel}
-          data-slot-state={slotState}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerCancel}
-        >
-          {badgeText}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {showCreateOption ? (
-          <DropdownMenuItem className="h-10 cursor-pointer" onClick={onCreateBooking}>
-            新增預約
-          </DropdownMenuItem>
-        ) : null}
-        {showOverrideOption ? (
-          <DropdownMenuItem className="h-10 cursor-pointer" onClick={onToggleOverride}>
-            {overrideOptionLabel}
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
+// SPECS-INDEX #641 / #977 第 7 批(2026-10-07):時間軸背景格子(DaySlotCell)、點擊 vs 拖曳判斷
+// (useTapVsDragOpenState、SLOT_TAP_VS_DRAG_THRESHOLD_PX)、每格狀態(daySlotState / resolveDaySlot)
+// 搬到 DaySlotCell.tsx 與 daySlotGrid.ts,商家端與服務人員端時間軸共用同一份。內容一字未改,完整背景說明在那兩個檔案。
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // 4.3:主頁面
@@ -2939,30 +2913,14 @@ function CalendarPageInner() {
                     {s.on_leave
                       ? null
                       : slots.map((slot, i) => {
-                          const slotStartMin = timeToMinutes(slot.start);
-                          const slotEndMin = timeToMinutes(slot.end);
-
-                          const inWindow = s.available_windows.some(
-                            (w) =>
-                              timeToMinutes(w.start_time) <= slotStartMin &&
-                              timeToMinutes(w.end_time) >= slotEndMin,
-                          );
-
-                          const matchedOverride = s.availability_overrides.find(
-                            (o) =>
-                              timeToMinutes(o.start_time) <= slotStartMin &&
-                              timeToMinutes(o.end_time) >= slotEndMin,
-                          );
-                          const isOverride = Boolean(matchedOverride);
-                          // §5.3 第 1 點:有例外直接採用例外值,不論第一層∩第二層原本判斷結果是什麼。
-                          const finalAvailable = matchedOverride
-                            ? matchedOverride.is_available
-                            : inWindow;
-
-                          const foreignBusy = s.foreign_bookings.some((b) => {
-                            const bStart = timeToMinutes(isoToTaipeiTime(b.start_at));
-                            const bEnd = timeToMinutes(isoToTaipeiTime(b.end_at));
-                            return bStart < slotEndMin && bEnd > slotStartMin;
+                          // §5.3 / §5.5 第 4 點:單日例外 → 可約區間 → 跨店佔用的判斷,
+                          // #977 第 7 批搬到 daySlotGrid.ts 的 resolveDaySlot(服務人員端時間軸共用同一份)。
+                          const { isOverride, finalAvailable, foreignBusy } = resolveDaySlot({
+                            slotStartMin: timeToMinutes(slot.start),
+                            slotEndMin: timeToMinutes(slot.end),
+                            availableWindows: s.available_windows,
+                            overrides: s.availability_overrides,
+                            foreignBookings: s.foreign_bookings,
                           });
 
                           if (foreignBusy) {

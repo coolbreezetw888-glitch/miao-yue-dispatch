@@ -281,7 +281,8 @@ describe("#977 服務人員權限功能開關", () => {
       ["direct_accept_after_merchant_confirm", "商家後台確認後直接接單", false],
       ["show_member_info", "服務人員是否顯示會員資料", false],
       ["google_calendar_sync_enabled", "服務人員Google日曆同步", true],
-      ["can_create_edit_orders", "服務人員新增編輯訂單", true],
+      // #977 第 7 批(2026-10-07):這個開關已生效,拿掉「即將推出」。
+      ["can_create_edit_orders", "服務人員新增編輯訂單", false],
       ["can_upload_construction_photos", "服務人員施工圖片上傳", true],
     ]);
   });

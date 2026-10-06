@@ -3031,6 +3031,14 @@ export type Database = {
         Returns: boolean
       }
       can_manage_bookings: { Args: { p_merchant_id: string }; Returns: boolean }
+      can_staff_dispatch_booking_notification: {
+        Args: {
+          p_booking_id: string
+          p_event_type: string
+          p_merchant_id: string
+        }
+        Returns: boolean
+      }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: {
@@ -4416,6 +4424,120 @@ export type Database = {
       set_staff_permission: {
         Args: { p_granted: boolean; p_section_key: string; p_staff_id: string }
         Returns: undefined
+      }
+      staff_cancel_booking: {
+        Args: { p_booking_id: string; p_reason?: string }
+        Returns: Json
+      }
+      staff_complete_booking: { Args: { p_booking_id: string }; Returns: Json }
+      staff_create_booking: {
+        Args: {
+          p_custom_duration_enabled?: boolean
+          p_custom_duration_minutes?: number
+          p_custom_total_amount?: number
+          p_custom_total_amount_enabled?: boolean
+          p_customer_address?: string
+          p_customer_email?: string
+          p_customer_name: string
+          p_customer_notes?: string
+          p_customer_phone: string
+          p_discount_enabled?: boolean
+          p_discount_mode?: string
+          p_discount_value?: number
+          p_notes?: string
+          p_payment_method_id?: string
+          p_points_override?: number
+          p_points_redeem_member_id?: string
+          p_points_redeemed?: number
+          p_service_items: Json
+          p_staff_id: string
+          p_start_at: string
+          p_tax_enabled?: boolean
+          p_tax_mode?: string
+          p_tax_value?: number
+        }
+        Returns: Json
+      }
+      staff_get_booking_for_edit: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
+      staff_get_booking_form_options: {
+        Args: { p_staff_id: string }
+        Returns: Json
+      }
+      staff_list_my_bookable_start_times: {
+        Args: {
+          p_date: string
+          p_duration_minutes: number
+          p_exclude_booking_id?: string
+          p_staff_id: string
+        }
+        Returns: string[]
+      }
+      staff_move_booking: {
+        Args: {
+          p_booking_id: string
+          p_expected_start_at: string
+          p_target_start_at: string
+        }
+        Returns: Json
+      }
+      staff_preview_booking_points: {
+        Args: {
+          p_booking_id: string
+          p_custom_total_amount: number
+          p_custom_total_amount_enabled: boolean
+          p_customer_phone: string
+          p_discount_enabled: boolean
+          p_discount_mode: string
+          p_discount_value: number
+          p_service_items: Json
+          p_staff_id: string
+          p_tax_enabled: boolean
+          p_tax_mode: string
+          p_tax_value: number
+        }
+        Returns: Json
+      }
+      staff_set_my_slot: {
+        Args: {
+          p_date: string
+          p_end_time: string
+          p_is_available: boolean
+          p_staff_id: string
+          p_start_time: string
+        }
+        Returns: number
+      }
+      staff_update_booking: {
+        Args: {
+          p_booking_id: string
+          p_custom_duration_enabled?: boolean
+          p_custom_duration_minutes?: number
+          p_custom_total_amount?: number
+          p_custom_total_amount_enabled?: boolean
+          p_customer_address?: string
+          p_customer_email?: string
+          p_customer_name: string
+          p_customer_notes?: string
+          p_customer_phone: string
+          p_discount_enabled?: boolean
+          p_discount_mode?: string
+          p_discount_value?: number
+          p_notes?: string
+          p_payment_method_id?: string
+          p_points_override?: number
+          p_points_override_reset?: boolean
+          p_points_redeem_member_id?: string
+          p_points_redeemed?: number
+          p_service_items: Json
+          p_start_at: string
+          p_tax_enabled?: boolean
+          p_tax_mode?: string
+          p_tax_value?: number
+        }
+        Returns: Json
       }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
       staff_confirm_booking: {

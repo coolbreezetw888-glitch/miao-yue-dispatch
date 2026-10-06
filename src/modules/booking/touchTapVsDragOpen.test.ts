@@ -1,7 +1,7 @@
 // SPECS-INDEX #641:手機版行事曆服務人員時間軸——橫向滑動誤觸建單/開關時段修復。
 //
-// 這裡直接測試從 CalendarPage.tsx 抽出來的 useTapVsDragOpenState(見該檔案 DaySlotCell
-// 元件上方的完整背景說明),不整個渲染 CalendarPage(牽動大量 context/react-query mocking)。
+// 這裡直接測試從 CalendarPage.tsx 抽出來的 useTapVsDragOpenState(#977 第 7 批起搬到 daySlotGrid.ts,
+// 見該檔案的完整背景說明),不整個渲染 CalendarPage(牽動大量 context/react-query mocking)。
 // 驗證重點:
 //   1. 觸控「點擊」(pointerdown 後幾乎沒有移動就 pointerup)→ 開啟選單。
 //   2. 觸控「拖曳滑動」(pointerdown 後移動距離超過閾值)→ 不開啟選單,讓原生橫向捲動接手。
@@ -13,7 +13,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { useTapVsDragOpenState } from "./CalendarPage";
+import { useTapVsDragOpenState } from "./daySlotGrid";
 
 describe("useTapVsDragOpenState(SPECS-INDEX #641)", () => {
   it("觸控點擊(幾乎沒有移動就放開)—— 開啟選單", () => {

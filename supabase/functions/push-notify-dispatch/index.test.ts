@@ -402,3 +402,104 @@ Deno.test("#972:render_booking_notification_variables 一律帶 p_merchant_id(�
   const render = rpcArgs.find((c) => c.fn === "render_booking_notification_variables");
   assertEquals(render?.args, { p_booking_id: "booking-A", p_merchant_id: "merchant-A" });
 });
+
+// =========================================================================
+// SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人自己建單 / 改單 / 取消 / 拖拉後發推播。
+// can_manage_bookings(管理員 / 客服)不過時,**再**問 can_staff_dispatch_booking_notification。
+// 「別人的單 / 協助人員 / 事件不符」的判斷在資料庫那支(pgTAP req977_09 鎖住),這裡鎖 handler 的接線。
+// 推播的 booking_id 本來就必填(沒帶 ⇒ 400,見上面「缺少必要欄位」),所以沒有「沒帶 booking_id ⇒ 403」這條路。
+// =========================================================================
+function makeStaffPushCaller(answers: Record<string, { data: unknown; error: unknown }>) {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client: CallerRpcClient = {
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      calls.push({ fn, args });
+      return Promise.resolve(answers[fn] ?? { data: false, error: null });
+    },
+  };
+  return { calls, client };
+}
+
+function makeStaffPushDeps(caller: CallerRpcClient, adminClient: unknown): HandleRequestDeps {
+  const deps = makeDeps(false);
+  deps.createCallerClient = () => caller;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deps.createAdminClient = () => adminClient as any;
+  return deps;
+}
+
+Deno.test("#977-7:管理員檢查不過、服務人員本人自己的單 → 放行並派送(200),問的是 can_staff_dispatch_booking_notification", async () => {
+  const { adminClient, rpcCalls } = makeOwnershipAwareAdminClient();
+  const caller = makeStaffPushCaller({
+    can_manage_bookings: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: true, error: null },
+  });
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_updated" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    makeStaffPushDeps(caller.client, adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(caller.calls, [
+    { fn: "can_manage_bookings", args: { p_merchant_id: "merchant-A" } },
+    {
+      fn: "can_staff_dispatch_booking_notification",
+      args: { p_merchant_id: "merchant-A", p_booking_id: "booking-A", p_event_type: "booking_updated" },
+    },
+  ]);
+  assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
+});
+
+Deno.test("#977-7:別人的單 / 協助人員 / 事件不符(資料庫回 false)→ 403,不進派送", async () => {
+  const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
+  const caller = makeStaffPushCaller({
+    can_manage_bookings: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: false, error: null },
+  });
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_cancelled" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    makeStaffPushDeps(caller.client, adminClient),
+  );
+  assertEquals(res.status, 403);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#977-7:服務人員那支 RPC 本身出錯 → 500(fail closed)", async () => {
+  const { adminClient, inserts } = makeOwnershipAwareAdminClient();
+  const caller = makeStaffPushCaller({
+    can_manage_bookings: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: null, error: { message: "boom" } },
+  });
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    makeStaffPushDeps(caller.client, adminClient),
+  );
+  assertEquals(res.status, 500);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多問服務人員那支(行為不變)", async () => {
+  const { adminClient } = makeOwnershipAwareAdminClient();
+  const caller = makeStaffPushCaller({
+    can_manage_bookings: { data: true, error: null },
+    can_staff_dispatch_booking_notification: { data: false, error: null },
+  });
+  const res = await handleRequest(
+    makeRequest(
+      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+      { Authorization: "Bearer fake-jwt" },
+    ),
+    makeStaffPushDeps(caller.client, adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(caller.calls.map((c) => c.fn), ["can_manage_bookings"]);
+});

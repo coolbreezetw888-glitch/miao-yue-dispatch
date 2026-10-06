@@ -48,7 +48,7 @@ create trigger req977_full_day_windows
   for each row execute function pg_temp.req977_full_day_windows();
 -- ─── 墊片結束 ──────────────────────────────────────────────────────────────────────────────
 
-select plan(20);
+select plan(22);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -254,6 +254,39 @@ select lives_ok(
 );
 
 select pg_temp.test_clear_auth();
+
+-- =========================================================================
+-- SPECS-INDEX #977 第 7 批(2026-10-07):服務人員新增編輯訂單的新函式也要守住同一條規則(規則 1)。
+--   public 的 11 支(服務人員端前端 / Edge Function 要呼叫):anon / PUBLIC 沒有、authenticated 有。
+--   private 的 5 支 helper(只給內部用):anon / PUBLIC / authenticated 都沒有。
+-- 細節與每支的放行 / 擋下情境見 req977_05 ~ req977_09。
+-- =========================================================================
+select is(
+  (select count(*)::int
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and (p.proname like 'staff\_%' and p.proname in (
+            'staff_get_booking_form_options', 'staff_get_booking_for_edit', 'staff_list_my_bookable_start_times',
+            'staff_preview_booking_points', 'staff_create_booking', 'staff_update_booking', 'staff_cancel_booking',
+            'staff_complete_booking', 'staff_move_booking', 'staff_set_my_slot')
+          or p.proname = 'can_staff_dispatch_booking_notification')
+     and not has_function_privilege('anon', p.oid, 'execute')
+     and not has_function_privilege('public', p.oid, 'execute')
+     and has_function_privilege('authenticated', p.oid, 'execute')),
+  11,
+  '#977 第 7 批:11 支服務人員訂單函式 anon / PUBLIC 都不能執行,authenticated 可以(數量對 = 每一支都符合)'
+);
+select is(
+  (select count(*)::int
+   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'private'
+     and p.proname in ('staff_order_self_ok', 'staff_order_actor_id', 'is_staff_order_call', 'staff_order_own_booking', 'staff_slot_toggle_ok')
+     and not has_function_privilege('anon', p.oid, 'execute')
+     and not has_function_privilege('public', p.oid, 'execute')
+     and not has_function_privilege('authenticated', p.oid, 'execute')),
+  5,
+  '#977 第 7 批:5 支 private helper 對 anon / PUBLIC / authenticated 都沒有 EXECUTE'
+);
 
 select * from finish();
 rollback;

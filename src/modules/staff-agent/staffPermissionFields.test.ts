@@ -34,8 +34,9 @@ describe("STAFF_BOOLEAN_PERMISSION_FIELDS 的說明文字(#883 → #977)", () =>
     const field = fieldByKey("show_member_info");
 
     expect(field.label).toBe("服務人員是否顯示會員資料");
+    // #977 第 7 批(2026-10-07):尾端加一句兩個開關的連動(規格 4-6 第 2 點)。
     expect(field.description).toBe(
-      "關閉時，這位服務人員在自己的預約詳情只看得到客戶姓名，看不到電話、地址等聯絡資料。",
+      "關閉時，這位服務人員在自己的預約詳情只看得到客戶姓名，看不到電話、地址等聯絡資料。開啟「服務人員新增編輯訂單」時，這個開關必須開著。",
     );
   });
 

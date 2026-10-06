@@ -47,7 +47,6 @@ import {
   DetailRow,
   DetailSection,
   EmptyState,
-  FieldTextarea,
   FullPageLayer,
   FullPageLayerContent,
   InternalNote,
@@ -103,6 +102,7 @@ import { useBookingStatusChangeLogs } from "./context";
 import { BackToDetailLink, StatusChangeLogsView } from "./StatusChangeLogsView";
 import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
+import { CancelBookingConfirmButton } from "./CancelBookingConfirmButton";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   BOOKING_STATUS_LABELS,
@@ -642,35 +642,14 @@ export function BookingDetailDialog({
                     </CardAlertDialogContent>
                   </CardAlertDialog>
                 ) : null}
+                {/* #977 第 7 批:取消的二次確認小卡窗抽成 CancelBookingConfirmButton(服務人員端共用),畫面一字未改。 */}
                 {showEditAndCancel && !openedAsAssistant ? (
-                  <CardAlertDialog>
-                    <CardAlertDialogTrigger asChild>
-                      <Button type="button" variant="danger" size="touch" disabled={busy}>
-                        取消預約
-                      </Button>
-                    </CardAlertDialogTrigger>
-                    <CardAlertDialogContent>
-                      <CardAlertDialogHeader>
-                        <CardAlertDialogTitle>確定要取消這筆預約嗎?</CardAlertDialogTitle>
-                        <CardAlertDialogDescription>
-                          取消後這個時段會恢復可預約，可以填寫取消原因(選填)。
-                        </CardAlertDialogDescription>
-                      </CardAlertDialogHeader>
-                      <FieldTextarea
-                        placeholder="取消原因(選填)"
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        rows={2}
-                        className="min-h-0"
-                      />
-                      <CardAlertDialogFooter>
-                        <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
-                        <CardAlertDialogAction tone="danger" onClick={handleCancel}>
-                          確定取消
-                        </CardAlertDialogAction>
-                      </CardAlertDialogFooter>
-                    </CardAlertDialogContent>
-                  </CardAlertDialog>
+                  <CancelBookingConfirmButton
+                    disabled={busy}
+                    reason={reason}
+                    onReasonChange={setReason}
+                    onConfirm={() => void handleCancel()}
+                  />
                 ) : null}
                 {showEditAndCancel ? (
                   <Button

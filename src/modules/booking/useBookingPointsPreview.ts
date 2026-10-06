@@ -26,18 +26,25 @@ export function useDebouncedValue<T>(value: T, delayMs: number): T {
 /**
  * @param input  null = 現在不要查(表單沒開、金額欄位填錯、編輯模式的訂單還沒載入)。
  * @param sessionKey 每次開啟表單換一個值。
+ * @param staffFetch SPECS-INDEX #977 第 7 批:服務人員模式改打 staff_preview_booking_points(會員由後端決定)。
+ *   不傳 = 商家模式,跟改版前一模一樣(query key 也一樣);有傳時 query key 尾端多一段 "staff",不跟商家模式共用快取。
  */
 export function useBookingPointsPreview(
   input: PreviewBookingPointsInput | null,
   sessionKey: string,
+  staffFetch?: (input: PreviewBookingPointsInput) => Promise<unknown>,
 ) {
   const serialized = input ? JSON.stringify(input) : null;
   const debounced = useDebouncedValue(serialized, BOOKING_POINTS_PREVIEW_DEBOUNCE_MS);
   const query = useQuery<BookingPointsPreview>({
-    queryKey: ["booking-module", "points-preview", sessionKey, debounced],
+    queryKey: staffFetch
+      ? ["booking-module", "points-preview", sessionKey, debounced, "staff"]
+      : ["booking-module", "points-preview", sessionKey, debounced],
     queryFn: async () =>
       parseBookingPointsPreview(
-        await previewBookingPoints(JSON.parse(debounced as string) as PreviewBookingPointsInput),
+        await (staffFetch ?? previewBookingPoints)(
+          JSON.parse(debounced as string) as PreviewBookingPointsInput,
+        ),
       ),
     enabled: debounced !== null,
     placeholderData: (previousData, previousQuery) =>

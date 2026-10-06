@@ -4,6 +4,8 @@
 --
 --   ①     指紋:把本批新增的段落拿掉、v_initial_status 換回 'pending_confirmation' 之後,prosrc 指紋必須等於改前
 --          d8fb4ffb50f0516c8c815aed24c09784(CRLF→LF 後 md5)⇒ 其餘內容逐字相同
+--          ⚠️ #977 第 7 批(2026-10-07)又在 create_booking 加了一段 [req977-batch7] 包起來的段落(created_by_role 認得服務人員),
+--          所以下面的正規表示式改成同時拿掉 batch4 與 batch7 兩種段落(batch[47]),其餘不變;第 7 批自己的指紋見 req977_05 ⑦。
 --   ②     ACL / 簽章與改前相同
 --   ③~⑥   「改前複製品」比對:用 ① 還原出來的改前版本另建一份 pg_temp.create_booking_old,
 --          開關關閉時 4 組參數(新客自動建會員 / 既有會員+派點覆寫+協助人員+折扣+稅+自訂工時+藏備註 /
@@ -41,7 +43,7 @@ create temp table r977e_src on commit drop as
     replace(
       regexp_replace(
         replace(p.prosrc, E'\r\n', E'\n'),
-        '  -- \[req977-batch4 begin\].*?-- \[req977-batch4 end\]\n', '', 'g'),
+        '  -- \[req977-batch[47] begin\].*?-- \[req977-batch[47] end\]\n', '', 'g'),
       'v_initial_status', '''pending_confirmation''') as reverted_src,
     pg_get_functiondef(p.oid) as def
   from pg_proc p
@@ -59,7 +61,7 @@ declare
 begin
   select def into v_def from r977e_src;
   v_def := replace(v_def, 'FUNCTION public.create_booking(', 'FUNCTION pg_temp.create_booking_old(');
-  v_def := regexp_replace(v_def, '  -- \[req977-batch4 begin\].*?-- \[req977-batch4 end\]\n', '', 'g');
+  v_def := regexp_replace(v_def, '  -- \[req977-batch[47] begin\].*?-- \[req977-batch[47] end\]\n', '', 'g');
   v_def := replace(v_def, 'v_initial_status', '''pending_confirmation''');
   execute v_def;
 end;

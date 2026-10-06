@@ -53,7 +53,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
-import { moveBooking } from "./api";
+import { moveBooking, type MoveBookingNotifyContext } from "./api";
 import {
   buildUndoInput,
   canDrag,
@@ -110,6 +110,12 @@ export interface CalendarBookingDragParams {
   onOpenDetail: (bookingId: string, opener: BookingDetailOpener) => void;
   /** 移動成功、或收到 40001(畫面過期)之後呼叫 → CalendarPage 傳 refetchAll(invalidateQueries)。 */
   onMoved: () => void;
+  /**
+   * SPECS-INDEX #977 第 7 批(2026-10-07):真正打 RPC 的那一支。不傳 = 商家端 moveBooking(行為不變);
+   * 服務人員端時間軸傳 staffMoveBooking(只改時間、不能轉派,後端 staff_move_booking 再擋一次)。
+   * 閾值、長按 500ms、吸附、過去時間確認、40001 重新整理、復原 8 秒這些規則都還是這支 hook 的,一條都不另寫。
+   */
+  moveFn?: (input: MoveBookingInput, ctx: MoveBookingNotifyContext) => Promise<MoveBookingResult>;
 }
 
 export interface DragGhostModel {
@@ -211,6 +217,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
     thresholdPx,
     onOpenDetail,
     onMoved,
+    moveFn,
   } = params;
   const staffBlocks = params.staffBlocks ?? EMPTY_STAFF_BLOCKS;
 
@@ -379,7 +386,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
     async (input: MoveBookingInput, customerName: string, undoOf: MoveBookingResult | null) => {
       const targetStaffName = staffNameById.get(input.targetStaffId) ?? null;
       try {
-        const result = await moveBooking(input, { targetStaffName });
+        const result = await (moveFn ?? moveBooking)(input, { targetStaffName });
         onMoved();
         if (undoOf) {
           toast.success("已復原");
@@ -406,7 +413,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
         toast.error(undoOf ? "無法復原" : "無法移動", { description: message });
       }
     },
-    [onMoved, staffNameById],
+    [onMoved, staffNameById, moveFn],
   );
 
   const handleDrop = useCallback(

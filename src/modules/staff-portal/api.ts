@@ -21,6 +21,12 @@ import {
   type DayScheduleForeignBooking,
   type DayScheduleOnLeave,
 } from "@/modules/booking/types";
+import type { BookingServiceItemSelectionInput } from "@/modules/booking/api";
+import type { MoveBookingInput, MoveBookingResult } from "@/modules/booking/bookingDragMove";
+import { isoToTaipeiDateKey, isoToTaipeiTime } from "@/modules/booking/dateUtils";
+import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
+import { dispatchLineNotification } from "@/modules/line-notifications/api";
+import { dispatchPushNotification } from "@/modules/push-notifications/api";
 import type { MerchantStaffPermission, StaffPermissionSectionKey } from "./types";
 
 export type StaffAvailabilityOverride = Tables<"staff_availability_overrides">;
@@ -366,4 +372,406 @@ export async function uploadMyStaffAvatar(
 
   const { data } = supabase.storage.from(STAFF_AVATAR_BUCKET).getPublicUrl(path);
   return data.publicUrl;
+}
+
+// =========================================================================
+// SPECS-INDEX #977 第 7 批(2026-10-07):「服務人員新增編輯訂單」開關生效。
+// 服務人員一律打 staff_ 開頭的包裝 RPC(後端自己檢查本人 + 兩個開關 + 行事曆檢視 + 主要服務人員),
+// 不直接打 create_booking / update_booking 等既有函式(那些只認管理員 / 客服)。
+// 包裝 RPC **一律不回整列 bookings**,這裡的回傳型別也只寫實際拿得到的欄位。
+// 通知:成功後比照商家端 booking/api.ts 的 createBooking / updateBooking / cancelBooking / completeBooking / moveBooking,
+// 用同樣的事件 fire-and-forget 呼叫 dispatchLineNotification / dispatchPushNotification
+// (Edge Function 端多了一道 can_staff_dispatch_booking_notification 放行服務人員本人)。
+// previousStaffId 一律不帶:服務人員不能換主要服務人員。
+// =========================================================================
+
+/** staff_get_booking_form_options 的回傳(只有本店的選項,沒有客戶 / 會員 / 其他服務人員 / 料錢)。 */
+export interface StaffBookingFormOptions {
+  staff_id: string;
+  staff_name: string;
+  industry_type: string;
+  service_items: {
+    id: string;
+    name: string;
+    price: number;
+    duration_minutes: number;
+    category_id: string | null;
+  }[];
+  service_categories: { id: string; name: string }[];
+  payment_methods: { id: string; name: string }[];
+  tax_settings: { tax_mode: string; tax_value: number } | null;
+  business_hours: { day_of_week: number; is_closed: boolean }[];
+}
+
+export async function fetchStaffBookingFormOptions(
+  staffId: string,
+): Promise<StaffBookingFormOptions> {
+  const { data, error } = await supabase.rpc("staff_get_booking_form_options", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+  return data as unknown as StaffBookingFormOptions;
+}
+
+/** staff_get_booking_for_edit 的回傳。notes_hidden = true 時 notes 一定是 null(後端不回原文)。 */
+export interface StaffBookingForEdit {
+  id: string;
+  merchant_id: string;
+  staff_id: string;
+  status: string;
+  start_at: string;
+  end_at: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string | null;
+  customer_address: string | null;
+  customer_notes: string | null;
+  notes: string | null;
+  notes_hidden: boolean;
+  custom_total_amount_enabled: boolean;
+  custom_total_amount: number | null;
+  discount_enabled: boolean;
+  discount_mode: string | null;
+  discount_value: number | null;
+  tax_enabled: boolean;
+  tax_mode_snapshot: string | null;
+  tax_value_snapshot: number | null;
+  payment_method_id: string | null;
+  payment_method_name_snapshot: string | null;
+  custom_duration_enabled: boolean;
+  custom_duration_minutes: number | null;
+  member_id: string | null;
+  member_name_snapshot: string | null;
+  points_planned: number;
+  points_planned_auto: number;
+  points_planned_overridden: boolean;
+  points_redeemed: number;
+  points_redeem_amount_snapshot: number;
+  service_items: {
+    service_item_id: string;
+    name: string;
+    quantity: number;
+    unit_price_snapshot: number;
+  }[];
+  /** 協助人員只有姓名(唯讀顯示「由商家指派」)。 */
+  assistant_names: string[];
+}
+
+export async function fetchStaffBookingForEdit(bookingId: string): Promise<StaffBookingForEdit> {
+  const { data, error } = await supabase.rpc("staff_get_booking_for_edit", {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+  return data as unknown as StaffBookingForEdit;
+}
+
+export async function fetchMyBookableStartTimes(params: {
+  staffId: string;
+  date: string;
+  durationMinutes: number;
+  excludeBookingId: string | null;
+}): Promise<string[]> {
+  const { data, error } = await supabase.rpc("staff_list_my_bookable_start_times", {
+    p_staff_id: params.staffId,
+    p_date: params.date,
+    p_duration_minutes: params.durationMinutes,
+    ...(params.excludeBookingId ? { p_exclude_booking_id: params.excludeBookingId } : {}),
+  });
+  if (error) throw error;
+  return (data ?? []) as string[];
+}
+
+function buildStaffServiceItemsJsonb(items: BookingServiceItemSelectionInput[]) {
+  return items.map((item) => ({
+    service_item_id: item.serviceItemId,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+  }));
+}
+
+/** 紅利預覽:沒有會員參數 —— 後端自己決定(新增 = 依電話;編輯 = 這張單現有的會員)。 */
+export async function staffPreviewBookingPoints(params: {
+  staffId: string;
+  bookingId: string | null;
+  customerPhone: string;
+  serviceItems: BookingServiceItemSelectionInput[];
+  customTotalAmountEnabled?: boolean | undefined;
+  customTotalAmount?: number | null | undefined;
+  discountEnabled?: boolean | undefined;
+  discountMode?: string | null | undefined;
+  discountValue?: number | null | undefined;
+  taxEnabled?: boolean | undefined;
+  taxMode?: string | null | undefined;
+  taxValue?: number | null | undefined;
+}): Promise<unknown> {
+  const { data, error } = await supabase.rpc("staff_preview_booking_points", {
+    p_staff_id: params.staffId,
+    // gen types 把 uuid / numeric 參數推成非 null,資料庫端接受 null(= 新增模式 / 沒填)。
+    p_booking_id: params.bookingId as string,
+    p_customer_phone: params.customerPhone,
+    p_service_items: buildStaffServiceItemsJsonb(params.serviceItems),
+    p_custom_total_amount_enabled: params.customTotalAmountEnabled ?? false,
+    p_custom_total_amount: (params.customTotalAmount ?? null) as number,
+    p_discount_enabled: params.discountEnabled ?? false,
+    p_discount_mode: (params.discountMode ?? null) as string,
+    p_discount_value: (params.discountValue ?? null) as number,
+    p_tax_enabled: params.taxEnabled ?? false,
+    p_tax_mode: (params.taxMode ?? null) as string,
+    p_tax_value: (params.taxValue ?? null) as number,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** 建單 / 改單共用的表單欄位(沒有協助人員、會員、隱藏備註、料錢 —— 後端根本沒有這些參數)。 */
+export interface StaffBookingFormFields {
+  serviceItems: BookingServiceItemSelectionInput[];
+  startAt: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string | null;
+  notes?: string | null;
+  customerAddress?: string | null;
+  customerNotes?: string | null;
+  customTotalAmountEnabled?: boolean;
+  customTotalAmount?: number | null;
+  discountEnabled?: boolean;
+  discountMode?: string | null;
+  discountValue?: number | null;
+  taxEnabled?: boolean;
+  taxMode?: string | null;
+  taxValue?: number | null;
+  paymentMethodId?: string | null;
+  customDurationEnabled?: boolean;
+  customDurationMinutes?: number | null;
+}
+
+function buildStaffFormArgs(input: StaffBookingFormFields) {
+  return {
+    p_service_items: buildStaffServiceItemsJsonb(input.serviceItems),
+    p_start_at: input.startAt,
+    p_customer_name: input.customerName,
+    p_customer_phone: input.customerPhone,
+    ...(input.customerEmail ? { p_customer_email: input.customerEmail } : {}),
+    ...(input.notes ? { p_notes: input.notes } : {}),
+    ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
+    ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
+    p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
+    ...(input.customTotalAmount !== null && input.customTotalAmount !== undefined
+      ? { p_custom_total_amount: input.customTotalAmount }
+      : {}),
+    p_discount_enabled: input.discountEnabled ?? false,
+    ...(input.discountMode ? { p_discount_mode: input.discountMode } : {}),
+    ...(input.discountValue !== null && input.discountValue !== undefined
+      ? { p_discount_value: input.discountValue }
+      : {}),
+    p_tax_enabled: input.taxEnabled ?? false,
+    ...(input.taxMode ? { p_tax_mode: input.taxMode } : {}),
+    ...(input.taxValue !== null && input.taxValue !== undefined
+      ? { p_tax_value: input.taxValue }
+      : {}),
+    ...(input.paymentMethodId ? { p_payment_method_id: input.paymentMethodId } : {}),
+    p_custom_duration_enabled: input.customDurationEnabled ?? false,
+    ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
+      ? { p_custom_duration_minutes: input.customDurationMinutes }
+      : {}),
+  };
+}
+
+export interface StaffCreateBookingInput extends StaffBookingFormFields {
+  staffId: string;
+  pointsOverride?: number | null;
+  pointsRedeemed?: number;
+  pointsRedeemMemberId?: string | null;
+}
+
+/** staff_create_booking 的回傳 = 建單成功提示(buildBookingCreatedToast)需要的欄位。 */
+export interface StaffCreatedBooking {
+  id: string;
+  merchant_id: string;
+  status: string;
+  member_id: string | null;
+  member_name_snapshot: string | null;
+  member_auto_created: boolean;
+  final_amount_snapshot: number;
+  points_planned: number;
+  points_redeemed: number;
+  points_redeem_amount_snapshot: number;
+}
+
+export async function staffCreateBooking(
+  input: StaffCreateBookingInput,
+): Promise<StaffCreatedBooking> {
+  const { data, error } = await supabase.rpc("staff_create_booking", {
+    p_staff_id: input.staffId,
+    ...buildStaffFormArgs(input),
+    p_points_redeemed: input.pointsRedeemed ?? 0,
+    ...(input.pointsOverride !== null && input.pointsOverride !== undefined
+      ? { p_points_override: input.pointsOverride }
+      : {}),
+    p_points_redeem_member_id: (input.pointsRedeemMemberId ?? null) as string,
+  });
+  if (error) throw error;
+  const created = data as unknown as StaffCreatedBooking;
+  // 跟商家端 createBooking 一樣:LINE + 推播 booking_created,不等待、吞掉錯誤。
+  dispatchLineNotification({
+    merchantId: created.merchant_id,
+    bookingId: created.id,
+    eventType: "booking_created",
+  });
+  dispatchPushNotification({
+    merchantId: created.merchant_id,
+    bookingId: created.id,
+    eventType: "booking_created",
+  });
+  return created;
+}
+
+export interface StaffUpdateBookingInput extends StaffBookingFormFields {
+  bookingId: string;
+  pointsOverride?: number | null;
+  pointsRedeemed?: number | null;
+  pointsOverrideReset?: boolean;
+  pointsRedeemMemberId?: string | null;
+  /** 推播的一句話摘要(同商家端 updateBooking 的 changeSummary)。 */
+  changeSummary?: string | null;
+}
+
+export interface StaffUpdatedBooking {
+  id: string;
+  merchant_id: string;
+  status: string;
+  start_at: string;
+  staff_id: string;
+}
+
+export async function staffUpdateBooking(
+  input: StaffUpdateBookingInput,
+): Promise<StaffUpdatedBooking> {
+  const { data, error } = await supabase.rpc("staff_update_booking", {
+    p_booking_id: input.bookingId,
+    ...buildStaffFormArgs(input),
+    // 同商家端 updateBooking:折抵一律帶 key(null = 維持原折抵)。
+    p_points_redeemed: (input.pointsRedeemed ?? null) as number,
+    ...(input.pointsOverride !== null && input.pointsOverride !== undefined
+      ? { p_points_override: input.pointsOverride }
+      : {}),
+    p_points_override_reset: input.pointsOverrideReset ?? false,
+    p_points_redeem_member_id: (input.pointsRedeemMemberId ?? null) as string,
+  });
+  if (error) throw error;
+  const updated = data as unknown as StaffUpdatedBooking;
+  // 跟商家端 updateBooking 一樣只發推播 booking_updated;不能換人 ⇒ 不帶 previousStaffId。
+  dispatchPushNotification({
+    merchantId: updated.merchant_id,
+    bookingId: updated.id,
+    eventType: "booking_updated",
+    ...(input.changeSummary ? { changeSummary: input.changeSummary } : {}),
+  });
+  return updated;
+}
+
+export interface StaffBookingStatusResult {
+  id: string;
+  merchant_id: string;
+  status: string;
+}
+
+export async function staffCancelBooking(
+  bookingId: string,
+  reason?: string | null,
+): Promise<StaffBookingStatusResult> {
+  const { data, error } = await supabase.rpc("staff_cancel_booking", {
+    p_booking_id: bookingId,
+    ...(reason ? { p_reason: reason } : {}),
+  });
+  if (error) throw error;
+  const result = data as unknown as StaffBookingStatusResult;
+  // 同商家端 cancelBooking:LINE + 推播 booking_cancelled。
+  dispatchLineNotification({
+    merchantId: result.merchant_id,
+    bookingId: result.id,
+    eventType: "booking_cancelled",
+  });
+  dispatchPushNotification({
+    merchantId: result.merchant_id,
+    bookingId: result.id,
+    eventType: "booking_cancelled",
+  });
+  return result;
+}
+
+export async function staffCompleteBooking(bookingId: string): Promise<StaffBookingStatusResult> {
+  const { data, error } = await supabase.rpc("staff_complete_booking", { p_booking_id: bookingId });
+  if (error) throw error;
+  const result = data as unknown as StaffBookingStatusResult;
+  // 同商家端 completeBooking:只發 LINE booking_completed。
+  dispatchLineNotification({
+    merchantId: result.merchant_id,
+    bookingId: result.id,
+    eventType: "booking_completed",
+  });
+  return result;
+}
+
+/**
+ * 拖拉改時間(只改時間、不能轉派)。吃的是拖拉接線層(calendarBookingDrag.tsx)同一份 MoveBookingInput,
+ * 但只用 bookingId / targetStartAt / expectedStartAt —— 被拖的 / 目標 / 預期服務人員一律由後端固定成自己。
+ * 回傳形狀跟 MoveBookingResult 相容(booking 只有 id / merchant_id,previous / next 沒有 assistant_staff_id)。
+ * 成功後比照商家端 moveBooking 發推播 booking_updated(changeSummary 同一支 computeBookingChangeSummary;
+ * 不能換人 ⇒ 不帶 previousStaffId)。「復原」= 再呼叫一次這支搬回原時間。
+ */
+export async function staffMoveBooking(
+  input: Pick<MoveBookingInput, "bookingId" | "targetStartAt" | "expectedStartAt">,
+): Promise<MoveBookingResult> {
+  const { data, error } = await supabase.rpc("staff_move_booking", {
+    p_booking_id: input.bookingId,
+    p_target_start_at: input.targetStartAt,
+    p_expected_start_at: input.expectedStartAt,
+  });
+  if (error) throw error;
+  const result = data as unknown as MoveBookingResult;
+  const merchantId = result.booking["merchant_id"];
+  if (typeof merchantId === "string" && merchantId) {
+    const changeSummary = computeBookingChangeSummary({
+      original: {
+        startAt: result.previous.start_at,
+        serviceItemIds: [],
+        staffId: result.previous.staff_id,
+      },
+      next: {
+        startAt: result.next.start_at,
+        serviceItemIds: [],
+        staffId: result.next.staff_id,
+        staffName: null,
+        formattedStartAt: `${isoToTaipeiDateKey(result.next.start_at)} ${isoToTaipeiTime(result.next.start_at)}`,
+      },
+    });
+    dispatchPushNotification({
+      merchantId,
+      bookingId: result.booking.id,
+      eventType: "booking_updated",
+      changeSummary,
+    });
+  }
+  return result;
+}
+
+/** 開 / 關自己某一格(半小時)。回傳衝突的既有預約筆數(只提示不擋)。 */
+export async function staffSetMySlot(params: {
+  staffId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  isAvailable: boolean;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc("staff_set_my_slot", {
+    p_staff_id: params.staffId,
+    p_date: params.date,
+    p_start_time: params.startTime,
+    p_end_time: params.endTime,
+    p_is_available: params.isAvailable,
+  });
+  if (error) throw error;
+  return (data ?? 0) as number;
 }

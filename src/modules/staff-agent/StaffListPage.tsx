@@ -128,6 +128,11 @@ import {
   type StaffListFilter,
 } from "./staffListLogic";
 import {
+  decideOrderSwitchChange,
+  ORDER_SWITCH_CONFIRM_COPY,
+  orderSwitchInactiveWarning,
+} from "./staffOrderSwitchLogic";
+import {
   DEFAULT_MAX_BOOKING_DAYS_AHEAD,
   DEFAULT_MIN_ADVANCE_BOOKING_DAYS,
   MAX_BOOKING_DAYS_AHEAD_LIMIT,
@@ -376,6 +381,10 @@ function StaffFormDialog({
   const isEdit = Boolean(staff);
   const [form, setForm] = useState<StaffFormState>(staff ? staffToFormState(staff) : EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  // #977 第 7 批(裁決 6):兩個開關連動的小卡窗(只改表單狀態,按「儲存」才寫入)。
+  const [orderSwitchConfirm, setOrderSwitchConfirm] = useState<
+    "confirm-enable-member-info" | "confirm-disable-orders" | null
+  >(null);
   const queryClient = useQueryClient();
 
   const staffServiceItemsQueryKey = ["staff-agent-module", "staff-service-items", staff?.id];
@@ -779,6 +788,7 @@ function StaffFormDialog({
               {STAFF_BOOLEAN_PERMISSION_FIELDS.map((field) => (
                 <SwitchRow
                   key={field.key}
+                  id={`staff-switch-${field.key}`}
                   title={
                     <>
                       {field.label}
@@ -787,10 +797,66 @@ function StaffFormDialog({
                   }
                   description={field.description}
                   checked={Boolean(form[toCamel(field.key)])}
-                  onCheckedChange={(v) => setField(toCamel(field.key), v)}
-                />
+                  onCheckedChange={(v) => {
+                    // #977 第 7 批(裁決 6):「新增編輯訂單」與「顯示會員資料」連動,先問再一起改。
+                    const decision = decideOrderSwitchChange(field.key, v, {
+                      canCreateEditOrders: Boolean(form.canCreateEditOrders),
+                      showMemberInfo: Boolean(form.showMemberInfo),
+                    });
+                    if (decision.kind === "apply") setField(toCamel(field.key), v);
+                    else setOrderSwitchConfirm(decision.kind);
+                  }}
+                >
+                  {/* #977 第 7 批:舊資料(新增編輯訂單開、顯示會員資料關)⇒ 常駐 `!`,不自動改資料。 */}
+                  {field.key === "can_create_edit_orders" &&
+                  orderSwitchInactiveWarning({
+                    canCreateEditOrders: Boolean(form.canCreateEditOrders),
+                    showMemberInfo: Boolean(form.showMemberInfo),
+                  }) ? (
+                    <AlertNote data-testid="order-switch-inactive-note">
+                      {orderSwitchInactiveWarning({
+                        canCreateEditOrders: Boolean(form.canCreateEditOrders),
+                        showMemberInfo: Boolean(form.showMemberInfo),
+                      })}
+                    </AlertNote>
+                  ) : null}
+                </SwitchRow>
               ))}
             </div>
+            <CardAlertDialog
+              open={orderSwitchConfirm !== null}
+              onOpenChange={(next) => {
+                if (!next) setOrderSwitchConfirm(null);
+              }}
+            >
+              <CardAlertDialogContent data-testid="order-switch-confirm">
+                {orderSwitchConfirm ? (
+                  <>
+                    <CardAlertDialogHeader>
+                      <CardAlertDialogTitle>
+                        {ORDER_SWITCH_CONFIRM_COPY[orderSwitchConfirm].title}
+                      </CardAlertDialogTitle>
+                      <CardAlertDialogDescription>
+                        {ORDER_SWITCH_CONFIRM_COPY[orderSwitchConfirm].description}
+                      </CardAlertDialogDescription>
+                    </CardAlertDialogHeader>
+                    <CardAlertDialogFooter>
+                      <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+                      <CardAlertDialogAction
+                        onClick={() => {
+                          const both = orderSwitchConfirm === "confirm-enable-member-info";
+                          setField("canCreateEditOrders", both);
+                          setField("showMemberInfo", both);
+                          setOrderSwitchConfirm(null);
+                        }}
+                      >
+                        {ORDER_SWITCH_CONFIRM_COPY[orderSwitchConfirm].action}
+                      </CardAlertDialogAction>
+                    </CardAlertDialogFooter>
+                  </>
+                ) : null}
+              </CardAlertDialogContent>
+            </CardAlertDialog>
           </div>
 
           {/* 模組 11(LINE 通知)§4.6:服務人員詳情/編輯頁疊加「LINE 綁定」區塊,只有編輯既有

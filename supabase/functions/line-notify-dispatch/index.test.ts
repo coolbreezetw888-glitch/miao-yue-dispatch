@@ -462,3 +462,102 @@ Deno.test("#972:buildNotifySubjectOwnershipLookup 請假紀錄查不到時回 fa
   assertEquals(await lookup.staffLeaveRecordBelongsToMerchant("leave-nope", "merchant-A"), false);
   assertEquals(selects.map((x) => x.table), ["staff_leave_records"]);
 });
+
+// =========================================================================
+// SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人自己建單 / 改單 / 取消 / 完成後發通知。
+// 原本那道 can_dispatch_line_notification(管理員 / 客服)不過時,有帶 booking_id 才**再**問
+// can_staff_dispatch_booking_notification。「別人的單 / 協助人員 / 事件不符」的判斷在資料庫那支(pgTAP req977_09 鎖住),
+// 這裡鎖住的是 handler 的接線:誰會被問、問了什麼、回答怎麼對應到 200 / 403 / 500。
+// =========================================================================
+function makeStaffCaller(answers: Record<string, { data: unknown; error: unknown }>) {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  return {
+    calls,
+    client: {
+      rpc: (fn: string, args: Record<string, unknown>) => {
+        calls.push({ fn, args });
+        return Promise.resolve(answers[fn] ?? { data: false, error: null });
+      },
+    },
+  };
+}
+
+Deno.test("#977-7:管理員檢查不過、服務人員本人自己的單 → 放行(200),而且問的是 can_staff_dispatch_booking_notification(帶商家 / 訂單 / 事件)", async () => {
+  const { adminClient, rpcCalls } = makeFakeLineAdminClient();
+  const caller = makeStaffCaller({
+    can_dispatch_line_notification: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: true, error: null },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(caller.calls, [
+    { fn: "can_dispatch_line_notification", args: { p_merchant_id: "merchant-A", p_event_type: "booking_created" } },
+    {
+      fn: "can_staff_dispatch_booking_notification",
+      args: { p_merchant_id: "merchant-A", p_booking_id: "booking-A", p_event_type: "booking_created" },
+    },
+  ]);
+  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+});
+
+Deno.test("#977-7:別人的單 / 協助人員 / 事件不符(資料庫回 false)→ 403,不查歸屬、不寫記錄", async () => {
+  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+  const caller = makeStaffCaller({
+    can_dispatch_line_notification: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: false, error: null },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_cancelled" }),
+    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+  );
+  assertEquals(res.status, 403);
+  assertEquals(rpcCalls, []);
+  assertEquals(inserts, []);
+  assertEquals(selects, []);
+});
+
+Deno.test("#977-7:沒帶 booking_id(例如請假通知)→ 不問服務人員那支,直接 403", async () => {
+  const { adminClient, inserts } = makeFakeLineAdminClient();
+  const caller = makeStaffCaller({
+    can_dispatch_line_notification: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: true, error: null },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-A", event_type: "staff_leave_created" }),
+    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+  );
+  assertEquals(res.status, 403);
+  assertEquals(caller.calls.map((c) => c.fn), ["can_dispatch_line_notification"]);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#977-7:服務人員那支 RPC 本身出錯 → 500(fail closed),不寫記錄", async () => {
+  const { adminClient, inserts } = makeFakeLineAdminClient();
+  const caller = makeStaffCaller({
+    can_dispatch_line_notification: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: null, error: { message: "boom" } },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+  );
+  assertEquals(res.status, 500);
+  assertEquals(inserts, []);
+});
+
+Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多問服務人員那支(行為不變)", async () => {
+  const { adminClient } = makeFakeLineAdminClient();
+  const caller = makeStaffCaller({
+    can_dispatch_line_notification: { data: true, error: null },
+    can_staff_dispatch_booking_notification: { data: false, error: null },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(caller.calls.map((c) => c.fn), ["can_dispatch_line_notification"]);
+});

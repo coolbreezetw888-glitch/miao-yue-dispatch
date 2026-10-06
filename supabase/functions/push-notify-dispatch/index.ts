@@ -28,6 +28,7 @@ import {
   NOTIFY_SUBJECT_NOT_FOUND_MESSAGE,
   type NotifySubjectOwnershipLookup,
 } from "../_shared/notifySubjectOwnership.ts";
+import { checkStaffBookingDispatch } from "../_shared/staffBookingDispatch.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(不在模組頂層算成常數)——ES module 的 import
 // 陳述式會被提升到檔案最前面執行,如果這裡在模組頂層就讀一次 Deno.env.get 存成常數,Deno 測試
@@ -154,7 +155,17 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
   if (!allowed) {
-    return jsonResponse({ error: "沒有權限對這個商家/訂單發送通知" }, 403);
+    // SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人(開了「新增編輯訂單」)自己建單 / 改單 / 取消 / 拖拉後,
+    // 用他自己的身分呼叫這支 ⇒ 上面那道 can_manage_bookings 一定不過。這裡**再**問一次
+    // can_staff_dispatch_booking_notification:本人是這張單的主要服務人員、可以自己下單、事件符合訂單現況才放行。
+    // 原本就放行的人完全不經過這一段(行為不變)。
+    const staffAllowed = await checkStaffBookingDispatch(callerClient, merchantId, bookingId, eventType);
+    if (staffAllowed === "error") {
+      return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
+    }
+    if (!staffAllowed) {
+      return jsonResponse({ error: "沒有權限對這個商家/訂單發送通知" }, 403);
+    }
   }
 
   const adminClient = resolvedDeps.createAdminClient();

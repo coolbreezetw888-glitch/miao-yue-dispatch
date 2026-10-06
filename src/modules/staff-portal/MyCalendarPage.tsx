@@ -1,3 +1,9 @@
+// 🔴 SPECS-INDEX #977 第 7 批(2026-10-07):「服務人員新增編輯訂單」生效的服務人員(開關 + 顯示會員資料 +
+// 行事曆檢視,staffOrderLogic.resolveStaffOrderAbility)可以在「時間軸格線」點空白格子新增預約 / 開關時段(方案 B2)、
+// 長按拖拉自己的單改時間,並在詳情編輯 / 取消 / 完成自己是主要服務人員的單。建單 / 編輯畫面 = 商家端同一個
+// BookingFormDialog 的服務人員模式(用 React.lazy 載入,避免 staff-portal ↔ booking/CalendarPage 互相 import)。
+// 沒生效的人這一頁完全維持現況。
+//
 // 🔴 SPECS-INDEX #977 第 4 批(2026-10-06):這一頁不再是純唯讀 —— 主要服務人員可以在預約詳情按「確認接單」
 // (見 MyBookingDetailDialog.tsx 檔頭);月曆日期格的數量改成兩色(待確認 / 已確認,用商家自訂顏色,
 // 已完成不算,0 不顯示,計算在 staffConfirmLogic.countDayStatusBadges)。
@@ -8,7 +14,8 @@
 // 比起既有管理員/客服版本的行事曆(可以跨服務人員切換、建單、編輯),這裡刻意做成簡化版
 // 唯讀檢視——服務人員這次的範圍只到「看得到自己的排程」,不包含建單/編輯(見規格書判斷 2)。
 
-import { useMemo, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   AttributeTag,
@@ -55,6 +62,14 @@ import {
 import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
 import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
 import { countDayStatusBadges } from "./staffConfirmLogic";
+import { resolveStaffOrderAbility } from "./staffOrderLogic";
+import { invalidateStaffSchedule } from "./staffScheduleChannel";
+
+// #977 第 7 批:建單 / 編輯表單在 booking/CalendarPage.tsx(那支檔案也 import 這一頁)⇒ 用 lazy 載入,
+// 不形成靜態的互相 import;只有開關生效、真的打開表單時才會載入。
+const BookingFormDialog = lazy(() =>
+  import("@/modules/booking/CalendarPage").then((m) => ({ default: m.BookingFormDialog })),
+);
 import type { MyBookingScheduleItem } from "./api";
 
 // v2 §10.2.4:「卡片列表」/「時間軸格線」兩種檢視,預設卡片列表(維持 v1 既有行為不變,
@@ -194,6 +209,14 @@ export default function MyCalendarPage() {
   const { data: hasCalendarAccess, isLoading: permissionLoading } =
     useMyStaffPermission("staff_calendar_view");
   const { data: staffRow, isLoading: staffLoading } = useActiveMyStaffRecord(merchantId);
+  // #977 第 7 批:方案 B2 的「開關時段」要看排班自助權限(+ 按件計酬)。
+  const { data: hasSelfManageAvailability } = useMyStaffPermission(
+    "staff_availability_self_manage",
+  );
+  const [formState, setFormState] = useState<
+    | { open: false }
+    | { open: true; editingBookingId: string | null; dateKey?: string; time?: string }
+  >({ open: false });
 
   // SPECS-INDEX #874(#895):商家端改單時自動更新這一頁,不用手動重新整理。
   // 一定要在下面任何 early return 之前呼叫(hook 規則)。沒有行事曆檢視權限 / staff_id 還沒解出來時
@@ -262,6 +285,13 @@ export default function MyCalendarPage() {
   }
 
   const selectedDayBookings = bookingsByDate.get(selectedDateKey) ?? [];
+  // #977 第 7 批:這只決定要不要顯示互動;後端 staff_ 包裝 RPC 才是安全邊界。
+  // useActiveMyStaffRecord 的 staleTime 30 秒:商家剛關掉開關時畫面可能還有選單,按下去會被後端擋、顯示錯誤提示。
+  const orderAbility = resolveStaffOrderAbility({
+    staffRow,
+    hasCalendarView: hasCalendarAccess,
+    hasSelfManageAvailability,
+  });
   const detailBooking = (schedule ?? []).find((b) => b.id === detailBookingId) ?? null;
 
   // 2026-09-24 使用者裁決(任務 2):商家從「到府派工」切成「到店服務」之後,既有訂單的客戶地址
@@ -403,6 +433,16 @@ export default function MyCalendarPage() {
               selectedDateKey={selectedDateKey}
               bookings={selectedDayBookings}
               onSelectBooking={setDetailBookingId}
+              orderActions={
+                orderAbility.canEditOrders && staffRow
+                  ? {
+                      unlimitedBackendEdit: staffRow.unlimited_backend_edit,
+                      canToggleSlots: orderAbility.canToggleSlots,
+                      onCreateBooking: (dateKey, time) =>
+                        setFormState({ open: true, editingBookingId: null, dateKey, time }),
+                    }
+                  : null
+              }
             />
           ) : selectedDayBookings.length === 0 ? (
             <p className="text-sm text-muted-foreground">這一天沒有預約。</p>
@@ -438,7 +478,51 @@ export default function MyCalendarPage() {
         onOpenChange={(open) => {
           if (!open) setDetailBookingId(null);
         }}
+        canEditOrders={orderAbility.canEditOrders}
+        onEdit={(bookingId) => {
+          setDetailBookingId(null);
+          setFormState({ open: true, editingBookingId: bookingId });
+        }}
       />
+
+      {/* #977 第 7 批:服務人員模式的建單 / 編輯畫面(商家端同一個表單)。只有開關生效的人才會掛上。 */}
+      {orderAbility.canEditOrders && staffRow && merchant && formState.open ? (
+        <Suspense fallback={null}>
+          <StaffScheduleRefreshOnUnmount />
+          <BookingFormDialog
+            merchantId={merchant.id}
+            industryType={merchant.industry_type as IndustryType}
+            open={formState.open}
+            onOpenChange={(open) => {
+              if (!open) setFormState({ open: false });
+            }}
+            prefill={{
+              ...(formState.dateKey ? { dateKey: formState.dateKey } : {}),
+              ...(formState.time ? { time: formState.time } : {}),
+            }}
+            editingBookingId={formState.editingBookingId}
+            onSaved={() => undefined}
+            actor={{ kind: "staff", staffId: staffRow.id, staffName: staffRow.name }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
+}
+
+/**
+ * #977 第 7 批:服務人員模式的建單 / 編輯畫面關掉(卸載)時,重查自己的行事曆(列表、時間軸、待確認數)與
+ * staff-portal 的其他查詢。獨立成小元件,useQueryClient 只在表單真的打開時才呼叫
+ * (這一頁其他情況不需要 QueryClient,既有測試也沒有包 Provider)。
+ */
+function StaffScheduleRefreshOnUnmount() {
+  const queryClient = useQueryClient();
+  useEffect(
+    () => () => {
+      invalidateStaffSchedule(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["staff-portal-module"] });
+    },
+    [queryClient],
+  );
+  return null;
 }

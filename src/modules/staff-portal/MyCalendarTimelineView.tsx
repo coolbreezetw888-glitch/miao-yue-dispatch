@@ -1,10 +1,17 @@
 // 對應規格書 v2 §10.2.3:服務人員自助行事曆的「時間軸格線」檢視,針對目前選定的單一一天,
 // 畫出跟商家端 CalendarPageInner 同樣風格的單欄時間軸格線(從開店到打烊依半小時切格)。
 //
+// 🔴 SPECS-INDEX #977 第 7 批(2026-10-07):下面第 2 點改成「開關關閉時」的版本(裁決 1 / 2 / 9):
+//   ・「服務人員新增編輯訂單」沒有生效(開關關、顯示會員資料關、或沒有行事曆檢視)⇒ **完全維持下面的唯讀現況**。
+//   ・生效 ⇒ 背景格子改成可點(跟商家端同一個 DaySlotCell + #641 點擊 vs 拖曳判斷,直接拖空白格 = 捲動),
+//     每一格的狀態用跟商家端同一支 resolveDaySlot 算(營業時間 ∩ 每週時段 + 單日例外 + 請假 + 跨店佔用);
+//     選單:可預約的格子有「新增預約」;「開啟 / 關閉時段」只給方案 B2 的人(按件計酬 + 排班自助權限)。
+//     自己是主要服務人員、待確認 / 已確認的色塊可以長按 0.5 秒上下拖改時間(同一個 useCalendarBookingDrag,
+//     改打 staff_move_booking;只有一欄,不能轉派)。協助、已完成、已取消的色塊維持點一下開詳情。
+//
 // 跟商家端時間軸的差異(規格書明講的三點):
 //   1. 只有一欄(自己),不是多位服務人員並排。
-//   2. 不掛 DropdownMenu、不能點格子開關時段/新增預約——那一整套是給商家管理員/客服用的操作
-//      邏輯,服務人員這裡純粹是唯讀顯示排程用的,不需要也不應該有這些互動。
+//   2. (開關關閉時)不掛 DropdownMenu、不能點格子開關時段/新增預約——服務人員這裡純粹是唯讀顯示排程用的。
 //   3. 資料來源不另外呼叫新的查詢:營業時間呼叫 10.2.1 的 useMyDayBusinessHours,預約清單由
 //      呼叫端(MyCalendarPage.tsx)從已經用 useMyBookingSchedule 抓回來的整月資料裡,用
 //      selectedDateKey 篩選出當天那幾筆再傳進來(前端記憶體篩選,不重新打 API)。
@@ -29,10 +36,26 @@
 // 設計上直接改成接受 staffId,由呼叫端(已經透過 useActiveMyStaffRecord 拿到 staffId)傳入,
 // 減少一層不必要的間接轉換。已在回報中向主腦說明這個偏離。
 
-import { useMemo, type CSSProperties } from "react";
+import { useCallback, useMemo, type CSSProperties } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/patterns";
 import { cn } from "@/lib/utils";
+import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+import {
+  BookingDragGhost,
+  DraggableBookingBlock,
+  PastDropConfirmDialog,
+  useCalendarBookingDrag,
+} from "@/modules/booking/calendarBookingDrag";
+import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { DaySlotCell } from "@/modules/booking/DaySlotCell";
+import {
+  buildStaffDayAvailableWindows,
+  resolveDaySlot,
+  SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+} from "@/modules/booking/daySlotGrid";
 import { isoToTaipeiTime, minutesToTime, timeToMinutes } from "@/modules/booking/dateUtils";
 import {
   bookingBlockStyle,
@@ -40,6 +63,8 @@ import {
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
   type BookingStatus,
+  type DayScheduleOwnBooking,
+  type DayScheduleStaffBlock,
 } from "@/modules/booking/types";
 
 import {
@@ -48,22 +73,37 @@ import {
   useMyDayBusinessHours,
   useMyDayScheduleState,
 } from "./context";
-import type { MyBookingScheduleItem } from "./api";
+import { staffMoveBooking, staffSetMySlot, type MyBookingScheduleItem } from "./api";
+import { invalidateStaffSchedule } from "./staffScheduleChannel";
 
 const SLOT_MINUTES = 30;
 const SLOT_PX = 30;
+
+/** #977 第 7 批:開關生效時才傳進來;沒傳 = 唯讀現況(裁決 1)。 */
+export interface MyTimelineOrderActions {
+  /** 「商家後台編輯無時段限制」:可約區間 = 整段營業時間(跟資料庫 get_merchant_day_schedule 同一條規則)。 */
+  unlimitedBackendEdit: boolean;
+  /** 方案 B2:選單有沒有「開啟 / 關閉時段」。 */
+  canToggleSlots: boolean;
+  /** 選單「新增預約」→ 打開服務人員模式的建單畫面,預帶日期與這一格的時間。 */
+  onCreateBooking: (dateKey: string, time: string) => void;
+}
 
 export function MyCalendarTimelineView({
   staffId,
   selectedDateKey,
   bookings,
   onSelectBooking,
+  orderActions = null,
 }: {
   staffId: string | null | undefined;
   selectedDateKey: string;
   bookings: MyBookingScheduleItem[];
   onSelectBooking: (bookingId: string) => void;
+  orderActions?: MyTimelineOrderActions | null;
 }) {
+  const queryClient = useQueryClient();
+  const interactive = orderActions !== null && Boolean(staffId);
   const { data: businessHours, isLoading } = useMyDayBusinessHours(staffId, selectedDateKey);
   // SPECS-INDEX #644:這一天的全天休假/時段排休/跨店佔用狀態明細 + 商家自訂的對應顏色設定。
   const { data: dayState } = useMyDayScheduleState(staffId, selectedDateKey);
@@ -89,6 +129,98 @@ export function MyCalendarTimelineView({
 
   const gridStartMin = slots.length > 0 ? timeToMinutes(slots[0]!.start) : 0;
   const gridTotalPx = slots.length * SLOT_PX;
+
+  // ───── #977 第 7 批:開關生效時才用到的資料與接線(hook 一律無條件呼叫,沒生效時查詢停用)─────
+  const { data: weeklyWindows } = useStaffAvailabilityWindows(interactive ? staffId : null);
+  const availableWindows = useMemo(
+    () =>
+      businessHours
+        ? buildStaffDayAvailableWindows({
+            hasSetting: businessHours.has_setting,
+            isClosed: businessHours.is_closed,
+            openTime: businessHours.open_time,
+            closeTime: businessHours.close_time,
+            unlimitedBackendEdit: orderActions?.unlimitedBackendEdit === true,
+            dayOfWeek: new Date(`${selectedDateKey}T00:00:00`).getDay(),
+            weeklyWindows: weeklyWindows ?? [],
+          })
+        : [],
+    [businessHours, orderActions?.unlimitedBackendEdit, selectedDateKey, weeklyWindows],
+  );
+
+  const refreshAfterChange = useCallback(() => {
+    invalidateStaffSchedule(queryClient);
+    void queryClient.invalidateQueries({
+      queryKey: ["staff-portal-module", "my-bookable-start-times"],
+    });
+  }, [queryClient]);
+
+  // 拖拉:只有一欄(自己),只放「自己是主要服務人員」的色塊進去(協助色塊不能拖)。
+  const dragStaffBlocks = useMemo<DayScheduleStaffBlock[] | undefined>(() => {
+    if (!interactive || !staffId) return undefined;
+    return [
+      {
+        staff_id: staffId,
+        staff_name: "",
+        unlimited_backend_edit: orderActions?.unlimitedBackendEdit === true,
+        available_windows: [],
+        availability_overrides: [],
+        on_leave: dayState?.on_leave ?? null,
+        foreign_bookings: [],
+        bookings: bookings
+          .filter((b) => b.role_in_booking === "primary")
+          .map<DayScheduleOwnBooking>((b) => ({
+            id: b.id,
+            start_at: b.start_at,
+            end_at: b.end_at,
+            status: b.status as BookingStatus,
+            customer_name: b.customer_name,
+            customer_phone: b.customer_phone ?? "",
+            notes: null,
+            role: "main",
+            service_items: [],
+          })),
+      },
+    ];
+  }, [interactive, staffId, orderActions?.unlimitedBackendEdit, dayState?.on_leave, bookings]);
+  const staffNameById = useMemo(() => new Map<string, string>(), []);
+  const dragController = useCalendarBookingDrag({
+    dateKey: selectedDateKey,
+    staffBlocks: dragStaffBlocks,
+    staffNameById,
+    gridStartMin,
+    slotCount: slots.length,
+    slotMinutes: SLOT_MINUTES,
+    slotPx: SLOT_PX,
+    thresholdPx: SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+    onOpenDetail: (bookingId) => onSelectBooking(bookingId),
+    onMoved: refreshAfterChange,
+    moveFn: (input) => staffMoveBooking(input),
+  });
+
+  async function handleToggleSlot(start: string, end: string, currentlyAvailable: boolean) {
+    if (!staffId) return;
+    try {
+      const conflictCount = await staffSetMySlot({
+        staffId,
+        date: selectedDateKey,
+        startTime: start,
+        endTime: end,
+        isAvailable: !currentlyAvailable,
+      });
+      // 文字跟商家端 handleToggleDayOverride 一樣:有既有預約只提示不擋。
+      if (conflictCount > 0) {
+        toast.warning(
+          `這個時段目前還有 ${conflictCount} 筆既有預約，系統不會自動取消或搬移，請自行確認是否需要另外處理。`,
+        );
+      } else {
+        toast.success(currentlyAvailable ? "已關閉這個時段" : "已開啟這個時段");
+      }
+      refreshAfterChange();
+    } catch (err) {
+      toast.error("設定失敗", { description: getErrorMessage(err) });
+    }
+  }
 
   if (isLoading) {
     // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。
@@ -120,12 +252,99 @@ export function MyCalendarTimelineView({
         </p>
       ) : null}
       <div
-        className="relative overflow-hidden rounded-md border border-border"
+        // #977 第 7 批:開關生效時這一層同時是拖拉的格線根節點(touchmove 只在拖拉中才 preventDefault)。
+        ref={interactive ? dragController.setGridRoot : undefined}
+        data-testid="my-timeline-grid"
+        data-interactive={interactive ? "true" : undefined}
+        data-drag-phase={interactive ? dragController.phase : undefined}
+        className={cn(
+          "relative overflow-hidden rounded-md border border-border",
+          interactive && dragController.isCommitting && "pointer-events-none",
+        )}
         style={{ height: gridTotalPx }}
       >
         {slots.map((slot, i) => {
           const slotStartMin = timeToMinutes(slot.start);
           const slotEndMin = slotStartMin + SLOT_MINUTES;
+
+          // #977 第 7 批:開關生效、沒有整天請假 ⇒ 用跟商家端同一支 resolveDaySlot 算狀態、畫可點的格子。
+          if (interactive && !onLeave) {
+            const resolved = resolveDaySlot({
+              slotStartMin,
+              slotEndMin,
+              availableWindows,
+              overrides: dayState?.availability_overrides ?? [],
+              foreignBookings: dayState?.foreign_bookings ?? [],
+            });
+            const label = `${slot.start}${
+              resolved.foreignBusy
+                ? "・外店預約中"
+                : resolved.isOverride && !resolved.finalAvailable
+                  ? "・時段排休"
+                  : ""
+            }`;
+            const showOverride = orderActions?.canToggleSlots === true;
+            // 跨店佔用、或這一格沒有任何可用操作(不可預約又不能開關時段)⇒ 純顯示,不包選單(比照商家端)。
+            if (resolved.foreignBusy || (!resolved.finalAvailable && !showOverride)) {
+              const plainStyle = resolved.foreignBusy
+                ? calendarStateBlockStyle(effectiveCalendarStateStyles, "cross_store_occupied")
+                : resolved.isOverride
+                  ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
+                  : undefined;
+              return (
+                <div
+                  key={slot.start}
+                  className={cn(
+                    "absolute inset-x-0 border-t border-border first:border-t-0",
+                    plainStyle ? undefined : "bg-muted/40",
+                  )}
+                  style={{ top: i * SLOT_PX, height: SLOT_PX, ...plainStyle }}
+                  data-slot-state={resolved.state}
+                  aria-label="不可預約"
+                >
+                  <span className="pl-1.5 text-[10px] text-muted-foreground">{label}</span>
+                </div>
+              );
+            }
+            return (
+              <DaySlotCell
+                key={slot.start}
+                top={i * SLOT_PX}
+                height={SLOT_PX}
+                cellClassName={cn(
+                  "pl-1.5 text-[10px] text-muted-foreground",
+                  resolved.finalAvailable
+                    ? resolved.isOverride
+                      ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
+                      : "bg-background hover:bg-brand-soft/40"
+                    : resolved.isOverride
+                      ? "hover:opacity-80"
+                      : "bg-muted/40 hover:bg-muted/60",
+                )}
+                cellStyle={
+                  resolved.isOverride && !resolved.finalAvailable
+                    ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
+                    : undefined
+                }
+                ariaLabel={
+                  resolved.finalAvailable ? `${slot.start} 可預約` : `${slot.start} 不可預約`
+                }
+                slotState={resolved.state}
+                badgeText={label}
+                showCreateOption={resolved.finalAvailable}
+                onCreateBooking={() => orderActions?.onCreateBooking(selectedDateKey, slot.start)}
+                showOverrideOption={showOverride}
+                overrideOptionLabel={resolved.finalAvailable ? "關閉時段" : "開啟時段"}
+                onToggleOverride={() =>
+                  void handleToggleSlot(
+                    slot.start,
+                    minutesToTime(slotEndMin),
+                    resolved.finalAvailable,
+                  )
+                }
+              />
+            );
+          }
 
           // 整天休假時不用再逐格判斷時段排休/跨店佔用——請假一律擋下,底下不會再有其他狀態需要
           // 顯示,跟商家端「on_leave 直接跳過整欄背景格線判斷」的既有邏輯一致。
@@ -174,11 +393,53 @@ export function MyCalendarTimelineView({
           );
         })}
 
+        {/* #977 第 7 批:拖拉落點計算要的「欄位」(只有一欄 = 自己)。放在格子後面、不吃滑鼠事件,
+            唯讀時不渲染(不影響原本第一格的 first:border-t-0)。 */}
+        {interactive && staffId ? (
+          <div className="pointer-events-none absolute inset-0" data-drag-column={staffId} />
+        ) : null}
         {bookings.map((b) => {
           const bStartMin = timeToMinutes(isoToTaipeiTime(b.start_at));
           const bEndMin = timeToMinutes(isoToTaipeiTime(b.end_at));
           const top = Math.max(0, ((bStartMin - gridStartMin) / SLOT_MINUTES) * SLOT_PX);
           const height = Math.max(SLOT_PX / 2, ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX);
+          // #977 第 7 批(裁決 9):開關生效 + 自己是主要服務人員 + 待確認 / 已確認 ⇒ 可以長按拖拉改時間。
+          // 用商家端同一個 DraggableBookingBlock(手勢、長按 500ms、復原提示都同一份);位置照服務人員端的
+          // left-16 right-1(inline style 蓋過元件預設的 inset-x-0)。
+          const ownDraggable =
+            interactive &&
+            staffId &&
+            b.role_in_booking === "primary" &&
+            (b.status === "pending_confirmation" || b.status === "accepted");
+          if (ownDraggable && staffId) {
+            return (
+              <DraggableBookingBlock
+                key={`${b.id}-${b.role_in_booking}`}
+                booking={{
+                  id: b.id,
+                  start_at: b.start_at,
+                  end_at: b.end_at,
+                  status: b.status as BookingStatus,
+                  customer_name: b.customer_name,
+                  customer_phone: b.customer_phone ?? "",
+                  notes: null,
+                  role: "main",
+                  service_items: [],
+                }}
+                staffId={staffId}
+                style={{
+                  top,
+                  height,
+                  left: 64,
+                  right: 4,
+                  ...staffPortalWhiteBlockStyle(
+                    bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
+                  ),
+                }}
+                controller={dragController}
+              />
+            );
+          }
           return (
             <button
               key={`${b.id}-${b.role_in_booking}`}
@@ -211,6 +472,16 @@ export function MyCalendarTimelineView({
           );
         })}
       </div>
+      {interactive ? (
+        <>
+          {/* #811 殘影(position: fixed)與 #816 拖到過去時間的確認框,同商家端。 */}
+          <BookingDragGhost ghost={dragController.ghost} />
+          <PastDropConfirmDialog
+            request={dragController.pastConfirm}
+            onResolve={dragController.resolvePastConfirm}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

@@ -36,6 +36,8 @@ import {
   fetchMyCalendarStateStyles,
   fetchMyDayBusinessHours,
   fetchMyDayScheduleState,
+  staffCancelBooking,
+  staffCompleteBooking,
   staffConfirmBooking,
   type MyBookingScheduleItem,
   type MyDayBusinessHours,
@@ -163,6 +165,31 @@ export function useStaffConfirmBooking() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (bookingId: string) => staffConfirmBooking(bookingId),
+    onSuccess: () => {
+      invalidateStaffSchedule(queryClient);
+    },
+  });
+}
+
+/**
+ * SPECS-INDEX #977 第 7 批(2026-10-07):預約詳情「取消預約」「標記完成」(只限開關生效 + 自己是主要服務人員,
+ * 後端 staff_cancel_booking / staff_complete_booking 再擋一次)。成功後**立刻** invalidate 行事曆查詢,不只等即時同步。
+ */
+export function useStaffCancelBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { bookingId: string; reason: string | null }) =>
+      staffCancelBooking(input.bookingId, input.reason),
+    onSuccess: () => {
+      invalidateStaffSchedule(queryClient);
+    },
+  });
+}
+
+export function useStaffCompleteBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId: string) => staffCompleteBooking(bookingId),
     onSuccess: () => {
       invalidateStaffSchedule(queryClient);
     },

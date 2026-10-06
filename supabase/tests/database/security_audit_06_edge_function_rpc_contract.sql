@@ -16,6 +16,7 @@
 --   line-notify-dispatch                                                                       → can_dispatch_line_notification(p_merchant_id, p_event_type)
 --   push-notify-dispatch                                                                       → can_manage_bookings(p_merchant_id)
 --   push-send-test                                                                             → get_my_push_identity(p_merchant_id) / count_my_recent_test_pushes(p_merchant_id)
+--   line-notify-dispatch / push-notify-dispatch(#977 第 7 批,原本的檢查不通過時才問)           → can_staff_dispatch_booking_notification(p_merchant_id, p_booking_id, p_event_type)
 -- ⚠️ 只列 callerClient 的呼叫。adminClient(service role)的 .rpc(...) 不受這條限制(service role 可以直接打
 --    private schema 以外的任何 public 函式,而且不受 EXECUTE grant 限制),混進來會變成一堆假警報。
 -- ⚠️ 之後任何 Edge Function 新增一支 callerClient.rpc(...),就要把它加進下面的 VALUES 清單,並把 plan() 加 2。
@@ -43,7 +44,7 @@
 -- 這支測試只讀系統目錄,不需要 fixture、不需要切換身份,所以沒有 test_set_auth helper。
 begin;
 
-select plan(17);
+select plan(19);
 
 -- =========================================================================
 -- 契約清單:Edge Function 用呼叫者身分呼叫的每一支 RPC(函式名, identity arguments 原文)。
@@ -61,7 +62,9 @@ insert into edge_caller_rpc_contract (seq, fn, args, called_by) values
   (3, 'can_manage_bookings',            'p_merchant_id uuid',                    'push-notify-dispatch(#805)'),
   (4, 'get_my_push_identity',           'p_merchant_id uuid',                    'push-send-test'),
   (5, 'count_my_recent_test_pushes',    'p_merchant_id uuid',                    'push-send-test'),
-  (6, 'am_i_allowed_line_marketing',    'p_merchant_id uuid',                    'line-send-marketing(#976 第 3 批)');
+  (6, 'am_i_allowed_line_marketing',    'p_merchant_id uuid',                    'line-send-marketing(#976 第 3 批)'),
+  -- SPECS-INDEX #977 第 7 批(2026-10-07):兩支通知 Edge Function 在原本的檢查不通過時,再用呼叫者身分問這支。
+  (7, 'can_staff_dispatch_booking_notification', 'p_merchant_id uuid, p_booking_id uuid, p_event_type text', 'line-notify-dispatch / push-notify-dispatch(#977 第 7 批)');
 
 -- =========================================================================
 -- ① 前提:清單真的有 6 筆(#976 第 3 批加了第 6 筆)。本專案吃過「空清單假通過」的虧 —— 下面 ②~⑪ 是用 select ... from 清單 產生的,
@@ -69,8 +72,8 @@ insert into edge_caller_rpc_contract (seq, fn, args, called_by) values
 -- =========================================================================
 select is(
   (select count(*)::int from edge_caller_rpc_contract),
-  6,
-  '#806 ①(前提):Edge Function 呼叫者身分 RPC 契約清單共 6 筆(新增 callerClient.rpc 時要同步加清單、plan +2)'
+  7,
+  '#806 ①(前提):Edge Function 呼叫者身分 RPC 契約清單共 7 筆(#977 第 7 批加了第 7 筆;新增 callerClient.rpc 時要同步加清單、plan +2)'
 );
 
 -- =========================================================================

@@ -1,0 +1,405 @@
+// SPECS-INDEX #977 第 7 批(2026-10-07):建單 / 編輯表單的「服務人員模式」+ 商家模式送出參數鎖住不變。
+//
+//   ・商家模式(預設):編輯送出的 updateBooking 參數整包比對(含主要服務人員、協助人員、會員、隱藏備註、料錢)
+//     ⇒ 這批加了資料來源層與服務人員分支之後,商家端送出的東西一個 key 都沒變(故障注入 11 的守門)
+//   ・服務人員模式:沒有服務人員下拉(唯讀一行自己的名字)、沒有協助人員欄位(編輯時唯讀「由商家指派」)、
+//     沒有會員比對面板、沒有「不讓服務人員看到」開關、沒有料錢;內部備註被藏起來的單沒有內部備註欄;
+//     送出打 staffCreateBooking / staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 料錢 / 其他服務人員
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const m = vi.hoisted(() => ({
+  getBooking: vi.fn(),
+  createBooking: vi.fn(),
+  updateBooking: vi.fn(),
+  staffCreateBooking: vi.fn(),
+  staffUpdateBooking: vi.fn(),
+  fetchStaffBookingFormOptions: vi.fn(),
+  fetchStaffBookingForEdit: vi.fn(),
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const MERCHANT_ID = "11111111-1111-4111-8111-111111111111";
+const STAFF_ID = "22222222-2222-4222-8222-222222222222";
+const ASSISTANT_ID = "55555555-5555-4555-8555-555555555555";
+const SERVICE_ITEM_ID = "33333333-3333-4333-8333-333333333333";
+const BOOKING_ID = "44444444-4444-4444-8444-444444444444";
+const MEMBER_ID = "66666666-6666-4666-8666-666666666666";
+const PM_ID = "77777777-7777-4777-8777-777777777777";
+const MATERIAL_ID = "88888888-8888-4888-8888-888888888888";
+
+vi.mock("sonner", () => ({ toast: m.toast }));
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: { from: () => ({}), rpc: () => ({}), channel: () => ({}) },
+}));
+
+vi.mock("./api", () => ({
+  getBooking: m.getBooking,
+  createBooking: m.createBooking,
+  updateBooking: m.updateBooking,
+  previewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
+  fetchStaffBookableStartTimes: vi.fn(async () => ALL_DAY_START_TIMES),
+  MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
+}));
+
+vi.mock("@/modules/staff-portal/api", () => ({
+  fetchStaffBookingFormOptions: m.fetchStaffBookingFormOptions,
+  fetchStaffBookingForEdit: m.fetchStaffBookingForEdit,
+  fetchMyBookableStartTimes: vi.fn(async () => ALL_DAY_START_TIMES),
+  staffPreviewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
+  staffCreateBooking: m.staffCreateBooking,
+  staffUpdateBooking: m.staffUpdateBooking,
+}));
+vi.mock("@/modules/staff-portal/context", () => ({
+  useMyDayScheduleState: () => ({
+    data: { on_leave: null, availability_overrides: [], foreign_bookings: [] },
+  }),
+}));
+vi.mock("@/modules/staff-portal/MyCalendarPage", () => ({ default: () => null }));
+
+vi.mock("./BookingDetailDialog", () => ({ BookingDetailDialog: () => null }));
+vi.mock("@/modules/members/MemberPhoneMatchPanel", () => ({
+  MemberPhoneMatchPanel: () => <div data-testid="member-phone-match-panel" />,
+}));
+
+vi.mock("./context", () => ({
+  setStaffDayOverride: vi.fn(),
+  useMerchantBookings: () => ({ data: [], isLoading: false, error: null }),
+  useMerchantBookingStatusColors: () => ({ data: undefined }),
+  useMerchantBusinessHours: () => ({
+    data: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ day_of_week: d, is_closed: false })),
+  }),
+  useMerchantCalendarStateStyles: () => ({ data: undefined }),
+  useMerchantDaySchedule: () => ({
+    data: { business_hours: { has_setting: true, is_closed: false }, staff: [] },
+    isLoading: false,
+    error: null,
+  }),
+  useMerchantMaterialCostItems: () => ({ data: [{ id: MATERIAL_ID, name: "冷媒", amount: 200 }] }),
+  useMerchantPaymentMethods: () => ({ data: [{ id: PM_ID, name: "現金" }] }),
+  useMerchantTaxSettings: () => ({ data: null }),
+}));
+
+vi.mock("@/modules/merchant/context", () => ({
+  useCurrentMerchant: () => ({
+    merchant: { id: MERCHANT_ID, name: "測試商家", industry_type: "in_store_beauty" },
+    isLoading: false,
+  }),
+}));
+vi.mock("@/modules/merchant/api", () => ({ getFeatureFlag: vi.fn(async () => true) }));
+
+vi.mock("@/modules/staff-agent/context", () => ({
+  useAgentPermission: () => ({ data: true, isLoading: false }),
+  useCurrentMerchantRole: () => ({ data: "admin", isLoading: false }),
+  useMerchantStaffList: () => ({
+    data: [
+      { id: STAFF_ID, name: "服務人員甲" },
+      { id: ASSISTANT_ID, name: "服務人員乙" },
+    ],
+  }),
+}));
+
+vi.mock("@/modules/service-items/context", () => ({
+  useMerchantServiceCategories: () => ({ data: [] }),
+  useMerchantServiceItems: () => ({
+    data: [
+      {
+        id: SERVICE_ITEM_ID,
+        name: "冷氣清洗",
+        price: 1000,
+        duration_minutes: 60,
+        category_id: null,
+      },
+    ],
+  }),
+}));
+
+import { BookingFormDialog } from "./CalendarPage";
+import { ALL_DAY_START_TIMES, pickServiceItems, selectPaymentMethod } from "./bookingFormTestUtils";
+
+const STAFF_ACTOR = { kind: "staff" as const, staffId: STAFF_ID, staffName: "服務人員甲" };
+
+function merchantEditingDetail() {
+  return {
+    id: BOOKING_ID,
+    merchant_id: MERCHANT_ID,
+    staff_id: STAFF_ID,
+    start_at: "2036-01-05T02:00:00+00:00",
+    end_at: "2036-01-05T03:00:00+00:00",
+    status: "accepted",
+    customer_name: "陳先生",
+    customer_phone: "0912345678",
+    customer_email: null,
+    customer_address: null,
+    notes: "上次尾款沒收",
+    customer_notes: "有養狗",
+    hide_notes_from_staff: true,
+    member_id: MEMBER_ID,
+    member_name_snapshot: "陳先生",
+    custom_total_amount_enabled: false,
+    custom_total_amount: null,
+    discount_enabled: false,
+    discount_mode: null,
+    discount_value: null,
+    tax_enabled: false,
+    tax_mode_snapshot: null,
+    tax_value_snapshot: null,
+    final_amount_snapshot: 1000,
+    payment_method_id: PM_ID,
+    payment_method_name_snapshot: "現金",
+    custom_duration_enabled: false,
+    custom_duration_minutes: null,
+    points_planned: 0,
+    points_planned_auto: 0,
+    points_planned_overridden: false,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+    createdByName: "客服小美",
+    lastModifiedByName: null,
+    serviceItems: [
+      {
+        id: SERVICE_ITEM_ID,
+        name: "冷氣清洗",
+        quantity: 1,
+        unitPriceSnapshot: 1000,
+        lineTotal: 1000,
+      },
+    ],
+    assistants: [{ staffId: ASSISTANT_ID, staffName: "服務人員乙" }],
+    materialCosts: [{ materialCostItemId: MATERIAL_ID, name: "冷媒", amountSnapshot: 200 }],
+  };
+}
+
+function staffEditRow(notesHidden: boolean) {
+  return {
+    id: BOOKING_ID,
+    merchant_id: MERCHANT_ID,
+    staff_id: STAFF_ID,
+    status: "accepted",
+    start_at: "2036-01-05T02:00:00+00:00",
+    end_at: "2036-01-05T03:00:00+00:00",
+    customer_name: "陳先生",
+    customer_phone: "0912345678",
+    customer_email: null,
+    customer_address: null,
+    customer_notes: "有養狗",
+    notes: notesHidden ? null : "一般備註",
+    notes_hidden: notesHidden,
+    custom_total_amount_enabled: false,
+    custom_total_amount: null,
+    discount_enabled: false,
+    discount_mode: null,
+    discount_value: null,
+    tax_enabled: false,
+    tax_mode_snapshot: null,
+    tax_value_snapshot: null,
+    payment_method_id: PM_ID,
+    payment_method_name_snapshot: "現金",
+    custom_duration_enabled: false,
+    custom_duration_minutes: null,
+    member_id: MEMBER_ID,
+    member_name_snapshot: "陳先生",
+    points_planned: 0,
+    points_planned_auto: 0,
+    points_planned_overridden: false,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+    service_items: [
+      {
+        service_item_id: SERVICE_ITEM_ID,
+        name: "冷氣清洗",
+        quantity: 1,
+        unit_price_snapshot: 1000,
+      },
+    ],
+    assistant_names: ["服務人員乙"],
+  };
+}
+
+const STAFF_OPTIONS = {
+  staff_id: STAFF_ID,
+  staff_name: "服務人員甲",
+  industry_type: "in_store_beauty",
+  service_items: [
+    { id: SERVICE_ITEM_ID, name: "冷氣清洗", price: 1000, duration_minutes: 60, category_id: null },
+  ],
+  service_categories: [],
+  payment_methods: [{ id: PM_ID, name: "現金" }],
+  tax_settings: null,
+  business_hours: [0, 1, 2, 3, 4, 5, 6].map((d) => ({ day_of_week: d, is_closed: false })),
+};
+
+function renderForm(props: { editingBookingId: string | null; staff?: boolean }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return render(
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <BookingFormDialog
+          merchantId={MERCHANT_ID}
+          industryType="in_store_beauty"
+          open
+          onOpenChange={() => {}}
+          prefill={{ staffId: STAFF_ID, dateKey: "2036-01-05", time: "10:00" }}
+          editingBookingId={props.editingBookingId}
+          onSaved={() => {}}
+          {...(props.staff ? { actor: STAFF_ACTOR } : {})}
+        />
+      </QueryClientProvider>
+    </MemoryRouter>,
+  );
+}
+
+beforeEach(() => {
+  m.getBooking.mockResolvedValue(merchantEditingDetail());
+  m.updateBooking.mockResolvedValue({ id: BOOKING_ID, merchant_id: MERCHANT_ID });
+  m.staffUpdateBooking.mockResolvedValue({ id: BOOKING_ID, merchant_id: MERCHANT_ID });
+  m.staffCreateBooking.mockResolvedValue({
+    id: BOOKING_ID,
+    merchant_id: MERCHANT_ID,
+    status: "pending_confirmation",
+    member_id: null,
+    member_name_snapshot: null,
+    member_auto_created: false,
+    final_amount_snapshot: 1000,
+    points_planned: 0,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+  });
+  m.fetchStaffBookingFormOptions.mockResolvedValue(STAFF_OPTIONS);
+});
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+const FORBIDDEN_STAFF_KEYS = [
+  "assistantStaffIds",
+  "memberId",
+  "hideNotesFromStaff",
+  "materialCostItemIds",
+  "merchantId",
+];
+
+describe("商家模式:送出參數跟改版前完全一樣(#977 第 7 批鎖住)", () => {
+  it("編輯送出 updateBooking 的整包參數(主要服務人員、協助人員、會員、隱藏備註、料錢都照原值帶)", async () => {
+    renderForm({ editingBookingId: BOOKING_ID });
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: /不讓服務人員看到這則內部備註/ })).toHaveAttribute(
+        "data-state",
+        "checked",
+      ),
+    );
+    expect(screen.getByTestId("member-phone-match-panel")).toBeInTheDocument();
+    screen.getByRole("button", { name: "儲存變更" }).click();
+    await waitFor(() => expect(m.updateBooking).toHaveBeenCalledTimes(1));
+    expect(m.updateBooking.mock.calls[0]?.[0]).toEqual({
+      bookingId: BOOKING_ID,
+      staffId: STAFF_ID,
+      serviceItems: [{ serviceItemId: SERVICE_ITEM_ID, quantity: 1, unitPrice: 1000 }],
+      startAt: "2036-01-05T10:00:00+08:00",
+      customerName: "陳先生",
+      customerPhone: "0912345678",
+      customerEmail: null,
+      customerAddress: null,
+      notes: "上次尾款沒收",
+      customerNotes: "有養狗",
+      hideNotesFromStaff: true,
+      memberId: MEMBER_ID,
+      assistantStaffIds: [ASSISTANT_ID],
+      materialCostItemIds: [MATERIAL_ID],
+      customTotalAmountEnabled: false,
+      customTotalAmount: null,
+      discountEnabled: false,
+      discountMode: null,
+      discountValue: null,
+      taxEnabled: false,
+      taxMode: null,
+      taxValue: null,
+      paymentMethodId: PM_ID,
+      customDurationEnabled: false,
+      customDurationMinutes: null,
+      pointsRedeemed: null,
+      pointsOverride: null,
+      pointsOverrideReset: false,
+      pointsRedeemMemberId: null,
+      changeSummary: expect.any(String),
+    });
+    expect(m.staffUpdateBooking).not.toHaveBeenCalled();
+    expect(m.fetchStaffBookingFormOptions).not.toHaveBeenCalled();
+  });
+});
+
+describe("服務人員模式(#977 第 7 批)", () => {
+  it("編輯:唯讀自己的名字與「由商家指派」的協助人員;沒有下拉 / 協助人員欄位 / 會員面板 / 隱藏開關 / 料錢", async () => {
+    m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(false));
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    expect(await screen.findByTestId("booking-form-assistants-readonly")).toHaveTextContent(
+      "服務人員乙（由商家指派）",
+    );
+    expect(screen.getByTestId("booking-form-staff-readonly")).toHaveTextContent("服務人員甲");
+    expect(document.getElementById("booking-staff")).toBeNull();
+    expect(screen.queryByTestId("booking-form-assistants")).toBeNull();
+    expect(screen.queryByTestId("member-phone-match-panel")).toBeNull();
+    expect(screen.queryByRole("switch", { name: /不讓服務人員看到這則內部備註/ })).toBeNull();
+    expect(screen.queryByText("料錢成本")).toBeNull();
+    expect(document.getElementById("booking-notes")).not.toBeNull();
+    expect(m.getBooking).not.toHaveBeenCalled();
+  });
+
+  it("編輯:內部備註被藏起來的單 ⇒ 沒有內部備註欄", async () => {
+    m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(true));
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    await screen.findByTestId("booking-form-assistants-readonly");
+    expect(document.getElementById("booking-notes")).toBeNull();
+  });
+
+  it("編輯送出 ⇒ staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 料錢 / 服務人員 id", async () => {
+    m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(true));
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    await screen.findByTestId("booking-form-assistants-readonly");
+    await waitFor(() =>
+      expect((document.getElementById("booking-customer-name") as HTMLInputElement).value).toBe(
+        "陳先生",
+      ),
+    );
+    screen.getByRole("button", { name: "儲存變更" }).click();
+    await waitFor(() => expect(m.staffUpdateBooking).toHaveBeenCalledTimes(1));
+    const payload = m.staffUpdateBooking.mock.calls[0]?.[0] as Record<string, unknown>;
+    for (const key of [...FORBIDDEN_STAFF_KEYS, "staffId"]) {
+      expect(Object.prototype.hasOwnProperty.call(payload, key)).toBe(false);
+    }
+    expect(payload).toMatchObject({ bookingId: BOOKING_ID, notes: null, paymentMethodId: PM_ID });
+    expect(m.updateBooking).not.toHaveBeenCalled();
+  });
+
+  it("新增送出 ⇒ staffCreateBooking(staffId = 自己),沒有協助人員 / 會員 / 隱藏備註 / 料錢", async () => {
+    renderForm({ editingBookingId: null, staff: true });
+    await waitFor(() => expect(m.fetchStaffBookingFormOptions).toHaveBeenCalledWith(STAFF_ID));
+    await screen.findByTestId("booking-form-staff-readonly");
+    fireEvent.change(document.getElementById("booking-customer-name") as HTMLElement, {
+      target: { value: "王小姐" },
+    });
+    fireEvent.change(document.getElementById("booking-customer-phone") as HTMLElement, {
+      target: { value: "0988000111" },
+    });
+    await waitFor(() => expect(document.getElementById("booking-service-items")).not.toBeNull());
+    pickServiceItems([/冷氣清洗/]);
+    await selectPaymentMethod("現金");
+    screen.getByRole("button", { name: "建立預約" }).click();
+    await waitFor(() => expect(m.staffCreateBooking).toHaveBeenCalledTimes(1));
+    const payload = m.staffCreateBooking.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload["staffId"]).toBe(STAFF_ID);
+    for (const key of FORBIDDEN_STAFF_KEYS) {
+      expect(Object.prototype.hasOwnProperty.call(payload, key)).toBe(false);
+    }
+    expect(payload).toMatchObject({
+      customerName: "王小姐",
+      customerPhone: "0988000111",
+      startAt: "2036-01-05T10:00:00+08:00",
+      paymentMethodId: PM_ID,
+    });
+    expect(m.createBooking).not.toHaveBeenCalled();
+  });
+});
