@@ -156,7 +156,7 @@ export async function runBirthdayDispatch(
       let result: LinePushResult;
       if (text.trim() === "") {
         // 商家把文案清成空白:LINE 不收空訊息,直接記失敗,不打 LINE。
-        result = { ok: false, status: 0, errorDetail: "生日 LINE 文案是空白,沒有發送" };
+        result = { ok: false, status: 0, errorDetail: "生日 LINE 文案是空白，沒有發送" };
       } else {
         result = await pushLineMessage(fetchImpl, row.channel_access_token, row.line_user_id, text);
       }

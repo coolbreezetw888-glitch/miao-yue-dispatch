@@ -108,11 +108,11 @@ export function buildTestResultUpdate(
 
   let message: string;
   if (result.status === 401) {
-    message = "Channel Access Token 無效或已過期,請確認是否正確複製";
+    message = "Channel Access Token 無效或已過期，請確認是否正確複製";
   } else if (result.status === 0) {
-    message = `無法連線到 LINE 伺服器,請稍後再試(${result.networkErrorMessage ?? "網路錯誤"})`;
+    message = `無法連線到 LINE 伺服器，請稍後再試(${result.networkErrorMessage ?? "網路錯誤"})`;
   } else {
-    message = `連線失敗(LINE 回應狀態碼 ${result.status}),請確認憑證是否正確`;
+    message = `連線失敗(LINE 回應狀態碼 ${result.status})，請確認憑證是否正確`;
   }
 
   return {
@@ -151,12 +151,12 @@ async function handleRequest(req: Request): Promise<Response> {
   }
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error("[line-test-connection] 缺少必要的環境變數");
-    return jsonResponse({ error: "伺服器設定不完整,請聯絡系統管理員" }, 500);
+    return jsonResponse({ error: "伺服器設定不完整，請聯絡系統管理員" }, 500);
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
-    return jsonResponse({ error: "缺少登入憑證,請重新登入後再試" }, 401);
+    return jsonResponse({ error: "缺少登入憑證，請重新登入後再試" }, 401);
   }
 
   let body: TestConnectionRequestBody;
@@ -183,10 +183,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (adminCheckError) {
     console.error("[line-test-connection] am_i_merchant_admin 呼叫失敗", adminCheckError);
-    return jsonResponse({ error: "驗證權限時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "驗證權限時發生錯誤，請稍後再試" }, 500);
   }
   if (!isAdmin) {
-    return jsonResponse({ error: "沒有權限執行此操作,僅限該商家管理員使用" }, 403);
+    return jsonResponse({ error: "沒有權限執行此操作，僅限該商家管理員使用" }, 403);
   }
 
   // 步驟 2:service_role client,只在通過權限檢查後才建立/使用。
@@ -202,10 +202,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (configError) {
     console.error("[line-test-connection] 讀取 merchant_line_configs 失敗", configError);
-    return jsonResponse({ error: "查詢串接設定時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "查詢串接設定時發生錯誤，請稍後再試" }, 500);
   }
   if (!config) {
-    return jsonResponse({ error: "尚未設定 LINE 串接憑證,請先儲存憑證再測試連線" }, 400);
+    return jsonResponse({ error: "尚未設定 LINE 串接憑證，請先儲存憑證再測試連線" }, 400);
   }
 
   const result = await callLineBotInfo(fetch, config.channel_access_token as string);
@@ -218,7 +218,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (updateError) {
     console.error("[line-test-connection] 更新 merchant_line_configs 失敗", updateError);
-    return jsonResponse({ error: "寫入測試結果時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "寫入測試結果時發生錯誤，請稍後再試" }, 500);
   }
 
   return jsonResponse(response, 200);

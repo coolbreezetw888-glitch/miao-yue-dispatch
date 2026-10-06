@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
     return await handleInviteMerchantStaff(req);
   } catch (err) {
     console.error("[invite-merchant-staff] 未預期的例外", err);
-    return jsonResponse({ error: "系統發生非預期錯誤,請稍後再試或聯絡系統管理員" }, 500);
+    return jsonResponse({ error: "系統發生非預期錯誤，請稍後再試或聯絡系統管理員" }, 500);
   }
 });
 
@@ -77,12 +77,12 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
     console.error(
       "[invite-merchant-staff] 缺少必要的環境變數(SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY)",
     );
-    return jsonResponse({ error: "伺服器設定不完整,請聯絡系統管理員" }, 500);
+    return jsonResponse({ error: "伺服器設定不完整，請聯絡系統管理員" }, 500);
   }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
-    return jsonResponse({ error: "缺少登入憑證,請重新登入後再試" }, 401);
+    return jsonResponse({ error: "缺少登入憑證，請重新登入後再試" }, 401);
   }
 
   let body: InviteRequestBody;
@@ -114,11 +114,11 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
 
   if (adminCheckError) {
     console.error("[invite-merchant-staff] am_i_merchant_admin 呼叫失敗", adminCheckError);
-    return jsonResponse({ error: "驗證權限時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "驗證權限時發生錯誤，請稍後再試" }, 500);
   }
 
   if (!isAdmin) {
-    return jsonResponse({ error: "沒有權限執行此操作,僅限該商家管理員使用" }, 403);
+    return jsonResponse({ error: "沒有權限執行此操作，僅限該商家管理員使用" }, 403);
   }
 
   // 步驟 2:service_role client,只在通過權限檢查後才建立/使用。
@@ -134,11 +134,11 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
 
   if (staffLookupError) {
     console.error("[invite-merchant-staff] 查詢服務人員失敗", staffLookupError);
-    return jsonResponse({ error: "查詢服務人員資料時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "查詢服務人員資料時發生錯誤，請稍後再試" }, 500);
   }
 
   if (!staffRow || staffRow.merchant_id !== merchantId || staffRow.status !== "active") {
-    return jsonResponse({ error: "找不到這位服務人員,或這位服務人員已被移除" }, 404);
+    return jsonResponse({ error: "找不到這位服務人員，或這位服務人員已被移除" }, 404);
   }
 
   if (staffRow.user_id) {
@@ -152,7 +152,7 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
 
   if (lookupError) {
     console.error("[invite-merchant-staff] lookup_user_id_by_email 呼叫失敗", lookupError);
-    return jsonResponse({ error: "查詢帳號時發生錯誤,請稍後再試" }, 500);
+    return jsonResponse({ error: "查詢帳號時發生錯誤，請稍後再試" }, 500);
   }
 
   let userId: string;
@@ -173,7 +173,7 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
       console.error("[invite-merchant-staff] inviteUserByEmail 失敗", inviteError);
       return jsonResponse(
         {
-          error: `邀請信寄送失敗:${inviteError?.message ?? "請稍後再試"}(Supabase 免費方案寄信額度較低,若短時間內邀請多人可能會碰到這個限制)`,
+          error: `邀請信寄送失敗：${inviteError?.message ?? "請稍後再試"}(Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
         },
         502,
       );
@@ -195,7 +195,7 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
   if (recordError) {
     console.error("[invite-merchant-staff] record_invited_staff_login 失敗", recordError);
     return jsonResponse(
-      { error: recordError.message || "寫入服務人員登入資料失敗,請稍後再試" },
+      { error: recordError.message || "寫入服務人員登入資料失敗，請稍後再試" },
       500,
     );
   }

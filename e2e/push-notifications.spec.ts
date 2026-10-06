@@ -171,7 +171,7 @@ async function stubTestPushEndpoint(
       await route.fulfill({
         status: 429,
         contentType: "application/json",
-        body: JSON.stringify({ error: "測試通知發太多次了,請等一分鐘再試" }),
+        body: JSON.stringify({ error: "測試通知發太多次了，請等一分鐘再試" }),
       });
       return;
     }

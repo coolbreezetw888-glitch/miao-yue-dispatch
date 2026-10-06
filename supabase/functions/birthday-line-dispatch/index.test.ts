@@ -206,7 +206,7 @@ Deno.test("handleRequest:文案是空白 ⇒ 不呼叫 LINE,直接記 failed", a
   const fetchImpl = makeFetch(recorded, () => new Response("{}"));
   await handleRequest(cronRequest(SECRET), { db, fetchImpl });
   assertEquals(recorded.lineCalls.length, 0);
-  assertEquals(recorded.marks, [["g-1", "failed", "生日 LINE 文案是空白,沒有發送", "log-1"]]);
+  assertEquals(recorded.marks, [["g-1", "failed", "生日 LINE 文案是空白，沒有發送", "log-1"]]);
 });
 
 Deno.test("handleRequest:滿一批(100 筆)會再認領下一批,不滿就停", async () => {

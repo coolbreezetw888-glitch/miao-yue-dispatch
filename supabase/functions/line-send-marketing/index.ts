@@ -249,7 +249,7 @@ async function handleRequest(req: Request): Promise<Response> {
         target_type: "member",
         target_id: item.memberId,
         status: "skipped",
-        error_detail: "黑名單客戶,系統自動排除,不會發送(伺服器端強制擋下,不論前端是否已經濾掉)",
+        error_detail: "黑名單客戶，系統自動排除，不會發送(伺服器端強制擋下，不論前端是否已經濾掉)",
         created_by_user_id: createdByUserId,
       });
       continue;

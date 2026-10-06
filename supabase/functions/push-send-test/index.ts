@@ -154,11 +154,11 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   );
   if (identityError) {
     console.error("[push-send-test] get_my_push_identity 失敗", identityError);
-    return jsonResponse({ error: "你不是這間商家的成員,無法發送測試通知" }, 403);
+    return jsonResponse({ error: "你不是這間商家的成員，無法發送測試通知" }, 403);
   }
   const identity = identityData as PushIdentity | null;
   if (!identity) {
-    return jsonResponse({ error: "你不是這間商家的成員,無法發送測試通知" }, 403);
+    return jsonResponse({ error: "你不是這間商家的成員，無法發送測試通知" }, 403);
   }
 
   // §6.6:頻率限制。放在裝置查詢之後、實際發送之前都可以,這裡先擋掉比較省。
@@ -171,7 +171,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return jsonResponse({ error: "檢查發送頻率時發生錯誤" }, 500);
   }
   if (typeof recentCount === "number" && recentCount >= TEST_PUSH_RATE_LIMIT) {
-    return jsonResponse({ error: "測試通知發太多次了,請等一分鐘再試" }, 429);
+    return jsonResponse({ error: "測試通知發太多次了，請等一分鐘再試" }, 429);
   }
 
   // 🔴 §6.2 第 1 點:用呼叫者的 JWT 查裝置,RLS 自動只回傳他自己的。

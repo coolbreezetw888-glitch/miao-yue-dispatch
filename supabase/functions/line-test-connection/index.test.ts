@@ -76,7 +76,7 @@ Deno.test("buildTestResultUpdate: 401 情境正確組裝白話錯誤訊息且 is
 
   assertEquals(update.is_connected, false);
   assertEquals(update.line_bot_user_id, null);
-  assertEquals(update.last_test_result, "Channel Access Token 無效或已過期,請確認是否正確複製");
+  assertEquals(update.last_test_result, "Channel Access Token 無效或已過期，請確認是否正確複製");
   assertEquals(response.success, false);
 });
 

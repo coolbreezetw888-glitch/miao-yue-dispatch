@@ -97,5 +97,5 @@ export function buildNotifySubjectOwnershipLookup(
   };
 }
 
-export const NOTIFY_SUBJECT_NOT_FOUND_MESSAGE = "找不到這筆訂單或請假紀錄,或它不屬於這個商家";
+export const NOTIFY_SUBJECT_NOT_FOUND_MESSAGE = "找不到這筆訂單或請假紀錄，或它不屬於這個商家";
 export const NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE = "確認訂單歸屬時發生錯誤";
