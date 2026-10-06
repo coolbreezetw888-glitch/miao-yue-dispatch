@@ -511,12 +511,12 @@ select is((select count(*)::int from claim_birthday_line_pending(100)), 0,
   'I8 ②③:下架會員、停用商家的待發紀錄都不會被認領去發 LINE');
 select is(
   (select row(line_status, line_error)::text from member_birthday_bonus_grants where member_id = 'db150000-0000-4000-8000-000000000905'),
-  row('skipped_member_removed', '會員已下架,不發送生日 LINE 訊息(生日點數已照常發放)')::text,
+  row('skipped_member_removed', '會員已下架，不發送生日 LINE 訊息(生日點數已照常發放)')::text,
   'I9 ②:發點後被下架的會員標 skipped_member_removed,原因白話'
 );
 select is(
   (select row(line_status, line_error)::text from member_birthday_bonus_grants where member_id = 'db150000-0000-4000-8000-000000000906'),
-  row('skipped_merchant_disabled', '商家已停用,不發送生日 LINE 訊息')::text,
+  row('skipped_merchant_disabled', '商家已停用，不發送生日 LINE 訊息')::text,
   'I10 ③:商家已停用 ⇒ 標 skipped_merchant_disabled,原因白話'
 );
 select is(pg_temp.bal('db150000-0000-4000-8000-000000000905') + pg_temp.bal('db150000-0000-4000-8000-000000000906'), 60,

@@ -96,7 +96,7 @@ select pg_temp.test_set_auth('e1710000-0000-4000-8000-000000000001');
 select throws_ok(
   $$select request_staff_login_email_change('e1710000-0000-4000-8000-000000000031', 'newstaff2@test.local')$$,
   'P0001',
-  '這位服務人員尚未開通登入,無法設定登入信箱建議',
+  '這位服務人員尚未開通登入，無法設定登入信箱建議',
   '③:目標服務人員尚未開通登入,被擋下'
 );
 
@@ -255,7 +255,7 @@ select pg_temp.test_set_auth('e1710000-0000-4000-8000-000000000001');
 select throws_ok(
   $$select request_agent_login_email_change('e1710000-0000-4000-8000-000000000041', 'newagent2@test.local')$$,
   'P0001',
-  '這位客服尚未開通登入,無法設定登入信箱建議',
+  '這位客服尚未開通登入，無法設定登入信箱建議',
   '⑬:邀請中(尚未開通登入)的客服,被擋下'
 );
 
