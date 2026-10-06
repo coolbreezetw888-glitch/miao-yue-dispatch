@@ -3007,6 +3007,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      am_i_allowed_line_marketing: {
+        Args: { p_merchant_id: string }
+        Returns: boolean
+      }
       am_i_merchant_admin: { Args: { p_merchant_id: string }; Returns: boolean }
       am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
@@ -3512,6 +3516,25 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: undefined
       }
+      export_leave_report: {
+        Args: {
+          p_merchant_id: string
+          p_staff_id?: string
+          p_start_date_from?: string
+          p_start_date_to?: string
+        }
+        Returns: Json
+      }
+      export_members_report: { Args: { p_merchant_id: string }; Returns: Json }
+      export_orders_report: {
+        Args: {
+          p_end_at?: string
+          p_merchant_id: string
+          p_start_at?: string
+          p_status?: string
+        }
+        Returns: Json
+      }
       generate_booking_slug: { Args: { p_name: string }; Returns: string }
       generate_member_line_binding_code: {
         Args: { p_member_id: string }
@@ -3861,6 +3884,14 @@ export type Database = {
           p_staff_id: string
         }
         Returns: boolean
+      }
+      list_line_marketable_members: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      list_report_export_staff: {
+        Args: { p_merchant_id: string }
+        Returns: Json
       }
       list_staff_bookable_start_times: {
         Args: {

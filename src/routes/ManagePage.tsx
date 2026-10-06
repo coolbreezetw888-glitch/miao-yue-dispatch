@@ -102,6 +102,7 @@ import {
 import type { MerchantAgent } from "@/modules/staff-agent/types";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
 import { MyPushSubscriptionCard } from "@/modules/push-notifications/MyPushSubscriptionCard";
+import { SCHEDULING_FEATURE_HIDDEN } from "@/modules/scheduling/featureVisibility";
 
 import { useAppLayoutContext } from "./AppLayout";
 import {
@@ -393,25 +394,17 @@ interface FunctionCardDef {
   visible: boolean;
 }
 
-/** ⚠️ 2026-09-24 使用者指示:「排班一覽這個功能可以先拔掉(隱藏起來),對應的權限開關也要跟著
- * 拔掉(隱藏起來)。」——關鍵字是**隱藏**,不是刪除,所以做成一個開關常數,不是把程式碼刪掉。
+/* ⚠️ 「排班一覽」刻意隱藏(2026-09-24 使用者指示),不是遺漏。開關常數 SCHEDULING_FEATURE_HIDDEN
+ * 在 #976 第 3 批(2026-10-06)搬到 src/modules/scheduling/featureVisibility.ts,讓這裡的卡片與
+ * /app/scheduling 的路由守衛(RequireSchedulingAccess)讀同一份 —— 隱藏期間打網址也一律導回功能頁。
+ * 完整的還原說明見那個檔案。
  *
- * 這是刻意隱藏,不是遺漏。**要還原就把下面這一行改成 false**,「排班一覽」卡片就會照原本的
- * scheduling 權限判斷(showSchedulingCard)重新出現,不需要改任何其他地方。
- *
- * 一起被隱藏、還原時要一起改回來的地方只有另外一處:
- *   ・src/modules/staff-agent/types.ts 的 AGENT_PERMISSION_SECTIONS 裡 key: "scheduling" 那一項
- *     的 hidden 旗標(客服權限設定頁的開關)。
- *
- * 刻意**沒有**被動到、所以還原時不用處理的東西:
- *   ・路由 /app/scheduling(src/App.tsx)、頁面 src/modules/scheduling/SchedulingOverviewPage.tsx、
- *     RequireSchedulingAccess.tsx、describeScheduleCell 與其測試 —— 全部保留可用。
+ * 刻意**沒有**被動到的東西:
+ *   ・路由 /app/scheduling(src/App.tsx)與頁面本身保留。
  *     ⚠️ 路由保留是必要的:src/routes/appLayoutLogic.test.ts 有一條結構性測試會直接讀 App.tsx,
  *        要求每一條 /app/* 路由都有對應的頁首標題,所以 appLayoutLogic.ts 裡
  *        `{ pattern: "/app/scheduling", title: "排班一覽" }` 那一列也必須留著。
- *   ・資料庫裡既有的 scheduling 權限授權紀錄 —— 一列都不動,入口不顯示就沒有副作用,
- *     還原之後原本開通過的客服依然是開通狀態,不用重新授權。 */
-const SCHEDULING_FEATURE_HIDDEN = true;
+ *   ・資料庫裡既有的 scheduling 權限授權紀錄 —— 一列都不動,還原之後原本開通過的客服依然是開通狀態。 */
 
 export default function ManagePage() {
   const navigate = useNavigate();
@@ -552,6 +545,10 @@ export default function ManagePage() {
   // 兩張卡片的顯示權限;「LINE 串接設定」「行銷通知」永遠只給商家管理員(規則 2.1/2.6)。
   const { data: canManageLineNotification } = useAgentPermission("line_notification");
   const showLineNotificationCards = isAdmin || canManageLineNotification === true;
+  // #976 第 3 批(2026-10-06):「再行銷通知」新增客服權限 line_marketing(改前只有商家管理員)。
+  // 跟 RequireLineMarketingAccess、後端 private.can_send_line_marketing 同一個判斷。
+  const { data: canSendLineMarketing } = useAgentPermission("line_marketing");
+  const showLineMarketingCard = isAdmin || canSendLineMarketing === true;
   // 模組 15(服務人員推播通知)7.3/7.9:push_notification 這把鑰匙決定「推播通知設定」卡片
   // 的顯示權限,完全比照模組 11 line_notification 的既有模式。
   const { data: canManagePushNotification } = useAgentPermission("push_notification");
@@ -654,7 +651,7 @@ export default function ManagePage() {
       icon: CalendarRange,
       // ⚠️ 刻意隱藏(2026-09-24 使用者指示),不是遺漏、也不是權限判斷壞掉:
       //    SCHEDULING_FEATURE_HIDDEN 改成 false 就會還原成原本的 showSchedulingCard 判斷。
-      //    完整的還原說明見這個檔案上方 SCHEDULING_FEATURE_HIDDEN 的註解。
+      //    完整的還原說明見 src/modules/scheduling/featureVisibility.ts。
       visible: !SCHEDULING_FEATURE_HIDDEN && showSchedulingCard,
     },
     {
@@ -739,7 +736,7 @@ export default function ManagePage() {
       label: "再行銷通知",
       description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
       icon: Megaphone,
-      visible: isAdmin,
+      visible: showLineMarketingCard,
     },
     {
       key: "push-events",

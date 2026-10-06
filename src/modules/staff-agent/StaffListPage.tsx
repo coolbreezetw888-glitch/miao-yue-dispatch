@@ -210,14 +210,17 @@ function FormPlaceholder({ children }: { children: React.ReactNode }) {
 }
 
 // 模組 5 規格書 4.2:比照模組 4 4.4 節先例,新增一週可預約時段設定區塊。允許同一天多組時段
-// (規格書 1.2)。空狀態(規則 2.5):完全沒設定任何時段、且 no_time_slot_limit=false 時,
-// 這位服務人員這次還不可預約,這裡用提示文字說明,不做任何攔阻(攔阻邏輯在 create_booking 裡)。
+// (規格書 1.2)。空狀態(規則 2.5):完全沒設定任何時段時,這位服務人員在後台還不能被排單,
+// 這裡用提示文字說明,不做任何攔阻(攔阻邏輯在 create_booking 裡)。
+// SPECS-INDEX #977 第 3 批(2026-10-06):後台判斷不再看「客戶預約無時段限制」(no_time_slot_limit),
+// 只看「商家後台編輯無時段限制」(unlimited_backend_edit,開啟時建單 / 改單整段跳過營業時間與每週時段,請假照擋)。
+// 提示文字跟著改看 unlimited_backend_edit —— 改前寫「開了客戶預約無時段限制,以下設定會被忽略」,現在已經不成立。
 function AvailabilityWindowsEditor({
   staffId,
-  noTimeSlotLimit,
+  unlimitedBackendEdit,
 }: {
   staffId: string;
-  noTimeSlotLimit: boolean;
+  unlimitedBackendEdit: boolean;
 }) {
   const queryClient = useQueryClient();
   const windowsQueryKey = ["booking-module", "staff-availability-windows", staffId] as const;
@@ -272,9 +275,9 @@ function AvailabilityWindowsEditor({
       {/* skill 二:「現在的狀態跟使用者以為的不一樣」用 `!` 常駐——開了無時段限制,底下的設定會被忽略;
           或是完全沒設定時段,這個人其實還約不到。 */}
       <AlertNote>
-        {noTimeSlotLimit
-          ? "目前已開啟「客戶預約無時段限制」,以下設定會被忽略,只受商家整體營業時間限制。"
-          : "完全沒有設定任何時段時,這位服務人員這次還不可預約,除非開啟「客戶預約無時段限制」。"}
+        {unlimitedBackendEdit
+          ? "目前已開啟「商家後台編輯無時段限制」，商家管理員或客服在後台建單、改單時不受以下時段與營業時間限制（請假時段仍然不能排）。"
+          : "完全沒有設定任何時段時，商家管理員或客服在後台還不能幫這位服務人員排單，除非開啟「商家後台編輯無時段限制」。"}
       </AlertNote>
 
       {isLoading ? (
@@ -688,7 +691,7 @@ function StaffFormDialog({
           {staff ? (
             <AvailabilityWindowsEditor
               staffId={staff.id}
-              noTimeSlotLimit={form.noTimeSlotLimit ?? false}
+              unlimitedBackendEdit={form.unlimitedBackendEdit ?? false}
             />
           ) : (
             <div className="flex flex-col gap-2">

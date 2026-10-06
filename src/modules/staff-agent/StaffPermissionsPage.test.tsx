@@ -165,7 +165,9 @@ describe("StaffPermissionsPage(#877 / #879)", () => {
     // 🔴 #928:原本斷言的是「客戶的姓名、電話、地址、備註」,但那個寫法把兩個**有條件**的欄位
     // 講成無條件的(地址看產業、內部備註可逐單隱藏),所以文案與斷言一起改成條件式說法。
     // 這裡只驗「有講到客戶個資」這件事本身,條件的部分交給下面 #928 那條專門驗。
-    expect(calendarRow?.textContent).toContain("客戶的姓名、電話、客戶備註");
+    // #977 第 3 批(2026-10-06):電話、地址改成要同時開「服務人員是否顯示會員資料」才顯示,說明改寫成
+    // 「客戶姓名、客戶備註」+ 下面 #977 那條驗的條件句;這裡驗的「有講到客戶個資」本身不變。
+    expect(calendarRow?.textContent).toContain("客戶姓名、客戶備註");
     // 舊說法只講「查看自己的行事曆/預約排程」就結束,不能再回來。
     expect(calendarRow?.textContent).toContain("接觸客戶個資");
   });
@@ -179,7 +181,8 @@ describe("StaffPermissionsPage(#877 / #879)", () => {
 
     const calendarRow = screen.getByText("行事曆檢視").closest("li");
     // ① 地址要標明是「到府派工」才有,不能無條件寫「地址」。
-    expect(calendarRow?.textContent).toContain("到府派工類型的商家還會顯示客戶地址");
+    // #977 第 3 批:句子改成「地址只有到府派工類型的商家才會顯示」(條件本身沒變)。
+    expect(calendarRow?.textContent).toContain("地址只有到府派工類型的商家才會顯示");
     // ② 兩種備註要分開:客戶備註一律有、內部備註可逐單隱藏。
     expect(calendarRow?.textContent).toContain("內部備註可以逐單另外隱藏");
     // 🔴 不能退回成無條件的「地址、備註」並列寫法(那正是 #928 要修掉的說法)。
@@ -194,8 +197,23 @@ describe("StaffPermissionsPage(#877 / #879)", () => {
     const calendarRow = screen.getByText("行事曆檢視").closest("li");
     expect(calendarRow?.textContent).toContain("顯示會員資料");
     expect(calendarRow?.textContent).toContain("紅利點數餘額");
-    // 🔴 不可以反過來變成「這一項會給點數」的暗示 —— 必須明講要兩個開關都開。
-    expect(calendarRow?.textContent).toContain("要兩個開關都開才看得到");
+    // 🔴 不可以反過來變成「這一項會給點數」的暗示 —— 必須明講要另外開那個開關。
+    // #977 第 3 批:句子改成「同樣要開啟「服務人員是否顯示會員資料」才看得到」。
+    expect(calendarRow?.textContent).toContain("同樣要開啟「服務人員是否顯示會員資料」才看得到");
+  });
+
+  // 🔴 #977 第 3 批(2026-10-06,使用者裁決 H-13):「服務人員是否顯示會員資料」關閉時,電話、地址在後端就不回傳。
+  // 管理員撥「行事曆檢視」時要知道:只開這一項,服務人員看不到客戶電話、地址。
+  it("#977:「行事曆檢視」說明寫出客戶電話、地址要同時開「服務人員是否顯示會員資料」", async () => {
+    await renderPage("active");
+
+    const calendarRow = screen.getByText("行事曆檢視").closest("li");
+    expect(calendarRow?.textContent).toContain(
+      "客戶電話、地址需同時開啟「服務人員是否顯示會員資料」才會顯示",
+    );
+    // 新文字一律全形標點:這段說明不可再出現半形逗號、冒號、括號。
+    const section = calendarRow?.textContent ?? "";
+    expect(section).not.toMatch(/[,:()]/);
   });
 
   it("#882 順手盤點:「可預約時段/休假自助調整」要寫出時段排休(不只是整天)", async () => {

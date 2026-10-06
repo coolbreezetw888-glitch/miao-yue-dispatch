@@ -1,4 +1,6 @@
-// 模組 11(LINE 通知)§4.4:行銷通知頁(新路由 /app/line-marketing,僅商家管理員可見;
+// 模組 11(LINE 通知)§4.4:行銷通知頁(新路由 /app/line-marketing;
+// SPECS-INDEX #976 第 3 批(2026-10-06)起:商家管理員,或「再行銷通知」(line_marketing)權限開啟的客服可見,
+// 守衛改用 RequireLineMarketingAccess,改前是 RequireMerchantAdmin;
 // §10.1/SPECS-INDEX #584 改名前叫「行銷再通知頁」)。
 // 會員多選清單(只顯示 line_bound=true 的會員,搜尋姓名/電話)+ 自訂訊息文字框(附字數統計)+
 // 可用變數說明/即時預覽(§10.1,複用 §4.2/§385 既有的 TemplateVariablePreview 共用元件)+
@@ -65,7 +67,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useMerchantMemberTiers } from "@/modules/members/api";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { RequireMerchantAdmin } from "@/modules/staff-agent/RequireMerchantAdmin";
+import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import { sendMarketingMessage, useMarketableMembers, type MarketableMember } from "./api";
 import {
@@ -73,6 +75,7 @@ import {
   isTierFullySelected,
   toggleTierSelection,
 } from "./memberSelection";
+import { RequireLineMarketingAccess } from "./RequireLineMarketingAccess";
 import { TemplateVariablePreview } from "./TemplateVariablePreview";
 import {
   LINE_MARKETING_TEMPLATE_PREVIEW_SAMPLE_VALUES,
@@ -92,6 +95,12 @@ function LineMarketingPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const navigate = useNavigate();
+  // #976 第 3 批:發送後原本一律導向「LINE 發送記錄」頁,但那一頁的守衛看 line_notification ——
+  // 只開了 line_marketing 的客服會被那邊導回首頁,看起來像「發送失敗」。看得到記錄頁的人(管理員或
+  // line_notification 客服)照舊導過去;看不到的人改回功能頁(結果已經在 toast 顯示)。
+  const { data: role } = useCurrentMerchantRole();
+  const { data: canManageLineNotification } = useAgentPermission("line_notification");
+  const canViewLineLogs = role === "admin" || canManageLineNotification === true;
 
   // 🔴 2026-09-30(品管第二次打回,🟡 第 3 項):原本只取 isLoading,查詢失敗時 members 是
   // undefined ⇒ 畫成「還沒有任何會員完成 LINE 綁定」,商家以為綁定資料全沒了。
@@ -166,7 +175,7 @@ function LineMarketingPageInner() {
       toast.success(
         `已送出:成功 ${result.sentCount} 筆、失敗 ${result.failedCount} 筆、跳過 ${result.skippedCount} 筆`,
       );
-      navigate("/app/line-logs");
+      navigate(canViewLineLogs ? "/app/line-logs" : "/app/manage");
     } catch (err) {
       toast.error("發送失敗", { description: getErrorMessage(err) });
     } finally {
@@ -429,8 +438,8 @@ function LineMarketingPageInner() {
 
 export default function LineMarketingPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireLineMarketingAccess>
       <LineMarketingPageInner />
-    </RequireMerchantAdmin>
+    </RequireLineMarketingAccess>
   );
 }

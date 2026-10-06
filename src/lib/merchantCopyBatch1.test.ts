@@ -189,6 +189,8 @@ describe("#976 客服權限設定", () => {
       "紅利點數",
       "會員系統設定",
       "LINE 通知設定",
+      // #976 第 3 批:新增「再行銷通知」,排在 LINE 通知設定之後、推播通知設定之前。
+      "再行銷通知",
       "推播通知設定",
       "報表匯出中心",
     ]);
@@ -204,6 +206,16 @@ describe("#976 客服權限設定", () => {
     expect(keyOf("抽成與薪資設定")).toBe("commission_settings");
     expect(keyOf("報表匯出中心")).toBe("report_export");
     expect(keyOf("月薪人員假別設定")).toBe("team_leave");
+    expect(keyOf("再行銷通知")).toBe("line_marketing");
+  });
+
+  it("#976 第 3 批:「再行銷通知」名稱與說明逐字", () => {
+    const section = AGENT_PERMISSION_SECTIONS.find((s) => s.key === "line_marketing");
+    expect(section?.label).toBe("再行銷通知");
+    expect(section?.description).toBe(
+      "開放後客服可以挑選已綁定 LINE 的會員名單，發送一次性的自訂文字訊息。",
+    );
+    expect(section?.hidden).toBeFalsy();
   });
 
   it("說明(抽查)", () => {

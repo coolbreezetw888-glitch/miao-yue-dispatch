@@ -81,12 +81,12 @@ export interface StaffPermissionFieldDef {
 // **只改文字與順序** —— key(資料庫欄位)、判斷邏輯一律不動。陣列順序 = 編輯服務人員畫面上的顯示順序。
 // 「即將推出」= 對應的功能還沒正式上線(客戶線上預約頁、接單確認流程、Google 日曆、服務人員建單、施工照片
 // 都是之後的模組);沒標的兩項(商家後台編輯無時段限制、服務人員是否顯示會員資料)是目前就有作用的。
-// 📌 第 5 項「服務人員是否顯示會員資料」:新說明是使用者 2026-10-02 裁決 H-13 定義的**正確行為**
-//    (關閉 = 只看得到客戶姓名)。現況程式關閉時仍看得到電話、地址 —— 那是 bug,修正排在第 3 批,
-//    這一批依規格書只改文字,不動邏輯。
+// 📌 第 5 項「服務人員是否顯示會員資料」:說明是使用者 2026-10-02 裁決 H-13 定義的**正確行為**
+//    (關閉 = 只看得到客戶姓名)。第 3 批(2026-10-06)已修:關閉時 get_my_booking_schedule 在後端就不回傳
+//    客戶電話、地址(migration 20261006130300)。
 // 📌 第 1 項「客戶預約無時段限制」(no_time_slot_limit):裁決 H-7 定義成「只管客戶線上預約」,所以標「即將推出」。
-//    但現況程式這個欄位**仍有作用**:行事曆的可預約時段顯示(get_merchant_day_schedule 等)開啟時會把整段
-//    營業時間當成可預約。這批不動邏輯,已在回報中列出。
+//    第 3 批(2026-10-06)起後台一律不看這個欄位(建單 / 改單 / 時間清單 / 行事曆 / 排班一覽,
+//    migration 20261006130200);後台要放寬只看「商家後台編輯無時段限制」。
 export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
   {
     key: "no_time_slot_limit",
@@ -378,7 +378,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     // ⚠️ 2026-09-24 使用者指示:「排班一覽這個功能可以先拔掉(隱藏起來),對應的權限開關也要跟著
     //    拔掉(隱藏起來)。」——這是刻意隱藏,不是遺漏。**還原就把下面這一行刪掉**(或改成 false),
     //    這個開關就會重新出現在客服權限設定頁上。
-    //    一起要改回來的另一處:src/routes/ManagePage.tsx 的 SCHEDULING_FEATURE_HIDDEN(功能卡片),
+    //    一起要改回來的另一處:src/modules/scheduling/featureVisibility.ts 的 SCHEDULING_FEATURE_HIDDEN(功能卡片 + 路由守衛,#976 第 3 批從 ManagePage.tsx 搬過去),
     //    那裡有完整的還原說明。資料庫裡既有的 scheduling 授權紀錄一列都不用動。
     // #976:隱藏中,只把說明裡引用的舊名「團隊休假」換成新名;#976 補修(2026-10-06)拿掉「對應模組 7」內部用語、標點改全形。
     hidden: true,
@@ -433,6 +433,16 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     label: "LINE 通知設定",
     // 已核對:「LINE 發送記錄」卡片跟「LINE 通知設定」共用這把鑰匙(ManagePage.tsx showLineNotificationCards)。
     description: "開放後客服可以調整每類事件要不要通知、通知誰、文案內容，以及查看 LINE 發送記錄。",
+  },
+  {
+    key: "line_marketing",
+    // #976 第 3 批(2026-10-06):新增。排在「LINE 通知設定」之後、「推播通知設定」之前(照功能頁卡片順序,
+    // ManagePage.tsx 的 line-marketing 卡片)。改前再行銷通知只給商家管理員。
+    // 後端同一個判斷 private.can_send_line_marketing:可選名單 list_line_marketable_members、
+    // Edge Function line-send-marketing(am_i_allowed_line_marketing)、會員等級篩選(merchant_member_tiers 讀取)。
+    // 既有客服預設關閉:資料庫沒有這個 key 的授權列 = 沒開。
+    label: "再行銷通知",
+    description: "開放後客服可以挑選已綁定 LINE 的會員名單，發送一次性的自訂文字訊息。",
   },
   {
     key: "push_notification",

@@ -2,9 +2,10 @@
 // 只測 buildMarketingDispatchPlan(未綁定會員被跳過且記錄 skip_reason='target_not_bound';
 // §10.2/SPECS-INDEX #612 問題 2:黑名單會員一律被伺服器端強制擋下,不管前端傳了什麼進來)跟
 // pushLineMessage,不呼叫真正的 Deno.serve handler(需要真實 Supabase 環境變數/資料庫連線)。
-// 「客服呼叫被擋下、管理員成功」這個權限邊界已經在 index.ts 用 am_i_merchant_admin(既有的
-// SECURITY DEFINER 函式)把關,對應的行為已經在 pgTAP module11_01(規則 2.1 對照組)驗證過
-// am_i_merchant_admin 系列權限判斷本身的正確性;這裡專注驗證 line-send-marketing 自己這一層
+// 權限邊界(#976 第 3 批起:管理員或 line_marketing 客服放行、其他客服擋下)在 index.ts 用
+// am_i_allowed_line_marketing(SECURITY DEFINER,內部是 private.can_send_line_marketing)把關,
+// 判斷本身由 pgTAP req976_02 驗證,實際呼叫這支 Edge Function 的 200 / 403 由
+// e2e-local/line-marketing-permission.spec.ts 在本機驗證;這裡專注驗證 line-send-marketing 自己這一層
 // 「誰會被跳過/誰會被發送」的分派邏輯。
 
 import { assertEquals } from "jsr:@std/assert@1";

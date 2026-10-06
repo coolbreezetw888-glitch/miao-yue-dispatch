@@ -21,6 +21,13 @@
 //
 // SPECS-INDEX #919(2026-09-30):會員報表 CSV **多一欄「會員類型」**(已完成驗證 / 尚未驗證),
 // 見 handleExportMembers 裡的說明。其餘三份報表的欄位完全沒動。
+//
+// SPECS-INDEX #976 第 3 批(2026-10-06,表 C-3):後端也檢查 report_export(畫面怎麼放行,後端就怎麼放行)。
+// 訂單 / 會員 / 請假三份報表與服務人員下拉,改用 ./reportExportApi.ts 的匯出專用函式(只回傳 CSV 欄位,
+// 權限 = 管理員或 report_export);抽成報表仍走 fetchStaffCommissionSummary(後端已多放行 report_export)。
+// 這樣只開 report_export 的客服也拿得到資料(改前四份都是空檔),CSV 欄位、篩選、排序、檔名、toast 全部照舊。
+// 📌 開頭第 3 行「這裡完全呼叫各自來源模組已經暴露的對外介面」從這一批起不再成立:各模組的對外介面是給
+//    各自頁面的權限用的,匯出中心要的是另一把鑰匙,所以在本模組另開匯出專用的讀取函式。
 
 import { useState } from "react";
 import {
@@ -41,17 +48,19 @@ import { buildCsvContent, downloadCsv } from "@/lib/csv";
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { fetchMerchantBookings } from "@/modules/booking/api";
-import { fetchMerchantMembersList } from "@/modules/members/api";
 // #919:會員類型的中文對應由會員模組自己提供(模組獨立性:文案與判斷的家在 members,
 // 這裡只是使用者,不自己複製一份 if)。
 import { memberIdentityStatusLabel } from "@/modules/members/memberIdentityStatus";
-import { fetchStaffLeaveRecords, fetchMerchantLeaveTypesAll } from "@/modules/scheduling/api";
 import { fetchStaffCommissionSummary } from "@/modules/payroll/api";
 import { formatStaffCommissionItemBreakdown } from "@/modules/payroll/types";
-import { useMerchantStaffList } from "@/modules/staff-agent/context";
 
 import { RequireReportExportAccess } from "./RequireReportExportAccess";
+import {
+  fetchLeaveReport,
+  fetchMembersReport,
+  fetchOrdersReport,
+  useReportExportStaff,
+} from "./reportExportApi";
 
 type ReportType = "orders" | "members" | "commission" | "leave";
 
@@ -82,7 +91,8 @@ function toMonthValue(year: number, month: number): string {
 function ReportExportCenterPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
-  const { data: staffList } = useMerchantStaffList(merchantId);
+  // #976 第 3 批:改用匯出專用的服務人員清單(只回 id / name,權限 = 管理員或 report_export)。
+  const { data: staffList } = useReportExportStaff(merchantId);
 
   const [activeTab, setActiveTab] = useState<ReportType>("orders");
   const [exporting, setExporting] = useState(false);
@@ -119,11 +129,10 @@ function ReportExportCenterPageInner() {
   async function handleExportOrders() {
     setExporting(true);
     try {
-      const rows = await fetchMerchantBookings(merchantId, {
+      const rows = await fetchOrdersReport(merchantId, {
         ...(orderStartDate ? { startAt: `${orderStartDate}T00:00:00` } : {}),
         ...(orderEndDate ? { endAt: `${orderEndDate}T23:59:59` } : {}),
-        ...(orderStatus === "__all__" ? {} : { status: [orderStatus] }),
-        unpaged: true,
+        ...(orderStatus === "__all__" ? {} : { status: orderStatus }),
       });
       const csv = buildCsvContent(
         ["訂單編號", "客戶姓名", "客戶電話", "預約時間", "狀態", "訂單金額", "來源"],
@@ -149,24 +158,24 @@ function ReportExportCenterPageInner() {
   async function handleExportMembers() {
     setExporting(true);
     try {
-      const rows = await fetchMerchantMembersList(merchantId, "", true);
+      const rows = await fetchMembersReport(merchantId);
       // #919(SPECS-INDEX):多一欄「會員類型」,讓商家在 Excel 裡也分得出兩層狀態。
       // 🔴 CSV 裡寫**中文白話**(「已完成驗證」/「尚未驗證」),不寫時間戳、也不寫 true/false
       //    —— 這份檔案是給商家在 Excel 裡看的,不是給程式讀的。
       // 🔴 中文對應**不在這裡 inline 寫**,一律用會員模組匯出的 memberIdentityStatusLabel:
       //    名單頁(#918)、詳情頁(#920)、這份 CSV 三個地方的文案必須一致,分三份寫早晚會對不上
       //    (規格書 §三 #923.3 第 6 條也要求這段要能被 vitest 測到)。
-      // 📌 資料來源沒變,還是同一支 fetchMerchantMembersList(…, unpaged=true);#918 在那支的
-      //    select 裡多帶了 identity_verified_at,所以這裡直接就有值。
+      // 📌 #976 第 3 批:資料來源改成 export_members_report(範圍與排序跟改前 fetchMerchantMembersList
+      //    (…, unpaged=true) 相同,欄位是資料庫原始名稱,identity_verified_at 一樣有帶)。
       const csv = buildCsvContent(
         ["姓名", "電話", "推薦碼", "點數餘額", "狀態", "會員類型"],
         rows.map((m) => [
           m.name,
           m.phone,
-          m.referralCode,
-          m.pointsBalance,
+          m.referral_code,
+          m.points_balance,
           m.status,
-          memberIdentityStatusLabel(m.identityVerifiedAt),
+          memberIdentityStatusLabel(m.identity_verified_at),
         ]),
       );
       downloadCsv(`會員報表_${todayIso()}.csv`, csv);
@@ -236,21 +245,18 @@ function ReportExportCenterPageInner() {
   async function handleExportLeave() {
     setExporting(true);
     try {
-      const [rows, leaveTypes] = await Promise.all([
-        fetchStaffLeaveRecords({
-          staffId: leaveStaffId === "__all__" ? null : leaveStaffId,
-          startDateFrom: leaveStartDate || null,
-          startDateTo: leaveEndDate || null,
-        }),
-        fetchMerchantLeaveTypesAll(merchantId),
-      ]);
-      const staffNameById = new Map((staffList ?? []).map((s) => [s.id, s.name]));
-      const leaveTypeNameById = new Map(leaveTypes.map((t) => [t.id, t.name]));
+      // #976 第 3 批:改用 export_leave_report,姓名 / 假別名稱由後端一併對照好(對照規則跟改前相同:
+      // 在職服務人員給姓名、對不到給 null ⇒ 退回顯示 id;假別含已下架)。
+      const rows = await fetchLeaveReport(merchantId, {
+        staffId: leaveStaffId === "__all__" ? null : leaveStaffId,
+        startDateFrom: leaveStartDate || null,
+        startDateTo: leaveEndDate || null,
+      });
       const csv = buildCsvContent(
         ["服務人員", "假別", "開始日期", "結束日期", "狀態", "備註"],
         rows.map((r) => [
-          staffNameById.get(r.staff_id) ?? r.staff_id,
-          leaveTypeNameById.get(r.leave_type_id) ?? r.leave_type_id,
+          r.staff_name ?? r.staff_id,
+          r.leave_type_name ?? r.leave_type_id,
           r.start_date,
           r.end_date,
           r.status,

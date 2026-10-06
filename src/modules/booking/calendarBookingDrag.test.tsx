@@ -124,7 +124,7 @@ function staffBlock(staffId: string, bookings: DayScheduleOwnBooking[]): DaySche
   return {
     staff_id: staffId,
     staff_name: NAMES.get(staffId)!,
-    no_time_slot_limit: false,
+    unlimited_backend_edit: false,
     available_windows: [],
     availability_overrides: [],
     on_leave: null,

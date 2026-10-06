@@ -12,6 +12,9 @@
 //   服務人員甲:沒有「無時段限制」、也沒有「後台無時段限制」;每週時段七天都 10:00~16:00;
 //              D(明天)12:00~12:30 單日排休;D+1 整天請假(特休)
 //   服務人員乙:無時段限制(= 營業時間),給手機下拉刷新 / 行事曆拖拉用
+//              #977 第 3 批(2026-10-06):no_time_slot_limit 後台不再看 ⇒ 改成「每週時段七天都 00:00~24:00」,
+//              跟商家營業時間取交集後 = 營業時間,判斷結果跟改前一模一樣(不改用 unlimited_backend_edit,
+//              因為那個會連營業時間都略過,時間清單會變成 00:00~23:30,跟這支測試要驗的不同)。
 //   日期:D = 台北的「明天」;D+3 給建單送出用;D+4 給手機組用(各自錯開,不會互相撞時段)
 //
 // teardown:service_role 硬刪除。刪前 SELECT 核對(集團底下商家名稱是本 fixture 前綴、帳號 email 是本 fixture
@@ -186,6 +189,15 @@ export async function setupBookingFormBatch2Fixture(): Promise<BookingFormBatch2
   }
   const staffAId = await addStaff(STAFF_A, false, 1, true);
   const staffBId = await addStaff(STAFF_B, true, 2);
+  const fullDayRes = await admin.from("staff_availability_windows").insert(
+    Array.from({ length: 7 }, (_, d) => ({
+      staff_id: staffBId,
+      day_of_week: d,
+      start_time: "00:00",
+      end_time: "24:00",
+    })),
+  );
+  if (fullDayRes.error) throw new Error(`乙的全天每週時段失敗:${fullDayRes.error.message}`);
 
   const winRes = await admin.from("staff_availability_windows").insert(
     Array.from({ length: 7 }, (_, d) => ({

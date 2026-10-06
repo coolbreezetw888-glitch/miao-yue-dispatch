@@ -19,6 +19,38 @@
 --   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
 
+-- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
+-- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
+-- (migration 20261006130200)。這支測試的 fixture 原本用 no_time_slot_limit=true 代表「這位服務人員不用另外
+-- 布置每週時段,只受商家營業時間限制」——那是情境布置的捷徑,不是這支測試要驗的主題。
+-- 為了讓原本的情境一字不差地成立,這裡在本交易內暫時掛一個 trigger:no_time_slot_limit=true 的服務人員
+-- 自動補上 7 天 00:00–24:00 的每週時段(= 改前「只受營業時間限制」的效果);改回 false 時拿掉這幾列。
+-- 整支測試結束 rollback,不留任何東西。新行為本身由 req977_01 驗證(那支不掛這個墊片)。
+create function pg_temp.req977_full_day_windows()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $req977$
+begin
+  if new.no_time_slot_limit then
+    insert into public.staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+    select new.id, d::smallint, '00:00'::time, '24:00'::time
+    from generate_series(0, 6) d
+    on conflict (staff_id, day_of_week, start_time, end_time) do nothing;
+  elsif tg_op = 'UPDATE' and old.no_time_slot_limit then
+    delete from public.staff_availability_windows
+    where staff_id = new.id and start_time = '00:00'::time and end_time = '24:00'::time;
+  end if;
+  return new;
+end;
+$req977$;
+
+create trigger req977_full_day_windows
+  after insert or update of no_time_slot_limit on public.merchant_staff
+  for each row execute function pg_temp.req977_full_day_windows();
+-- ─── 墊片結束 ──────────────────────────────────────────────────────────────────────────────
+
 -- 96 → 99:2026-09-24 完成時間基準(migration 20260924040000)新增三條斷言——
 --   (1) 用訂單虛構的 start_at 月份(2026-12)查詢營收應該是 0(把口徑改變本身釘成回歸保護)
 --   (2)(3) 單月版/區間版各一條 cmp_ok(>= 3500),避免「改成兩邊互相對照」之後出現
@@ -1080,10 +1112,10 @@ select throws_ok(
 
 select pg_temp.test_clear_auth();
 
--- billing/staff_report 不是完全對稱的兩把鑰匙(規格書 §3.9/§3.10/§3.11 明講):師傅報表
--- (3.9/3.10)檢查較寬的 private.can_view_payroll_reports(billing 或 staff_report 任一即可),
--- 只有店家帳務報表(3.11)檢查較窄的 private.can_view_billing——所以被授權 billing 的客服
--- 「連帶」可以看師傅報表,但被授權 staff_report 的客服不能看店家帳務報表(下面緊接著測試這個方向)。
+-- SPECS-INDEX #976 C-2(2026-10-06,第 3 批)改寫:原本 billing/staff_report 不對稱 —— 服務人員報表(3.9/3.10)
+-- 檢查較寬的 can_view_payroll_reports(billing 或 staff_report 任一),所以 billing 客服「連帶」看得到服務人員報表,
+-- 但畫面上(RequireStaffReportAccess)只看 staff_report。收緊後 can_view_payroll_reports = can_view_staff_report,
+-- 兩把鑰匙變對稱:billing 只看店家報表,staff_report 只看服務人員報表。
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000005');
 
 select lives_ok(
@@ -1091,9 +1123,10 @@ select lives_ok(
   '規則 2.9:被授權 billing 的客服可以查詢店家帳務報表'
 );
 
-select lives_ok(
+select throws_ok(
   $$select get_staff_commission_summary('e8000000-0000-4000-8000-000000000048', 2026, 12)$$,
-  '規則 2.9:被授權 billing 的客服「連帶」也可以查詢師傅報表(3.9 檢查的是較寬的 can_view_payroll_reports,billing 或 staff_report 任一即可,規格書明講的設計,不是漏洞)'
+  '42501', '沒有權限查詢這間商家的服務人員報表',
+  '#976 C-2:只有 billing 的客服不能再查詢服務人員報表(後端跟畫面一致,只給 staff_report)'
 );
 
 select pg_temp.test_clear_auth();
@@ -1141,9 +1174,11 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000005');
 select is(
   -- 模組 8 §11(2026-09-22 新增)固定資料多了一位 M5(049,§十 10.1 動態天數對照專用,見上方
   -- ⓪-2 區塊),在職服務人員數從原本 7 位變成 8 位,這裡的期望值同步更新,不是這次修正的行為變動。
+  -- #976 C-2(2026-10-06):can_view_payroll_reports 不再涵蓋 billing ⇒ 只有 billing 的客服讀不到服務人員清單
+  -- (店家報表頁不需要這份清單;服務人員報表頁的下拉由 staff_report 那一條驗證)。
   (select count(*)::int from merchant_staff where merchant_id = 'e8000000-0000-4000-8000-000000000021' and status = 'active'),
-  8,
-  '§302 回歸修正:被授權 billing(can_view_payroll_reports 涵蓋)的客服現在能讀到 A 店在職服務人員清單(師傅報表頁下拉選單用)'
+  0,
+  '#976 C-2:只有 billing 的客服讀不到服務人員清單(該清單只給服務人員報表頁等有需要的權限)'
 );
 
 select pg_temp.test_clear_auth();

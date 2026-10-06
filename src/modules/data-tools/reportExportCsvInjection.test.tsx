@@ -3,6 +3,11 @@
 // 內容來檢查;buildCsvContent 用的是真的那一支,只把 downloadCsv(瀏覽器下載)換成替身。
 //
 // 【故障注入】拿掉 neutralizeCsvFormula 的判斷 → 本檔四條全部轉紅。
+//
+// #976 第 3 批(2026-10-06):訂單 / 會員 / 請假三份報表與服務人員下拉改走 ./reportExportApi(匯出專用 RPC),
+// 替身跟著搬過去;資料內容、四條斷言一個字都沒改(CSV 輸出必須跟改前完全相同)。
+// 會員列的欄位改成資料庫原始名稱(referral_code / points_balance / identity_verified_at),
+// 請假列改成後端已對照好的 staff_name / leave_type_name。
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -21,11 +26,9 @@ vi.mock("./RequireReportExportAccess", () => ({
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => ({ merchant: { id: "m1", name: "測試商家" }, isLoading: false }),
 }));
-vi.mock("@/modules/staff-agent/context", () => ({
-  useMerchantStaffList: () => ({ data: [{ id: "s1", name: "=服務人員" }], isLoading: false }),
-}));
-vi.mock("@/modules/booking/api", () => ({
-  fetchMerchantBookings: vi.fn(async () => [
+vi.mock("./reportExportApi", () => ({
+  useReportExportStaff: () => ({ data: [{ id: "s1", name: "=服務人員" }], isLoading: false }),
+  fetchOrdersReport: vi.fn(async () => [
     {
       id: "b1",
       customer_name: '=HYPERLINK("http://evil","點我")',
@@ -36,16 +39,26 @@ vi.mock("@/modules/booking/api", () => ({
       source: "@line",
     },
   ]),
-}));
-vi.mock("@/modules/members/api", () => ({
-  fetchMerchantMembersList: vi.fn(async () => [
+  fetchMembersReport: vi.fn(async () => [
     {
       name: "-2+3",
       phone: "0912345678",
-      referralCode: "@ref",
-      pointsBalance: -5,
+      referral_code: "@ref",
+      points_balance: -5,
       status: "active",
-      identityVerifiedAt: null,
+      identity_verified_at: null,
+    },
+  ]),
+  fetchLeaveReport: vi.fn(async () => [
+    {
+      staff_id: "s1",
+      staff_name: "=服務人員",
+      leave_type_id: "t1",
+      leave_type_name: "+特休",
+      start_date: "2026-10-01",
+      end_date: "2026-10-02",
+      status: "approved",
+      notes: "=1+1,有逗號",
     },
   ]),
 }));
@@ -63,19 +76,6 @@ vi.mock("@/modules/payroll/api", () => ({
       },
     ],
   })),
-}));
-vi.mock("@/modules/scheduling/api", () => ({
-  fetchStaffLeaveRecords: vi.fn(async () => [
-    {
-      staff_id: "s1",
-      leave_type_id: "t1",
-      start_date: "2026-10-01",
-      end_date: "2026-10-02",
-      status: "approved",
-      notes: "=1+1,有逗號",
-    },
-  ]),
-  fetchMerchantLeaveTypesAll: vi.fn(async () => [{ id: "t1", name: "+特休" }]),
 }));
 
 import ReportExportCenterPage from "./ReportExportCenterPage";

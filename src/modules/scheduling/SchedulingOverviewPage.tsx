@@ -163,7 +163,7 @@ function SchedulingOverviewPageInner() {
                     {staffBlock.days.map((day) => {
                       const { tone, label } = describeScheduleCell(
                         day,
-                        staffBlock.no_time_slot_limit,
+                        staffBlock.unlimited_backend_edit,
                       );
                       return (
                         <td

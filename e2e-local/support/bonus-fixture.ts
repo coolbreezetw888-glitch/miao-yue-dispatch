@@ -140,7 +140,14 @@ export async function setupBonusFixture(): Promise<BonusFixture> {
     const digits = String((Number(runId.slice(-8)) + 10 + index) % 100_000_000).padStart(8, "0");
     const staffRes = await admin
       .from("merchant_staff")
-      .insert({ merchant_id: merchantId, name, phone: `09${digits}`, no_time_slot_limit: true })
+      // #977 第 3 批(2026-10-06):no_time_slot_limit 後台不再看,補上 unlimited_backend_edit 維持「不用布置每週時段」。
+      .insert({
+        merchant_id: merchantId,
+        name,
+        phone: `09${digits}`,
+        no_time_slot_limit: true,
+        unlimited_backend_edit: true,
+      })
       .select("id")
       .single();
     staffIds.push(must(`建立服務人員 ${name}`, staffRes.data, staffRes.error).id as string);

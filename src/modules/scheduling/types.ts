@@ -48,7 +48,9 @@ export interface ScheduleOverviewDay {
 export interface ScheduleOverviewStaffBlock {
   staff_id: string;
   staff_name: string;
-  no_time_slot_limit: boolean;
+  /** SPECS-INDEX #977 第 3 批(2026-10-06):改前是 no_time_slot_limit。排班一覽的「不受時段限制」改看
+   * 「商家後台編輯無時段限制」,跟後台建單判斷、行事曆同一個欄位。 */
+  unlimited_backend_edit: boolean;
   days: ScheduleOverviewDay[];
 }
 
@@ -239,6 +241,7 @@ function collectRanges(items: { start_time?: string; end_time?: string }[]): Min
 
 export function describeScheduleCell(
   day: ScheduleOverviewDay,
+  /** #977 第 3 批起傳 unlimited_backend_edit(後台不受時段限制);改前傳 no_time_slot_limit。 */
   noTimeSlotLimit: boolean,
 ): ScheduleCellDescription {
   // 優先權 1:請假。

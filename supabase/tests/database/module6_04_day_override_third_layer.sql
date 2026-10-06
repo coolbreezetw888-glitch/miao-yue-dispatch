@@ -176,14 +176,17 @@ select lives_ok(
   'PART A5:unlimited_backend_edit=true,跳過邊界檢查,建立成功(無例外)'
 );
 
--- A6. 規則 2.5:服務人員 C(no_time_slot_limit=true,完全沒設定時段)只受商家營業時間限制,應該成功。
-select lives_ok(
+-- A6. SPECS-INDEX #977(2026-10-06,第 3 批)改寫:原本驗「服務人員 C(no_time_slot_limit=true,完全沒設定時段)
+--     只受商家營業時間限制,應該成功」。現在 no_time_slot_limit 只管客戶線上預約,後台建單不再看它
+--     ⇒ 完全沒設定時段的 C 照樣被擋下(跟規則 2.5 沒開時相同)。
+select throws_ok(
   $$select create_booking(
     'c4000000-0000-4000-8000-000000000020', 'c4000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','c4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     'A6客戶', '0921000006'
   , p_payment_method_id => '59b3d7ce-18b5-5f44-a02d-125d743c9eea')$$,
-  'PART A6:no_time_slot_limit=true 時只受商家營業時間限制,建立成功(無例外)'
+  'P0001', null,
+  'PART A6(#977):no_time_slot_limit=true 不再讓後台建單略過每週時段,沒設定時段照樣被擋下'
 );
 
 -- A7. 多格子情境(等價性延伸):90 分鐘服務(橫跨 3 個半小時格子:10:00-11:30),

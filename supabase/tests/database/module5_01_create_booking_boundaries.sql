@@ -156,18 +156,20 @@ select throws_ok(
   '規則 2.5:服務人員完全沒設定任何可預約時段,視為不可預約,被擋下'
 );
 
--- ⑧ 規則 2.5 的例外:no_time_slot_limit=true 時,即使沒有設定任何 staff_availability_windows,
---    只受商家整體營業時間限制,應該成功。
+-- ⑧ SPECS-INDEX #977(2026-10-06,第 3 批)改寫:原本這條驗「no_time_slot_limit=true 時,即使沒有設定任何
+--    staff_availability_windows,只受商家整體營業時間限制,應該成功」。現在 no_time_slot_limit 只管客戶線上預約,
+--    後台建單不再看它 ⇒ 同一個情境改成「照樣被擋下」(跟 ⑦ 沒開時的結果相同)。
 update merchant_staff set no_time_slot_limit = true where id = 'b1000000-0000-4000-8000-000000000042';
 
-select lives_ok(
+select throws_ok(
   $$select create_booking(
     'b1000000-0000-4000-8000-000000000020', 'b1000000-0000-4000-8000-000000000042',
     jsonb_build_array(jsonb_build_object('service_item_id','b1000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶八', '0911000008',
     p_payment_method_id => 'b1000000-0000-4000-8000-000000000060'
   )$$,
-  '規則 2.2 例外:no_time_slot_limit=true 時只受商家營業時間限制,建立成功'
+  'P0001', null,
+  '#977:no_time_slot_limit=true 不再讓後台建單略過每週時段,沒設定時段照樣被擋下'
 );
 
 select pg_temp.test_clear_auth();

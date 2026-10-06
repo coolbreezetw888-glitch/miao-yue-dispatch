@@ -11,7 +11,8 @@
 --
 -- 【清單怎麼來、怎麼維護】
 -- 清單 = grep 全部 supabase/functions/**/*.ts 裡用 callerClient 呼叫的 .rpc("...")(2026-09-26 掃描結果):
---   invite-merchant-agent / invite-merchant-staff / line-send-marketing / line-test-connection → am_i_merchant_admin(p_merchant_id)
+--   invite-merchant-agent / invite-merchant-staff / line-test-connection                      → am_i_merchant_admin(p_merchant_id)
+--   line-send-marketing(#976 第 3 批,2026-10-06 起;改前用 am_i_merchant_admin)                → am_i_allowed_line_marketing(p_merchant_id)
 --   line-notify-dispatch                                                                       → can_dispatch_line_notification(p_merchant_id, p_event_type)
 --   push-notify-dispatch                                                                       → can_manage_bookings(p_merchant_id)
 --   push-send-test                                                                             → get_my_push_identity(p_merchant_id) / count_my_recent_test_pushes(p_merchant_id)
@@ -42,7 +43,7 @@
 -- 這支測試只讀系統目錄,不需要 fixture、不需要切換身份,所以沒有 test_set_auth helper。
 begin;
 
-select plan(15);
+select plan(17);
 
 -- =========================================================================
 -- 契約清單:Edge Function 用呼叫者身分呼叫的每一支 RPC(函式名, identity arguments 原文)。
@@ -55,20 +56,21 @@ create temp table edge_caller_rpc_contract (
 ) on commit drop;
 
 insert into edge_caller_rpc_contract (seq, fn, args, called_by) values
-  (1, 'am_i_merchant_admin',            'p_merchant_id uuid',                    'invite-merchant-agent / invite-merchant-staff / line-send-marketing / line-test-connection'),
+  (1, 'am_i_merchant_admin',            'p_merchant_id uuid',                    'invite-merchant-agent / invite-merchant-staff / line-test-connection'),
   (2, 'can_dispatch_line_notification', 'p_merchant_id uuid, p_event_type text', 'line-notify-dispatch'),
   (3, 'can_manage_bookings',            'p_merchant_id uuid',                    'push-notify-dispatch(#805)'),
   (4, 'get_my_push_identity',           'p_merchant_id uuid',                    'push-send-test'),
-  (5, 'count_my_recent_test_pushes',    'p_merchant_id uuid',                    'push-send-test');
+  (5, 'count_my_recent_test_pushes',    'p_merchant_id uuid',                    'push-send-test'),
+  (6, 'am_i_allowed_line_marketing',    'p_merchant_id uuid',                    'line-send-marketing(#976 第 3 批)');
 
 -- =========================================================================
--- ① 前提:清單真的有 5 筆。本專案吃過「空清單假通過」的虧 —— 下面 ②~⑪ 是用 select ... from 清單 產生的,
+-- ① 前提:清單真的有 6 筆(#976 第 3 批加了第 6 筆)。本專案吃過「空清單假通過」的虧 —— 下面 ②~⑪ 是用 select ... from 清單 產生的,
 --    清單若意外是空的,會一條斷言都不產生而 plan 對不上;這條讓失敗原因一眼可讀。
 -- =========================================================================
 select is(
   (select count(*)::int from edge_caller_rpc_contract),
-  5,
-  '#806 ①(前提):Edge Function 呼叫者身分 RPC 契約清單共 5 筆(新增 callerClient.rpc 時要同步加清單、plan +2)'
+  6,
+  '#806 ①(前提):Edge Function 呼叫者身分 RPC 契約清單共 6 筆(新增 callerClient.rpc 時要同步加清單、plan +2)'
 );
 
 -- =========================================================================

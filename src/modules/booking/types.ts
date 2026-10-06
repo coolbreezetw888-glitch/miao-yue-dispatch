@@ -408,7 +408,10 @@ export interface DayScheduleOnLeave {
 export interface DayScheduleStaffBlock {
   staff_id: string;
   staff_name: string;
-  no_time_slot_limit: boolean;
+  /** SPECS-INDEX #977 第 3 批(2026-10-06):改前這裡是 no_time_slot_limit。後台行事曆的可約時段放寬改看
+   * 「商家後台編輯無時段限制」(true ⇒ available_windows = 整段營業時間);no_time_slot_limit 只留給客戶線上預約。
+   * 行事曆畫面沒有直接讀這個值(只讀 available_windows),保留欄位方便除錯對照。 */
+  unlimited_backend_edit: boolean;
   available_windows: DayScheduleAvailableWindow[];
   /** 模組 6 §5.5 第 3 點(新增):這位服務人員這一天的單日例外設定,前端疊加規則(§5.3):
    * 落在某個區間內就採用該區間的 is_available 值,沒有落在任何區間就沿用 available_windows

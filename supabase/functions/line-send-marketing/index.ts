@@ -1,9 +1,12 @@
 // 模組 11:LINE 通知 — Edge Function line-send-marketing
-// 對應規格書 3.15,規則 2.6(核心必測:只給商家管理員,不透過 line_notification 權限開放)。
+// 對應規格書 3.15,規則 2.6(核心必測:不透過 line_notification 權限開放)。
+// SPECS-INDEX #976 第 3 批(2026-10-06):新增客服權限「再行銷通知」(line_marketing)。允許對象從
+// 「只有商家管理員」改成「商家管理員,或 line_marketing 權限開啟的在職客服」—— 仍然**不**因為
+// line_notification 權限放行(那是另一把鑰匙)。
 //
 // 流程:
-//   1. 驗證呼叫者是 private.is_merchant_admin(merchant_id)(用 am_i_merchant_admin 這支既有
-//      公開包裝函式,比照 invite-merchant-agent/line-test-connection 既有寫法)。
+//   1. 驗證呼叫者是 private.can_send_line_marketing(merchant_id)(用 am_i_allowed_line_marketing 這支
+//      公開包裝函式,以呼叫者自己的 JWT 執行;改前用 am_i_merchant_admin)。
 //   2. 對每個 member_id 查 members.line_bound,true 的才實際呼叫 push API(逐一呼叫,不用
 //      multicast——理由:逐一呼叫才能取得每個對象各自的成功/失敗狀態,寫入獨立的
 //      line_notification_log 記錄)。
@@ -175,22 +178,27 @@ async function handleRequest(req: Request): Promise<Response> {
     return jsonResponse({ error: "缺少必要欄位(merchant_id/member_ids/message)" }, 400);
   }
 
-  // 規則 2.6(核心必測):只給商家管理員,不接受客服呼叫(即使有 line_notification 權限)。
+  // 規則 2.6(核心必測)+ #976 第 3 批:商家管理員或 line_marketing 客服才放行;
+  // 只有 line_notification 權限的客服照樣擋下。
   const callerClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
     auth: { persistSession: false },
   });
 
-  const { data: isAdmin, error: adminCheckError } = await callerClient.rpc("am_i_merchant_admin", {
-    p_merchant_id: merchantId,
-  });
+  const { data: isAllowed, error: permissionCheckError } = await callerClient.rpc(
+    "am_i_allowed_line_marketing",
+    { p_merchant_id: merchantId },
+  );
 
-  if (adminCheckError) {
-    console.error("[line-send-marketing] am_i_merchant_admin 呼叫失敗", adminCheckError);
+  if (permissionCheckError) {
+    console.error("[line-send-marketing] am_i_allowed_line_marketing 呼叫失敗", permissionCheckError);
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
-  if (!isAdmin) {
-    return jsonResponse({ error: "沒有權限執行此操作,僅限該商家管理員使用" }, 403);
+  if (isAllowed !== true) {
+    return jsonResponse(
+      { error: "沒有權限執行此操作，僅限該商家管理員或已開啟「再行銷通知」權限的客服使用" },
+      403,
+    );
   }
 
   const { data: userData } = await callerClient.auth.getUser();

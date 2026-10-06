@@ -2,6 +2,38 @@
 -- §3.3/§6.3(get_customer_related_bookings)、§3.2/§6.2(update_booking_payment_method)。
 begin;
 
+-- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
+-- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
+-- (migration 20261006130200)。這支測試的 fixture 原本用 no_time_slot_limit=true 代表「這位服務人員不用另外
+-- 布置每週時段,只受商家營業時間限制」——那是情境布置的捷徑,不是這支測試要驗的主題。
+-- 為了讓原本的情境一字不差地成立,這裡在本交易內暫時掛一個 trigger:no_time_slot_limit=true 的服務人員
+-- 自動補上 7 天 00:00–24:00 的每週時段(= 改前「只受營業時間限制」的效果);改回 false 時拿掉這幾列。
+-- 整支測試結束 rollback,不留任何東西。新行為本身由 req977_01 驗證(那支不掛這個墊片)。
+create function pg_temp.req977_full_day_windows()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $req977$
+begin
+  if new.no_time_slot_limit then
+    insert into public.staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+    select new.id, d::smallint, '00:00'::time, '24:00'::time
+    from generate_series(0, 6) d
+    on conflict (staff_id, day_of_week, start_time, end_time) do nothing;
+  elsif tg_op = 'UPDATE' and old.no_time_slot_limit then
+    delete from public.staff_availability_windows
+    where staff_id = new.id and start_time = '00:00'::time and end_time = '24:00'::time;
+  end if;
+  return new;
+end;
+$req977$;
+
+create trigger req977_full_day_windows
+  after insert or update of no_time_slot_limit on public.merchant_staff
+  for each row execute function pg_temp.req977_full_day_windows();
+-- ─── 墊片結束 ──────────────────────────────────────────────────────────────────────────────
+
 select plan(19);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
@@ -42,8 +74,11 @@ insert into merchant_agents (id, merchant_id, user_id, name, invited_email, stat
   ('c2000000-0000-4000-8000-000000000031', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000003', '客服-無授權', 'pgtap-m6b-agent-none@test.local', 'active', now(), '0900000101'),
   ('c2000000-0000-4000-8000-000000000032', 'c2000000-0000-4000-8000-000000000021', 'c2000000-0000-4000-8000-000000000004', '客服-營業時間', 'pgtap-m6b-agent-bh@test.local', 'active', now(), '0900000102');
 
+-- SPECS-INDEX #976 C-1(2026-10-06,第 3 批):稅金寫入權限從 business_hours 改成 payment_methods(稅金設定在
+-- 付款方式管理頁)。客服 032 原本拿 business_hours 來驗「有權限可以寫」,改拿 payment_methods(名稱與信箱沿用,
+-- 不影響其他斷言);「只有 business_hours 寫不進稅金」由 req976_01 驗證。
 insert into merchant_agent_permissions (agent_id, section_key, granted) values
-  ('c2000000-0000-4000-8000-000000000032', 'business_hours', true),
+  ('c2000000-0000-4000-8000-000000000032', 'payment_methods', true),
   ('c2000000-0000-4000-8000-000000000031', 'orders', true);
 
 -- =========================================================================
@@ -77,7 +112,7 @@ select is(
 );
 
 -- =========================================================================
--- §2.1 merchant_tax_settings:RLS(要求 private.can_manage_business_hours)。
+-- §2.1 merchant_tax_settings:RLS(#976 C-1 起寫入要求 private.can_manage_payment_methods)。
 -- =========================================================================
 select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000003');
 
@@ -85,7 +120,7 @@ select throws_ok(
   $$insert into merchant_tax_settings (merchant_id, tax_mode, tax_value)
     values ('c2000000-0000-4000-8000-000000000021', 'percentage', 8)$$,
   '42501', null,
-  '§2.1:無授權 business_hours 的客服不能寫入 merchant_tax_settings'
+  '§2.1:沒有 payment_methods 權限(只有 orders)的客服不能寫入 merchant_tax_settings'
 );
 
 select pg_temp.test_clear_auth();
@@ -95,7 +130,7 @@ select pg_temp.test_set_auth('c2000000-0000-4000-8000-000000000004');
 select lives_ok(
   $$insert into merchant_tax_settings (merchant_id, tax_mode, tax_value)
     values ('c2000000-0000-4000-8000-000000000021', 'percentage', 8)$$,
-  '§2.1:被授權 business_hours 的客服可以寫入 merchant_tax_settings'
+  '§2.1(#976):被授權 payment_methods 的客服可以寫入 merchant_tax_settings'
 );
 
 select is(
@@ -107,7 +142,7 @@ select is(
 select lives_ok(
   $$update merchant_tax_settings set tax_mode = 'fixed', tax_value = 20
     where merchant_id = 'c2000000-0000-4000-8000-000000000021'$$,
-  '§2.1:被授權 business_hours 的客服可以更新 merchant_tax_settings(改變模式)'
+  '§2.1(#976):被授權 payment_methods 的客服可以更新 merchant_tax_settings(改變模式)'
 );
 
 -- §2.1:沒有 DELETE 政策,真刪除不會真的刪掉。

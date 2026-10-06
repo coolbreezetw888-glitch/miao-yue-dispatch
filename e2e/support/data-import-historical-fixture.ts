@@ -58,6 +58,10 @@ export async function setupDataImportHistoricalFixture(): Promise<DataImportHist
       name: existingStaffName,
       phone: existingStaffPhone,
       no_time_slot_limit: true,
+      // #977 第 3 批(2026-10-06):no_time_slot_limit 改成只管客戶線上預約,後台建單不再看它。
+      // 這個 fixture 原本靠它「不用布置每週時段」,改用後台的「商家後台編輯無時段限制」達到同樣效果
+      // (行事曆可約時段也改看這個欄位,畫面一樣是整段營業時間可點)。
+      unlimited_backend_edit: true,
     })
     .select("id")
     .single();

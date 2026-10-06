@@ -479,17 +479,18 @@ interface RawMarketableMember {
   is_blacklisted: boolean;
 }
 
-/** 規則 2.6:只有 line_bound=true 的會員才會出現在可選名單裡,避免管理員誤以為選了就會送到。 */
+/** 規則 2.6:只有 line_bound=true 的會員才會出現在可選名單裡,避免管理員誤以為選了就會送到。
+ *
+ * SPECS-INDEX #976 第 3 批(2026-10-06):改呼叫 list_line_marketable_members(權限 = 管理員或
+ * line_marketing 客服)。改前直接讀 members 表,要「會員管理」或「訂單」權限才讀得到 ——
+ * 新開的 line_marketing 客服會看到空名單;而且不該為了這頁把整張 members 表開給他(表層政策給的是整列)。
+ * 範圍(line_bound=true、status=active、依姓名排序)與回傳欄位跟改前一致。 */
 export async function fetchMarketableMembers(merchantId: string): Promise<MarketableMember[]> {
-  const { data, error } = await supabase
-    .from("members")
-    .select("id, name, phone, tier_id, is_blacklisted")
-    .eq("merchant_id", merchantId)
-    .eq("line_bound", true)
-    .eq("status", "active")
-    .order("name", { ascending: true });
+  const { data, error } = await supabase.rpc("list_line_marketable_members", {
+    p_merchant_id: merchantId,
+  });
   if (error) throw error;
-  return ((data ?? []) as RawMarketableMember[]).map((m) => ({
+  return ((data ?? []) as unknown as RawMarketableMember[]).map((m) => ({
     id: m.id,
     name: m.name,
     phone: m.phone,

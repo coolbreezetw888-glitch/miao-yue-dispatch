@@ -24,6 +24,7 @@ import {
   type SchedulingLeaveFixture,
 } from "./support/scheduling-leave-fixture";
 import { primeCurrentMerchant } from "./support/app-shell";
+import { SCHEDULING_FEATURE_HIDDEN } from "../src/modules/scheduling/featureVisibility";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -60,6 +61,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("排班一覽(§4.4):整天請假顯示灰底+假別名稱,取消後恢復正常", async ({ page }) => {
+  // #976 第 3 批(2026-10-06,表 C-4):「排班一覽」功能隱藏期間,/app/scheduling 對所有人一律導回功能頁,
+  // 這一條本來就進不了頁面 ⇒ 隱藏期間跳過(不刪,還原功能時跟著常數自動恢復)。
+  // 隱藏期間「打網址會被導回」改由 e2e-local/permission-tightening-batch3.spec.ts 驗證。
+  test.skip(
+    SCHEDULING_FEATURE_HIDDEN,
+    "排班一覽功能隱藏中(SCHEDULING_FEATURE_HIDDEN),網址一律導回功能頁",
+  );
   await page.goto("/app/scheduling");
   // 等表格真的載入完成(兩位測試服務人員的名字都出現在最左欄)。
   await expect(page.getByText(fixture.staffOnLeaveName)).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -76,7 +84,8 @@ test("排班一覽(§4.4):整天請假顯示灰底+假別名稱,取消後恢復�
   await expect(staffNormalRow.getByText("休假:", { exact: false })).toHaveCount(0);
 
   // 取消請假後(直接呼叫跟前端相同的 cancel_staff_leave RPC,見 fixture 檔頭說明),重新整理
-  // 應該恢復正常顯示——因為兩位服務人員都設了 no_time_slot_limit=true,恢復正常後這一格應該顯示
+  // 應該恢復正常顯示——因為兩位服務人員都設了 unlimited_backend_edit=true(#977 第 3 批起排班一覽的
+  // 「不受時段限制」看這個欄位,改前看 no_time_slot_limit),恢復正常後這一格應該顯示
   // 「不受時段限制」文字(見 describeScheduleCell 優先權 4),不再是灰底請假標示。
   await cancelFixtureLeave(fixture);
   await page.reload();
@@ -116,7 +125,7 @@ test("行事曆(§4.5):請假當天整欄灰底不可建單,非請假日期/其�
   await expect(leaveColumn.locator("button")).toHaveCount(0);
 
   // 正常服務人員(同一天):不受影響,欄位標題不會出現「休假」字樣,而且因為
-  // no_time_slot_limit=true + 商家整週營業,應該渲染出正常、可點擊的「可預約」時段格子
+  // unlimited_backend_edit=true(#977 第 3 批起行事曆的放寬看這個欄位)+ 商家整週營業,應該渲染出正常、可點擊的「可預約」時段格子
   // (aria-label="可預約",見 CalendarPage.tsx 的 DropdownMenuTrigger 按鈕)。
   await expect(normalColumn.getByText("休假", { exact: false })).toHaveCount(0);
   await expect(normalColumn.getByLabel("可預約").first()).toBeVisible();
