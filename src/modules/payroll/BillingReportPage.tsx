@@ -48,12 +48,14 @@ import { useMerchantBillingSummaryByRange } from "./api";
 // 點畫面幾乎不可能發現,必須有測試釘住。
 import {
   BILLING_SUMMARY_LABELS,
+  NET_MARGIN_MATERIAL_COST_HELP,
   POINTS_REDEEM_AMOUNT_DESCRIPTION,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
   buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
+  commissionMaterialNoteText,
   compensationTypeText,
   employmentStatusCsvText,
   monthlySalaryCellText,
@@ -208,9 +210,12 @@ function BillingReportPageInner() {
               label={BILLING_SUMMARY_LABELS.materialCost}
               value={summary.total_material_cost}
             />
+            {/* #985 第 8 批 8-9:卡片下方一行小字,說明這段期間的抽成有沒有先扣料錢
+                (只在有抽成紀錄、而且資料庫有回傳計數時出現)。 */}
             <SummaryCard
               label={BILLING_SUMMARY_LABELS.commissionPayout}
               value={summary.total_commission_payout}
+              note={commissionMaterialNoteText(summary)}
             />
             {/* 2026-09-24 使用者裁決:月薪這三張卡在「區間不是完整月份」時顯示說明文字,不顯示
                 0(顯示 0 會讓商家以為真的沒有月薪成本)。判斷一律以 salaryApplicable 為準,
@@ -282,7 +287,14 @@ function BillingReportPageInner() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
+              {/* #985 第 8 批 8-9:`?` 補充料錢與抽成的關係。HelpToggle 的說明區塊是 basis-full,
+                  標題列要是 flex flex-wrap。 */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
+                <HelpToggle label="說明：料錢跟抽成怎麼算進商家總淨利">
+                  {NET_MARGIN_MATERIAL_COST_HELP}
+                </HelpToggle>
+              </div>
               <CardDescription>
                 總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。只是
                 概估，不含房租/水電等其他營運成本，不是完整的財務損益表。
@@ -385,12 +397,15 @@ function SummaryCard({
   value,
   unavailableText = "—",
   help,
+  note,
 }: {
   label: string;
   value: number | null | undefined;
   unavailableText?: string;
   /** skill 二 `?`:「這是什麼」的說明,要點才展開(目前只有紅利折抵金額卡用)。 */
   help?: string;
+  /** #985 第 8 批 8-9:數字下方的一行小字(目前只有總抽成支出卡用);null / 未給 ⇒ 不顯示。 */
+  note?: string | null;
 }) {
   return (
     <Card>
@@ -412,6 +427,14 @@ function SummaryCard({
             {value.toLocaleString()} 元
           </p>
         )}
+        {note ? (
+          <p
+            className="mt-1 text-xs leading-snug text-muted-foreground"
+            data-testid="summary-card-note"
+          >
+            {note}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

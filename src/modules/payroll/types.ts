@@ -99,6 +99,9 @@ export interface StaffCommissionSummary {
     completion_date: string;
     customer_name: string;
     commission_base_amount: number;
+    /** #985 第 8 批 8-11:這筆抽成先扣掉的料錢(完成當時的設定;不扣料錢時是 0)。
+     * 資料庫先上、前端後上的過渡期間舊回應沒有這個 key ⇒ optional,缺鍵時畫面顯示「—」、CSV 輸出空白。 */
+    material_cost_deducted?: number;
     commission_amount: number;
     recalculated: boolean;
     legacy_rate_percentage: number | null;
@@ -196,4 +199,11 @@ export interface MerchantBillingSummary {
    * `?? true`,那個過渡防禦已經收掉)。false 時月薪相關數字一律顯示「需選擇完整月份才能計算」,
    * 不顯示 0。 */
   salary_applicable: boolean;
+  /** #985 第 8 批 8-8:商家「目前」的「料錢影響服務人員抽成」設定(查無設定 = false)。
+   * 以下三個資訊鍵都是 optional:舊資料庫回應沒有這些 key 時,前端不顯示小字、CSV 不加列。 */
+  material_cost_affects_commission_now?: boolean;
+  /** 期間內(跟總抽成支出同一個期間判斷)抽成先扣料錢的訂單筆數。 */
+  commission_orders_material_deducted_count?: number;
+  /** 期間內抽成沒有扣料錢的訂單筆數。 */
+  commission_orders_material_not_deducted_count?: number;
 }

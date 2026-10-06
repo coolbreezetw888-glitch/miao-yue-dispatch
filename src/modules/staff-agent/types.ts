@@ -355,7 +355,8 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     key: "material_costs",
     label: "料錢成本管理",
     // 已核對:MaterialCostsPage.tsx 有品項清單 + MaterialCostEnabledToggle(功能開關),守衛 material_costs。
-    description: "開放後客服可以新增、編輯、下架料錢成本品項清單，也可以設定料錢成本功能開關。",
+    description:
+      "開放後客服可以新增、編輯、下架料錢成本品項清單，也可以設定料錢成本功能開關。「料錢影響服務人員抽成」開關需要同時有「抽成與薪資設定」權限才能修改。",
   },
   {
     key: "payment_methods",
@@ -390,10 +391,11 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     // #976:舊名「抽成設定」。
     // 照事實核對:「商家抽成基準」仍在(PayrollSettingsPage.tsx 的 MerchantPayrollSettingsCard「【抽成制】抽成基準」)
     // ⇒ 依規格書第三節規則 2 補回;「預設比例」「月折算天數」已刪除 ⇒ 不出現。
+    // #985 第 8 批:抽成基準的修改入口搬到料錢成本管理頁的「料錢影響服務人員抽成」開關(後端仍要求這把鑰匙),抽成與薪資設定頁只唯讀顯示。
     // 假別扣款規則的按鈕在 LeaveTypesPage.tsx,要能進那一頁(team_leave)且有這把鑰匙(commission_settings)才看得到。
     label: "抽成與薪資設定",
     description:
-      "開放後客服可以調整商家的抽成基準、抽成制服務人員的個人抽成比例、月薪制服務人員的薪資設定。假別扣款規則在「月薪人員假別設定」頁，需要同時開啟該權限才能修改。",
+      "開放後客服可以調整料錢是否影響抽成（在料錢成本管理頁）、抽成制服務人員的個人抽成比例、月薪制服務人員的薪資設定。假別扣款規則在「月薪人員假別設定」頁，需要同時開啟該權限才能修改。",
   },
   {
     key: "staff_report",

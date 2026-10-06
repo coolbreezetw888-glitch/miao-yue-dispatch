@@ -112,7 +112,8 @@ describe("模組 8 CSV 匯出的公式注入防護(#925)", () => {
       <PieceRateStaffReport staffId="s1" staffName="服務人員甲" dateRange={VALID} />,
     );
     const line = (await clickExport()).split("\r\n")[1] ?? "";
-    expect(line.startsWith(`2026-10-01,"'=HYPERLINK(""http://evil"")",-300,`)).toBe(true);
+    // #985 第 8 批 8-11:客戶後面多一欄「扣除料錢」(這組 fixture 沒有這個 key ⇒ 空白),只調整欄位位置。
+    expect(line.startsWith(`2026-10-01,"'=HYPERLINK(""http://evil"")",,-300,`)).toBe(true);
     expect(line).toContain(",-30,");
   });
 

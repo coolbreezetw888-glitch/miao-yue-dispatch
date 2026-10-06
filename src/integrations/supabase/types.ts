@@ -3676,6 +3676,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_material_cost_commission_setting: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
       get_member_point_history: {
         Args: { p_member_id: string }
         Returns: {
@@ -4317,6 +4321,10 @@ export type Database = {
       set_agent_permission: {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
+      }
+      set_material_cost_affects_commission: {
+        Args: { p_enabled: boolean; p_merchant_id: string }
+        Returns: Json
       }
       set_member_blacklist_status: {
         Args: {

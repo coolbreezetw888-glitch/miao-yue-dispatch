@@ -119,7 +119,8 @@ describe("報表匯出中心 CSV 公式注入防護(#925)", () => {
   it("抽成報表:服務人員姓名 / 客戶姓名(Tab 開頭)補單引號;金額負數不動", async () => {
     const csv = await exportOn("抽成");
     const line = csv.split("\r\n")[1] ?? "";
-    expect(line.startsWith("'=服務人員,b1,2026-10-01,'\t=cmd,-300,")).toBe(true);
+    // #985 第 8 批 8-11:客戶姓名後面多一欄「扣除料錢」(這組 fixture 沒有這個 key ⇒ 空白),只調整欄位位置。
+    expect(line.startsWith("'=服務人員,b1,2026-10-01,'\t=cmd,,-300,")).toBe(true);
     expect(line.endsWith(",-30")).toBe(true);
   });
 

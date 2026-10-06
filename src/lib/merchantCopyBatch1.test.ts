@@ -235,7 +235,10 @@ describe("#976 客服權限設定", () => {
     const d = visibleAgentPermissionSections().find(
       (s) => s.key === "commission_settings",
     )!.description;
-    expect(d).toContain("抽成基準");
+    // #985 第 8 批 8-4:「調整商家的抽成基準」依規格書改寫成「調整料錢是否影響抽成(在料錢成本管理頁)」
+    // ——設定本身仍在(只是修改入口搬到料錢成本管理頁),所以斷言跟著改成新說法。
+    expect(d).toContain("料錢是否影響抽成");
+    expect(d).toContain("料錢成本管理頁");
     expect(d).not.toContain("預設比例");
     expect(d).not.toContain("月折算天數");
   });

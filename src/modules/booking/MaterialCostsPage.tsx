@@ -22,11 +22,13 @@ import {
   CardDialogFooter,
   CardDialogHeader,
   CardDialogTitle,
+  AlertNote,
   EmptyState,
   ErrorState,
   FieldAmountInput,
   FieldInput,
   FormField,
+  HelpToggle,
   ListCard,
   LoadingSkeleton,
   PageHeader,
@@ -43,25 +45,40 @@ import { getFeatureFlag, setFeatureFlag } from "@/modules/merchant/api";
 
 import {
   addMaterialCostItem,
+  fetchMaterialCostCommissionSetting,
   fetchMerchantMaterialCostItemsAll,
+  materialCostCommissionSettingQueryKey,
+  setMaterialCostAffectsCommission,
   reactivateMaterialCostItem,
   removeMaterialCostItem,
   updateMaterialCostItem,
   MATERIAL_COST_ENABLED_FEATURE_KEY,
   type UpsertMaterialCostItemInput,
 } from "./api";
+import { MATERIAL_COST_COMMISSION_COPY } from "./materialCostCommissionCopy";
 import { RequireMaterialCostsAccess } from "./RequireMaterialCostsAccess";
 import type { MaterialCostItem } from "./types";
 
 const itemsQueryKey = (merchantId: string) =>
   ["booking-module", "material-cost-items-admin", merchantId] as const;
 
+// #985 第 8 批:「料錢成本功能」開關跟下面「料錢影響服務人員抽成」那一列共用同一份查詢
+// (同一個 queryKey,react-query 只會發一次請求)。
+const materialCostEnabledQueryKey = (merchantId: string) =>
+  ["booking-module", "material-cost-enabled", merchantId] as const;
+
+async function fetchMaterialCostEnabled(merchantId: string): Promise<boolean> {
+  const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
+  // 規格書(建單功能擴充)2.3:查無資料一律視為關閉(預設值關閉)。
+  return value ?? false;
+}
+
 // 商家端三項調整規格書 §一 1.2/1.3:料錢成本功能開關,從 BusinessHoursPage.tsx 搬過來,
 // 放在這個頁面最上方(料錢成本品項清單 Card 之前)。RLS 已放寬成同時允許
 // can_manage_material_costs,不再要求 can_manage_business_hours,所以這裡不需要額外的
 // 權限判斷——能進到這個頁面的人(RequireMaterialCostsAccess 已擋過一次)就能操作這個開關。
 function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
-  const featureFlagQueryKey = ["booking-module", "material-cost-enabled", merchantId] as const;
+  const featureFlagQueryKey = materialCostEnabledQueryKey(merchantId);
   const queryClient = useQueryClient();
   const {
     data: enabled,
@@ -70,11 +87,7 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
     refetch,
   } = useQuery({
     queryKey: featureFlagQueryKey,
-    queryFn: async () => {
-      const value = await getFeatureFlag(merchantId, MATERIAL_COST_ENABLED_FEATURE_KEY);
-      // 規格書(建單功能擴充)2.3:查無資料一律視為關閉(預設值關閉)。
-      return value ?? false;
-    },
+    queryFn: () => fetchMaterialCostEnabled(merchantId),
   });
 
   async function handleToggle(checked: boolean) {
@@ -122,6 +135,135 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
           />
         )}
       </CardContent>
+    </Card>
+  );
+}
+
+// =========================================================================
+// SPECS-INDEX #985 第 8 批 8-1 / 8-2:「料錢影響服務人員抽成」開關。
+// 資料庫沿用 merchant_payroll_settings.commission_basis_type(開啟 = 扣料錢),讀寫走 RPC;
+// 能不能改由資料庫回傳的 can_edit 決定(管理員或「抽成與薪資設定」權限),後端 RPC 也會再擋一次。
+// =========================================================================
+export function MaterialCostCommissionToggle({ merchantId }: { merchantId: string }) {
+  const queryClient = useQueryClient();
+  const settingQuery = useQuery({
+    queryKey: materialCostCommissionSettingQueryKey(merchantId),
+    queryFn: () => fetchMaterialCostCommissionSetting(merchantId),
+  });
+  const featureQuery = useQuery({
+    queryKey: materialCostEnabledQueryKey(merchantId),
+    queryFn: () => fetchMaterialCostEnabled(merchantId),
+  });
+
+  // 確認窗:記住「要切成哪個值」;null = 沒開。開關本身的值永遠來自資料庫,不先樂觀改,
+  // 所以按取消或送出失敗時,開關自然停在原值。
+  const [pendingValue, setPendingValue] = useState<boolean | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // 只有確定讀到「功能是關的」才變灰;讀取中 / 讀不到時不猜。
+  const featureOff = featureQuery.data === false;
+  const setting = settingQuery.data;
+  const canEdit = setting?.canEdit === true;
+
+  async function handleConfirm() {
+    if (pendingValue === null) return;
+    setSaving(true);
+    try {
+      await setMaterialCostAffectsCommission(merchantId, pendingValue);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: materialCostCommissionSettingQueryKey(merchantId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ["payroll-module", "merchant-payroll-settings", merchantId],
+        }),
+      ]);
+      toast.success("已更新");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+      setPendingValue(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        {/* HelpToggle 展開的說明區塊是 basis-full,所以標題列必須是 flex flex-wrap。 */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+          <CardTitle>料錢與服務人員抽成</CardTitle>
+          <HelpToggle label="說明：料錢影響抽成的開關會影響哪些訂單">
+            {MATERIAL_COST_COMMISSION_COPY.help}
+          </HelpToggle>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {settingQuery.isLoading ? (
+          <LoadingSkeleton variant="lines" rows={1} />
+        ) : settingQuery.isError || !setting ? (
+          // 8-2:讀不到時不顯示開關(不能顯示預設值讓人誤以為是自己的設定)。
+          <ErrorState
+            title="讀不到料錢影響抽成的設定"
+            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
+            onRetry={() => void settingQuery.refetch()}
+          />
+        ) : (
+          <SwitchRow
+            id="material-cost-affects-commission"
+            title={MATERIAL_COST_COMMISSION_COPY.title}
+            description={MATERIAL_COST_COMMISSION_COPY.description}
+            checked={setting.affectsCommission}
+            onCheckedChange={(next) => setPendingValue(next)}
+            disabled={!canEdit || featureOff || saving}
+          >
+            {featureOff || !canEdit ? (
+              <div className="flex flex-col gap-2">
+                {featureOff ? (
+                  <AlertNote>{MATERIAL_COST_COMMISSION_COPY.featureOffNote}</AlertNote>
+                ) : null}
+                {!canEdit ? (
+                  <AlertNote>{MATERIAL_COST_COMMISSION_COPY.noPermissionNote}</AlertNote>
+                ) : null}
+              </div>
+            ) : null}
+          </SwitchRow>
+        )}
+      </CardContent>
+
+      <CardDialog
+        open={pendingValue !== null}
+        onOpenChange={(open) => {
+          if (!open && !saving) setPendingValue(null);
+        }}
+      >
+        <CardDialogContent>
+          <CardDialogHeader>
+            <CardDialogTitle>
+              {MATERIAL_COST_COMMISSION_COPY.confirmTitle(pendingValue ?? false)}
+            </CardDialogTitle>
+            <CardDialogDescription>
+              {MATERIAL_COST_COMMISSION_COPY.confirmBody(pendingValue ?? false)}
+            </CardDialogDescription>
+          </CardDialogHeader>
+          <CardDialogFooter>
+            <CardDialogClose asChild>
+              <Button type="button" variant="neutral" size="touch" disabled={saving}>
+                取消
+              </Button>
+            </CardDialogClose>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              disabled={saving}
+              onClick={() => void handleConfirm()}
+            >
+              {saving ? "儲存中⋯" : "確定"}
+            </Button>
+          </CardDialogFooter>
+        </CardDialogContent>
+      </CardDialog>
     </Card>
   );
 }
@@ -336,6 +478,9 @@ function MaterialCostsPageInner() {
       />
 
       <MaterialCostEnabledToggle merchantId={merchantId} />
+
+      {/* #985 第 8 批 8-1:緊接在「料錢成本功能」正下方。 */}
+      <MaterialCostCommissionToggle merchantId={merchantId} />
 
       <Card>
         <CardHeader>

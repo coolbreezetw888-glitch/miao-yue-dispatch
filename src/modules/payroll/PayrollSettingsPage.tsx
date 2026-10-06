@@ -16,6 +16,7 @@
 //   - 月薪制 > 編輯(Q1,只有 2 欄)→ **全頁層**(2026-09-29 使用者裁決:跟並排的抽成制編輯保持一致,
 //     不要照「3 欄以內」規則改回小卡窗)。
 //   - 商家層級設定:抽成基準二選一改 ChoiceChipGroup(每個選項含一行說明,直向排列);月折算天數的長說明
+//     (#985 第 8 批:抽成基準二選一已拿掉,改到料錢成本管理頁的「料錢影響服務人員抽成」開關,這裡只唯讀顯示)
 //     收進 `?`,常駐只留一句結論。
 //   - 兩份服務人員清單改 ListCard:「編輯」是唯一主要動作;抽成制人員有尚未設定抽成的項目時整張變黃 +
 //     待辦標籤(skill 二之五「需要處理的卡片整張變黃」)。
@@ -52,7 +53,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import {
+  useAgentPermission,
+  useCurrentMerchantRole,
+  useMerchantStaffList,
+} from "@/modules/staff-agent/context";
 import {
   addStaffServiceItem,
   fetchStaffServiceItemIds,
@@ -66,7 +71,6 @@ import {
   batchApplyStaffServiceCommissionRates,
   fetchStaffServiceCommissionRates,
   staffServiceCommissionRatesQueryKey,
-  upsertMerchantPayrollSettings,
   upsertStaffSalarySettings,
   upsertStaffServiceCommissionRate,
   useMerchantPayrollSettings,
@@ -79,9 +83,7 @@ import {
 } from "./commissionAttention";
 import { previewServiceCommission, calculateDayRate, getDaysInMonth } from "./previewCalculators";
 import {
-  COMMISSION_BASIS_TYPE_LABELS,
   COMMISSION_MODE_LABELS,
-  type CommissionBasisType,
   type CommissionMode,
   type StaffServiceCommissionRate,
 } from "./types";
@@ -101,90 +103,57 @@ const COMMISSION_MODE_OPTIONS = (Object.keys(COMMISSION_MODE_LABELS) as Commissi
 // =========================================================================
 // 區塊一:商家層級設定。
 // =========================================================================
-function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
-  const queryClient = useQueryClient();
+export function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
   const { data: settings, isLoading, isError, refetch } = useMerchantPayrollSettings(merchantId);
-
-  const [basisType, setBasisType] = useState<CommissionBasisType>("gross");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!settings) return;
-    setBasisType(settings.commission_basis_type as CommissionBasisType);
-  }, [settings]);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await upsertMerchantPayrollSettings(merchantId, {
-        commissionBasisType: basisType,
-      });
-      await queryClient.invalidateQueries({ queryKey: payrollSettingsQueryKey(merchantId) });
-      toast.success("已更新抽成與薪資設定");
-    } catch (err) {
-      toast.error("更新失敗", { description: getErrorMessage(err) });
-    } finally {
-      setSaving(false);
-    }
-  }
+  // #985 第 8 批 8-3:「料錢影響抽成」改到料錢成本管理頁修改,這裡只唯讀顯示。連結只給進得去
+  // 那一頁的人(管理員或「料錢成本管理」權限),其他人只看文字,不給一個點了會被導回首頁的連結。
+  const { data: role } = useCurrentMerchantRole();
+  const { data: canManageMaterialCosts } = useAgentPermission("material_costs");
+  const canOpenMaterialCostsPage =
+    role === "admin" || (role === "agent" && canManageMaterialCosts === true);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>商家層級設定</CardTitle>
         <CardDescription>
-          抽成計算基準，套用到所有抽成制服務人員;每個人實際抽成多少，到下方「抽成制服務人員」
-          逐一設定。
+          套用到所有抽成制服務人員;每個人實際抽成多少，到下方「抽成制服務人員」逐一設定。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         {isLoading ? (
           <LoadingSkeleton variant="lines" rows={3} />
         ) : isError ? (
-          // 🔴 2026-09-30 QA:讀不到時原本會顯示元件的預設值(抽成基準 = 全額),使用者以為那是
-          // 自己存過的設定,一按儲存就覆寫掉真實設定。出錯就不給表單。
+          // 🔴 2026-09-30 QA:讀不到時不可以顯示預設值(會讓人以為是自己存過的設定)。
           <ErrorState
             title="讀不到商家層級的抽成設定"
-            reason="可能是網路斷了;現在先不顯示欄位，避免你把預設值當成自己的設定存回去"
+            reason="可能是網路斷了;現在先不顯示目前的設定，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
           <>
-            <FormField label="【抽成制】抽成基準" required>
-              {/* skill 二之七:單選用 ChoiceChipGroup(radiogroup 語意)。兩個選項各帶一行說明,所以直向
-                  排列、每顆佔滿一行。值來自常數白名單,不是 Radix Select,沒有幽靈空值事件,原本
-                  「為了寫法一致」套在 RadioGroup 上的 guardPhantomEmptyChange 這裡不再需要。 */}
-              <ChoiceChipGroup
-                aria-label="抽成基準"
-                className="flex-col items-stretch"
-                value={basisType}
-                onValueChange={setBasisType}
-                options={[
-                  {
-                    value: "gross",
-                    label: (
-                      <span className="flex flex-col items-start gap-0.5 text-left">
-                        <span>{COMMISSION_BASIS_TYPE_LABELS.gross}</span>
-                        <span className="text-xs font-normal leading-snug text-muted-foreground">
-                          以訂單金額(已扣折扣、排除稅金)全額當作抽成基準，不扣除料錢成本。
-                        </span>
-                      </span>
-                    ),
-                  },
-                  {
-                    value: "net_of_material_cost",
-                    label: (
-                      <span className="flex flex-col items-start gap-0.5 text-left">
-                        <span>{COMMISSION_BASIS_TYPE_LABELS.net_of_material_cost}</span>
-                        <span className="text-xs font-normal leading-snug text-muted-foreground">
-                          再扣除這筆訂單登記的料錢成本後，剩下的金額才當作抽成基準。到府派工這類會用到
-                          料錢成本的商家可以考慮這個選項。
-                        </span>
-                      </span>
-                    ),
-                  },
-                ]}
-              />
+            {/* #985 第 8 批 8-3:原本的「【抽成制】抽成基準」二選一拿掉(同一個設定只留一個修改入口,
+                在料錢成本管理頁),這裡改成唯讀一行。原本的「儲存」按鈕只存這一個欄位,一併拿掉。 */}
+            <FormField label="【抽成制】料錢影響抽成">
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="payroll-material-commission-readonly"
+              >
+                料錢影響抽成：目前
+                {settings?.commission_basis_type === "net_of_material_cost" ? "開啟" : "關閉"}
+                。要修改請到
+                {canOpenMaterialCostsPage ? (
+                  <Link
+                    to="/app/material-costs"
+                    className="font-semibold text-brand hover:underline"
+                  >
+                    「料錢成本管理」
+                  </Link>
+                ) : (
+                  "「料錢成本管理」"
+                )}
+                。
+              </p>
             </FormField>
 
             {/* §十 10.1:這次拿掉商家手動填寫的固定天數,改成系統依「當月實際天數」自動計算
@@ -199,19 +168,6 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
                 系統依當月實際天數自動計算(28~31 天)，不需要另外設定。
               </p>
             </FormField>
-
-            <div>
-              {/* 這一頁唯一的主要按鈕(skill 二之三:一個畫面只能有一顆)。 */}
-              <Button
-                type="button"
-                variant="primary"
-                size="touch"
-                disabled={saving}
-                onClick={handleSave}
-              >
-                {saving ? "儲存中⋯" : "儲存"}
-              </Button>
-            </div>
           </>
         )}
       </CardContent>

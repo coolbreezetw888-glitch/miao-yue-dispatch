@@ -1268,6 +1268,52 @@ export async function reactivateMaterialCostItem(itemId: string): Promise<void> 
   if (error) throw error;
 }
 
+// =========================================================================
+// SPECS-INDEX #985 第 8 批:「料錢影響服務人員抽成」開關(沿用 merchant_payroll_settings
+// .commission_basis_type;開啟 = 扣料錢)。讀寫一律走 RPC,權限擋在資料庫(8-5 / 8-6)。
+// =========================================================================
+export interface MaterialCostCommissionSetting {
+  /** 開關目前是否開啟(抽成先扣料錢)。查無設定 = 關閉。 */
+  affectsCommission: boolean;
+  /** 目前登入者能不能改(管理員或「抽成與薪資設定」權限)。 */
+  canEdit: boolean;
+}
+
+export const materialCostCommissionSettingQueryKey = (merchantId: string) =>
+  ["booking-module", "material-cost-commission-setting", merchantId] as const;
+
+/** 回應格式不對時丟錯,不要把「不知道」猜成「關閉」。 */
+export function parseMaterialCostCommissionSetting(data: unknown): MaterialCostCommissionSetting {
+  const obj = (data ?? {}) as { affects_commission?: unknown; can_edit?: unknown };
+  if (typeof obj.affects_commission !== "boolean" || typeof obj.can_edit !== "boolean") {
+    throw new Error("讀到的設定格式不正確");
+  }
+  return { affectsCommission: obj.affects_commission, canEdit: obj.can_edit };
+}
+
+export async function fetchMaterialCostCommissionSetting(
+  merchantId: string,
+): Promise<MaterialCostCommissionSetting> {
+  const { data, error } = await supabase.rpc("get_material_cost_commission_setting", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return parseMaterialCostCommissionSetting(data);
+}
+
+export async function setMaterialCostAffectsCommission(
+  merchantId: string,
+  enabled: boolean,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("set_material_cost_affects_commission", {
+    p_merchant_id: merchantId,
+    p_enabled: enabled,
+  });
+  if (error) throw error;
+  const obj = (data ?? {}) as { affects_commission?: unknown; can_edit?: unknown };
+  return typeof obj.affects_commission === "boolean" ? obj.affects_commission : enabled;
+}
+
 // 型別工具,供未來需要局部更新 bookings 欄位的模組(例如模組 6)參考既有慣例,這次本模組不使用。
 export type BookingUpdate = TablesUpdate<"bookings">;
 

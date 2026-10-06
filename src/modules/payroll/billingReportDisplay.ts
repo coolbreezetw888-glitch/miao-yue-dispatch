@@ -336,6 +336,52 @@ export const BILLING_SUMMARY_LABELS = {
   pointsRedeemAmount: "紅利折抵金額",
 } as const;
 
+/** #985 第 8 批 8-10:CSV 尾端兩列資訊列的「項目」文字。刻意不放進 BILLING_SUMMARY_LABELS
+ * (那一組是「畫面卡片標題 = CSV 項目」一對一對應,這兩列只出現在 CSV)。 */
+export const COMMISSION_MATERIAL_CSV_LABELS = {
+  deducted: "抽成先扣料錢的訂單筆數",
+  notDeducted: "抽成未扣料錢的訂單筆數",
+} as const;
+
+// =========================================================================
+// #985 第 8 批 8-9 / 8-10:料錢影響抽成的透明化(只加說明與資訊列,不改任何既有數字)。
+// =========================================================================
+
+/** 「商家總淨利」`?` 說明補的那一句(8-9)。 */
+export const NET_MARGIN_MATERIAL_COST_HELP =
+  "料錢一律算店家成本；「料錢影響抽成」開啟時，抽成會先扣料錢再算，所以抽成支出較少。";
+
+export type CommissionMaterialCountFields = Pick<
+  MerchantBillingSummary,
+  "commission_orders_material_deducted_count" | "commission_orders_material_not_deducted_count"
+>;
+
+/** 兩個計數鍵都在(而且是數字)才回傳;舊資料庫回應缺鍵 ⇒ null(不顯示小字、CSV 不加列)。 */
+export function readCommissionMaterialCounts(
+  summary: CommissionMaterialCountFields | undefined,
+): { deducted: number; notDeducted: number } | null {
+  const deducted = summary?.commission_orders_material_deducted_count;
+  const notDeducted = summary?.commission_orders_material_not_deducted_count;
+  if (typeof deducted !== "number" || typeof notDeducted !== "number") return null;
+  return { deducted, notDeducted };
+}
+
+/**
+ * 8-9:「總抽成支出」卡片下方的小字。只在這段期間有抽成紀錄時顯示:
+ *   全部扣料錢 / 全部沒扣 / 混合(期間中切換過設定)三種說法。
+ */
+export function commissionMaterialNoteText(
+  summary: CommissionMaterialCountFields | undefined,
+): string | null {
+  const counts = readCommissionMaterialCounts(summary);
+  if (!counts) return null;
+  const { deducted, notDeducted } = counts;
+  if (deducted <= 0 && notDeducted <= 0) return null;
+  if (notDeducted <= 0) return "這段期間的抽成都已先扣料錢再算。";
+  if (deducted <= 0) return "這段期間的抽成都沒有扣料錢。";
+  return `這段期間有 ${deducted} 筆抽成先扣料錢、${notDeducted} 筆沒有扣（期間中切換過設定）。`;
+}
+
 /**
  * 紅利系統重構 §4.10(#848):「紅利折抵金額」卡片 / CSV 那一列要不要出現。
  *
@@ -382,6 +428,8 @@ export type BillingCsvSummaryFields = Pick<
   | "estimated_net_margin"
   | "points_feature_enabled"
   | "total_points_redeem_amount"
+  | "commission_orders_material_deducted_count"
+  | "commission_orders_material_not_deducted_count"
 >;
 
 /** 總計區塊的一個項目:左邊是畫面上那張卡的標題,右邊是數字或「算不出來」的說明文字。 */
@@ -443,6 +491,20 @@ export function buildBillingCsvSummaryItems(
           },
         ]
       : []),
+    // #985 第 8 批 8-10:兩列資訊列一律接在最尾端(紅利那一列之後),不插在中間、不改既有列。
+    // 舊資料庫回應沒有這兩個 key ⇒ 不輸出。
+    ...commissionMaterialCsvItems(summary),
+  ];
+}
+
+function commissionMaterialCsvItems(
+  summary: CommissionMaterialCountFields,
+): BillingCsvSummaryItem[] {
+  const counts = readCommissionMaterialCounts(summary);
+  if (!counts) return [];
+  return [
+    { label: COMMISSION_MATERIAL_CSV_LABELS.deducted, value: counts.deducted },
+    { label: COMMISSION_MATERIAL_CSV_LABELS.notDeducted, value: counts.notDeducted },
   ];
 }
 

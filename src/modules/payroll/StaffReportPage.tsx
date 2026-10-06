@@ -47,6 +47,11 @@ import {
 } from "./api";
 import { buildCsvContent, downloadCsv } from "./csvExport";
 import { validateDateRange } from "./dateRangeUtils";
+import {
+  MATERIAL_COST_DEDUCTED_LABEL,
+  materialCostDeductedCsvValue,
+  materialCostDeductedText,
+} from "./materialCostDeductedDisplay";
 import { formatStaffCommissionItemBreakdown } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
@@ -127,10 +132,20 @@ export function PieceRateStaffReport({
     // #781:欄位標題寫「完成日期」而不是只寫「日期」——#767 之後這一欄裝的是「按下完成的
     // 那一刻」,報表讀者(服務人員/商家)自己就看得懂這份報表的認列口徑是什麼,
     // 這比在畫面上掛一個會被關掉、會過時的說明橫幅有效得多(#782 刻意不加橫幅的理由)。
-    const headers = ["完成日期", "客戶", "抽成基準", "服務項目明細", "抽成金額", "已被人工重算"];
+    // #985 第 8 批 8-11:「扣除料錢」放在「抽成基準」左邊(0 輸出 0)。
+    const headers = [
+      "完成日期",
+      "客戶",
+      MATERIAL_COST_DEDUCTED_LABEL,
+      "抽成基準",
+      "服務項目明細",
+      "抽成金額",
+      "已被人工重算",
+    ];
     const rows = summary.details.map((d) => [
       d.completion_date,
       d.customer_name,
+      materialCostDeductedCsvValue(d),
       d.commission_base_amount,
       formatStaffCommissionItemBreakdown(d),
       d.commission_amount,
@@ -259,6 +274,11 @@ export function PieceRateStaffReport({
                           (淺色底 + 細框),一眼看到錢在哪」,改用 DetailSection tone="amount"。 */}
                       <DetailSection tone="amount" className="mt-2 gap-1">
                         {/* 2026-09-24 稽核修正(問題 4):明細一律走同一支 formatAmount,格式統一。 */}
+                        {/* #985 第 8 批 8-11:扣除料錢放在抽成基準前面;0(沒扣)顯示「—」。
+                            服務人員端 MyPayrollPage 也複用這個元件(Q4:服務人員自己的明細也顯示)。 */}
+                        <DetailRow label={MATERIAL_COST_DEDUCTED_LABEL} size="sm">
+                          {materialCostDeductedText(d)}
+                        </DetailRow>
                         <DetailRow label="抽成基準" size="sm">
                           {formatAmount(d.commission_base_amount)}
                         </DetailRow>

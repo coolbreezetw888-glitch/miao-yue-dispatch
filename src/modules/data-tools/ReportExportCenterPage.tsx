@@ -52,6 +52,10 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 // 這裡只是使用者,不自己複製一份 if)。
 import { memberIdentityStatusLabel } from "@/modules/members/memberIdentityStatus";
 import { fetchStaffCommissionSummary } from "@/modules/payroll/api";
+import {
+  MATERIAL_COST_DEDUCTED_LABEL,
+  materialCostDeductedCsvValue,
+} from "@/modules/payroll/materialCostDeductedDisplay";
 import { formatStaffCommissionItemBreakdown } from "@/modules/payroll/types";
 
 import { RequireReportExportAccess } from "./RequireReportExportAccess";
@@ -193,7 +197,9 @@ function ReportExportCenterPageInner() {
       const targets = (staffList ?? []).filter(
         (s) => commissionStaffId === "__all__" || s.id === commissionStaffId,
       );
-      const allRows: Array<[string, string, string, string, number, string, number]> = [];
+      const allRows: Array<
+        [string, string, string, string, number | string, number, string, number]
+      > = [];
       for (const staff of targets) {
         try {
           const summary = await fetchStaffCommissionSummary(
@@ -207,6 +213,8 @@ function ReportExportCenterPageInner() {
               d.booking_id,
               d.completion_date,
               d.customer_name,
+              // #985 第 8 批 8-11:「扣除料錢」放在「抽成基準金額」左邊(0 輸出 0)。
+              materialCostDeductedCsvValue(d),
               d.commission_base_amount,
               formatStaffCommissionItemBreakdown(d),
               d.commission_amount,
@@ -224,6 +232,7 @@ function ReportExportCenterPageInner() {
           // #781:#767 之後這一欄裝的是「按下完成的那一刻」,不是預約日期,標題要誠實。
           "完成日期",
           "客戶姓名",
+          MATERIAL_COST_DEDUCTED_LABEL,
           "抽成基準金額",
           "服務項目明細",
           "抽成金額",

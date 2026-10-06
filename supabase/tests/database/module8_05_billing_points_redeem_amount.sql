@@ -244,13 +244,15 @@ select is(
 );
 select is(
   (select count(*)::int from jsonb_object_keys(get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8))),
-  12,
-  '§3.15:按年月版回傳 12 個鍵(既有 10 個 + 新增 2 個),沒有多也沒有少'
+  -- #985 第 8 批 8-8:尾端再加 3 個資訊鍵(material_cost_affects_commission_now + 兩個計數),鍵數預期 12 → 15;既有鍵逐鍵相等另由 req985_02 驗。
+  15,
+  '§3.15:按年月版回傳 15 個鍵(既有 10 個 + #848 新增 2 個 + #985 新增 3 個),沒有多也沒有少'
 );
 select is(
   (select count(*)::int from jsonb_object_keys(get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', '2026-08-01', '2026-08-31'))),
-  12,
-  '§3.15:按區間版同樣回傳 12 個鍵'
+  -- #985 第 8 批 8-8:尾端再加 3 個資訊鍵(material_cost_affects_commission_now + 兩個計數),鍵數預期 12 → 15;既有鍵逐鍵相等另由 req985_02 驗。
+  15,
+  '§3.15:按區間版同樣回傳 15 個鍵'
 );
 
 -- ④ points_feature_enabled
