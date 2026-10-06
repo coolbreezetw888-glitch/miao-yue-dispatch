@@ -99,6 +99,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { GuardLoading } from "@/components/patterns";
 import InstallPwaHint from "@/components/InstallPwaHint";
+// SPECS-INDEX #982:手機下拉刷新。掛在共用外殼,商家端與服務人員端所有頁面一次就有。
+import { PullToRefresh } from "@/components/PullToRefresh";
 import UpdateAvailableHint from "@/components/UpdateAvailableHint";
 import { cn } from "@/lib/utils";
 // 所有 fixed/sticky 邊緣元件的疊放順序單一事實來源。頁首吸頂(TOP_LAYER_HEADER)與底部分頁籤
@@ -441,6 +443,11 @@ export default function AppLayout() {
       <main className="pb-24">
         <Outlet context={outletContext} />
       </main>
+
+      {/* SPECS-INDEX #982:手機(寬 < 1024px)頁面在最頂端時往下拉 ⇒ 重新抓目前畫面的資料(不整頁重載)。
+          只聽觸控、不攔截,彈窗 / 整頁選擇畫面開著、內層捲動區不在頂端、水平滑動、長按拖拉時都不觸發,
+          見 src/components/PullToRefresh.tsx 與 src/lib/pullToRefresh.ts。 */}
+      <PullToRefresh />
 
       {/* 模組 7(排班與休假管理)§6.5:安裝提示元件,掛在共用後台殼層(見第〇節判斷 8,
           PWA 這次疊加在既有 /app 殼層上,不是獨立服務人員端)。 */}

@@ -50,6 +50,8 @@ vi.mock("./api", () => ({
   // 紅利系統重構 批次 7:表單會呼叫紅利預覽。這支測試只管「隱藏備註」,讓紅利功能維持關閉
   // (區塊整個不渲染),紅利區塊自己的測試在 bookingFormPoints.test.tsx。
   previewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
+  // SPECS-INDEX #980:時間選單改問資料庫;這裡讓整天都能約(這支只測隱藏備註)。
+  fetchStaffBookableStartTimes: vi.fn(async () => ALL_DAY_START_TIMES),
   MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
 }));
 
@@ -125,6 +127,7 @@ vi.mock("@/modules/service-items/context", () => ({
 }));
 
 import { BookingFormDialog } from "./CalendarPage";
+import { ALL_DAY_START_TIMES } from "./bookingFormTestUtils";
 
 /** 一筆「合法到可以直接按儲存」的既有訂單,hide_notes_from_staff 由呼叫端決定。 */
 function editingDetail(hideNotesFromStaff: boolean) {

@@ -36,6 +36,8 @@ vi.mock("./api", () => ({
   updateBooking: updateBookingMock,
   // 紅利系統重構 批次 7:表單會呼叫紅利預覽;這支只測會員面板,讓紅利功能維持關閉(區塊不渲染)。
   previewBookingPoints: vi.fn(async () => ({ feature_enabled: false })),
+  // SPECS-INDEX #980:時間選單改問資料庫;這裡讓整天都能約(這支只測會員面板)。
+  fetchStaffBookableStartTimes: vi.fn(async () => ALL_DAY_START_TIMES),
   MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
 }));
 
@@ -110,6 +112,7 @@ vi.mock("@/modules/service-items/context", () => ({
 }));
 
 import { BookingFormDialog } from "./CalendarPage";
+import { ALL_DAY_START_TIMES, pickServiceItems, selectPaymentMethod } from "./bookingFormTestUtils";
 
 /** 假的會員資料:模擬 get_members_by_phone(前綴比對、至少 4 位數字、完全相等排第一)。 */
 const MEMBERS: MemberPhoneMatchCandidate[] = [
@@ -289,8 +292,9 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     fireEvent.click(screen.getByRole("button", { name: /李小華/ }));
     expect(screen.getByText("將連結既有客戶:")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /冷氣清洗/ }));
-    fireEvent.click(screen.getByRole("radio", { name: "現場付款" }));
+    // SPECS-INDEX #979:服務項目改從「選擇項目」整頁勾選、付款方式改下拉選單(只改操作步驟)。
+    pickServiceItems([/冷氣清洗/]);
+    await selectPaymentMethod("現場付款");
     screen.getByRole("button", { name: "建立預約" }).click();
 
     await waitFor(() => expect(createBookingMock).toHaveBeenCalledTimes(1));

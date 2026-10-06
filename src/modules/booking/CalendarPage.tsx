@@ -36,6 +36,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -115,12 +116,16 @@ import { computeBookingChangeSummary } from "@/modules/push-notifications/change
 
 import {
   createBooking,
+  fetchStaffBookableStartTimes,
   getBooking,
   updateBooking,
   MATERIAL_COST_ENABLED_FEATURE_KEY,
   type BookingServiceItemSelectionInput,
 } from "./api";
 import { BookingDetailDialog } from "./BookingDetailDialog";
+// SPECS-INDEX #979:「選擇項目」整頁(畫面)+ 草稿 / 寫回的純邏輯。
+import { ServiceItemPickerPage } from "./ServiceItemPickerPage";
+import type { AppliedPickerSelection } from "./serviceItemPickerLogic";
 // SPECS-INDEX #873:移除協助人員後「維持現狀 / 再加助手」的擋流程提示。
 import { AssistantRemovedPrompt } from "./assistantRemoval";
 import { assistantRemovedInfoAfterEdit, type AssistantRemovedInfo } from "./assistantRemovalLogic";
@@ -177,8 +182,18 @@ import {
   timeToMinutes,
   toDateKey,
 } from "./dateUtils";
-// 2026-09-24 稽核修正(問題 5):時段清單要排除整天請假/單日排休,計算邏輯抽成純函式方便測試。
-import { buildBookingSlotOptions } from "./bookingSlotOptions";
+// SPECS-INDEX #980:時段清單改由資料庫決定(取代 2026-09-24 的前端算法 bookingSlotOptions.ts,該檔已於第 2 批刪除),
+// 前端只負責「拿多長工時去問 / 顯示哪一種狀態 / 原本選的時間要不要清掉」。
+import {
+  isOriginalBookingSelection,
+  NO_BOOKABLE_TIME_MESSAGE,
+  resolveBookingTimePanelState,
+  resolveScrollAnchorTime,
+  resolveSlotQueryDuration,
+  shouldClearSelectedTime,
+  shouldShowTimeClearedNotice,
+  TIME_NO_LONGER_AVAILABLE_MESSAGE,
+} from "./bookingTimeOptions";
 // SPECS-INDEX #811~#817:行事曆拖拉改時間/轉派的接線層(色塊手勢、殘影、toast/復原、過去時間確認框),
 // 模式判定與落點計算的純邏輯在 bookingDragMove.ts,這個檔案只傳資料、不重複實作任何規則。
 import {
@@ -211,13 +226,11 @@ import {
   calendarStateBlockStyle,
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
-  filterServiceItemsByCategory,
   getTaxModeHelperText,
   type AmountAdjustmentMode,
   type BookingStatus,
   type CalendarStateStyleMap,
   type DayScheduleOwnBooking,
-  type ServiceItemCategoryFilter,
 } from "./types";
 
 // SPECS-INDEX #811(行事曆拖拉):這兩個格線常數改成 export,拖拉的落點計算(bookingDragMove.ts
@@ -265,6 +278,9 @@ function BookingDateTimeField({
   dateKey,
   time,
   closedWeekdays,
+  excludeBookingId,
+  keepOriginalTime,
+  timeChosenByUser,
   onChange,
 }: {
   id?: string | undefined;
@@ -274,94 +290,203 @@ function BookingDateTimeField({
   dateKey: string;
   time: string;
   closedWeekdays: Set<number>;
-  onChange: (dateKey: string, time: string) => void;
+  /** SPECS-INDEX #980 第 6 點:編輯既有訂單時傳那筆的 id,自己原本佔用的時間不算衝突。 */
+  excludeBookingId: string | null;
+  /** 編輯模式、服務人員 / 日期 / 時間 / 工時都還是原本的值 ⇒ 不自動清空(見 shouldClearSelectedTime)。 */
+  keepOriginalTime: boolean;
+  /** 主腦裁決(第 2 批第 3 項):目前的時間是不是使用者自己選的。系統自動帶的預設值(新增預約的 10:00)
+   * 變得不能約時安靜清空、不跳提示;使用者自己選的才顯示「這個時間已無法預約，請重新選擇」。 */
+  timeChosenByUser: boolean;
+  /** source = "user":使用者在時段清單點了一個時間;"auto":換日期(時間沿用)或自動清空。 */
+  onChange: (dateKey: string, time: string, source: "user" | "auto") => void;
 }) {
   const [open, setOpen] = useState(false);
+  // #980 第 4 點:原本選的時間變得不能選、被自動清空時,常駐提示(skill 二:狀態跟使用者以為的不一樣 ⇒ `!`)。
+  const [timeClearedNotice, setTimeClearedNotice] = useState(false);
   const { data: schedule } = useMerchantDaySchedule(merchantId, dateKey || null);
 
   const staffBlock = (schedule?.staff ?? []).find((s) => s.staff_id === staffId);
 
-  // 2026-09-24 稽核修正(問題 5):這位服務人員這一天是不是整天請假。有值時下面的時段清單
-  // 一定是空的,改成顯示「這天休假」的說明,不要讓客服把整張表單填完送出才被後端擋下。
+  // 2026-09-24 稽核修正(問題 5):這位服務人員這一天是不是整天請假。有值時說明假別,
+  // 不要讓客服把整張表單填完送出才被後端擋下。(清單本身也會是空的,後端同樣擋請假。)
   const onLeave = staffBlock?.on_leave ?? null;
 
-  // 第 3 點:只列出總工時能完整放進某個可預約區間的起始時間點,以現有的 SLOT_MINUTES 切格。
-  // 2026-09-24 稽核修正(問題 5):同時排除整天請假(on_leave)跟單日排休
-  // (availability_overrides 且 is_available=false)——這兩份資料本來就在同一包
-  // get_merchant_day_schedule 回傳值裡,以前只讀了 available_windows 沒讀它們,
-  // 導致行事曆主畫面已經整欄灰掉的服務人員,在建單表單裡照樣列得出所有時段。
-  // 實際計算搬到 bookingSlotOptions.ts(純函式,有單元測試),這裡只負責把資料餵進去。
-  const slotOptions = useMemo(() => {
-    if (!staffBlock) return [];
-    return buildBookingSlotOptions({
-      availableWindows: staffBlock.available_windows,
-      availabilityOverrides: staffBlock.availability_overrides,
-      onLeave: Boolean(staffBlock.on_leave),
-      totalDurationMinutes,
-      slotMinutes: SLOT_MINUTES,
+  // SPECS-INDEX #980:「哪些起點能約」改由資料庫 list_staff_bookable_start_times 決定(逐格呼叫送出時
+  // 真正擋時段的 check_staff_booking_slot),不再由前端用 available_windows 自己算 —— 舊算法沒有看
+  // 既有訂單 / 無時段限制 / 單日例外開啟,跟送出時的檢查對不起來。純邏輯在 bookingTimeOptions.ts。
+  const queryDuration = resolveSlotQueryDuration(totalDurationMinutes);
+  const slotQuery = useQuery({
+    queryKey: [
+      "booking-module",
+      "bookable-start-times",
+      merchantId,
+      staffId,
+      dateKey,
+      queryDuration,
+      excludeBookingId,
+    ],
+    queryFn: () =>
+      fetchStaffBookableStartTimes({
+        merchantId,
+        staffId,
+        date: dateKey,
+        durationMinutes: queryDuration as number,
+        excludeBookingId,
+      }),
+    enabled: Boolean(merchantId) && Boolean(staffId) && Boolean(dateKey) && queryDuration !== null,
+  });
+
+  const panelState = resolveBookingTimePanelState({
+    staffId,
+    dateKey,
+    leaveTypeName: onLeave ? onLeave.leave_type_name : null,
+    queryDuration,
+    isLoading: slotQuery.isPending || slotQuery.isFetching,
+    isError: slotQuery.isError,
+    options: slotQuery.data,
+  });
+
+  // #980 第 4 點:改了日期 / 服務人員 / 項目後,原本選的時間如果已經不能選 ⇒ 清空 + 常駐提示。
+  const shouldClear = shouldClearSelectedTime({
+    time,
+    state: panelState,
+    keepOriginal: keepOriginalTime,
+  });
+  useEffect(() => {
+    if (!shouldClear) return;
+    onChange(dateKey, "", "auto");
+    setTimeClearedNotice(shouldShowTimeClearedNotice(timeChosenByUser));
+    // onChange 是呼叫端每次 render 新建的函式,不放進依賴(只在「該清」這個判斷變成 true 時跑一次)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldClear, dateKey]);
+
+  // #980 追加:間隔 5 分鐘時清單很長(一天 288 個)⇒ 打開時捲到目前選的時間附近(沒選就捲到 09:00 附近)。
+  const listRef = useRef<HTMLDivElement>(null);
+  const listOptions = panelState.kind === "list" ? panelState.options : null;
+  const scrollAnchor = listOptions ? resolveScrollAnchorTime(listOptions, time) : null;
+  useEffect(() => {
+    if (!open || !scrollAnchor) return;
+    const raf = requestAnimationFrame(() => {
+      const container = listRef.current;
+      const button = container?.querySelector<HTMLElement>(`[data-time="${scrollAnchor}"]`);
+      if (!container || !button) return;
+      container.scrollTop = Math.max(
+        0,
+        button.offsetTop - (container.clientHeight - button.offsetHeight) / 2,
+      );
     });
-  }, [staffBlock, totalDurationMinutes]);
+    return () => cancelAnimationFrame(raf);
+    // 只在打開 / 清單內容變了的時候捲,使用者自己捲動時不要搶回來。
+  }, [open, listOptions?.length, scrollAnchor]);
 
   const label = dateKey && time ? formatDisplayDateTime(dateKey, time) : "請選擇日期時間";
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          type="button"
-          variant="neutral"
-          size="touch"
-          className="w-full justify-start font-normal tabular-nums"
+    <div className="flex flex-col gap-2">
+      {/* 🔴 #980 QA(2026-10-06):modal ⇒ Popover 自己掛一層捲動鎖。
+          原因:Popover 內容用 Portal 掛到 body,在建單全頁層(Radix Dialog)外面;Dialog 的捲動鎖
+          (react-remove-scroll)只放行 Dialog 自己裡面的捲動 ⇒ 時間清單的滾輪 / 觸控捲動全部被吃掉
+          (wheel defaultPrevented)。react-remove-scroll 只有「最上層」那一把鎖生效,Popover 開成 modal
+          之後最上層是 Popover 自己的鎖 ⇒ Popover 裡面可以捲、外面照樣鎖住。
+          見 ui-overlay-patterns「三之五、全頁層裡的 Popover」。 */}
+      <Popover open={open} onOpenChange={setOpen} modal>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="neutral"
+            size="touch"
+            className="w-full justify-start font-normal tabular-nums"
+          >
+            {label}
+          </Button>
+        </PopoverTrigger>
+        {/* #980 QA:視窗高度不夠時不可超出畫面 ⇒ 整個 Popover 最高 = Radix 算好的可用高度
+            (--radix-popover-content-available-height,已扣掉 collisionPadding),放不下時 Radix 會自動翻到上方。
+            🔴 #980 QA 第二次:矮視窗(375×560、1280×560)可用高度只有約 230~260px,月曆 + 清單放不下 ⇒
+            白框本身 overflow-y-auto,**整個彈出框內容一起捲**,所有內容一定包在白框裡,不會溢出疊到表單上。
+            清單自己最高 192px、在裡面捲;捲到底之後會接著捲外面的白框(不加 overscroll-contain,讓捲動可以接力)。
+            白框本身 overscroll-contain:捲到底不會再帶動後面的頁面。 */}
+        <PopoverContent
+          className="w-auto p-0"
+          align="start"
+          collisionPadding={8}
+          data-testid="booking-datetime-popover"
         >
-          {label}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={dateKey ? new Date(`${dateKey}T00:00:00`) : undefined}
-          defaultMonth={dateKey ? new Date(`${dateKey}T00:00:00`) : getTaipeiNow()}
-          onSelect={(d) => {
-            if (!d) return;
-            onChange(toDateKey(d), time);
-          }}
-          disabled={(d) => closedWeekdays.has(d.getDay())}
-        />
-        <div className="border-t border-border p-3">
-          {!staffId ? (
-            <p className="text-center text-sm text-muted-foreground">請先選擇服務人員</p>
-          ) : !dateKey ? (
-            <p className="text-center text-sm text-muted-foreground">請先選擇日期</p>
-          ) : onLeave ? (
-            /* 2026-09-24 稽核修正(問題 5):整天請假時明確說明原因(含假別名稱快照),
-               不要只顯示「這天沒有可預約的時段」讓客服猜是哪裡設錯。
-               這是體驗層引導,真正擋下建單的仍然是後端 create_booking 的驗證。 */
-            <AlertNote>這位服務人員這天休假({onLeave.leave_type_name}),無法建立預約。</AlertNote>
-          ) : slotOptions.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground">這天沒有可預約的時段</p>
-          ) : (
-            <div className="grid max-h-48 grid-cols-3 gap-1.5 overflow-y-auto">
-              {slotOptions.map((t) => (
-                <Button
-                  key={t}
-                  type="button"
-                  size="card"
-                  variant={time === t ? "primary" : "neutral"}
-                  className="tabular-nums"
-                  onClick={() => {
-                    onChange(dateKey, t);
-                    setOpen(false);
-                  }}
+          {/* 🔴 捲動要放在「裡面這一層」,不能直接放在 PopoverContent 上:modal Popover 的捲動鎖以
+              PopoverContent 本身為根,只放行它「裡面」的捲動 —— 根節點自己捲會被當成外面而擋掉
+              (實測:滾輪 / 觸控在白框上完全捲不動)。CSS 變數由 PopoverContent 定義,這一層繼承得到。 */}
+          <div
+            data-testid="booking-datetime-popover-scroll"
+            className="max-h-[var(--radix-popover-content-available-height)] overflow-y-auto overscroll-contain"
+          >
+            <Calendar
+              mode="single"
+              selected={dateKey ? new Date(`${dateKey}T00:00:00`) : undefined}
+              defaultMonth={dateKey ? new Date(`${dateKey}T00:00:00`) : getTaipeiNow()}
+              onSelect={(d) => {
+                if (!d) return;
+                onChange(toDateKey(d), time, "auto");
+              }}
+              disabled={(d) => closedWeekdays.has(d.getDay())}
+            />
+            <div className="border-t border-border p-3" data-testid="booking-time-options">
+              {panelState.kind === "need-staff" ? (
+                <p className="text-center text-sm text-muted-foreground">請先選擇服務人員</p>
+              ) : panelState.kind === "need-date" ? (
+                <p className="text-center text-sm text-muted-foreground">請先選擇日期</p>
+              ) : panelState.kind === "on-leave" ? (
+                /* 2026-09-24 稽核修正(問題 5):整天請假時明確說明原因(含假別名稱快照)。 */
+                <AlertNote>
+                  這位服務人員這天休假({panelState.leaveTypeName}),無法建立預約。
+                </AlertNote>
+              ) : panelState.kind === "loading" ? (
+                <div className="grid grid-cols-3 gap-1.5" aria-label="正在查詢可預約的時間">
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <div key={n} className="h-9 animate-pulse rounded-md bg-muted" />
+                  ))}
+                </div>
+              ) : panelState.kind === "error" ? (
+                <AlertNote>
+                  查不到這天可以預約的時間，可能是網路不穩。請關掉再打開一次，你填的資料沒有遺失。
+                </AlertNote>
+              ) : panelState.kind === "empty" ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  {NO_BOOKABLE_TIME_MESSAGE}
+                </p>
+              ) : (
+                <div
+                  ref={listRef}
+                  data-testid="booking-time-options-list"
+                  className="relative grid max-h-48 grid-cols-3 gap-1.5 overflow-y-auto"
                 >
-                  {t}
-                </Button>
-              ))}
+                  {panelState.options.map((t) => (
+                    <Button
+                      key={t}
+                      data-time={t}
+                      type="button"
+                      size="card"
+                      variant={time === t ? "primary" : "neutral"}
+                      className="tabular-nums"
+                      onClick={() => {
+                        onChange(dateKey, t, "user");
+                        setTimeClearedNotice(false);
+                        setOpen(false);
+                      }}
+                    >
+                      {t}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+          </div>
+        </PopoverContent>
+      </Popover>
+      {timeClearedNotice && !time ? (
+        <AlertNote>{TIME_NO_LONGER_AVAILABLE_MESSAGE}</AlertNote>
+      ) : null}
+    </div>
   );
 }
 
@@ -449,13 +574,13 @@ export function BookingFormDialog({
 
   const [staffId, setStaffId] = useState("");
   const [serviceItemIds, setServiceItemIds] = useState<string[]>([]);
-  // SPECS-INDEX #598:分類篩選只影響「顯示哪些選項讓你勾」,不影響「已經勾了哪些」(serviceItemIds
-  // 是獨立狀態,不受篩選影響,切換篩選不會弄丟已經勾選的項目)。
-  const [categoryFilter, setCategoryFilter] = useState<ServiceItemCategoryFilter>("all");
+  // SPECS-INDEX #979:「選擇項目」整頁開著沒有。取代 #598 的分類篩選下拉(分類改成整頁裡的頁籤)。
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [assistantStaffIds, setAssistantStaffIds] = useState<string[]>([]);
   const [materialCostItemIds, setMaterialCostItemIds] = useState<string[]>([]);
   const [dateKey, setDateKey] = useState("");
   const [time, setTime] = useState("");
+  const [timeChosenByUser, setTimeChosenByUser] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -552,7 +677,7 @@ export function BookingFormDialog({
   // 編輯模式等 editingDetail 載入後帶入既有的金額快照值,不重新查詢商家目前設定。
   useEffect(() => {
     if (!open) return;
-    setCategoryFilter("all"); // #598:每次開啟表單,分類篩選重設為「全部」。
+    setPickerOpen(false); // #979:每次開啟表單,「選擇項目」整頁一律從關閉開始。
     // 紅利系統重構 批次 7:每次開啟都重來(預覽 session、會員變更判斷、確認窗)。
     setPointsPreviewSession((n) => n + 1);
     previewMemberKeyRef.current = null;
@@ -590,6 +715,8 @@ export function BookingFormDialog({
       setMaterialCostItemIds(editingDetail.materialCosts.map((c) => c.materialCostItemId));
       setDateKey(isoToTaipeiDateKey(editingDetail.start_at));
       setTime(isoToTaipeiTime(editingDetail.start_at));
+      // 編輯:時間是這筆訂單當初選的 ⇒ 算「使用者選的」(變得不能約時要提示)。
+      setTimeChosenByUser(true);
       setCustomerName(editingDetail.customer_name);
       setCustomerPhone(editingDetail.customer_phone);
       setCustomerEmail(editingDetail.customer_email ?? "");
@@ -651,6 +778,9 @@ export function BookingFormDialog({
       setMaterialCostItemIds([]);
       setDateKey(prefill.dateKey ?? toDateKey(getTaipeiNow()));
       setTime(prefill.time ?? "10:00");
+      // 主腦裁決(第 2 批第 3 項):從行事曆點某一格進來(prefill.time 有值)= 使用者選的;
+      // 按「新增預約」按鈕帶的 10:00 = 系統預設值,不能約時安靜清空、不跳提示。
+      setTimeChosenByUser(Boolean(prefill.time));
       setCustomerName("");
       setCustomerPhone("");
       setCustomerEmail("");
@@ -732,6 +862,21 @@ export function BookingFormDialog({
   const totalDurationMinutes = customDurationEnabled
     ? Number(customDurationMinutes) || 0
     : itemsTotalDurationMinutes;
+
+  // SPECS-INDEX #980:編輯既有訂單時,這筆訂單「原本」的服務人員 / 日期 / 時間 / 工時。
+  // 目前的選擇如果都還是原本的值,時間選單不自動清空(見 bookingTimeOptions.ts shouldClearSelectedTime)。
+  const originalBookingSelection = useMemo(() => {
+    if (!isEdit || !editingDetail) return null;
+    return {
+      staffId: editingDetail.staff_id,
+      dateKey: isoToTaipeiDateKey(editingDetail.start_at),
+      time: isoToTaipeiTime(editingDetail.start_at),
+      durationMinutes: Math.round(
+        (new Date(editingDetail.end_at).getTime() - new Date(editingDetail.start_at).getTime()) /
+          60000,
+      ),
+    };
+  }, [isEdit, editingDetail]);
 
   // §2.3 步驟 1 的「逐項小計」= Σ(unit_price × quantity)。
   const itemsSubtotal = useMemo(() => {
@@ -966,36 +1111,31 @@ export function BookingFormDialog({
     return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
   }
 
-  /** 服務項目勾選/取消勾選:勾選時初始化數量=1、單價=service_items.price 當下的即時值
-   * (§4.2:這是「建立當下」唯一允許讀取即時資料當作預設值的地方,客服可以手動修改);
-   * 取消勾選時把對應的數量/單價從狀態裡移除,避免殘留舊值造成混淆。 */
-  function toggleServiceItem(itemId: string, defaultPrice: number) {
-    setServiceItemIds((prev) => toggleInArray(prev, itemId));
-    setItemQuantities((prev) => {
-      if (itemId in prev) {
+  /** SPECS-INDEX #979:「選擇項目」整頁的「原價」—— 編輯時本來就在單上的項目用那張單的單價快照
+   * (#829:歷史訂單留當時的快照),其餘用 service_items.price 現價(§4.2:建立當下唯一允許讀即時
+   * 資料當預設值的地方)。跟 adjustedUnitPriceItemNames 的「基準值」是同一個定義。 */
+  function pickerBaselinePrice(itemId: string): number | null {
+    const snapshot = isEdit ? loadedUnitPriceSnapshots[itemId] : undefined;
+    if (snapshot) return snapshot.price;
+    const item = (serviceItems ?? []).find((s) => s.id === itemId);
+    return item ? Number(item.price) : null;
+  }
+
+  /** SPECS-INDEX #979:整頁按「確認」⇒ 一次寫回三份狀態。被取消勾選的項目同時把 #829 的快照基準
+   * 拿掉 —— 跟改版前「移除」按鈕(toggleServiceItem)的行為一致:之後若再重新勾選,單價會被填回
+   * 現價,應該跟「新勾選」一樣拿現價當基準,不能還拿舊快照來比。 */
+  function handlePickerConfirm(applied: AppliedPickerSelection) {
+    setServiceItemIds(applied.serviceItemIds);
+    setItemQuantities(applied.itemQuantities);
+    setItemUnitPrices(applied.itemUnitPrices);
+    if (applied.removedIds.length > 0) {
+      setLoadedUnitPriceSnapshots((prev) => {
         const next = { ...prev };
-        delete next[itemId];
+        for (const id of applied.removedIds) delete next[id];
         return next;
-      }
-      return { ...prev, [itemId]: "1" };
-    });
-    setItemUnitPrices((prev) => {
-      if (itemId in prev) {
-        const next = { ...prev };
-        delete next[itemId];
-        return next;
-      }
-      return { ...prev, [itemId]: String(defaultPrice) };
-    });
-    // #829 使用者裁決修正:編輯模式下取消勾選一個項目,同時把它的快照基準拿掉——之後若再重新勾選,
-    // 單價會被填回 service_items.price 現價,此時應該跟「新勾選」一樣拿現價當基準,不能還拿舊快照
-    // 來比(否則重新勾選後畫面顯示的就是預設值,卻被判成「已調整」,提示叫人「改回預設值」會無所適從)。
-    setLoadedUnitPriceSnapshots((prev) => {
-      if (!(itemId in prev)) return prev;
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
+      });
+    }
+    setPickerOpen(false);
   }
 
   // SPECS-INDEX #936(§12.2):點選面板裡的候選會員 ⇒ 電話 / 姓名 /(需要地址的產業才帶)地址
@@ -1311,17 +1451,17 @@ export function BookingFormDialog({
     if (!open) setReopenFocusAssistants(false);
   }, [open]);
 
-  // skill 二之九:選中的服務項目展開成卡片(永遠顯示,不受分類篩選影響),沒選的縮成小方塊排在下面
-  // (受分類篩選影響)。已勾選但目前不在上架清單裡的項目(編輯舊訂單時遇到已下架項目)維持改版前的
-  // 行為:表單上看不到、但送出時仍原封不動帶回去。
-  const selectedServiceItems = serviceItemIds.flatMap((id) => {
+  // SPECS-INDEX #979:表單上「選擇項目」列下方的已選清單摘要(名稱 × 數量、小計)。
+  // 單價一律讀 resolveUnitPrice(跟 itemsSubtotal / 送出 payload 同一份解析結果)。
+  // 已勾選但目前不在上架清單裡的項目(編輯舊訂單時遇到已下架項目)送出時仍原封不動帶回去;
+  // 摘要用那張單的快照名稱顯示,讓小計跟摘要加得起來。
+  const selectedSummaryRows = serviceItemIds.flatMap((id) => {
     const item = (serviceItems ?? []).find((s) => s.id === id);
-    return item ? [item] : [];
+    const name = item?.name ?? loadedUnitPriceSnapshots[id]?.name;
+    if (!name) return [];
+    const quantity = parseItemQuantity(itemQuantities[id]);
+    return [{ id, name, quantity, subtotal: quantity * resolveUnitPrice(amountFields, id) }];
   });
-  const filteredServiceItems = filterServiceItemsByCategory(serviceItems ?? [], categoryFilter);
-  const unselectedServiceItems = filteredServiceItems.filter(
-    (item) => !serviceItemIds.includes(item.id),
-  );
 
   // ui-v1-full:外殼從 Sheet(底部 92vh)換成全頁層(skill 三):手機滿版、電腦置中面板,標題列與
   // 底部按鈕列固定、只有中間會捲動;「取消 / 建立預約(儲存變更)」兩顆等寬(skill 二之三)。
@@ -1342,6 +1482,13 @@ export function BookingFormDialog({
   const formLayer = (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
+        // SPECS-INDEX #979:「選擇項目」整頁開著時,Esc = 整頁的「返回」(放棄這次修改),
+        // 不可以把整張建單表單一起關掉(客服填了一半的資料會全部不見)。
+        onEscapeKeyDown={(e) => {
+          if (!pickerOpen) return;
+          e.preventDefault();
+          setPickerOpen(false);
+        }}
         title={isEdit ? "編輯預約" : "新增預約"}
         subtitle={!isEdit ? "建立後狀態是「待確認」,需要再次確認才會正式成立。" : undefined}
         footer={
@@ -1495,9 +1642,23 @@ export function BookingFormDialog({
                 dateKey={dateKey}
                 time={time}
                 closedWeekdays={closedWeekdays}
-                onChange={(d, t) => {
+                excludeBookingId={isEdit ? editingBookingId : null}
+                keepOriginalTime={
+                  // 服務項目清單還沒載入時工時還算不準,先不要自動清空原本的時間。
+                  (isEdit && serviceItems === undefined) ||
+                  isOriginalBookingSelection({
+                    original: originalBookingSelection,
+                    staffId,
+                    dateKey,
+                    time,
+                    durationMinutes: totalDurationMinutes,
+                  })
+                }
+                timeChosenByUser={timeChosenByUser}
+                onChange={(d, t, source) => {
                   setDateKey(d);
                   setTime(t);
+                  if (source === "user") setTimeChosenByUser(true);
                 }}
               />
             </FormField>
@@ -1530,146 +1691,56 @@ export function BookingFormDialog({
           </DetailSection>
 
           {/* ───────── 服務項目 ───────── */}
-          {/* 建單功能擴充 2.1/5.1 第 1 點,模組 6 §4.1/4.2:服務項目改多選,每項可調整數量
-              (預設 1,最小 1,整數)跟單價(預設帶入 service_items.price,可手動修改),
-              即時顯示工時加總(§2.2:duration_minutes × quantity)。 */}
+          {/* SPECS-INDEX #979(2026-10-06,參考圖 62):原本分類下拉 + 一顆顆方塊 + 已選卡片(數量 / 單價),
+              改成一個「選擇項目 >」列,點了打開蓋滿表單的「選擇項目」整頁(ServiceItemPickerPage)。
+              數量、單價覆寫(= 整頁裡的「自訂金額」)、工時加總、金額、#829、紅利預覽的計算全部照舊 ——
+              整頁按「確認」才把結果寫回下面這三份狀態(serviceItemIds / itemQuantities / itemUnitPrices),
+              其餘程式碼讀的還是同樣的狀態。 */}
           <DetailSection label="服務項目" className="gap-4">
             <FormField
-              label="服務項目(可多選)"
+              label="選擇項目"
               required
+              htmlFor="booking-service-items"
               helpLabel="說明:服務項目怎麼選"
-              help="點下方的方塊加入項目,加入後會展開成一張卡,可以調整數量與單價;按卡片上的「移除」取消。"
+              help="點「選擇項目」進到選擇頁，可以切換分類、勾選多個項目、調整數量；勾選後打開「自訂金額」就能改這一項的單價。按「確認」才會套用，按左上角返回則不會改動。"
             >
-              <div className="flex flex-col gap-3">
-                {/* 已選的項目:一張卡(定價 + 數量 + 單價)。 */}
-                {selectedServiceItems.length > 0 ? (
-                  <ul className="flex flex-col gap-2.5">
-                    {selectedServiceItems.map((item) => (
-                      <li
-                        key={item.id}
-                        className="flex flex-col gap-3 rounded-lg border border-brand/40 bg-brand-soft/30 p-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="break-words text-sm font-semibold text-foreground">
-                              {item.name}
-                            </p>
-                            <p className="text-xs tabular-nums text-muted-foreground">
-                              定價 {formatAmount(Number(item.price))}・{item.duration_minutes} 分鐘
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="text"
-                            size="card"
-                            className="-mr-2 -mt-1 shrink-0"
-                            onClick={() => toggleServiceItem(item.id, Number(item.price))}
-                          >
-                            移除
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <FormField label="數量" htmlFor={`booking-item-qty-${item.id}`}>
-                            <FieldInput
-                              id={`booking-item-qty-${item.id}`}
-                              type="number"
-                              inputMode="numeric"
-                              min={1}
-                              step={1}
-                              className="tabular-nums"
-                              value={itemQuantities[item.id] ?? "1"}
-                              onChange={(e) =>
-                                setItemQuantities((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
-                              }
-                              // 2026-09-24 稽核修正(問題 1)配套:離開欄位時如果還是空的,
-                              // 自動填回 "1",讓畫面不會停在「空白格子」這種容易誤會的狀態
-                              // (送出時的 parseItemQuantity 本來就會當成 1,這裡只是讓畫面
-                              // 跟實際送出的值一眼看起來就一致)。輸入過程中不干擾,只在離開時補。
-                              onBlur={(e) => {
-                                if (e.target.value.trim() !== "") return;
-                                setItemQuantities((prev) => ({ ...prev, [item.id]: "1" }));
-                              }}
-                            />
-                          </FormField>
-                          {/* 🔴 2026-09-30:單價是 FieldAmountInput(type="text"),沒有原生
-                              min / step,所以錯誤一律靠 parseAmountInput + FormField error=
-                              (skill 二之七:框變紅 + 下面一行 `!` 說明,不可以只把框變紅)。
-                              錯誤訊息是從目前輸入內容即時算出來的,改成正確的數字就會自己消失。 */}
-                          <FormField
-                            label="單價"
-                            htmlFor={`booking-item-price-${item.id}`}
-                            error={amountFields.unitPriceErrors[item.id] ?? null}
-                          >
-                            <FieldAmountInput
-                              id={`booking-item-price-${item.id}`}
-                              value={itemUnitPrices[item.id] ?? String(item.price)}
-                              onChange={(e) =>
-                                setItemUnitPrices((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
-                              }
-                            />
-                          </FormField>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-
-                {/* SPECS-INDEX #598(訂單管理.md §9.2):分類篩選下拉選單,「全部」為預設值(等同既有
-                    行為)。只影響下面沒選的方塊顯示哪些,不影響已經選的項目(切換篩選不會弄丟
-                    已選的項目,見 handleSubmit 附近的 serviceItemIds 獨立狀態)。商家沒有使用分類
-                    功能時,不顯示這個下拉,不影響既有操作流程。 */}
-                {(serviceCategories ?? []).length > 0 ? (
-                  /* 2026-09-24 稽核修正(問題 3):合法值是 "all"/"uncategorized" 兩個 sentinel
-                     加上資料庫來的動態分類 id,沒有固定白名單可以比對,判斷條件是「不是空字串」。
-                     (categoryFilter 會在每次開啟表單的 useEffect 裡被重設,一樣有時序風險。) */
-                  <FieldSelect
-                    aria-label="服務項目分類篩選"
-                    value={categoryFilter}
-                    onValueChange={guardPhantomEmptyChange<ServiceItemCategoryFilter>(
-                      setCategoryFilter,
+              <div className="flex flex-col gap-2.5">
+                <button
+                  id="booking-service-items"
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-[16px] text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-[15px]"
+                >
+                  <span
+                    className={cn(
+                      "min-w-0 truncate",
+                      selectedSummaryRows.length === 0 && "text-muted-foreground",
                     )}
-                    options={[
-                      { value: "all", label: "全部分類" },
-                      { value: "uncategorized", label: UNCATEGORIZED_LABEL },
-                      ...(serviceCategories ?? []).map((category) => ({
-                        value: category.id,
-                        label: category.name,
-                      })),
-                    ]}
-                  />
-                ) : null}
+                  >
+                    {selectedSummaryRows.length === 0
+                      ? "選擇項目"
+                      : `已選 ${serviceItemIds.length} 項`}
+                  </span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+                </button>
 
-                {/* 沒選的項目:縮成可點的小方塊(skill 二之九),商家有 30 個項目時畫面也不會爆掉。 */}
-                {(serviceItems ?? []).length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">目前沒有上架中的服務項目。</p>
-                ) : filteredServiceItems.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">這個分類目前沒有服務項目。</p>
-                ) : unselectedServiceItems.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">這個分類的項目都已加入。</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {unselectedServiceItems.map((item) => (
-                      <ChoiceChip
-                        key={item.id}
-                        selected={false}
-                        onClick={() => toggleServiceItem(item.id, Number(item.price))}
-                      >
-                        <span className="break-words text-left">
-                          {item.name}
-                          <span className="ml-1 tabular-nums text-muted-foreground">
-                            {formatAmount(Number(item.price))}
-                          </span>
-                        </span>
-                      </ChoiceChip>
+                {/* 已選清單摘要:項目名稱 × 數量、小計(規格 1.1 第 2 點)。skill 二之六 明細列。 */}
+                {selectedSummaryRows.length > 0 ? (
+                  <div
+                    data-testid="booking-selected-items-summary"
+                    className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 px-3.5 py-3"
+                  >
+                    {selectedSummaryRows.map((row) => (
+                      <DetailRow key={row.id} label={`${row.name} × ${row.quantity}`} size="sm">
+                        {formatAmount(row.subtotal)}
+                      </DetailRow>
                     ))}
+                    <DetailDivider className="my-1" />
+                    <DetailRow label="小計" size="sm">
+                      {formatAmount(itemsSubtotal)}
+                    </DetailRow>
                   </div>
-                )}
+                ) : null}
 
                 <p className="text-xs tabular-nums text-muted-foreground">
                   已選 {serviceItemIds.length} 項,逐項加總工時 {itemsTotalDurationMinutes} 分鐘
@@ -1839,12 +1910,19 @@ export function BookingFormDialog({
                 之後客服在新建流程一定會選到一個實際的付款方式);編輯模式維持顯示這個選項——
                 對應後端「維持原值放行,只有主動改成空值才擋」的規則,選了它會在送出時被擋下
                 (見 handleSubmit 的驗證),不是完全禁止選取。
-                skill 二之七:付款方式是單選 ⇒ ChoiceChipGroup;不是 Radix Select,沒有幽靈空值事件。 */}
-            <FormField label="付款方式" required>
-              <ChoiceChipGroup
-                aria-label="付款方式"
-                value={paymentMethodValue}
-                onValueChange={setPaymentMethodValue}
+                SPECS-INDEX #979 §1.3(2026-10-06):付款方式從一排方塊(ChoiceChipGroup)改成下拉選單
+                (FieldSelect),選項、預設值(新增 = 未選、編輯 = 原值)、必填規則全部照舊。
+                新增模式沒有「未選擇」這個選項 ⇒ 值是 sentinel 時傳空字串給 Radix,讓它顯示 placeholder。
+                🔴 Radix Select 有幽靈空值事件 ⇒ 一律包 guardPhantomEmptyChange(合法值是動態 uuid 加
+                PAYMENT_METHOD_UNSET,判斷條件是「不是空字串」)。 */}
+            <FormField label="付款方式" htmlFor="booking-payment-method" required>
+              <FieldSelect
+                id="booking-payment-method"
+                value={
+                  !isEdit && paymentMethodValue === PAYMENT_METHOD_UNSET ? "" : paymentMethodValue
+                }
+                onValueChange={guardPhantomEmptyChange(setPaymentMethodValue)}
+                placeholder="請選擇付款方式"
                 options={[
                   ...(isEdit ? [{ value: PAYMENT_METHOD_UNSET, label: "(未選擇/尚未設定)" }] : []),
                   ...paymentMethodOptions.map((option) => ({
@@ -2041,6 +2119,28 @@ export function BookingFormDialog({
         放在全頁層的內容裡,Radix 會把它另外 portal 到 body(FullPageLayer.tsx 檔頭寫的用法),後開的蓋在上面,
         背景遮罩疊兩層會更暗 —— 這是預期的長相(skill 三「兩層重疊」)。
         AlertDialog:點遮罩不會關(按 Esc 會關),確認類。 */}
+        {/* SPECS-INDEX #979:「選擇項目」整頁。absolute inset-0 蓋住整個全頁層面板(含標題列與底部按鈕列),
+            見 ServiceItemPickerPage.tsx 檔頭與 ui-overlay-patterns skill「整頁選擇畫面」。
+            每次打開都重新掛載 ⇒ 草稿一律從表單目前的狀態開始。 */}
+        {pickerOpen ? (
+          <ServiceItemPickerPage
+            items={(serviceItems ?? []).map((item) => ({
+              id: item.id,
+              name: item.name,
+              price: Number(item.price),
+              duration_minutes: item.duration_minutes,
+              category_id: item.category_id,
+            }))}
+            categories={(serviceCategories ?? []).map((c) => ({ id: c.id, name: c.name }))}
+            uncategorizedLabel={UNCATEGORIZED_LABEL}
+            serviceItemIds={serviceItemIds}
+            itemQuantities={itemQuantities}
+            itemUnitPrices={itemUnitPrices}
+            baselinePrice={pickerBaselinePrice}
+            onConfirm={handlePickerConfirm}
+            onBack={() => setPickerOpen(false)}
+          />
+        ) : null}
         <CardAlertDialog open={pointsReviewConfirmOpen} onOpenChange={setPointsReviewConfirmOpen}>
           <CardAlertDialogContent>
             <CardAlertDialogHeader>

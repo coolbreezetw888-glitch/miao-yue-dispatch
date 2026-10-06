@@ -241,9 +241,13 @@ test("建單表單:客戶電話亂打會被擋下、不會送出;改成市話+�
   // 否則 handleSubmit 會先被更前面的檢查擋住,根本走不到電話那一條。
   await dialog.getByText("服務人員 *", { exact: true }).locator("..").getByRole("combobox").click();
   await page.getByRole("option", { name: `${STAFF_NAME_PREFIX}${fixture.runId}` }).click();
-  const serviceItemLabel = dialog.getByText("E2E測試服務項目(會員模組)");
-  await expect(serviceItemLabel).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await serviceItemLabel.click();
+  // SPECS-INDEX #979(2026-10-06):服務項目改從「選擇項目」整頁勾選後按「確認」(只改操作步驟)。
+  await dialog.locator("#booking-service-items").click();
+  const picker = dialog.getByTestId("service-item-picker");
+  const serviceItemCheckbox = picker.getByRole("checkbox", { name: /E2E測試服務項目\(會員模組\)/ });
+  await expect(serviceItemCheckbox).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await serviceItemCheckbox.click();
+  await picker.getByRole("button", { name: /^確認/ }).click();
   await dialog.locator("#booking-customer-name").fill("E2E電話格式測試客戶");
 
   // 亂打 3 碼(正式庫實查到的髒資料型態)→ 被擋下,對話框還在。

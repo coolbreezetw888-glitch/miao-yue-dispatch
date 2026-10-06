@@ -762,6 +762,73 @@ export async function fetchMerchantDaySchedule(
   return data as unknown as MerchantDaySchedule;
 }
 
+/** SPECS-INDEX #980 追加:商家「建單時間間隔」可選的值(分鐘)。查無設定 = 30(跟改版前一樣)。 */
+export const BOOKING_START_TIME_INTERVAL_OPTIONS = [5, 10, 15, 30] as const;
+export type BookingStartTimeInterval = (typeof BOOKING_START_TIME_INTERVAL_OPTIONS)[number];
+export const DEFAULT_BOOKING_START_TIME_INTERVAL: BookingStartTimeInterval = 30;
+
+/** 讀商家的建單時間間隔(營業時間設定頁用;權限 = 營業時間設定或訂單管理,RLS 把關)。 */
+export async function fetchBookingStartTimeInterval(
+  merchantId: string,
+): Promise<BookingStartTimeInterval> {
+  const { data, error } = await supabase
+    .from("merchant_booking_settings")
+    .select("start_time_interval_minutes")
+    .eq("merchant_id", merchantId)
+    .maybeSingle();
+  if (error) throw error;
+  const value = data?.start_time_interval_minutes;
+  return (BOOKING_START_TIME_INTERVAL_OPTIONS as readonly number[]).includes(value ?? -1)
+    ? (value as BookingStartTimeInterval)
+    : DEFAULT_BOOKING_START_TIME_INTERVAL;
+}
+
+/** 寫入商家的建單時間間隔。沿用營業時間設定頁既有寫法:前端直接 upsert,權限由 RLS
+ * (can_manage_business_hours)把關;資料庫 CHECK 只接受 5 / 10 / 15 / 30。 */
+export async function setBookingStartTimeInterval(
+  merchantId: string,
+  minutes: BookingStartTimeInterval,
+): Promise<void> {
+  const { error } = await supabase
+    .from("merchant_booking_settings")
+    .upsert(
+      { merchant_id: merchantId, start_time_interval_minutes: minutes },
+      { onConflict: "merchant_id" },
+    );
+  if (error) throw error;
+}
+
+/**
+ * SPECS-INDEX #980:建單 / 改單時間選單「只列出能約的開始時間」。
+ *
+ * 判斷全部在資料庫 `public.list_staff_bookable_start_times`(依商家「建單時間間隔」(5 / 10 / 15 / 30 分鐘,預設 30)產生一天的候選起點,逐一交給送出時
+ * 真正擋時段的 `private.check_staff_booking_slot` 試算),前端**不自己算任何規則** ——
+ * 這樣清單跟送出時的檢查永遠是同一套(營業時間、每週時段、單日例外、請假、無時段限制、嚴格衝突、
+ * 同集團跨店佔用、編輯時排除自己)。
+ * ⚠️ 這只是體驗層引導,不是安全邊界:送出時 create_booking / update_booking 照樣會再檢查一次。
+ *
+ * @param durationMinutes 這次預約的總工時(分鐘,1~1440)。呼叫端在還沒選項目(0 分鐘)時傳一格 30 分鐘。
+ * @param excludeBookingId 編輯既有訂單時傳那筆的 id(自己原本佔的時間不算衝突);新增時傳 null。
+ * @returns 「HH:MM」字串陣列,已排序。
+ */
+export async function fetchStaffBookableStartTimes(params: {
+  merchantId: string;
+  staffId: string;
+  date: string; // 'YYYY-MM-DD'
+  durationMinutes: number;
+  excludeBookingId: string | null;
+}): Promise<string[]> {
+  const { data, error } = await supabase.rpc("list_staff_bookable_start_times", {
+    p_merchant_id: params.merchantId,
+    p_staff_id: params.staffId,
+    p_date: params.date,
+    p_duration_minutes: params.durationMinutes,
+    ...(params.excludeBookingId ? { p_exclude_booking_id: params.excludeBookingId } : {}),
+  });
+  if (error) throw error;
+  return (data ?? []) as string[];
+}
+
 // =========================================================================
 // 模組 6(訂單管理)§5.2/§6.4:單日例外設定/清除,包一層呼叫 set_staff_day_override/
 // clear_staff_day_override。權限歸在 business_hours(§5.4),不是 orders,RLS 由資料庫函式自己

@@ -38,6 +38,8 @@ vi.mock("./api", () => ({
   createBooking: createBookingMock,
   updateBooking: updateBookingMock,
   previewBookingPoints: previewMock,
+  // SPECS-INDEX #980:時間選單改問資料庫;這裡讓整天都能約(這支只測紅利區塊)。
+  fetchStaffBookableStartTimes: vi.fn(async () => ALL_DAY_START_TIMES),
   MATERIAL_COST_ENABLED_FEATURE_KEY: "material_cost_enabled",
 }));
 
@@ -112,6 +114,7 @@ vi.mock("@/modules/service-items/context", () => ({
 }));
 
 import { BookingFormDialog } from "./CalendarPage";
+import { ALL_DAY_START_TIMES, pickServiceItems, selectPaymentMethod } from "./bookingFormTestUtils";
 
 // ---------------------------------------------------------------------------
 // 假資料
@@ -218,16 +221,17 @@ function renderForm(editingBookingId: string | null) {
   );
 }
 
-/** 新增模式填到「可以直接按建立」:姓名、電話、選服務項目、選付款方式。 */
-function fillCreateForm(phone = "0912345678") {
+/** 新增模式填到「可以直接按建立」:姓名、電話、選服務項目、選付款方式。
+ * SPECS-INDEX #979(2026-10-06):服務項目改從「選擇項目」整頁勾選、付款方式改下拉選單,只改操作步驟。 */
+async function fillCreateForm(phone = "0912345678") {
   fireEvent.change(document.getElementById("booking-customer-name") as HTMLElement, {
     target: { value: "王小明" },
   });
   fireEvent.change(document.getElementById("booking-customer-phone") as HTMLElement, {
     target: { value: phone },
   });
-  fireEvent.click(screen.getByRole("button", { name: /冷氣清洗/ }));
-  fireEvent.click(screen.getByRole("radio", { name: "現金" }));
+  pickServiceItems([/冷氣清洗/]);
+  await selectPaymentMethod("現金");
 }
 
 /**
@@ -286,7 +290,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("新增模式:預覽帶電話、不帶會員(§12.1);existing 會員顯示建議點數與會員姓名", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     expect(screen.getByText("10 點")).toBeInTheDocument();
     expect(screen.getByText("訂單完成後才入帳")).toBeInTheDocument();
@@ -300,7 +304,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("🔴 v2.4 裁決 8 ④:預覽回 error ⇒ 顯示原因,不顯示「0 點」", async () => {
     previewMock.mockResolvedValue({ feature_enabled: true, error: "折扣金額不能超過訂單小計" });
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() =>
       expect(
         screen.getByText(/目前算不出這筆訂單的紅利點數:折扣金額不能超過訂單小計/),
@@ -312,7 +316,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("#799:商家沒設派點規則 ⇒ 「商家尚未設定派點規則」,不寫 0 點", async () => {
     previewMock.mockResolvedValue(previewOk({ rules_configured: false, auto_points: 0 }));
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("商家尚未設定派點規則")).toBeInTheDocument());
     expect(screen.queryByText("0 點")).not.toBeInTheDocument();
   });
@@ -325,7 +329,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
       ),
     );
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("新客戶(送出後自動建立會員)")).toBeInTheDocument());
     expect(screen.getByRole("switch", { name: /手動修改派點/ })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /使用點數折抵/ })).not.toBeInTheDocument();
@@ -334,7 +338,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("不折抵、不手動修改就建立 ⇒ pointsRedeemed 0、pointsOverride null", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     await clickSubmit("建立預約");
     await waitFor(() => expect(createBookingMock).toHaveBeenCalledTimes(1));
@@ -350,7 +354,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("手動修改派點:超過 100,000 ⇒ 欄位標紅 + 擋送出;改成合法數字 ⇒ 送 pointsOverride", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("switch", { name: /手動修改派點/ }));
     const input = await screen.findByLabelText(/本單派點/);
@@ -372,7 +376,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("🔴 §2.5 有折扣 ⇒ 送出先跳確認小卡窗(疊在全頁層上,兩層遮罩),確認後才呼叫 create_booking", async () => {
     previewMock.mockResolvedValue(previewOk({ review_required: true }));
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     fireEvent.click(screen.getByRole("switch", { name: /折扣優惠/ }));
     fireEvent.change(document.getElementById("booking-discount-value") as HTMLElement, {
       target: { value: "100" },
@@ -401,7 +405,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("確認窗按「返回修改」⇒ 不送出", async () => {
     previewMock.mockResolvedValue(previewOk({ review_required: true }));
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     fireEvent.click(screen.getByRole("switch", { name: /折扣優惠/ }));
     fireEvent.change(document.getElementById("booking-discount-value") as HTMLElement, {
       target: { value: "100" },
@@ -417,7 +421,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("折抵:輸入 55 點 ⇒ 即時顯示折抵 $5、金額預覽多「紅利折抵 / 實付」,送出 pointsRedeemed 55", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     expect(screen.getByText(/目前可用 120 點;本單最多可折 120 點\(\$12\)/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch", { name: /使用點數折抵/ }));
@@ -438,7 +442,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
   it("折抵超過可用點數 ⇒ 標紅並擋送出", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("switch", { name: /使用點數折抵/ }));
     fireEvent.change(await screen.findByLabelText(/折抵點數/), { target: { value: "200" } });
@@ -462,7 +466,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
           }),
     );
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("switch", { name: /使用點數折抵/ }));
     fireEvent.change(await screen.findByLabelText(/折抵點數/), { target: { value: "100" } });
@@ -514,7 +518,7 @@ describe("v2.4 裁決 22(批次 7 QA 打回)", () => {
           }),
     );
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員:王小明")).toBeInTheDocument());
     await settlePreview();
     fireEvent.click(screen.getByRole("switch", { name: /使用點數折抵/ }));
@@ -547,7 +551,7 @@ describe("v2.4 裁決 22(批次 7 QA 打回)", () => {
   it("① 不碰紅利的單純建單,預覽還在算也照樣能送(不用等)", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     fireEvent.click(screen.getByRole("button", { name: "建立預約" }));
     await waitFor(() => expect(createBookingMock).toHaveBeenCalledTimes(1));
   });
@@ -555,7 +559,7 @@ describe("v2.4 裁決 22(批次 7 QA 打回)", () => {
   it("① 人工確認:有折扣、預覽還沒跟上就按 ⇒ 不跳確認窗、直接提示稍候", async () => {
     previewMock.mockResolvedValue(previewOk());
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     fireEvent.click(screen.getByRole("switch", { name: /折扣優惠/ }));
     fireEvent.change(document.getElementById("booking-discount-value") as HTMLElement, {
       target: { value: "100" },
@@ -571,7 +575,7 @@ describe("v2.4 裁決 22(批次 7 QA 打回)", () => {
       previewOk({}, { available_points: 0, max_points: 0, max_amount: 0 }),
     );
     renderForm(null);
-    fillCreateForm();
+    await fillCreateForm();
     await waitFor(() =>
       expect(screen.getByText("這位會員目前沒有可用點數,無法使用點數折抵")).toBeInTheDocument(),
     );

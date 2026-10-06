@@ -1465,6 +1465,29 @@ export type Database = {
           },
         ]
       }
+      merchant_booking_settings: {
+        Row: {
+          merchant_id: string
+          start_time_interval_minutes: number
+        }
+        Insert: {
+          merchant_id: string
+          start_time_interval_minutes?: number
+        }
+        Update: {
+          merchant_id?: string
+          start_time_interval_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_booking_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_business_hours: {
         Row: {
           close_time: string | null
@@ -3838,6 +3861,16 @@ export type Database = {
           p_staff_id: string
         }
         Returns: boolean
+      }
+      list_staff_bookable_start_times: {
+        Args: {
+          p_date: string
+          p_duration_minutes: number
+          p_exclude_booking_id?: string
+          p_merchant_id: string
+          p_staff_id: string
+        }
+        Returns: string[]
       }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }

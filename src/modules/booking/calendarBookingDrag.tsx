@@ -601,6 +601,9 @@ export function DraggableBookingBlock({
       data-role={b.role}
       data-staff-id={staffId}
       data-drag-source={isSource ? "true" : undefined}
+      // SPECS-INDEX #982:手機下拉刷新碰到可拖的色塊一律不觸發(長按 0.5 秒後是拖拉改時間)。
+      // 判斷在 src/lib/pullToRefresh.ts 的 OPT_OUT_SELECTOR。
+      data-booking-draggable={draggable ? "true" : undefined}
       className={cn(
         // 坑 6:select-none + -webkit-touch-callout:none 是靜態 CSS,不影響捲動,無條件設。
         // 🔴 z-10 是行事曆層級階梯的**最低**一層,不要往上調(2026-09-30 使用者實機巡檢修正):

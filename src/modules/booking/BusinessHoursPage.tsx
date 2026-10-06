@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import {
   AlertNote,
+  ChoiceChipGroup,
   ErrorState,
   FieldTime,
   LoadingSkeleton,
@@ -26,7 +27,14 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getFeatureFlag, setFeatureFlag } from "@/modules/merchant/api";
 
-import { upsertMerchantBusinessHours, STRICT_CONFLICT_CHECK_FEATURE_KEY } from "./api";
+import {
+  BOOKING_START_TIME_INTERVAL_OPTIONS,
+  fetchBookingStartTimeInterval,
+  setBookingStartTimeInterval,
+  upsertMerchantBusinessHours,
+  STRICT_CONFLICT_CHECK_FEATURE_KEY,
+  type BookingStartTimeInterval,
+} from "./api";
 import { useMerchantBusinessHours } from "./context";
 import { RequireBusinessHoursAccess } from "./RequireBusinessHoursAccess";
 import { DAY_OF_WEEK_LABELS, type MerchantBusinessHours } from "./types";
@@ -192,6 +200,63 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
   );
 }
 
+// SPECS-INDEX #980 追加(2026-10-06,使用者補充):商家「建單時間間隔」。
+// 建單 / 改單的時間選單每隔幾分鐘列一個可選的開始時間(5 / 10 / 15 / 30,預設 30)。
+// 權限沿用這一頁(business_hours);寫入走 merchant_booking_settings 的 RLS(can_manage_business_hours)。
+// 這個設定只影響「選單列出哪些起點」,能不能約仍由資料庫 check_staff_booking_slot 判斷。
+export function BookingStartTimeIntervalSetting({ merchantId }: { merchantId: string }) {
+  const queryKey = ["booking-module", "start-time-interval", merchantId] as const;
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey,
+    queryFn: () => fetchBookingStartTimeInterval(merchantId),
+  });
+
+  async function handleChange(value: string) {
+    const minutes = Number(value) as BookingStartTimeInterval;
+    if (!(BOOKING_START_TIME_INTERVAL_OPTIONS as readonly number[]).includes(minutes)) return;
+    try {
+      await setBookingStartTimeInterval(merchantId, minutes);
+      await queryClient.invalidateQueries({ queryKey });
+      // 建單表單的時間選單也要跟著換間隔。
+      await queryClient.invalidateQueries({ queryKey: ["booking-module", "bookable-start-times"] });
+      toast.success("已更新建單時間間隔");
+    } catch (err) {
+      toast.error("更新失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>建單時間間隔</CardTitle>
+        <CardDescription>建單時，時間選單每隔幾分鐘列一個可選的開始時間。</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <LoadingSkeleton variant="lines" rows={1} />
+        ) : isError ? (
+          <ErrorState
+            title="讀不到建單時間間隔"
+            reason="可能是網路斷了；現在先不顯示目前的設定，避免你看到錯誤的值"
+            onRetry={() => void refetch()}
+          />
+        ) : (
+          <ChoiceChipGroup
+            aria-label="建單時間間隔"
+            value={String(data ?? 30)}
+            onValueChange={(v) => void handleChange(v)}
+            options={BOOKING_START_TIME_INTERVAL_OPTIONS.map((m) => ({
+              value: String(m),
+              label: `${m} 分鐘`,
+            }))}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function BusinessHoursPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
@@ -262,6 +327,7 @@ function BusinessHoursPageInner() {
       </Card>
 
       <StrictConflictCheckToggle merchantId={merchantId} />
+      <BookingStartTimeIntervalSetting merchantId={merchantId} />
     </main>
   );
 }

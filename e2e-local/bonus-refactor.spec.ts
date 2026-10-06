@@ -85,11 +85,17 @@ async function openNewBooking(page: Page, staffIndex = 0): Promise<Locator> {
   await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
   await dialog.locator("#booking-staff").click();
   await page.getByRole("option", { name: fixture.staffNames[staffIndex] as string }).click();
-  const item = dialog.getByText(SERVICE_ITEM_NAME).first();
+  // SPECS-INDEX #979(2026-10-06):服務項目改從「選擇項目」整頁勾選、付款方式改下拉選單(只改操作步驟)。
+  await dialog.locator("#booking-service-items").click();
+  const picker = dialog.getByTestId("service-item-picker");
+  const item = picker.getByRole("checkbox", { name: new RegExp(SERVICE_ITEM_NAME) });
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await item.click();
+  await picker.getByRole("button", { name: /^確認/ }).click();
+  await expect(picker).toHaveCount(0);
   await dialog.locator("#booking-customer-name").fill("E2E紅利客戶");
-  await dialog.getByRole("radiogroup", { name: "付款方式" }).getByRole("radio").first().click();
+  await dialog.locator("#booking-payment-method").click();
+  await page.getByRole("option").first().click();
   return dialog;
 }
 
@@ -120,7 +126,13 @@ test("§4.6:建單看到派點、改數量跟著變、新電話顯示新客戶",
   await expect(suggestedRow(dialog)).toContainText("10 點", { timeout: LOAD_TIMEOUT });
   await expect(pointsSection(dialog)).toContainText("訂單完成後才入帳");
 
-  await dialog.locator(`#booking-item-qty-${fixture.serviceItemId}`).fill("2");
+  // #979:數量改在「選擇項目」整頁裡調(+ 一次 = 2),按確認才套用。
+  await dialog.locator("#booking-service-items").click();
+  await dialog
+    .getByTestId("service-item-picker")
+    .getByRole("button", { name: `增加「${SERVICE_ITEM_NAME}」的數量` })
+    .click();
+  await dialog.getByTestId("service-item-picker").getByRole("button", { name: /^確認/ }).click();
   await expect(suggestedRow(dialog)).toContainText("20 點", { timeout: LOAD_TIMEOUT });
 
   await dialog.locator("#booking-customer-phone").fill(NEW_CUSTOMER_PHONE);
