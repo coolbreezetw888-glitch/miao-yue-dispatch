@@ -902,6 +902,32 @@ export interface MerchantBookingsFilters {
 
 const POSTGREST_PAGE_SIZE = 1000;
 
+/**
+ * SPECS-INDEX #984:月曆兩色數字用 —— 查一批訂單的協助人員(booking id → 協助人員 staff id 清單)。
+ * 只在「主要服務人員不在行事曆可見名單裡」的少數單才會呼叫(見 merchantMonthBadges.bookingIdsNeedingAssistantLookup),
+ * 平常是空陣列、完全不發查詢。權限沿用 booking_assistants 既有的 RLS(跟預約詳情的協助人員查詢同一條),不擴大。
+ * 一次最多 100 個 id 一批,避免網址太長。
+ */
+export async function fetchBookingAssistantStaffIds(
+  bookingIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  for (let i = 0; i < bookingIds.length; i += 100) {
+    const chunk = bookingIds.slice(i, i + 100);
+    const { data, error } = await supabase
+      .from("booking_assistants")
+      .select("booking_id, staff_id")
+      .in("booking_id", chunk);
+    if (error) throw error;
+    for (const row of (data ?? []) as { booking_id: string; staff_id: string }[]) {
+      const list = result.get(row.booking_id) ?? [];
+      list.push(row.staff_id);
+      result.set(row.booking_id, list);
+    }
+  }
+  return result;
+}
+
 export async function fetchMerchantBookings(
   merchantId: string,
   filters: MerchantBookingsFilters = {},

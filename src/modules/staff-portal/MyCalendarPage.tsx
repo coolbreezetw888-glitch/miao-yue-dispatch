@@ -26,7 +26,6 @@ import {
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { solidFillStyle } from "@/lib/statusPillStyle";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
@@ -40,6 +39,7 @@ import {
   addMonths,
   toDateKey,
 } from "@/modules/booking/dateUtils";
+import { DayStatusCountBadges } from "@/modules/booking/DayStatusCountBadges";
 import { formatAmount } from "@/modules/booking/orderAmount";
 import {
   BOOKING_STATUS_LABELS,
@@ -362,38 +362,13 @@ export default function MyCalendarPage() {
                 } ${inCurrentMonth ? "" : "opacity-40"}`}
               >
                 <span>{date.getDate()}</span>
-                {badges.pending > 0 || badges.accepted > 0 ? (
-                  // 手機 375 寬一格約 45px(含 1px 邊框)。兩種都是兩位數(例如 12 / 10)時,原本 px-1 + 2px 間距
-                  // 會超出格子邊框 ⇒ 改成左右內距 2px、間距 1px、數字等寬(tabular-nums),兩位數一顆約 16px,
-                  // 兩顆加起來約 33px,留得下邊框與餘裕(e2e-local E4 一位數 / 兩位數各量一次)。
-                  // whitespace-nowrap 防止擠成兩行。
-                  <span className="flex items-center gap-px whitespace-nowrap">
-                    {badges.pending > 0 ? (
-                      <span
-                        data-testid="day-pending-count"
-                        aria-label={`待確認 ${badges.pending} 筆`}
-                        className="min-w-4 rounded-full border px-0.5 text-[10px] leading-4 tabular-nums"
-                        style={solidFillStyle(
-                          getBookingStatusColor(effectiveStatusColors, "pending_confirmation"),
-                        )}
-                      >
-                        {badges.pending}
-                      </span>
-                    ) : null}
-                    {badges.accepted > 0 ? (
-                      <span
-                        data-testid="day-accepted-count"
-                        aria-label={`已確認 ${badges.accepted} 筆`}
-                        className="min-w-4 rounded-full border px-0.5 text-[10px] leading-4 tabular-nums"
-                        style={solidFillStyle(
-                          getBookingStatusColor(effectiveStatusColors, "accepted"),
-                        )}
-                      >
-                        {badges.accepted}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
+                {/* #984:徽章搬到 booking/DayStatusCountBadges(商家端行事曆共用),markup 與 testid 不變;
+                    兩顆都是 0 時元件自己回 null(跟原本的外層判斷等效)。 */}
+                <DayStatusCountBadges
+                  pending={badges.pending}
+                  accepted={badges.accepted}
+                  statusColors={effectiveStatusColors}
+                />
               </button>
             );
           })}

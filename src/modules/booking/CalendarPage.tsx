@@ -105,6 +105,7 @@ import { computeBookingChangeSummary } from "@/modules/push-notifications/change
 
 import {
   createBooking,
+  fetchBookingAssistantStaffIds,
   fetchStaffBookableStartTimes,
   updateBooking,
   type BookingServiceItemSelectionInput,
@@ -212,6 +213,11 @@ import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // SPECS-INDEX #977 第 7 批:背景格子元件與每格狀態的純函式搬到共用檔(服務人員端時間軸也用同一份)。
 import { DaySlotCell } from "./DaySlotCell";
+import { DayStatusCountBadges } from "./DayStatusCountBadges";
+import {
+  bookingIdsNeedingAssistantLookup,
+  countMerchantDayStatusBadges,
+} from "./merchantMonthBadges";
 import { daySlotState, resolveDaySlot, SLOT_TAP_VS_DRAG_THRESHOLD_PX } from "./daySlotGrid";
 // 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
 // 下面給管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
@@ -2435,10 +2441,36 @@ function CalendarPageInner() {
       ? toDateKey(addDays(weekStart, 7))
       : toDateKey(addDays(monthGrid[monthGrid.length - 1]!.date, 1));
 
+  // #984:unpaged —— 月曆數字要算準,不能被 PostgREST 單次 1000 筆上限截掉(原本只畫有沒有預約的小點,
+  // 截掉也幾乎看不出來;改成數字之後就會少算)。只影響這一支查詢,其他頁面的 useMerchantBookings 不變。
   const { data: rangeBookings } = useMerchantBookings(merchantId, {
     startAt: buildTaipeiIso(rangeStartKey, "00:00"),
     endAt: buildTaipeiIso(rangeEndKey, "00:00"),
+    unpaged: true,
   });
+
+  // SPECS-INDEX #984:月曆日期格兩色數字(待確認 / 已確認,商家自訂狀態色)。
+  // 計算範圍 = 時間軸欄位那份服務人員名單(get_merchant_day_schedule 與 useMerchantStaffList 都是
+  // merchant_staff.status = 'active'),主要或協助是他們的單都算、同一張單只算一次。
+  // 名單還沒載入時先不顯示數字(不先顯示錯的)。
+  const visibleStaffIds = useMemo(
+    () => (staffList ? new Set(staffList.map((s) => s.id)) : null),
+    [staffList],
+  );
+  // 主要服務人員不在名單裡的單(例如主要服務人員已停用、協助人員還在職)才另外查協助人員;平常是空的、不發查詢。
+  const assistantLookupIds = useMemo(
+    () => bookingIdsNeedingAssistantLookup(rangeBookings, visibleStaffIds),
+    [rangeBookings, visibleStaffIds],
+  );
+  const { data: assistantStaffIdsByBooking } = useQuery({
+    queryKey: ["booking-module", "month-badge-assistants", merchantId, assistantLookupIds],
+    queryFn: () => fetchBookingAssistantStaffIds(assistantLookupIds),
+    enabled: assistantLookupIds.length > 0,
+  });
+  const dayStatusCounts = useMemo(
+    () => countMerchantDayStatusBadges(rangeBookings, visibleStaffIds, assistantStaffIdsByBooking),
+    [rangeBookings, visibleStaffIds, assistantStaffIdsByBooking],
+  );
 
   // 1.2:「有預約」的判斷邏輯包含 pending_confirmation/accepted 兩種未終止狀態,不含 cancelled
   // (沿用既有的「非 cancelled」判斷,ACTIVE_BOOKING_STATUSES 是這個集合的具名對照,completed 也算
@@ -2689,6 +2721,7 @@ function CalendarPageInner() {
                 <button
                   key={key}
                   type="button"
+                  data-month-date-key={key}
                   onClick={() => setSelectedDate(date)}
                   className={cn(
                     "flex min-h-11 flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs tabular-nums transition-colors",
@@ -2699,11 +2732,15 @@ function CalendarPageInner() {
                   )}
                 >
                   <span>{date.getDate()}</span>
-                  {datesWithBookings.has(key) ? (
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
-                  ) : (
-                    <span className="h-1.5 w-1.5" aria-hidden />
-                  )}
+                  {/* #984:原本的藍點換成兩色數字(待確認 / 已確認);外層固定 18px 高(徽章 16px + 上下邊框),
+                      沒有數字的格子也佔同樣高度,整排格子一樣高、日期數字對齊(原本空白小點的作用)。 */}
+                  <span className="flex h-[18px] items-center" data-testid="month-day-badges">
+                    <DayStatusCountBadges
+                      pending={dayStatusCounts.get(key)?.pending ?? 0}
+                      accepted={dayStatusCounts.get(key)?.accepted ?? 0}
+                      statusColors={effectiveStatusColors}
+                    />
+                  </span>
                 </button>
               );
             })}

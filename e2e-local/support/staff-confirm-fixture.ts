@@ -357,6 +357,12 @@ export async function teardownStaffConfirmFixture(fixture: StaffConfirmFixture):
       "推播發送記錄",
       () => svc.from("push_notification_log").delete().in("merchant_id", m).select("id"),
     ],
+    // #984:商家端月曆 e2e 會把一張單標記完成 ⇒ 產生抽成快照;booking_commission_item_records →
+    // booking_service_items 沒有 cascade ⇒ 先刪抽成快照(寫法比照 staff-order-fixture)。
+    [
+      "抽成快照",
+      () => svc.from("booking_commission_records").delete().in("merchant_id", m).select("id"),
+    ],
     ["訂單", () => svc.from("bookings").delete().in("merchant_id", m).select("id")],
     ["會員", () => svc.from("members").delete().in("merchant_id", m).select("id")],
     ["商家", () => svc.from("merchants").delete().in("id", m).select("id")],
