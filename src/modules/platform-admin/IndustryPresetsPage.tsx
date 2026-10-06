@@ -133,7 +133,7 @@ export default function IndustryPresetsPage() {
         </div>
 
         {error ? (
-          <p className="text-sm text-destructive">載入失敗:{(error as Error).message}</p>
+          <p className="text-sm text-destructive">載入失敗：{(error as Error).message}</p>
         ) : (
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as IndustryType)}>
             <TabsList>
@@ -183,7 +183,9 @@ export default function IndustryPresetsPage() {
                                 </CardAlertDialogTrigger>
                                 <CardAlertDialogContent>
                                   <CardAlertDialogHeader>
-                                    <CardAlertDialogTitle>確定要刪除這一項嗎?</CardAlertDialogTitle>
+                                    <CardAlertDialogTitle>
+                                      確定要刪除這一項嗎？
+                                    </CardAlertDialogTitle>
                                     <CardAlertDialogDescription className="break-all">
                                       刪除「{preset.feature_key}」不會影響已經建立的商家目前的功能
                                       開關，只影響之後新建商家的預設值。

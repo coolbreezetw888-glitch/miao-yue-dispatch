@@ -193,6 +193,16 @@ export function ServiceItemPickerPage({
                         <span className="break-words text-[15px] font-semibold text-foreground">
                           {item.name}
                         </span>
+                        {/* #986 第 9 批:名稱下方顯示描述(保留換行、不截斷 —— 這頁就是讓人看清楚選什麼);
+                            沒有描述時整行不出現、不留空白。React 文字節點,不解析 HTML。 */}
+                        {item.description?.trim() ? (
+                          <span
+                            data-testid={`picker-item-description-${item.id}`}
+                            className="whitespace-pre-line break-words text-[13px] text-muted-foreground"
+                          >
+                            {item.description}
+                          </span>
+                        ) : null}
                         <span className="text-[13px] tabular-nums text-muted-foreground">
                           固定價格{" "}
                           <span className="font-semibold text-destructive/80">

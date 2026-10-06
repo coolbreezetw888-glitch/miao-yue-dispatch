@@ -150,7 +150,7 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
     if (minDays < MIN_ADVANCE_BOOKING_DAYS_LIMIT) {
       // 用語跟欄位說明文字對齊(2026-09-24 使用者最終規格:0 = 不需要提前,當天預約當天服務也可以)
       // ——訊息不只說「錯了」,也要順便告訴商家他想要的效果該怎麼填。
-      return "「最少要提前幾天預約」不能是負數;不需要提前請填 0 或留空";
+      return "「最少要提前幾天預約」不能是負數；不需要提前請填 0 或留空";
     }
   }
 
@@ -162,7 +162,7 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
     // 所以這裡只剩負數要擋,原本那句「至少要是 1 天」已經不成立。訊息比照欄位一的寫法,
     // 順便告訴商家「只接受當天預約」該怎麼填,不只說他錯了。
     if (maxDays < MIN_BOOKING_DAYS_AHEAD_LIMIT) {
-      return `「最遠可以預約到幾天後」不能是負數;只接受當天預約請填 0，不確定要填多少請留空(留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天)`;
+      return `「最遠可以預約到幾天後」不能是負數；只接受當天預約請填 0，不確定要填多少請留空(留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天)`;
     }
     if (maxDays > MAX_BOOKING_DAYS_AHEAD_LIMIT) {
       return `「最遠可以預約到幾天後」最多只能填 ${MAX_BOOKING_DAYS_AHEAD_LIMIT} 天(大約 10 年)，請確認是不是多打了幾個 0`;

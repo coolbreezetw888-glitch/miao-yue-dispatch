@@ -132,7 +132,7 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
           // 使用者以為那是自己存過的設定,一按儲存就把真實設定覆寫掉。出錯就不給表單。
           <ErrorState
             title="讀不到稅金設定"
-            reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
+            reason="可能是網路斷了；現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
             onRetry={() => void refetch()}
           />
         ) : (

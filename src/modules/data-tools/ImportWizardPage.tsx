@@ -356,7 +356,7 @@ function ImportWizardPageInner() {
           <CardHeader>
             <CardTitle>步驟一：選擇匯入類型</CardTitle>
             <CardDescription>
-              請先確認匯出的 CSV 為 UTF-8 編碼;如果用 Excel 另存新檔，請選擇「CSV
+              請先確認匯出的 CSV 為 UTF-8 編碼；如果用 Excel 另存新檔，請選擇「CSV
               UTF-8(逗號分隔)」格式。 單批匯入上限 {MAX_ROWS} 筆，筆數過多請分批匯入。
             </CardDescription>
           </CardHeader>
@@ -406,12 +406,12 @@ function ImportWizardPageInner() {
               <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted-foreground">
                 {importKind === "members" ? (
                   <>
-                    還沒整理好 CSV?可以先下載範例模板對照欄位。這個商家目前
+                    還沒整理好 CSV？可以先下載範例模板對照欄位。這個商家目前
                     {phoneRequiredForMembers ? "要求" : "不要求"}建立會員時必填電話。
                   </>
                 ) : (
                   <>
-                    還沒整理好 CSV?可以先下載範例模板對照欄位。服務時長沒填預設 60
+                    還沒整理好 CSV？可以先下載範例模板對照欄位。服務時長沒填預設 60
                     分鐘，訂單狀態沒填預設「已完成」，付款方式為選填(留空也能成功匯入)。
                   </>
                 )}
@@ -748,7 +748,7 @@ function ImportWizardPageInner() {
                 <CardAlertDialogContent>
                   <CardAlertDialogHeader>
                     <CardAlertDialogTitle>
-                      確定要匯入這 {mappedRows.length} 筆資料嗎?
+                      確定要匯入這 {mappedRows.length} 筆資料嗎？
                     </CardAlertDialogTitle>
                     <CardAlertDialogDescription>
                       送出後會立即寫入資料庫，之後可以在「匯入紀錄」頁面查看結果並視情況復原。

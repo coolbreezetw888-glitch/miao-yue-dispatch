@@ -245,7 +245,7 @@ describe("§4.2 紅利計算", () => {
       "這條套用在還沒有自己公式的服務項目。已經單獨設過公式的項目，吃它自己那條，不會兩邊都拿。",
     );
     expect(within(card).getByTestId("formula-preview")).toHaveTextContent(
-      "全部服務項目: 數量 × 1點",
+      "全部服務項目：數量 × 1點",
     );
   });
 

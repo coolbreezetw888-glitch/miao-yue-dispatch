@@ -172,7 +172,7 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
           <div className="flex flex-col gap-2">
             <p className="text-xs leading-relaxed text-muted-foreground">
               你的 LINE 已經綁定完成，不需要再做任何設定。如果換了 LINE 帳號、或不想再收到通知，
-              可以自己解除綁定;之後想再收通知，重新產生一次綁定碼就好。
+              可以自己解除綁定；之後想再收通知，重新產生一次綁定碼就好。
             </p>
             {/* 🔴 可逆動作(解除後重新產生綁定碼就能再綁)⇒ 不標紅,用 ② 次要。 */}
             <Button

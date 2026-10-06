@@ -87,7 +87,7 @@ function StaffPermissionsInner() {
             <AlertNote>
               這位服務人員還沒完成登入，
               <strong className="font-bold">四項權限會在他第一次登入時預設全部開啟</strong>
-              ;現在顯示的關閉狀態不代表他登入後會是關的。等他完成登入後再回來這頁調整，才會是實際生效的設定。
+              ；現在顯示的關閉狀態不代表他登入後會是關的。等他完成登入後再回來這頁調整，才會是實際生效的設定。
             </AlertNote>
           ) : null}
           {isLoading ? (

@@ -214,7 +214,7 @@ test("T5 移除 → 出現「已移除」徽章、「恢復」按鈕出現、「
   // #849:「移除」在 ⋯ 選單裡。
   await (await openRowMenu(page, row)).getByRole("menuitem", { name: "移除" }).click();
   const confirm = page.getByRole("alertdialog");
-  await expect(confirm.getByText("確定要移除這位客服嗎?")).toBeVisible();
+  await expect(confirm.getByText("確定要移除這位客服嗎？")).toBeVisible();
   await confirm.getByRole("button", { name: "確定移除" }).click();
 
   await expect(page.getByText("已移除客服")).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -331,7 +331,7 @@ test("T9 #798 真正刪除:只出現在已移除那一列、二次確認講明�
   // 行為 ①:二次確認對話框明確講「無法復原」,而且標題帶這位客服的名字(不是通用文案)。
   await removedMenu.getByRole("menuitem", { name: "真正刪除" }).click();
   const confirm = page.getByRole("alertdialog");
-  await expect(confirm.getByText(`確定要真正刪除「${fixture.agentName}」嗎?`)).toBeVisible();
+  await expect(confirm.getByText(`確定要真正刪除「${fixture.agentName}」嗎？`)).toBeVisible();
   await expect(confirm.getByText("無法復原", { exact: false })).toBeVisible();
   // 先按「取消」一次:取消之後什麼都不該發生,那一列還在。
   await confirm.getByRole("button", { name: "取消" }).click();

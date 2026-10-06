@@ -385,7 +385,10 @@ export async function uploadMyStaffAvatar(
 // previousStaffId 一律不帶:服務人員不能換主要服務人員。
 // =========================================================================
 
-/** staff_get_booking_form_options 的回傳(只有本店的選項,沒有客戶 / 會員 / 其他服務人員 / 料錢)。 */
+/**
+ * staff_get_booking_form_options 的回傳(只有本店的選項,沒有客戶 / 會員 / 其他服務人員)。
+ * #986 第 9 批:多了料錢(總開關 + 本店上架品項;關著時品項是空陣列)、建單時間間隔、服務項目描述。
+ */
 export interface StaffBookingFormOptions {
   staff_id: string;
   staff_name: string;
@@ -396,11 +399,19 @@ export interface StaffBookingFormOptions {
     price: number;
     duration_minutes: number;
     category_id: string | null;
+    /** #986 第 9 批:服務項目描述(沒填 = null)。舊版後端沒有這個鍵 ⇒ undefined。 */
+    description?: string | null;
   }[];
   service_categories: { id: string; name: string }[];
   payment_methods: { id: string; name: string }[];
   tax_settings: { tax_mode: string; tax_value: number } | null;
   business_hours: { day_of_week: number; is_closed: boolean }[];
+  /** #986 第 9 批:料錢成本總開關(查無 = false)。 */
+  material_cost_enabled?: boolean;
+  /** #986 第 9 批:本店上架料錢品項(總開關關著 ⇒ [])。 */
+  material_cost_items?: { id: string; name: string; amount: number }[];
+  /** #986 第 9 批:建單時間間隔(5 / 10 / 15 / 30,後端已把其他值轉成 30)。 */
+  start_time_interval_minutes?: number;
 }
 
 export async function fetchStaffBookingFormOptions(
@@ -455,6 +466,16 @@ export interface StaffBookingForEdit {
   }[];
   /** 協助人員只有姓名(唯讀顯示「由商家指派」)。 */
   assistant_names: string[];
+  /**
+   * #986 第 9 批:這張單目前的料錢(金額是訂單上的快照;is_active = false 代表品項已下架)。
+   * 舊版後端沒有這個鍵 ⇒ undefined。
+   */
+  material_costs?: {
+    material_cost_item_id: string;
+    name: string;
+    amount_snapshot: number;
+    is_active: boolean;
+  }[];
 }
 
 export async function fetchStaffBookingForEdit(bookingId: string): Promise<StaffBookingForEdit> {
@@ -523,7 +544,10 @@ export async function staffPreviewBookingPoints(params: {
   return data;
 }
 
-/** 建單 / 改單共用的表單欄位(沒有協助人員、會員、隱藏備註、料錢 —— 後端根本沒有這些參數)。 */
+/**
+ * 建單 / 改單共用的表單欄位(沒有協助人員、會員、隱藏備註 —— 後端根本沒有這些參數)。
+ * #986 第 9 批:多了料錢 materialCostItemIds(使用者裁決「服務人員跟客服一樣可看可改料錢」)。
+ */
 export interface StaffBookingFormFields {
   serviceItems: BookingServiceItemSelectionInput[];
   startAt: string;
@@ -544,6 +568,11 @@ export interface StaffBookingFormFields {
   paymentMethodId?: string | null;
   customDurationEnabled?: boolean;
   customDurationMinutes?: number | null;
+  /**
+   * #986 第 9 批:料錢品項。undefined = 不帶這個參數(建單 = 不帶料錢、改單 = 後端維持現有料錢);
+   * 陣列(含空陣列 = 全部拿掉)= 用這個值。表單送出時一律帶目前勾選的陣列。
+   */
+  materialCostItemIds?: string[];
 }
 
 function buildStaffFormArgs(input: StaffBookingFormFields) {
@@ -574,6 +603,9 @@ function buildStaffFormArgs(input: StaffBookingFormFields) {
     p_custom_duration_enabled: input.customDurationEnabled ?? false,
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
+      : {}),
+    ...(input.materialCostItemIds !== undefined
+      ? { p_material_cost_item_ids: input.materialCostItemIds }
       : {}),
   };
 }
@@ -645,6 +677,7 @@ export interface StaffUpdatedBooking {
   staff_id: string;
 }
 
+// #986 使用者裁決：服務人員改單 / 拖拉不通知客戶，不可加 LINE
 export async function staffUpdateBooking(
   input: StaffUpdateBookingInput,
 ): Promise<StaffUpdatedBooking> {
@@ -721,6 +754,7 @@ export async function staffCompleteBooking(bookingId: string): Promise<StaffBook
  * 成功後比照商家端 moveBooking 發推播 booking_updated(changeSummary 同一支 computeBookingChangeSummary;
  * 不能換人 ⇒ 不帶 previousStaffId)。「復原」= 再呼叫一次這支搬回原時間。
  */
+// #986 使用者裁決：服務人員改單 / 拖拉不通知客戶，不可加 LINE
 export async function staffMoveBooking(
   input: Pick<MoveBookingInput, "bookingId" | "targetStartAt" | "expectedStartAt">,
 ): Promise<MoveBookingResult> {

@@ -200,7 +200,7 @@ describe("群組:一件事一組,同一個人兩個身份不會像是重複發�
     expect(groups[0]!.recipients.map((r) => r.targetType)).toEqual(["agent", "staff"]);
     expect(groups[0]!.sameUserNotes).toHaveLength(1);
     expect(formatSameUserNote(groups[0]!.sameUserNotes[0]!)).toBe(
-      "阿金同時是客服和服務人員，所以這裡有 2 列;他的手機只會收到一次。",
+      "阿金同時是客服和服務人員，所以這裡有 2 列；他的手機只會收到一次。",
     );
     // 代表時間 = 最新那一列
     expect(groups[0]!.attempted_at).toBe("2026-09-27T16:27:05.000Z");

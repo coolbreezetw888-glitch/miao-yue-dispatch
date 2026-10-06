@@ -38,6 +38,8 @@ export interface PickerItem {
   price: number;
   duration_minutes: number;
   category_id: string | null;
+  /** #986 第 9 批:服務項目描述(沒填 = null / undefined ⇒ 卡片不留空白)。 */
+  description?: string | null | undefined;
 }
 
 export interface PickerCategory {

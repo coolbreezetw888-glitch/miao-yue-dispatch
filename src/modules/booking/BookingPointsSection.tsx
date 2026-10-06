@@ -278,7 +278,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
         <SwitchRow
           id="booking-points-redeem"
           title="使用點數折抵"
-          description={`目前可用 ${redeem.availablePoints} 點;本單最多可折 ${redeem.maxPoints} 點(${formatAmount(
+          description={`目前可用 ${redeem.availablePoints} 點；本單最多可折 ${redeem.maxPoints} 點(${formatAmount(
             redeem.maxAmount,
           )})`}
           checked={props.redeemEnabled}
@@ -291,7 +291,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
                 htmlFor="booking-points-redeem-input"
                 error={props.redeemValidation.error}
                 helpLabel="說明：點數折抵怎麼換算"
-                help={`目前 ${redeem.pointsUnit ?? "—"} 點 = ${redeem.amountUnit ?? "—"} 元，金額無條件捨去到整數元;本單最多可折應付金額的 ${redeem.maxRatioPercent ?? 0}%。點數在建單當下就會先從會員餘額扣下，訂單取消會退回。`}
+                help={`目前 ${redeem.pointsUnit ?? "—"} 點 = ${redeem.amountUnit ?? "—"} 元，金額無條件捨去到整數元；本單最多可折應付金額的 ${redeem.maxRatioPercent ?? 0}%。點數在建單當下就會先從會員餘額扣下，訂單取消會退回。`}
               >
                 <FieldInput
                   id="booking-points-redeem-input"

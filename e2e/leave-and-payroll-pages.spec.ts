@@ -302,7 +302,7 @@ test.describe("#762 /app/leave-records 請假紀錄", () => {
     // 不加 exact 會同時命中兩顆按鈕。
     await row.getByRole("button", { name: "取消", exact: true }).click();
     const alert = page.getByRole("alertdialog");
-    await expect(alert.getByText("確定要取消這筆請假紀錄嗎?")).toBeVisible();
+    await expect(alert.getByText("確定要取消這筆請假紀錄嗎？")).toBeVisible();
     await expect(alert.getByRole("button", { name: "先不要" })).toBeVisible();
     await expect(alert.getByRole("button", { name: "確定取消" })).toBeVisible();
 

@@ -169,7 +169,7 @@ function IndustryTransferWizardPageInner() {
             {!membersLoading && membersError ? (
               <ErrorState
                 title="讀不到來源商家的會員名單"
-                reason="可能是網路斷了;現在先不顯示名單，避免你把空白當成「這間商家沒有會員」而直接跳過這一步"
+                reason="可能是網路斷了；現在先不顯示名單，避免你把空白當成「這間商家沒有會員」而直接跳過這一步"
                 onRetry={() => void refetchSourceMembers()}
               />
             ) : null}
@@ -265,7 +265,7 @@ function IndustryTransferWizardPageInner() {
                 <CardAlertDialogContent>
                   <CardAlertDialogHeader>
                     <CardAlertDialogTitle>
-                      確定要搬遷這 {selectedMemberIds.size} 位會員嗎?
+                      確定要搬遷這 {selectedMemberIds.size} 位會員嗎？
                     </CardAlertDialogTitle>
                     <CardAlertDialogDescription>
                       這些會員的資料跟紅利點數會搬到新商家。

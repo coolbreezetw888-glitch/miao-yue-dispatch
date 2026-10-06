@@ -624,7 +624,7 @@ function StaffFormDialog({
             <FormField
               label="計酬類型"
               helpLabel="說明：計酬類型會影響什麼"
-              help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能);抽成制則是用「可預約時段」調整接單時間。"
+              help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能)；抽成制則是用「可預約時段」調整接單時間。"
             >
               <ChoiceChipGroup
                 aria-label="計酬類型"
@@ -945,7 +945,7 @@ function InviteStaffLoginDialog({
         <CardDialogHeader>
           <CardDialogTitle className="break-words">邀請「{staff?.name}」開通登入</CardDialogTitle>
           <CardDialogDescription>
-            對方會收到一封邀請信，點連結設定密碼後即可用手機登入;如果這個 email
+            對方會收到一封邀請信，點連結設定密碼後即可用手機登入；如果這個 email
             已經有秒約帳號，會直接開通登入。
           </CardDialogDescription>
         </CardDialogHeader>
@@ -1154,7 +1154,7 @@ function StaffListInner() {
             // 服務人員」加一顆「新增第一位」,不只是讓人以為名單不見了,還會誘導他重複建立。
             <ErrorState
               title="讀不到服務人員名單"
-              reason="可能是網路斷了，或你沒有查看服務人員的權限;現在先不顯示名單，避免你把空白當成「人員不見了」而重複新增"
+              reason="可能是網路斷了，或你沒有查看服務人員的權限；現在先不顯示名單，避免你把空白當成「人員不見了」而重複新增"
               onRetry={() => void refetchStaffList()}
             />
           ) : !staffList || staffList.length === 0 ? (
@@ -1364,7 +1364,7 @@ function StaffListInner() {
       >
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
-            <CardAlertDialogTitle>確定要移除這位服務人員嗎?</CardAlertDialogTitle>
+            <CardAlertDialogTitle>確定要移除這位服務人員嗎？</CardAlertDialogTitle>
             <CardAlertDialogDescription>
               這是軟刪除，資料不會不見，之後隨時可以重新上架恢復。
             </CardAlertDialogDescription>
@@ -1393,11 +1393,11 @@ function StaffListInner() {
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
             <CardAlertDialogTitle className="break-words">
-              確定要真正刪除「{hardDeletingStaff?.name}」嗎?
+              確定要真正刪除「{hardDeletingStaff?.name}」嗎？
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
-              抽成紀錄時，系統才會真的允許刪除;如果有歷史紀錄牽連，系統會擋下
+              這個動作無法復原！只有在這位服務人員完全沒有任何歷史訂單/請假/
+              抽成紀錄時，系統才會真的允許刪除；如果有歷史紀錄牽連，系統會擋下
               並告訴你原因，這個人會維持「已移除」狀態。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>

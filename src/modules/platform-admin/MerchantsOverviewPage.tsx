@@ -89,7 +89,7 @@ export default function MerchantsOverviewPage() {
               點進詳情頁。視覺提示(#691/#692)加上這一句白話說明,兩層一起做,才不會下一輪
               又問同一件事。 */}
           <p className="mt-1 text-sm text-muted-foreground">
-            系統裡所有的集團與商家,可以篩選、可以啟用/停用任一間店。點商家名稱或右側「查看詳情」,可以進到單一商家的詳情頁,查看並編輯基本資料、管理員、集團管理者,以及檢視服務人員與客服名單。
+            系統裡所有的集團與商家，可以篩選、可以啟用/停用任一間店。點商家名稱或右側「查看詳情」，可以進到單一商家的詳情頁，查看並編輯基本資料、管理員、集團管理者，以及檢視服務人員與客服名單。
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export default function MerchantsOverviewPage() {
           /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
           <LoadingSkeleton variant="lines" rows={5} />
         ) : error ? (
-          <p className="text-sm text-destructive">載入失敗:{(error as Error).message}</p>
+          <p className="text-sm text-destructive">載入失敗：{(error as Error).message}</p>
         ) : (
           <Table>
             <TableHeader>

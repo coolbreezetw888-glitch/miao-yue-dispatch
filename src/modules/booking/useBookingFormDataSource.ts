@@ -7,6 +7,8 @@
 //     (RLS 只開給管理員 / 客服),所以改讀兩支 SECURITY DEFINER 的唯讀 RPC:
 //       staff_get_booking_form_options(選項)、staff_get_booking_for_edit(編輯時的這張單)。
 //     **不放寬任何 RLS**。商家模式那幾支 hook 在服務人員模式下傳 null 進去 ⇒ 查詢停用、不會發出請求。
+//     #986 第 9 批:料錢(總開關 + 上架品項)也改由 staff_get_booking_form_options 回,編輯時的現有料錢由
+//     staff_get_booking_for_edit 回(使用者裁決推翻第 7 批主腦決定 C「服務人員模式不顯示料錢」)。
 // 表單本體只讀這裡回傳的資料,不用知道現在是哪一種模式(要藏哪些欄位另外看 actor.kind)。
 
 import { useMemo } from "react";
@@ -56,6 +58,8 @@ export interface BookingFormServiceItem {
   price: number;
   duration_minutes: number;
   category_id: string | null;
+  /** #986 第 9 批:服務項目描述(只在「選擇項目」整頁顯示)。沒填 = null。 */
+  description?: string | null;
 }
 
 export interface BookingFormDataSource {
@@ -135,7 +139,12 @@ export function staffEditToBookingDetail(row: StaffBookingForEdit): BookingDetai
       staffId: `assigned-by-merchant-${index}`,
       staffName: name,
     })),
-    materialCosts: [],
+    // #986 第 9 批:編輯時預帶這張單目前的料錢(已下架品項也帶,跟商家模式一樣原樣送回、後端不擋)。
+    materialCosts: (row.material_costs ?? []).map((c) => ({
+      materialCostItemId: c.material_cost_item_id,
+      name: c.name,
+      amountSnapshot: Number(c.amount_snapshot),
+    })),
     createdByName: "",
     lastModifiedByName: null,
   } as unknown as BookingDetail;
@@ -190,6 +199,9 @@ export function useBookingFormDataSource(params: {
     return {
       staffList: [{ id: staffActorId, name: staffOptions?.staff_name ?? staffActorName ?? "" }],
       serviceItems: staffOptions?.service_items.map((i) => ({ ...i, price: Number(i.price) })),
+      materialCostItems: staffOptions
+        ? (staffOptions.material_cost_items ?? []).map((m) => ({ ...m, amount: Number(m.amount) }))
+        : undefined,
       merchantTaxSettings: staffOptions
         ? staffOptions.tax_settings
           ? {
@@ -226,9 +238,10 @@ export function useBookingFormDataSource(params: {
     staffList: staffSide.staffList,
     serviceItems: staffSide.serviceItems,
     serviceCategories: staffOptions?.service_categories,
-    // 主腦決定 C:服務人員模式不顯示料錢。
-    materialCostItems: EMPTY_MATERIAL_COST_ITEMS,
-    materialCostEnabled: false,
+    // #986 第 9 批(使用者裁決推翻主腦決定 C):服務人員跟客服一樣看得到、改得了料錢。
+    // 總開關、上架品項都由 staff_get_booking_form_options 回;還沒讀到 ⇒ undefined(跟商家模式一樣)。
+    materialCostItems: staffSide.materialCostItems,
+    materialCostEnabled: staffOptions ? staffOptions.material_cost_enabled === true : undefined,
     businessHours: staffOptions?.business_hours,
     paymentMethods: staffOptions?.payment_methods,
     merchantTaxSettings: staffSide.merchantTaxSettings,
@@ -236,5 +249,3 @@ export function useBookingFormDataSource(params: {
     editingNotesHidden: staffEditing?.notes_hidden === true,
   };
 }
-
-const EMPTY_MATERIAL_COST_ITEMS: { id: string; name: string; amount: number }[] = [];

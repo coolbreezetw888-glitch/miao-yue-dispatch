@@ -382,7 +382,7 @@ export function validateRedeemPoints(raw: string, redeem: PointsRedeemInfo): Red
       amount,
       error: `本單最多可折抵 ${formatAmount(redeem.capAmount)}(應付金額的 ${
         redeem.maxRatioPercent ?? 0
-      }%)，折抵 ${points} 點可折 ${formatAmount(amount)}，已超過上限;建議改成 ${redeem.maxPoints} 點`,
+      }%)，折抵 ${points} 點可折 ${formatAmount(amount)}，已超過上限；建議改成 ${redeem.maxPoints} 點`,
       hint: null,
     };
   }

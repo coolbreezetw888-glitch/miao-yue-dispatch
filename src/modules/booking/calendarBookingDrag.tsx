@@ -103,6 +103,11 @@ export interface CalendarBookingDragParams {
   slotMinutes: number;
   slotPx: number;
   thresholdPx: number;
+  /**
+   * #986 第 9 批(9-10、9-11):放開時吸附到幾分鐘 = 商家「建單時間間隔」。不傳 = 吸附到格線(跟改版前一樣)。
+   * 格線、空白格選單、建單預帶時間都不受影響。
+   */
+  snapMinutes?: number | undefined;
   /** ≤ 閾值就放開 = 點擊 → 開詳情(取代色塊原本的 onClick)。
    * SPECS-INDEX #873:第二個參數告訴詳情「是從哪一張色塊打開的」(主 / 協助 + 那一欄的服務人員),
    * 從「(協助)」色塊打開時,詳情要給「移除協助人員」而不是「取消預約」(原本兩張色塊都只傳 booking id,
@@ -215,6 +220,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
     slotMinutes,
     slotPx,
     thresholdPx,
+    snapMinutes,
     onOpenDetail,
     onMoved,
     moveFn,
@@ -302,6 +308,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
             durationMin,
             columnRects: geometry.rects,
             occludedLeftClientX: geometry.occludedLeft,
+            snapMinutes,
           })
         : null;
 
@@ -350,7 +357,8 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
       const ghostTop =
         source.role === "assistant"
           ? geometry.gridTop + ((bStartMin - gridStartMin) / slotMinutes) * slotPx
-          : geometry.gridTop + target.slotIndex * slotPx;
+          : // #986 第 9 批:用吸附後的 startMin 換算(落點可能在格子中間);沒吸附間隔時 = slotIndex × slotPx,跟改版前相同。
+            geometry.gridTop + ((target.startMin - gridStartMin) / slotMinutes) * slotPx;
       const viewportWidth =
         typeof window !== "undefined" ? window.innerWidth : Number.POSITIVE_INFINITY;
       return {
@@ -378,6 +386,7 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
       slotCount,
       slotMinutes,
       slotPx,
+      snapMinutes,
     ],
   );
 
@@ -722,10 +731,10 @@ export function PastDropConfirmDialog({
     >
       <CardAlertDialogContent data-testid="booking-drag-past-confirm">
         <CardAlertDialogHeader>
-          <CardAlertDialogTitle>要移到已經過去的時間嗎?</CardAlertDialogTitle>
+          <CardAlertDialogTitle>要移到已經過去的時間嗎？</CardAlertDialogTitle>
           <CardAlertDialogDescription>
             你正在把 {request?.customerName ?? ""} 的預約移到已經過去的 {request?.time ?? ""}
-            ，確定嗎?
+            ，確定嗎？
           </CardAlertDialogDescription>
         </CardAlertDialogHeader>
         <CardAlertDialogFooter>

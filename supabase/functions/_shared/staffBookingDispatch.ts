@@ -26,7 +26,10 @@ export async function checkStaffBookingDispatch(
     p_event_type: eventType,
   });
   if (error) {
-    console.error("[staff-booking-dispatch] can_staff_dispatch_booking_notification 呼叫失敗", error);
+    console.error(
+      "[staff-booking-dispatch] can_staff_dispatch_booking_notification 呼叫失敗",
+      error,
+    );
     return "error";
   }
   return data === true;
@@ -39,7 +42,28 @@ export async function checkStaffBookingDispatch(
  * 管理員 / 客服路徑(viaStaffPath = false):照舊採用 body 的值(空字串視同沒帶)。
  * LINE(line-notify-dispatch)沒有任何自由文字欄位(內容全由伺服器依訂單組裝),不需要這一段。
  */
-export const STAFF_PATH_CHANGE_SUMMARY = "您的預約內容已更新，請至系統查看最新內容";
+//
+// #986 第 9 批:這句只會送到商家內部(管理員 / 客服 / 服務人員)的手機推播與鈴鐺,改成內部口吻,
+// 免得讀起來像是對客人說的。
+export const STAFF_PATH_CHANGE_SUMMARY = "服務人員已修改預約內容，請至系統查看";
+
+/**
+ * #986 第 9 批(使用者裁決):服務人員改單 / 拖拉**不通知客戶**。
+ * line-notify-dispatch 走服務人員路徑時,只放行這幾個 LINE 事件(建單、取消、完成照舊可能發給客戶);
+ * 其他事件(包含以後若有人替 LINE 加「改單」事件)一律在伺服器端擋下,不靠前端。
+ * 管理員 / 客服路徑不受影響。
+ */
+export const STAFF_PATH_LINE_EVENTS: readonly string[] = [
+  "booking_created",
+  "booking_cancelled",
+  "booking_completed",
+];
+
+export const STAFF_PATH_LINE_EVENT_BLOCKED_MESSAGE = "服務人員修改預約不會發送 LINE 通知";
+
+export function isStaffPathLineEventAllowed(eventType: string): boolean {
+  return STAFF_PATH_LINE_EVENTS.includes(eventType);
+}
 
 export function resolveStaffSafeDispatchFields(
   viaStaffPath: boolean,

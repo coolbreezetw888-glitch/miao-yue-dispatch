@@ -44,7 +44,7 @@ export function CancelBookingConfirmButton({
       </CardAlertDialogTrigger>
       <CardAlertDialogContent>
         <CardAlertDialogHeader>
-          <CardAlertDialogTitle>確定要取消這筆預約嗎?</CardAlertDialogTitle>
+          <CardAlertDialogTitle>確定要取消這筆預約嗎？</CardAlertDialogTitle>
           <CardAlertDialogDescription>
             取消後這個時段會恢復可預約，可以填寫取消原因(選填)。
           </CardAlertDialogDescription>

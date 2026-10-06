@@ -378,7 +378,7 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
         ) : isError ? (
           <ErrorState
             title="讀不到會員等級"
-            reason="可能是網路斷了;現在先不顯示等級清單，避免你把空白當成「等級都不見了」而重新建一份"
+            reason="可能是網路斷了；現在先不顯示等級清單，避免你把空白當成「等級都不見了」而重新建一份"
             onRetry={() => void refetchTiers()}
           />
         ) : !tiers || tiers.length === 0 ? (
@@ -512,7 +512,7 @@ function MemberSettingsPageInner() {
           ) : isSettingsError ? (
             <ErrorState
               title="讀不到會員政策設定"
-              reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
+              reason="可能是網路斷了；現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
               onRetry={() => void refetchSettings()}
             />
           ) : (

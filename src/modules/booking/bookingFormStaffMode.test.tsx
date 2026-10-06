@@ -3,8 +3,10 @@
 //   ・商家模式(預設):編輯送出的 updateBooking 參數整包比對(含主要服務人員、協助人員、會員、隱藏備註、料錢)
 //     ⇒ 這批加了資料來源層與服務人員分支之後,商家端送出的東西一個 key 都沒變(故障注入 11 的守門)
 //   ・服務人員模式:沒有服務人員下拉(唯讀一行自己的名字)、沒有協助人員欄位(編輯時唯讀「由商家指派」)、
-//     沒有會員比對面板、沒有「不讓服務人員看到」開關、沒有料錢;內部備註被藏起來的單沒有內部備註欄;
-//     送出打 staffCreateBooking / staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 料錢 / 其他服務人員
+//     沒有會員比對面板、沒有「不讓服務人員看到」開關;內部備註被藏起來的單沒有內部備註欄;
+//     送出打 staffCreateBooking / staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 其他服務人員
+//   ・#986 第 9 批(使用者裁決推翻主腦決定 C):服務人員模式「有料錢」—— 商家料錢總開關開著才出現(關著就沒有),
+//     編輯時預帶這張單的料錢,送出一律帶 materialCostItemIds(含空陣列)
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -274,13 +276,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const FORBIDDEN_STAFF_KEYS = [
-  "assistantStaffIds",
-  "memberId",
-  "hideNotesFromStaff",
-  "materialCostItemIds",
-  "merchantId",
-];
+// #986 第 9 批:materialCostItemIds 不再是禁止的 key(服務人員可看可改料錢)。
+const FORBIDDEN_STAFF_KEYS = ["assistantStaffIds", "memberId", "hideNotesFromStaff", "merchantId"];
+
+const REMOVED_MATERIAL_ID = "99999999-9999-4999-8999-999999999999";
+const STAFF_OPTIONS_WITH_MATERIAL = {
+  ...STAFF_OPTIONS,
+  material_cost_enabled: true,
+  material_cost_items: [{ id: MATERIAL_ID, name: "冷媒", amount: 200 }],
+  start_time_interval_minutes: 30,
+};
 
 describe("商家模式:送出參數跟改版前完全一樣(#977 第 7 批鎖住)", () => {
   it("編輯送出 updateBooking 的整包參數(主要服務人員、協助人員、會員、隱藏備註、料錢都照原值帶)", async () => {
@@ -332,7 +337,7 @@ describe("商家模式:送出參數跟改版前完全一樣(#977 第 7 批鎖住
 });
 
 describe("服務人員模式(#977 第 7 批)", () => {
-  it("編輯:唯讀自己的名字與「由商家指派」的協助人員;沒有下拉 / 協助人員欄位 / 會員面板 / 隱藏開關 / 料錢", async () => {
+  it("編輯:唯讀自己的名字與「由商家指派」的協助人員;沒有下拉 / 協助人員欄位 / 會員面板 / 隱藏開關;料錢總開關關 ⇒ 沒有料錢", async () => {
     m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(false));
     renderForm({ editingBookingId: BOOKING_ID, staff: true });
     expect(await screen.findByTestId("booking-form-assistants-readonly")).toHaveTextContent(
@@ -355,7 +360,7 @@ describe("服務人員模式(#977 第 7 批)", () => {
     expect(document.getElementById("booking-notes")).toBeNull();
   });
 
-  it("編輯送出 ⇒ staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 料錢 / 服務人員 id", async () => {
+  it("編輯送出 ⇒ staffUpdateBooking,參數裡沒有協助人員 / 會員 / 隱藏備註 / 服務人員 id;料錢帶目前的陣列(這張單沒有 ⇒ [])", async () => {
     m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(true));
     renderForm({ editingBookingId: BOOKING_ID, staff: true });
     await screen.findByTestId("booking-form-assistants-readonly");
@@ -371,10 +376,12 @@ describe("服務人員模式(#977 第 7 批)", () => {
       expect(Object.prototype.hasOwnProperty.call(payload, key)).toBe(false);
     }
     expect(payload).toMatchObject({ bookingId: BOOKING_ID, notes: null, paymentMethodId: PM_ID });
+    // #986 第 9 批:編輯一律帶目前勾選的陣列(不送 undefined / null)。
+    expect(payload["materialCostItemIds"]).toEqual([]);
     expect(m.updateBooking).not.toHaveBeenCalled();
   });
 
-  it("新增送出 ⇒ staffCreateBooking(staffId = 自己),沒有協助人員 / 會員 / 隱藏備註 / 料錢", async () => {
+  it("新增送出 ⇒ staffCreateBooking(staffId = 自己),沒有協助人員 / 會員 / 隱藏備註;沒勾料錢 ⇒ materialCostItemIds = []", async () => {
     renderForm({ editingBookingId: null, staff: true });
     await waitFor(() => expect(m.fetchStaffBookingFormOptions).toHaveBeenCalledWith(STAFF_ID));
     await screen.findByTestId("booking-form-staff-readonly");
@@ -400,6 +407,56 @@ describe("服務人員模式(#977 第 7 批)", () => {
       startAt: "2036-01-05T10:00:00+08:00",
       paymentMethodId: PM_ID,
     });
+    expect(payload["materialCostItemIds"]).toEqual([]);
     expect(m.createBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe("服務人員模式的料錢(#986 第 9 批,9-1 / 9-2)", () => {
+  it("總開關開 ⇒ 有料錢區塊;新增時勾一個品項 ⇒ staffCreateBooking 帶 materialCostItemIds", async () => {
+    m.fetchStaffBookingFormOptions.mockResolvedValue(STAFF_OPTIONS_WITH_MATERIAL);
+    renderForm({ editingBookingId: null, staff: true });
+    expect(await screen.findByText("料錢成本")).toBeInTheDocument();
+    fireEvent.change(document.getElementById("booking-customer-name") as HTMLElement, {
+      target: { value: "王小姐" },
+    });
+    fireEvent.change(document.getElementById("booking-customer-phone") as HTMLElement, {
+      target: { value: "0988000111" },
+    });
+    await waitFor(() => expect(document.getElementById("booking-service-items")).not.toBeNull());
+    pickServiceItems([/冷氣清洗/]);
+    await selectPaymentMethod("現金");
+    fireEvent.click(screen.getByRole("button", { name: /冷媒/ }));
+    screen.getByRole("button", { name: "建立預約" }).click();
+    await waitFor(() => expect(m.staffCreateBooking).toHaveBeenCalledTimes(1));
+    const payload = m.staffCreateBooking.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload["materialCostItemIds"]).toEqual([MATERIAL_ID]);
+  });
+
+  it("編輯:預帶這張單的料錢(含已下架的舊品項);拿掉上架那一項 ⇒ 送出只剩已下架那一項(原樣保留,後端不擋)", async () => {
+    m.fetchStaffBookingFormOptions.mockResolvedValue(STAFF_OPTIONS_WITH_MATERIAL);
+    m.fetchStaffBookingForEdit.mockResolvedValue({
+      ...staffEditRow(false),
+      material_costs: [
+        { material_cost_item_id: MATERIAL_ID, name: "冷媒", amount_snapshot: 200, is_active: true },
+        {
+          material_cost_item_id: REMOVED_MATERIAL_ID,
+          name: "舊銅管",
+          amount_snapshot: 90,
+          is_active: false,
+        },
+      ],
+    });
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    const chip = await screen.findByRole("button", { name: /冷媒/ });
+    await waitFor(() => expect(chip).toHaveAttribute("aria-pressed", "true"));
+    // 已下架品項跟商家模式一樣不出現在可勾選清單(商家模式現況:只列上架品項,舊品項留在陣列裡原樣送回)。
+    expect(screen.queryByRole("button", { name: /舊銅管/ })).toBeNull();
+    fireEvent.click(chip);
+    await waitFor(() => expect(chip).toHaveAttribute("aria-pressed", "false"));
+    screen.getByRole("button", { name: "儲存變更" }).click();
+    await waitFor(() => expect(m.staffUpdateBooking).toHaveBeenCalledTimes(1));
+    const payload = m.staffUpdateBooking.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload["materialCostItemIds"]).toEqual([REMOVED_MATERIAL_ID]);
   });
 });

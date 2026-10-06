@@ -81,7 +81,7 @@ export default function AgentInviteCompletePage() {
       // 邀請連結剛載入頁面時快取住的舊值(那個當下 status 還是 invited,查回來合法地是 0 間商家)。
       await refetchAccessibleMerchants();
 
-      toast.success("密碼設定完成，歡迎加入!");
+      toast.success("密碼設定完成，歡迎加入！");
       navigate("/app", { replace: true });
     } catch (err) {
       toast.error("設定失敗", { description: getErrorMessage(err) });

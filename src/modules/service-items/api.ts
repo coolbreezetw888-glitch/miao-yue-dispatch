@@ -10,7 +10,12 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import type { ServiceCategory, ServiceItem, ServiceItemType } from "./types";
+import {
+  normalizeServiceItemDescription,
+  type ServiceCategory,
+  type ServiceItem,
+  type ServiceItemType,
+} from "./types";
 
 // =========================================================================
 // 3.3:服務分類 CRUD。
@@ -64,6 +69,11 @@ export interface UpsertServiceItemInput {
   itemType: ServiceItemType;
   durationMinutes: number;
   categoryId: string | null;
+  /**
+   * #986 第 9 批:項目描述(選填,最多 200 字)。送出前一律 trim,空白存 null(normalizeServiceItemDescription)。
+   * undefined = 不動這個欄位(只在 updateServiceItem 有意義)。
+   */
+  description?: string | null;
 }
 
 /** 回傳某商家所有服務項目(含已下架,4.1 畫面自行依 status 篩選/標示)。 */
@@ -102,6 +112,7 @@ export async function addServiceItem(
       item_type: input.itemType,
       duration_minutes: input.durationMinutes,
       category_id: input.categoryId,
+      description: normalizeServiceItemDescription(input.description),
     })
     .select("*")
     .single();
@@ -119,6 +130,9 @@ export async function updateServiceItem(
     ...(input.itemType !== undefined ? { item_type: input.itemType } : {}),
     ...(input.durationMinutes !== undefined ? { duration_minutes: input.durationMinutes } : {}),
     ...(input.categoryId !== undefined ? { category_id: input.categoryId } : {}),
+    ...(input.description !== undefined
+      ? { description: normalizeServiceItemDescription(input.description) }
+      : {}),
   };
   const { error } = await supabase.from("service_items").update(payload).eq("id", itemId);
   if (error) throw error;

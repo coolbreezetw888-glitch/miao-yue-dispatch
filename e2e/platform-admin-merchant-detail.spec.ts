@@ -177,7 +177,7 @@ test.describe("超級管理員商家詳情強化", () => {
 
     // #693:副標說明補的那一句。
     await expect(
-      page.getByText("點商家名稱或右側「查看詳情」,可以進到單一商家的詳情頁"),
+      page.getByText("點商家名稱或右側「查看詳情」，可以進到單一商家的詳情頁"),
     ).toBeVisible();
   });
 
@@ -234,7 +234,7 @@ test.describe("超級管理員商家詳情強化", () => {
     // #705:三種狀態分得出來——這裡至少要確定「不是卡在載入中」,而且沒有出現讀取失敗。
     // ⚠️ 讀取失敗必須顯示錯誤、不能靜默當成空清單(規格書 3.15),所以這條斷言很重要:
     //    如果哪天函式被誤 revoke,畫面會出現「載入失敗:…」而這裡會紅。
-    await expect(page.getByText("載入失敗:", { exact: false })).toHaveCount(0);
+    await expect(page.getByText("載入失敗：", { exact: false })).toHaveCount(0);
   });
 
   // 規格書 2.2 / 6.3 第 5 點:釘住「唯讀」這個使用者裁決——兩張卡片內不得有任何 button。

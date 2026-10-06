@@ -109,7 +109,7 @@ function ImportHistoryPageInner() {
       {!isLoading && isError ? (
         <ErrorState
           title="讀不到匯入紀錄"
-          reason="可能是網路斷了;現在先不顯示紀錄，避免你把空白當成「那批匯入沒成功」而重複匯一次"
+          reason="可能是網路斷了；現在先不顯示紀錄，避免你把空白當成「那批匯入沒成功」而重複匯一次"
           onRetry={() => void refetchOperations()}
         />
       ) : null}
@@ -163,7 +163,7 @@ function ImportHistoryPageInner() {
                     </CardAlertDialogTrigger>
                     <CardAlertDialogContent>
                       <CardAlertDialogHeader>
-                        <CardAlertDialogTitle>確定要復原這個批次嗎?</CardAlertDialogTitle>
+                        <CardAlertDialogTitle>確定要復原這個批次嗎？</CardAlertDialogTitle>
                         <CardAlertDialogDescription>
                           只會復原這個批次自己動過、且之後沒有被其他操作異動過的資料，詳細結果會列出來。
                         </CardAlertDialogDescription>

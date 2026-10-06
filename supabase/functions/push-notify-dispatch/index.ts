@@ -164,7 +164,12 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     // 用他自己的身分呼叫這支 ⇒ 上面那道 can_manage_bookings 一定不過。這裡**再**問一次
     // can_staff_dispatch_booking_notification:本人是這張單的主要服務人員、可以自己下單、事件符合訂單現況才放行。
     // 原本就放行的人完全不經過這一段(行為不變)。
-    const staffAllowed = await checkStaffBookingDispatch(callerClient, merchantId, bookingId, eventType);
+    const staffAllowed = await checkStaffBookingDispatch(
+      callerClient,
+      merchantId,
+      bookingId,
+      eventType,
+    );
     if (staffAllowed === "error") {
       return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
     }
@@ -210,6 +215,8 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     changeSummary: staffSafe.changeSummary,
     // #823:空字串視同沒帶,不要讓 "" 走進去被當成一個 staff id 去查。
     previousStaffId: staffSafe.previousStaffId,
+    // #986 第 9 批(使用者裁決):服務人員改單 / 拖拉不通知客戶 ⇒ 收件人硬過濾只留商家內部。
+    internalRecipientsOnly: viaStaffPath && eventType === "booking_updated",
   });
 
   return jsonResponse({ ...result }, 200);

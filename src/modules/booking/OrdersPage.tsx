@@ -454,7 +454,7 @@ function OrdersPageInner() {
         // 「沒有符合篩選條件的訂單」吃掉,商家以為訂單不見了。照 A 批三頁已經做對的寫法。
         <ErrorState
           title="讀不到訂單清單"
-          reason="可能是網路斷了，或你沒有查看訂單的權限;現在先不顯示清單，避免你把空白當成「訂單不見了」"
+          reason="可能是網路斷了，或你沒有查看訂單的權限；現在先不顯示清單，避免你把空白當成「訂單不見了」"
           onRetry={() => void refetchBookings()}
         />
       ) : dateGroups.length === 0 ? (

@@ -284,7 +284,7 @@ function EditProfileDialog({
                   // 2026-09-24 主腦裁決把顯示 fallback 改成「暱稱 → 姓名 → 登入信箱前半段」之後,
                   // 這句說明也要跟著改成實際行為——原本寫「留空會顯示登入信箱前半段」現在只在姓名
                   // 也沒填的時候才成立,照實改寫成「會顯示你的姓名」。
-                  help: "給客戶看的稱呼，可以跟本名不一樣;留空的話畫面上會顯示你的姓名。",
+                  help: "給客戶看的稱呼，可以跟本名不一樣；留空的話畫面上會顯示你的姓名。",
                   helpLabel: "說明：暱稱留空會顯示什麼",
                 }
               : {})}
@@ -752,7 +752,7 @@ export default function ManagePage() {
       key: "push-logs",
       to: "/app/push-logs",
       label: "推播發送記錄",
-      description: "查看每一次手機推播有沒有發成功;沒發成功的會用白話說明原因和該怎麼處理",
+      description: "查看每一次手機推播有沒有發成功；沒發成功的會用白話說明原因和該怎麼處理",
       icon: History,
       visible: showPushNotificationCard,
     },

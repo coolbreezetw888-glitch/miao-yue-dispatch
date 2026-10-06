@@ -173,8 +173,8 @@ function formatThreshold(amount: number): string {
 
 /**
  * §4.2 第 4 點一句話預覽(使用者截圖的格式):
- *   `壁掛分離式 (普通機型) [NT$2,200]: 數量 × 50點 (單項金額≥2200元)`
- *   `全部服務項目: 數量 × 50點 (單項金額≥2200元)`
+ *   `壁掛分離式 (普通機型) [NT$2,200]：數量 × 50點 (單項金額≥2200元)`
+ *   `全部服務項目：數量 × 50點 (單項金額≥2200元)`
  *   門檻 0 時省略括號。點數或門檻還沒填好(不是合法數字)時回 null,畫面不顯示半套句子。
  */
 export function formulaPreviewSentence(input: {
@@ -187,7 +187,7 @@ export function formulaPreviewSentence(input: {
   if (!points.ok || !threshold.ok) return null;
   const head = input.item ? `${input.item.name} [${formatNtd(input.item.price)}]` : "全部服務項目";
   const tail = threshold.value > 0 ? ` (單項金額≥${formatThreshold(threshold.value)}元)` : "";
-  return `${head}: 數量 × ${points.value}點${tail}`;
+  return `${head}：數量 × ${points.value}點${tail}`;
 }
 
 export interface FormulaItemOption {

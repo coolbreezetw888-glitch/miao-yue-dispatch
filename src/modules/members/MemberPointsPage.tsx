@@ -262,7 +262,7 @@ function MemberPointsPageInner() {
           <CardContent className="pt-6">
             <ErrorState
               title="讀不到紅利點數的設定"
-              reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值(0 點、功能已啟用)當成自己的設定存回去"
+              reason="可能是網路斷了；現在先不顯示欄位，避免你把畫面上的預設值(0 點、功能已啟用)當成自己的設定存回去"
               onRetry={() => void refetchSettings()}
             />
           </CardContent>
@@ -328,7 +328,7 @@ function MemberPointsPageInner() {
                     關閉後<strong>系統就不再自動給點數了</strong>
                     ：客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
                     顯示任何點數相關的數字與入口(要結清某位會員剩下的點數，請先重新開啟功能、
-                    結清後再關閉);既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
+                    結清後再關閉)；既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
                   </AlertNote>
                 </SwitchRow>
               )}
@@ -350,7 +350,7 @@ function MemberPointsPageInner() {
           <CardContent className="pt-6">
             <EmptyState
               title="你目前的權限看不到這頁的規則設定"
-              description="個別會員的點數餘額、登記兌換與異動歷史，在「會員管理」點進該位會員就能操作;要調整點數核發規則，請找商家管理員開放「紅利點數」權限。"
+              description="個別會員的點數餘額、登記兌換與異動歷史，在「會員管理」點進該位會員就能操作；要調整點數核發規則，請找商家管理員開放「紅利點數」權限。"
               action={
                 <Button asChild variant="primary" size="touch">
                   <Link to="/app/members">去會員管理</Link>

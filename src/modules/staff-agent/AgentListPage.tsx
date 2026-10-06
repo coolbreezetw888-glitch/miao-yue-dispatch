@@ -432,7 +432,7 @@ function AgentListInner() {
         <CardHeader>
           <CardTitle>邀請新客服</CardTitle>
           <CardDescription>
-            對方會收到一封邀請信，點連結設定密碼後即可登入;如果對方已經有秒約帳號，會直接加為客服。
+            對方會收到一封邀請信，點連結設定密碼後即可登入；如果對方已經有秒約帳號，會直接加為客服。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -641,7 +641,7 @@ function AgentListInner() {
       >
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
-            <CardAlertDialogTitle>確定要移除這位客服嗎?</CardAlertDialogTitle>
+            <CardAlertDialogTitle>確定要移除這位客服嗎？</CardAlertDialogTitle>
             <CardAlertDialogDescription>
               移除後對方無法再看到這間店的任何資料，但對方的秒約帳號本身不受影響，
               資料採軟刪除，之後仍可查詢紀錄。
@@ -671,13 +671,13 @@ function AgentListInner() {
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
             <CardAlertDialogTitle className="break-words">
-              確定要真正刪除「{hardDeletingAgent?.name}」嗎?
+              確定要真正刪除「{hardDeletingAgent?.name}」嗎？
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這個動作無法復原!這位客服的紀錄與權限設定會被徹底刪除，之後在名單上
+              這個動作無法復原！這位客服的紀錄與權限設定會被徹底刪除，之後在名單上
               再也找不到，也無法用「恢復」救回。對方的秒約帳號本身不受影響，同一個 Email
               之後仍然可以重新邀請。只有在確定不再需要這筆資料(例如邀請時 Email
-              打錯字、對方永遠不會來註冊)時才使用;若只是暫時停用，請維持 「已移除」狀態即可。
+              打錯字、對方永遠不會來註冊)時才使用；若只是暫時停用，請維持 「已移除」狀態即可。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>

@@ -2581,6 +2581,7 @@ export type Database = {
         Row: {
           category_id: string | null
           created_at: string
+          description: string | null
           duration_minutes: number
           id: string
           item_type: string
@@ -2593,6 +2594,7 @@ export type Database = {
         Insert: {
           category_id?: string | null
           created_at?: string
+          description?: string | null
           duration_minutes: number
           id?: string
           item_type: string
@@ -2605,6 +2607,7 @@ export type Database = {
         Update: {
           category_id?: string | null
           created_at?: string
+          description?: string | null
           duration_minutes?: number
           id?: string
           item_type?: string
@@ -4452,6 +4455,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
+          p_material_cost_item_ids?: string[]
           p_notes?: string
           p_payment_method_id?: string
           p_points_override?: number
@@ -4533,6 +4537,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
+          p_material_cost_item_ids?: string[]
           p_notes?: string
           p_payment_method_id?: string
           p_points_override?: number

@@ -1081,3 +1081,81 @@ describe("useBookingDragState —— 觸控長按(Q4=B,#817)", () => {
     expect(h.onDragStart).not.toHaveBeenCalled();
   });
 });
+
+// ===========================================================================
+// #986 第 9 批(9-10、9-11):snapMinutes = 商家「建單時間間隔」。沒帶時上面所有既有測試一字不改照樣過。
+// ===========================================================================
+describe("computeDropTarget + snapMinutes(吸附到建單時間間隔)", () => {
+  const columns: DropColumnRect[] = [{ staffId: A, left: 100, right: 200 }];
+  // 同上:09:00 起、每格 30 分 / 30px(1px = 1 分鐘)、20 格(09:00–19:00)、頂端 Y=100。
+  const base = {
+    gridTopClientY: 100,
+    gridStartMin: 540,
+    slotMinutes: 30,
+    slotPx: 30,
+    slotCount: 20,
+    columnRects: columns,
+    pointerClientX: 150,
+    grabOffsetY: 0,
+  };
+
+  it("帶 10 ⇒ 落點是 10 分鐘倍數,可以停在格子中間(10:10)", () => {
+    // 色塊頂端在格線內 71px = 71 分鐘 ⇒ 10:11 ⇒ 吸附到 10:10。
+    const r = computeDropTarget({ ...base, pointerClientY: 171, snapMinutes: 10 });
+    expect(r).toEqual({ staffId: A, slotIndex: 2, startMin: 610, startTime: "10:10" });
+    expect(r!.startMin % 10).toBe(0);
+  });
+
+  it("5 / 15 / 30 各一例", () => {
+    // 頂端 73 分鐘 ⇒ 10:13
+    expect(computeDropTarget({ ...base, pointerClientY: 173, snapMinutes: 5 })).toMatchObject({
+      startTime: "10:15",
+    });
+    expect(computeDropTarget({ ...base, pointerClientY: 173, snapMinutes: 15 })).toMatchObject({
+      startTime: "10:15",
+    });
+    expect(computeDropTarget({ ...base, pointerClientY: 173, snapMinutes: 30 })).toMatchObject({
+      startTime: "10:00",
+    });
+  });
+
+  it("clamp 上下界:不早於格線起點;色塊尾端不超出格線終點(60 分 + 間隔 10 ⇒ 最晚 18:00)", () => {
+    expect(computeDropTarget({ ...base, pointerClientY: -500, snapMinutes: 10 })).toMatchObject({
+      startTime: "09:00",
+    });
+    expect(
+      computeDropTarget({ ...base, pointerClientY: 5000, snapMinutes: 10, durationMin: 60 }),
+    ).toMatchObject({ startTime: "18:00" });
+    // 50 分鐘的色塊 ⇒ 最晚 18:10(18:10–19:00 剛好貼齊),不是格線的 18:00。
+    expect(
+      computeDropTarget({ ...base, pointerClientY: 5000, snapMinutes: 10, durationMin: 50 }),
+    ).toMatchObject({ startTime: "18:10" });
+  });
+
+  it("格線起點不是間隔倍數時,最早往上取到倍數(起點 09:05、間隔 15 ⇒ 最早 09:15)", () => {
+    const r = computeDropTarget({
+      ...base,
+      gridStartMin: 545,
+      pointerClientY: -500,
+      snapMinutes: 15,
+    });
+    expect(r).toMatchObject({ startTime: "09:15" });
+  });
+
+  it("帶 30(= 格線)時,跟沒帶的結果完全相同(格線起點是整點時)", () => {
+    for (const y of [-500, 100, 144, 146, 171, 225, 333, 5000]) {
+      for (const durationMin of [undefined, 30, 60, 90]) {
+        const input = { ...base, pointerClientY: y, ...(durationMin ? { durationMin } : {}) };
+        expect(computeDropTarget({ ...input, snapMinutes: 30 }), `y=${y} d=${durationMin}`).toEqual(
+          computeDropTarget(input),
+        );
+      }
+    }
+  });
+
+  it("X 在格線外照樣回 null(吸附只影響 Y)", () => {
+    expect(
+      computeDropTarget({ ...base, pointerClientX: 50, pointerClientY: 171, snapMinutes: 10 }),
+    ).toBeNull();
+  });
+});

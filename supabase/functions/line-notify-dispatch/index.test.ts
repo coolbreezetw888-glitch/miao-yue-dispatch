@@ -139,10 +139,18 @@ Deno.test(
       },
     });
 
-    const variables = await resolveNotificationVariables(client, "merchant-1", undefined, "leave-1");
+    const variables = await resolveNotificationVariables(
+      client,
+      "merchant-1",
+      undefined,
+      "leave-1",
+    );
     assertEquals(calls.length, 1);
     assertEquals(calls[0].fn, "render_staff_leave_notification_variables");
-    assertEquals(calls[0].args, { p_staff_leave_record_id: "leave-1", p_merchant_id: "merchant-1" });
+    assertEquals(calls[0].args, {
+      p_staff_leave_record_id: "leave-1",
+      p_merchant_id: "merchant-1",
+    });
 
     // 這是 bug 385 的實際情境:staff_leave_created 事件的預設文案。修好之前 variables 永遠是
     // {},渲染結果會殘留 {{staff_name}}/{{booking_date}} 沒被替換,直接送給收訊人看到。
@@ -233,17 +241,20 @@ Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,有實際目標時要�
   assertEquals(shouldWriteAnyLogRow(result), true);
 });
 
-Deno.test("shouldWriteAnyLogRow: #962 服務人員已離職/停用、未開放行事曆檢視被跳過時,仍要寫跳過記錄讓商家查得到", () => {
-  for (const reason of ["staff_inactive", "staff_calendar_view_off"] as const) {
-    const result: ResolveTargetsResult = {
-      connected: true,
-      event_enabled: true,
-      targets: [],
-      skipped: [{ type: "staff", id: "s1", reason }],
-    };
-    assertEquals(shouldWriteAnyLogRow(result), true);
-  }
-});
+Deno.test(
+  "shouldWriteAnyLogRow: #962 服務人員已離職/停用、未開放行事曆檢視被跳過時,仍要寫跳過記錄讓商家查得到",
+  () => {
+    for (const reason of ["staff_inactive", "staff_calendar_view_off"] as const) {
+      const result: ResolveTargetsResult = {
+        connected: true,
+        event_enabled: true,
+        targets: [],
+        skipped: [{ type: "staff", id: "s1", reason }],
+      };
+      assertEquals(shouldWriteAnyLogRow(result), true);
+    }
+  },
+);
 
 // =========================================================================
 // SPECS-INDEX #972:跨商家訂單 / 請假紀錄(IDOR)。
@@ -258,7 +269,10 @@ Deno.test("shouldWriteAnyLogRow: #962 服務人員已離職/停用、未開放�
 // 假資料庫只認得:booking-A / leave-A(屬於 merchant-A 的服務人員 staff-A),以及
 // booking-B / leave-B(屬於 merchant-B 的服務人員 staff-B)。
 // =========================================================================
-const FAKE_BOOKINGS: Record<string, string> = { "booking-A": "merchant-A", "booking-B": "merchant-B" };
+const FAKE_BOOKINGS: Record<string, string> = {
+  "booking-A": "merchant-A",
+  "booking-B": "merchant-B",
+};
 const FAKE_LEAVES: Record<string, string> = { "leave-A": "staff-A", "leave-B": "staff-B" };
 const FAKE_STAFF: Record<string, string> = { "staff-A": "merchant-A", "staff-B": "merchant-B" };
 
@@ -284,17 +298,22 @@ function makeFakeLineAdminClient(options: { failLookup?: boolean } = {}) {
               }
               if (table === "bookings") {
                 const owner = FAKE_BOOKINGS[String(filters.id)];
-                const ok = owner !== undefined &&
+                const ok =
+                  owner !== undefined &&
                   (filters.merchant_id === undefined || filters.merchant_id === owner);
                 return Promise.resolve({ data: ok ? { id: filters.id } : null, error: null });
               }
               if (table === "staff_leave_records") {
                 const staffId = FAKE_LEAVES[String(filters.id)];
-                return Promise.resolve({ data: staffId ? { staff_id: staffId } : null, error: null });
+                return Promise.resolve({
+                  data: staffId ? { staff_id: staffId } : null,
+                  error: null,
+                });
               }
               if (table === "merchant_staff") {
                 const owner = FAKE_STAFF[String(filters.id)];
-                const ok = owner !== undefined &&
+                const ok =
+                  owner !== undefined &&
                   (filters.merchant_id === undefined || filters.merchant_id === owner);
                 return Promise.resolve({ data: ok ? { id: filters.id } : null, error: null });
               }
@@ -302,7 +321,10 @@ function makeFakeLineAdminClient(options: { failLookup?: boolean } = {}) {
                 return Promise.resolve({ data: { channel_access_token: "token" }, error: null });
               }
               if (table === "merchant_line_event_settings") {
-                return Promise.resolve({ data: { message_template: "{{customer_name}}" }, error: null });
+                return Promise.resolve({
+                  data: { message_template: "{{customer_name}}" },
+                  error: null,
+                });
               }
               return Promise.resolve({ data: null, error: null });
             },
@@ -355,32 +377,50 @@ function makeLineRequest(body: Record<string, unknown>): Request {
   });
 }
 
-Deno.test("#972(核心必測):A 商家帶 B 商家的 booking_id → 404,不解析收件人、不寫任何發送記錄", async () => {
-  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-B", event_type: "booking_confirmed" }),
-    makeLineDeps(adminClient),
-  );
-  assertEquals(res.status, 404);
-  assertEquals(rpcCalls, []);
-  assertEquals(inserts, []);
-});
+Deno.test(
+  "#972(核心必測):A 商家帶 B 商家的 booking_id → 404,不解析收件人、不寫任何發送記錄",
+  async () => {
+    const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-B",
+        event_type: "booking_confirmed",
+      }),
+      makeLineDeps(adminClient),
+    );
+    assertEquals(res.status, 404);
+    assertEquals(rpcCalls, []);
+    assertEquals(inserts, []);
+  },
+);
 
-Deno.test("#972(核心必測):A 商家帶 B 商家的 staff_leave_record_id → 404,不解析收件人、不寫任何發送記錄", async () => {
-  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-B", event_type: "staff_leave_created" }),
-    makeLineDeps(adminClient),
-  );
-  assertEquals(res.status, 404);
-  assertEquals(rpcCalls, []);
-  assertEquals(inserts, []);
-});
+Deno.test(
+  "#972(核心必測):A 商家帶 B 商家的 staff_leave_record_id → 404,不解析收件人、不寫任何發送記錄",
+  async () => {
+    const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        staff_leave_record_id: "leave-B",
+        event_type: "staff_leave_created",
+      }),
+      makeLineDeps(adminClient),
+    );
+    assertEquals(res.status, 404);
+    assertEquals(rpcCalls, []);
+    assertEquals(inserts, []);
+  },
+);
 
 Deno.test("#972:不存在的 booking_id 也回 404(不區分「不存在」與「別家的」),不寫記錄", async () => {
   const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient();
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-nope", event_type: "booking_created" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-nope",
+      event_type: "booking_created",
+    }),
     makeLineDeps(adminClient),
   );
   assertEquals(res.status, 404);
@@ -391,7 +431,11 @@ Deno.test("#972:不存在的 booking_id 也回 404(不區分「不存在」與�
 Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed,不當作通過),不寫記錄", async () => {
   const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient({ failLookup: true });
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_created",
+    }),
     makeLineDeps(adminClient),
   );
   assertEquals(res.status, 500);
@@ -399,38 +443,62 @@ Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed,不當作通過),�
   assertEquals(inserts, []);
 });
 
-Deno.test("#972 正向對照:同商家的 booking_id → 正常解析收件人並寫入跳過記錄(行為不變)", async () => {
-  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
-    makeLineDeps(adminClient),
-  );
-  assertEquals(res.status, 200);
-  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
-  assertEquals(inserts.length, 1);
-  assertEquals(inserts[0].table, "line_notification_log");
-  assertEquals(inserts[0].row.booking_id, "booking-A");
-  // 釘住歸屬查詢真的用了 merchant_id 條件(拿掉 .eq("merchant_id") 這條會轉紅)。
-  assertEquals(selects[0], { table: "bookings", filters: { id: "booking-A", merchant_id: "merchant-A" } });
-});
+Deno.test(
+  "#972 正向對照:同商家的 booking_id → 正常解析收件人並寫入跳過記錄(行為不變)",
+  async () => {
+    const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-A",
+        event_type: "booking_confirmed",
+      }),
+      makeLineDeps(adminClient),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+    assertEquals(inserts.length, 1);
+    assertEquals(inserts[0].table, "line_notification_log");
+    assertEquals(inserts[0].row.booking_id, "booking-A");
+    // 釘住歸屬查詢真的用了 merchant_id 條件(拿掉 .eq("merchant_id") 這條會轉紅)。
+    assertEquals(selects[0], {
+      table: "bookings",
+      filters: { id: "booking-A", merchant_id: "merchant-A" },
+    });
+  },
+);
 
-Deno.test("#972 正向對照:同商家的 staff_leave_record_id → 正常解析收件人並寫入跳過記錄", async () => {
-  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-A", event_type: "staff_leave_created" }),
-    makeLineDeps(adminClient),
-  );
-  assertEquals(res.status, 200);
-  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
-  assertEquals(inserts.length, 1);
-  assertEquals(inserts[0].row.staff_leave_record_id, "leave-A");
-  assertEquals(selects[1], { table: "merchant_staff", filters: { id: "staff-A", merchant_id: "merchant-A" } });
-});
+Deno.test(
+  "#972 正向對照:同商家的 staff_leave_record_id → 正常解析收件人並寫入跳過記錄",
+  async () => {
+    const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        staff_leave_record_id: "leave-A",
+        event_type: "staff_leave_created",
+      }),
+      makeLineDeps(adminClient),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+    assertEquals(inserts.length, 1);
+    assertEquals(inserts[0].row.staff_leave_record_id, "leave-A");
+    assertEquals(selects[1], {
+      table: "merchant_staff",
+      filters: { id: "staff-A", merchant_id: "merchant-A" },
+    });
+  },
+);
 
 Deno.test("#972:授權檢查沒過時仍然是 403(歸屬檢查不會蓋掉原本的授權檢查),也不查歸屬", async () => {
   const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_confirmed",
+    }),
     makeLineDeps(adminClient, {
       createCallerClient: () => ({ rpc: () => Promise.resolve({ data: false, error: null }) }),
     }),
@@ -448,7 +516,11 @@ Deno.test("#972:注入的歸屬檢查回 false 時,handler 一定擋下(handler 
     staffLeaveRecordBelongsToMerchant: () => Promise.resolve(false),
   };
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_confirmed",
+    }),
     makeLineDeps(adminClient, { createOwnershipLookup: () => denyAll }),
   );
   assertEquals(res.status, 404);
@@ -456,12 +528,18 @@ Deno.test("#972:注入的歸屬檢查回 false 時,handler 一定擋下(handler 
   assertEquals(inserts, []);
 });
 
-Deno.test("#972:buildNotifySubjectOwnershipLookup 請假紀錄查不到時回 false,不再查服務人員", async () => {
-  const { adminClient, selects } = makeFakeLineAdminClient();
-  const lookup = buildNotifySubjectOwnershipLookup(adminClient);
-  assertEquals(await lookup.staffLeaveRecordBelongsToMerchant("leave-nope", "merchant-A"), false);
-  assertEquals(selects.map((x) => x.table), ["staff_leave_records"]);
-});
+Deno.test(
+  "#972:buildNotifySubjectOwnershipLookup 請假紀錄查不到時回 false,不再查服務人員",
+  async () => {
+    const { adminClient, selects } = makeFakeLineAdminClient();
+    const lookup = buildNotifySubjectOwnershipLookup(adminClient);
+    assertEquals(await lookup.staffLeaveRecordBelongsToMerchant("leave-nope", "merchant-A"), false);
+    assertEquals(
+      selects.map((x) => x.table),
+      ["staff_leave_records"],
+    );
+  },
+);
 
 // =========================================================================
 // SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人自己建單 / 改單 / 取消 / 完成後發通知。
@@ -482,42 +560,63 @@ function makeStaffCaller(answers: Record<string, { data: unknown; error: unknown
   };
 }
 
-Deno.test("#977-7:管理員檢查不過、服務人員本人自己的單 → 放行(200),而且問的是 can_staff_dispatch_booking_notification(帶商家 / 訂單 / 事件)", async () => {
-  const { adminClient, rpcCalls } = makeFakeLineAdminClient();
-  const caller = makeStaffCaller({
-    can_dispatch_line_notification: { data: false, error: null },
-    can_staff_dispatch_booking_notification: { data: true, error: null },
-  });
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
-    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
-  );
-  assertEquals(res.status, 200);
-  assertEquals(caller.calls, [
-    { fn: "can_dispatch_line_notification", args: { p_merchant_id: "merchant-A", p_event_type: "booking_created" } },
-    {
-      fn: "can_staff_dispatch_booking_notification",
-      args: { p_merchant_id: "merchant-A", p_booking_id: "booking-A", p_event_type: "booking_created" },
-    },
-  ]);
-  assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
-});
+Deno.test(
+  "#977-7:管理員檢查不過、服務人員本人自己的單 → 放行(200),而且問的是 can_staff_dispatch_booking_notification(帶商家 / 訂單 / 事件)",
+  async () => {
+    const { adminClient, rpcCalls } = makeFakeLineAdminClient();
+    const caller = makeStaffCaller({
+      can_dispatch_line_notification: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-A",
+        event_type: "booking_created",
+      }),
+      makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(caller.calls, [
+      {
+        fn: "can_dispatch_line_notification",
+        args: { p_merchant_id: "merchant-A", p_event_type: "booking_created" },
+      },
+      {
+        fn: "can_staff_dispatch_booking_notification",
+        args: {
+          p_merchant_id: "merchant-A",
+          p_booking_id: "booking-A",
+          p_event_type: "booking_created",
+        },
+      },
+    ]);
+    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+  },
+);
 
-Deno.test("#977-7:別人的單 / 協助人員 / 事件不符(資料庫回 false)→ 403,不查歸屬、不寫記錄", async () => {
-  const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
-  const caller = makeStaffCaller({
-    can_dispatch_line_notification: { data: false, error: null },
-    can_staff_dispatch_booking_notification: { data: false, error: null },
-  });
-  const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_cancelled" }),
-    makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
-  );
-  assertEquals(res.status, 403);
-  assertEquals(rpcCalls, []);
-  assertEquals(inserts, []);
-  assertEquals(selects, []);
-});
+Deno.test(
+  "#977-7:別人的單 / 協助人員 / 事件不符(資料庫回 false)→ 403,不查歸屬、不寫記錄",
+  async () => {
+    const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+    const caller = makeStaffCaller({
+      can_dispatch_line_notification: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: false, error: null },
+    });
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-A",
+        event_type: "booking_cancelled",
+      }),
+      makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+    );
+    assertEquals(res.status, 403);
+    assertEquals(rpcCalls, []);
+    assertEquals(inserts, []);
+    assertEquals(selects, []);
+  },
+);
 
 Deno.test("#977-7:沒帶 booking_id(例如請假通知)→ 不問服務人員那支,直接 403", async () => {
   const { adminClient, inserts } = makeFakeLineAdminClient();
@@ -526,11 +625,18 @@ Deno.test("#977-7:沒帶 booking_id(例如請假通知)→ 不問服務人員那
     can_staff_dispatch_booking_notification: { data: true, error: null },
   });
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", staff_leave_record_id: "leave-A", event_type: "staff_leave_created" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      staff_leave_record_id: "leave-A",
+      event_type: "staff_leave_created",
+    }),
     makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
   );
   assertEquals(res.status, 403);
-  assertEquals(caller.calls.map((c) => c.fn), ["can_dispatch_line_notification"]);
+  assertEquals(
+    caller.calls.map((c) => c.fn),
+    ["can_dispatch_line_notification"],
+  );
   assertEquals(inserts, []);
 });
 
@@ -541,7 +647,11 @@ Deno.test("#977-7:服務人員那支 RPC 本身出錯 → 500(fail closed),不�
     can_staff_dispatch_booking_notification: { data: null, error: { message: "boom" } },
   });
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_created",
+    }),
     makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
   );
   assertEquals(res.status, 500);
@@ -555,9 +665,93 @@ Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多�
     can_staff_dispatch_booking_notification: { data: false, error: null },
   });
   const res = await handleRequest(
-    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineRequest({
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_created",
+    }),
     makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
   );
   assertEquals(res.status, 200);
-  assertEquals(caller.calls.map((c) => c.fn), ["can_dispatch_line_notification"]);
+  assertEquals(
+    caller.calls.map((c) => c.fn),
+    ["can_dispatch_line_notification"],
+  );
 });
+
+// =========================================================================
+// #986 第 9 批(使用者裁決):服務人員改單 / 拖拉不通知客戶。服務人員路徑只放行建單、取消、完成三種 LINE 事件,
+// 其他事件(例如 booking_updated)在伺服器端直接 403:不問 can_staff_dispatch_booking_notification、不寫任何記錄。
+// =========================================================================
+Deno.test(
+  "#986-9:服務人員路徑 + booking_updated → 403(服務人員修改預約不會發送 LINE 通知),不問服務人員那支、不寫記錄",
+  async () => {
+    const { adminClient, rpcCalls, inserts, selects } = makeFakeLineAdminClient();
+    const caller = makeStaffCaller({
+      can_dispatch_line_notification: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-A",
+        event_type: "booking_updated",
+      }),
+      makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+    );
+    assertEquals(res.status, 403);
+    assertEquals(await res.json(), { error: "服務人員修改預約不會發送 LINE 通知" });
+    assertEquals(
+      caller.calls.map((c) => c.fn),
+      ["can_dispatch_line_notification"],
+    );
+    assertEquals(rpcCalls, []);
+    assertEquals(inserts, []);
+    assertEquals(selects, []);
+  },
+);
+
+for (const ev of ["booking_created", "booking_cancelled", "booking_completed"] as const) {
+  Deno.test(
+    `#986-9:服務人員路徑白名單事件 ${ev} → 照第 7 批放行條件(資料庫回 true ⇒ 200)`,
+    async () => {
+      const { adminClient } = makeFakeLineAdminClient();
+      const caller = makeStaffCaller({
+        can_dispatch_line_notification: { data: false, error: null },
+        can_staff_dispatch_booking_notification: { data: true, error: null },
+      });
+      const res = await handleRequest(
+        makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: ev }),
+        makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(
+        caller.calls.map((c) => c.fn),
+        ["can_dispatch_line_notification", "can_staff_dispatch_booking_notification"],
+      );
+    },
+  );
+}
+
+Deno.test(
+  "#986-9 對照:管理員 / 客服路徑對 booking_updated 行為不變(交給 can_dispatch_line_notification 決定,不套白名單)",
+  async () => {
+    const { adminClient } = makeFakeLineAdminClient();
+    const caller = makeStaffCaller({
+      can_dispatch_line_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      makeLineRequest({
+        merchant_id: "merchant-A",
+        booking_id: "booking-A",
+        event_type: "booking_updated",
+      }),
+      makeLineDeps(adminClient, { createCallerClient: () => caller.client }),
+    );
+    assertEquals(res.status !== 403, true);
+    assertEquals(
+      caller.calls.map((c) => c.fn),
+      ["can_dispatch_line_notification"],
+    );
+  },
+);

@@ -73,7 +73,7 @@ export function DateRangePicker({
           都沒有標題的列疊在一起,使用者看不出哪條是哪條。包進 FormField 給它可見標籤。
           aria-label 保留:FormField 的 <Label> 沒有 htmlFor(radiogroup 不是單一控制項),
           語意名稱還是靠 aria-label 提供。 */}
-      <FormField label="區間單位" help="「按日期」可以挑任意兩天;「按月份」會自動抓整個月。">
+      <FormField label="區間單位" help="「按日期」可以挑任意兩天；「按月份」會自動抓整個月。">
         <ChoiceChipGroup
           aria-label="區間單位"
           value={granularity}

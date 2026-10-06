@@ -365,7 +365,7 @@ export function MemberPointsPanel({ member }: { member: MemberDetail }) {
         {isHistoryError ? (
           <ErrorState
             title="讀不到點數異動紀錄"
-            reason="可能是網路斷了;現在先不顯示紀錄，避免你把空白當成「這位會員沒有任何點數異動」"
+            reason="可能是網路斷了；現在先不顯示紀錄，避免你把空白當成「這位會員沒有任何點數異動」"
             onRetry={() => void refetchHistory()}
           />
         ) : !pointHistory || pointHistory.length === 0 ? (

@@ -11,10 +11,11 @@
 --   ㉓~㉘   引擎未動:範例 A / B / C 開關開與關各完成一筆,抽成與快照數字 = 規格書第五節
 --   ㉙~㉛   快照制:開啟時完成 ⇒ 切關閉後快照不變 ⇒ 手動重算 ⇒ 變不扣料錢
 --   ㉜~㊵   順手修:編輯訂單時原有料錢品項已下架 / 功能已關 ⇒ 服務人員與管理員都能存、快照保留;
+--   ㊶㊷    #986 第 9 批補釘:只放寬「這一筆訂單原本就有」的已下架品項(別張單的不行、拿掉後再加回不行);
 --            新加的品項照舊檢查(功能關、已下架、別家品項);新建訂單照舊檢查
 begin;
 
-select plan(40);
+select plan(42);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -321,6 +322,32 @@ select throws_ok(
   'P0001', '找不到其中一個料錢成本品項,或已下架', '㊴ 新建訂單用已下架品項照舊擋下(不受放寬影響)');
 select throws_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000062'::uuid, 'f9850000-0000-4000-8000-000000000062'::uuid])$$, :'e1_id'),
   'P0001', '同一個料錢成本品項不能在同一筆預約裡選取兩次', '㊵ 原有品項重複選取照舊擋下');
+select pg_temp.test_clear_auth();
+
+-- ㊶㊷ #986 第 9 批補釘(第 8 批 QA 建議):放寬只限「這一筆訂單原本就有」的已下架品項。
+create function pg_temp.aup2(p_booking uuid, p_materials uuid[], p_start timestamptz)
+returns uuid language sql as $$
+  select id from public.update_booking(
+    p_booking_id => p_booking,
+    p_staff_id => 'f9850000-0000-4000-8000-000000000040',
+    p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','f9850000-0000-4000-8000-000000000035','quantity',1,'unit_price',800)),
+    p_start_at => p_start,
+    p_customer_name => '林小姐(管理員改)',
+    p_customer_phone => '0955985000',
+    p_customer_address => '台北市測試路 85 號',
+    p_material_cost_item_ids => p_materials,
+    p_payment_method_id => 'f9850000-0000-4000-8000-000000000050'
+  );
+$$;
+grant execute on function pg_temp.aup2(uuid, uuid[], timestamptz) to authenticated;
+
+select pg_temp.test_set_auth('f9850000-0000-4000-8000-000000000001');
+select pg_temp.mk(array['f9850000-0000-4000-8000-000000000035'::uuid], '{}'::uuid[], '2036-07-05 10:00+08') as id \gset e2_
+select throws_ok(format($$select pg_temp.aup2(%L, array['f9850000-0000-4000-8000-000000000062'::uuid], '2036-07-05 10:00+08')$$, :'e2_id'),
+  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊶ 訂單 A 上的已下架品項,加進訂單 B 照舊擋下');
+select pg_temp.aup2(:'e1_id'::uuid, '{}'::uuid[], '2036-07-01 10:00+08');
+select throws_ok(format($$select pg_temp.aup2(%L, array['f9850000-0000-4000-8000-000000000062'::uuid], '2036-07-01 10:00+08')$$, :'e1_id'),
+  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊷ 已下架品項從訂單拿掉後再加回來照舊擋下');
 select pg_temp.test_clear_auth();
 
 select * from finish();

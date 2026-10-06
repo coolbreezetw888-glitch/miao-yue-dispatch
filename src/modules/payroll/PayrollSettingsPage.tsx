@@ -117,7 +117,7 @@ export function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string
       <CardHeader>
         <CardTitle>商家層級設定</CardTitle>
         <CardDescription>
-          套用到所有抽成制服務人員;每個人實際抽成多少，到下方「抽成制服務人員」逐一設定。
+          套用到所有抽成制服務人員；每個人實際抽成多少，到下方「抽成制服務人員」逐一設定。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -127,7 +127,7 @@ export function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string
           // 🔴 2026-09-30 QA:讀不到時不可以顯示預設值(會讓人以為是自己存過的設定)。
           <ErrorState
             title="讀不到商家層級的抽成設定"
-            reason="可能是網路斷了;現在先不顯示目前的設定，避免給你錯誤的訊息"
+            reason="可能是網路斷了；現在先不顯示目前的設定，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -462,7 +462,7 @@ function StaffServiceCommissionDialog({
             </div>
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
               範例：一筆原價 1000 元、1 件的服務，套用這個設定可以拿到{" "}
-              <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考;只會套用到目前開關=開的
+              <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考；只會套用到目前開關=開的
               項目，關掉的項目不受影響)。
             </p>
           </section>
@@ -816,7 +816,7 @@ function StaffSalarySettingsDialog({
             {!Number.isNaN(numericBaseSalary) ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
                 試算：以本月 {payDaysPerMonth} 天換算，一天薪水約{" "}
-                <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」;
+                <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」；
                 天數由系統依請假當月自動換算，不用另外設定(詳見上方「【月薪制】月折算天數」)。
               </p>
             ) : null}

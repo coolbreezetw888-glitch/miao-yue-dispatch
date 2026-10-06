@@ -125,7 +125,7 @@ function LineLogsPageInner() {
           ) : isError ? (
             <ErrorState
               title="讀不到發送記錄"
-              reason="可能是網路斷了;現在先不顯示記錄，避免你把空白當成「通知從來沒發過」"
+              reason="可能是網路斷了；現在先不顯示記錄，避免你把空白當成「通知從來沒發過」"
               onRetry={() => void refetchLogs()}
             />
           ) : !logs || logs.length === 0 ? (

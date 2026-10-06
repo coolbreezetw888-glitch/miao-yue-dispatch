@@ -33,7 +33,7 @@ export function ThemePresetPicker({
     <div className="flex flex-col gap-4">
       <FormField
         label="基礎色系"
-        help="選一組現成的色系最快。這個顏色會套用到全站的主要按鈕、選中狀態、標籤等地方(skill 一：元件不寫死品牌色，一律跟著這裡走)。"
+        help="選一組現成的色系最快。這個顏色會套用到全站的主要按鈕、選中狀態、標籤等地方。"
         helpLabel="說明：基礎色系會影響哪些地方"
       >
         {/* 可點的方塊 = 單選(skill 二之七),選中 = 主題色框 + 勾。每顆至少 44px 觸控目標。

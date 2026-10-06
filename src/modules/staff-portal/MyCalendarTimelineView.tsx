@@ -37,7 +37,7 @@
 // 減少一層不必要的間接轉換。已在回報中向主腦說明這個偏離。
 
 import { useCallback, useMemo, type CSSProperties } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/patterns";
@@ -73,7 +73,12 @@ import {
   useMyDayBusinessHours,
   useMyDayScheduleState,
 } from "./context";
-import { staffMoveBooking, staffSetMySlot, type MyBookingScheduleItem } from "./api";
+import {
+  fetchStaffBookingFormOptions,
+  staffMoveBooking,
+  staffSetMySlot,
+  type MyBookingScheduleItem,
+} from "./api";
 import { invalidateStaffSchedule } from "./staffScheduleChannel";
 
 const SLOT_MINUTES = 30;
@@ -184,6 +189,16 @@ export function MyCalendarTimelineView({
     ];
   }, [interactive, staffId, orderActions?.unlimitedBackendEdit, dayState?.on_leave, bookings]);
   const staffNameById = useMemo(() => new Map<string, string>(), []);
+  // #986 第 9 批(9-11):拖拉放開時吸附到商家「建單時間間隔」。服務人員讀不到 merchant_booking_settings
+  // (RLS 不放寬),改從 staff_get_booking_form_options 拿;只有開了「新增編輯訂單」的人才能拖(interactive),
+  // 剛好也是能呼叫這支 RPC 的人。query key 跟建單表單(useBookingFormDataSource)同一把,共用快取。
+  // 讀不到 / 讀取失敗 ⇒ 30(= 格線,跟改版前一樣)。
+  const { data: staffFormOptions } = useQuery({
+    queryKey: ["staff-portal-module", "booking-form-options", staffId],
+    queryFn: () => fetchStaffBookingFormOptions(staffId as string),
+    enabled: interactive,
+  });
+  const dragSnapMinutes = staffFormOptions?.start_time_interval_minutes ?? SLOT_MINUTES;
   const dragController = useCalendarBookingDrag({
     dateKey: selectedDateKey,
     staffBlocks: dragStaffBlocks,
@@ -193,6 +208,7 @@ export function MyCalendarTimelineView({
     slotMinutes: SLOT_MINUTES,
     slotPx: SLOT_PX,
     thresholdPx: SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+    snapMinutes: dragSnapMinutes,
     onOpenDetail: (bookingId) => onSelectBooking(bookingId),
     onMoved: refreshAfterChange,
     moveFn: (input) => staffMoveBooking(input),

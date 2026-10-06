@@ -236,3 +236,33 @@ describe("formatRelativeNotificationTime(§13.7)", () => {
     expect(formatRelativeNotificationTime("not-a-date", now)).toBe("");
   });
 });
+
+// #986 第 9 批(9-16):服務人員確認接單後,有「訂單管理」權限的客服也會收到 booking_confirmed(target_type agent)。
+describe("確認接單鈴鐺給客服(#986 第 9 批)", () => {
+  it("agent + booking_confirmed ⇒ 點下去到 /app/orders(跟管理員那則同一個目的地)", () => {
+    expect(resolveNotificationLink({ target_type: "agent" })).toBe("/app/orders");
+    expect(resolveNotificationLink({ target_type: "admin" })).toBe("/app/orders");
+  });
+
+  it("同一則確認接單同時以 agent 身分存在時,合併後仍算得出 /app/orders", () => {
+    const row = {
+      id: "n-agent",
+      user_id: "u1",
+      merchant_id: "m1",
+      target_type: "agent",
+      target_id: "agent-1",
+      event_type: "booking_confirmed",
+      booking_id: "b1",
+      title: "服務人員已確認訂單",
+      body: "服務人員「甲」已確認 2036/01/05 10:00「陳小美」的訂單。",
+      read_at: null,
+      created_at: "2036-01-05T02:00:00Z",
+    } as unknown as UserNotification;
+    const merged = mergeNotificationRows([row]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.primaryTargetType).toBe("agent");
+    expect(resolveNotificationLink({ target_type: merged[0]!.primaryTargetType })).toBe(
+      "/app/orders",
+    );
+  });
+});

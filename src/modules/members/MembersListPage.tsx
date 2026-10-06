@@ -315,7 +315,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <FormField
             label="生日"
             htmlFor="member-birthday"
-            help="填了生日，系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話，7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
+            help="填了生日，系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話，7 天內會補發)；要商家在「紅利點數 > 生日獎勵」開啟才會發。"
             helpLabel="說明：填生日會發生什麼事"
           >
             <FieldDate
@@ -537,7 +537,7 @@ function MembersListInner() {
             // 「沒有符合條件的會員」,商家以為會員被刪掉了。
             <ErrorState
               title="讀不到會員名單"
-              reason="可能是網路斷了，或你沒有查看會員的權限;現在先不顯示名單，避免你把空白當成「會員不見了」"
+              reason="可能是網路斷了，或你沒有查看會員的權限；現在先不顯示名單，避免你把空白當成「會員不見了」"
               onRetry={() => void refetchMembers()}
             />
           ) : visibleMembers.length === 0 ? (
@@ -653,7 +653,9 @@ function MembersListInner() {
       >
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
-            <CardAlertDialogTitle>確定要下架「{deactivatingMember?.name}」嗎?</CardAlertDialogTitle>
+            <CardAlertDialogTitle>
+              確定要下架「{deactivatingMember?.name}」嗎？
+            </CardAlertDialogTitle>
             <CardAlertDialogDescription>
               這是軟刪除，資料不會不見，之後隨時可以重新上架恢復。
             </CardAlertDialogDescription>

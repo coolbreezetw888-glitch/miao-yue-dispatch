@@ -423,7 +423,7 @@ describe("建單表單的紅利區塊(紅利系統重構 §4.6)", () => {
     renderForm(null);
     await fillCreateForm();
     await waitFor(() => expect(screen.getByText("會員：王小明")).toBeInTheDocument());
-    expect(screen.getByText(/目前可用 120 點;本單最多可折 120 點\(\$12\)/)).toBeInTheDocument();
+    expect(screen.getByText(/目前可用 120 點；本單最多可折 120 點\(\$12\)/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch", { name: /使用點數折抵/ }));
     fireEvent.change(await screen.findByLabelText(/折抵點數/), { target: { value: "55" } });
     expect(screen.getByText("折抵 $5")).toBeInTheDocument();

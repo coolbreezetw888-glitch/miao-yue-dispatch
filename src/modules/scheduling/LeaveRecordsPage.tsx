@@ -509,7 +509,7 @@ function LeaveRecordsPageInner() {
       >
         <CardAlertDialogContent>
           <CardAlertDialogHeader>
-            <CardAlertDialogTitle>確定要取消這筆請假紀錄嗎?</CardAlertDialogTitle>
+            <CardAlertDialogTitle>確定要取消這筆請假紀錄嗎？</CardAlertDialogTitle>
             <CardAlertDialogDescription>
               取消後這位服務人員這段期間恢復正常排班，可以正常被預約。要改期或改假別，
               取消後重新登記一筆新的即可。

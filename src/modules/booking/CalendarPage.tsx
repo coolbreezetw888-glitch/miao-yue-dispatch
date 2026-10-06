@@ -105,6 +105,7 @@ import { computeBookingChangeSummary } from "@/modules/push-notifications/change
 
 import {
   createBooking,
+  DEFAULT_BOOKING_START_TIME_INTERVAL,
   fetchBookingAssistantStaffIds,
   fetchStaffBookableStartTimes,
   updateBooking,
@@ -159,6 +160,7 @@ import {
 } from "./bookingCreatedFeedback";
 import {
   setStaffDayOverride,
+  useBookingStartTimeInterval,
   useMerchantBookings,
   useMerchantBookingStatusColors,
   useMerchantCalendarStateStyles,
@@ -556,7 +558,8 @@ export function BookingFormDialog({
   /**
    * SPECS-INDEX #977 第 7 批(2026-10-07):誰在用這張表單。預設商家模式(管理員 / 客服),行為與送出參數完全不變。
    * 服務人員模式:主要服務人員固定是自己(唯讀一行)、沒有協助人員欄位、沒有會員比對面板、沒有「不讓服務人員看到」
-   * 開關、沒有料錢;資料改讀 staff_ 唯讀 RPC、送出改打 staff_create_booking / staff_update_booking。
+   * 開關;資料改讀 staff_ 唯讀 RPC、送出改打 staff_create_booking / staff_update_booking。
+   * #986 第 9 批:料錢區塊跟商家模式同一段 JSX、同一套條件(商家開了料錢成本功能才出現),可看可改。
    */
   actor?: BookingFormActor;
 }) {
@@ -1409,9 +1412,11 @@ export function BookingFormDialog({
 
       if (actor.kind === "staff") {
         // ───── SPECS-INDEX #977 第 7 批:服務人員模式 ─────
-        // 送出改打 staff_create_booking / staff_update_booking。**不帶**協助人員、會員、隱藏備註、料錢、
-        // 其他服務人員(包裝 RPC 根本沒有這些參數;主要服務人員固定是自己、既有協助人員 / 會員 / 隱藏備註 / 料錢
+        // 送出改打 staff_create_booking / staff_update_booking。**不帶**協助人員、會員、隱藏備註、
+        // 其他服務人員(包裝 RPC 根本沒有這些參數;主要服務人員固定是自己、既有協助人員 / 會員 / 隱藏備註
         // 由後端保留現值)。成功後的 LINE / 推播在 staff-portal/api.ts 裡,事件跟商家端相同。
+        // #986 第 9 批(使用者裁決推翻主腦決定 C):料錢跟商家模式一樣帶目前勾選的陣列(編輯時含空陣列 =
+        // 全部拿掉;已下架的舊品項在預帶時就在陣列裡,原樣送回、後端不擋)。不送 null。
         const staffFields = {
           serviceItems: shared.serviceItems,
           startAt: shared.startAt,
@@ -1433,6 +1438,7 @@ export function BookingFormDialog({
           paymentMethodId: shared.paymentMethodId,
           customDurationEnabled: shared.customDurationEnabled,
           customDurationMinutes: shared.customDurationMinutes,
+          materialCostItemIds: shared.materialCostItemIds,
         };
         if (isEdit && editingBookingId) {
           const changeSummary = editingDetail
@@ -1929,7 +1935,7 @@ export function BookingFormDialog({
                     </AlertNote>
                   ) : hasAdjustedUnitPrice ? (
                     <AlertNote>
-                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價，但自訂總金額仍在開啟中，金額會以下方輸入的總金額為準;關閉後，在單價改回預設值之前無法再開啟。`}
+                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價，但自訂總金額仍在開啟中，金額會以下方輸入的總金額為準；關閉後，在單價改回預設值之前無法再開啟。`}
                     </AlertNote>
                   ) : null}
                   {customTotalAmountEnabled ? (
@@ -2293,6 +2299,7 @@ export function BookingFormDialog({
               price: Number(item.price),
               duration_minutes: item.duration_minutes,
               category_id: item.category_id,
+              description: item.description ?? null,
             }))}
             categories={(serviceCategories ?? []).map((c) => ({ id: c.id, name: c.name }))}
             uncategorizedLabel={UNCATEGORIZED_LABEL}
@@ -2311,7 +2318,7 @@ export function BookingFormDialog({
               <CardAlertDialogDescription>
                 {`本單有自訂總金額/折扣，系統建議 ${pointsSuggested ?? 0} 點僅供參考，是否以 ${
                   pointsWillAssign ?? 0
-                } 點送出?`}
+                } 點送出？`}
               </CardAlertDialogDescription>
             </CardAlertDialogHeader>
             <div className="flex flex-col gap-1 rounded-md bg-muted/50 px-3.5 py-2.5 text-sm tabular-nums">
@@ -2379,6 +2386,7 @@ function CalendarPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();
+  const { data: bookingStartTimeInterval } = useBookingStartTimeInterval(merchantId);
   const { data: staffList } = useMerchantStaffList(merchantId);
   // 模組 7(排班與休假管理)§4.4 第 3 點:排班一覽頁的儲存格會連結跳轉到
   // /app/calendar?date=YYYY-MM-DD,這裡只在「第一次掛載」時讀取這個查詢參數決定初始日期,
@@ -2587,6 +2595,9 @@ function CalendarPageInner() {
     slotMinutes: SLOT_MINUTES,
     slotPx: SLOT_PX,
     thresholdPx: SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+    // #986 第 9 批(9-10,使用者裁決 3「先做出來看結果,不妥再修」):放開時吸附到「建單時間間隔」。
+    // 讀取失敗 / 還沒讀到 ⇒ 30(= 格線,跟改版前一樣)。格線、空白格選單、建單預帶時間都不變。
+    snapMinutes: bookingStartTimeInterval ?? DEFAULT_BOOKING_START_TIME_INTERVAL,
     onOpenDetail: openDetailFromBlock,
     onMoved: refetchAll,
   });
@@ -2754,7 +2765,7 @@ function CalendarPageInner() {
       ) : scheduleError ? (
         <ErrorState
           title="讀不到這天的排班與預約"
-          reason="可能是網路斷了;現在先不顯示時間軸，避免你把空白當成「服務人員都不見了」或「這天沒有任何預約」"
+          reason="可能是網路斷了；現在先不顯示時間軸，避免你把空白當成「服務人員都不見了」或「這天沒有任何預約」"
           onRetry={() => void refetchSchedule()}
         />
       ) : !schedule || schedule.staff.length === 0 ? (

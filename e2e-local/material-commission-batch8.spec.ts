@@ -187,6 +187,15 @@ test("F5 手機 375 寬:料錢成本管理頁不爆版", async ({ browser }) => 
   await page.screenshot({ path: `${SHOT_DIR}/material-costs-375.png`, fullPage: true });
   await sw.click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  // #986 第 9 批(第 8 批 QA 建議):確認窗有淡入 / 縮放動畫,截圖前等動畫全部跑完,免得拍到半透明的窗。
+  //    只看確認窗本身(含子元素)的動畫,頁面上若有轉圈圈這種無限動畫不會卡住。
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"]');
+    return (
+      dialog !== null &&
+      dialog.getAnimations({ subtree: true }).every((a) => a.playState !== "running")
+    );
+  });
   await page.screenshot({ path: `${SHOT_DIR}/material-costs-375-confirm.png` });
   await page.getByRole("dialog").getByRole("button", { name: "取消" }).click();
   expectOnlyLocalRequests(recorder);

@@ -163,7 +163,7 @@ describe("PushLogsPage(#778)", () => {
     expect(recipients[0]).toHaveTextContent("客服 阿金");
     expect(recipients[1]).toHaveTextContent("服務人員 阿金");
     expect(screen.getByTestId("push-log-same-user-note")).toHaveTextContent(
-      "阿金同時是客服和服務人員，所以這裡有 2 列;他的手機只會收到一次。",
+      "阿金同時是客服和服務人員，所以這裡有 2 列；他的手機只會收到一次。",
     );
     expect(screen.getByText("部分送達")).toBeInTheDocument();
   });

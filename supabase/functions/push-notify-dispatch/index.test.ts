@@ -164,7 +164,11 @@ function makeRecordingAdminClient() {
         const single = () => {
           if (table === "merchant_push_event_settings") {
             return Promise.resolve({
-              data: { enabled: true, message_title: "訂單內容異動", message_body: "{{change_summary}}" },
+              data: {
+                enabled: true,
+                message_title: "訂單內容異動",
+                message_body: "{{change_summary}}",
+              },
               error: null,
             });
           }
@@ -187,8 +191,10 @@ function makeRecordingAdminClient() {
     rpc: (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
       if (fn === "resolve_push_recipients") return Promise.resolve({ data: [], error: null });
-      if (fn === "is_staff_push_event_disabled") return Promise.resolve({ data: false, error: null });
-      if (fn === "render_booking_notification_variables") return Promise.resolve({ data: {}, error: null });
+      if (fn === "is_staff_push_event_disabled")
+        return Promise.resolve({ data: false, error: null });
+      if (fn === "render_booking_notification_variables")
+        return Promise.resolve({ data: {}, error: null });
       return Promise.resolve({ data: null, error: null });
     },
   };
@@ -201,46 +207,61 @@ function resolveStaffIdsFrom(rpcCalls: { fn: string; args: Record<string, unknow
     .map((c) => c.args["p_booking_staff_id"]);
 }
 
-Deno.test("#823:body 有 previous_staff_id 時,resolve_push_recipients 會被多叫一次,第二次的 p_booking_staff_id 就是舊的那位", async () => {
-  const { adminClient, rpcCalls } = makeRecordingAdminClient();
-  const deps = makeDeps(true);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  deps.createAdminClient = () => adminClient as any;
+Deno.test(
+  "#823:body 有 previous_staff_id 時,resolve_push_recipients 會被多叫一次,第二次的 p_booking_staff_id 就是舊的那位",
+  async () => {
+    const { adminClient, rpcCalls } = makeRecordingAdminClient();
+    const deps = makeDeps(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deps.createAdminClient = () => adminClient as any;
 
-  const req = makeRequest(
-    {
-      merchant_id: "m1",
-      booking_id: "b1",
-      event_type: "booking_updated",
-      change_summary: "服務人員改為 王小明",
-      previous_staff_id: "staff-old",
-    },
-    { Authorization: "Bearer fake-jwt" },
-  );
-  const res = await handleRequest(req, deps);
+    const req = makeRequest(
+      {
+        merchant_id: "m1",
+        booking_id: "b1",
+        event_type: "booking_updated",
+        change_summary: "服務人員改為 王小明",
+        previous_staff_id: "staff-old",
+      },
+      { Authorization: "Bearer fake-jwt" },
+    );
+    const res = await handleRequest(req, deps);
 
-  assertEquals(res.status, 200);
-  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new", "staff-old"]);
-  // 順便釘住 adapter 送出的參數名(PostgREST 靠參數名解析函式,名字錯了就是 PGRST202)。
-  const first = rpcCalls.find((c) => c.fn === "resolve_push_recipients")!;
-  assertEquals(Object.keys(first.args).sort(), ["p_booking_staff_id", "p_event_type", "p_merchant_id"]);
-});
+    assertEquals(res.status, 200);
+    assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new", "staff-old"]);
+    // 順便釘住 adapter 送出的參數名(PostgREST 靠參數名解析函式,名字錯了就是 PGRST202)。
+    const first = rpcCalls.find((c) => c.fn === "resolve_push_recipients")!;
+    assertEquals(Object.keys(first.args).sort(), [
+      "p_booking_staff_id",
+      "p_event_type",
+      "p_merchant_id",
+    ]);
+  },
+);
 
-Deno.test("#823 正向對照:同樣的請求但**沒有** previous_staff_id → resolve_push_recipients 只叫一次", async () => {
-  const { adminClient, rpcCalls } = makeRecordingAdminClient();
-  const deps = makeDeps(true);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  deps.createAdminClient = () => adminClient as any;
+Deno.test(
+  "#823 正向對照:同樣的請求但**沒有** previous_staff_id → resolve_push_recipients 只叫一次",
+  async () => {
+    const { adminClient, rpcCalls } = makeRecordingAdminClient();
+    const deps = makeDeps(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deps.createAdminClient = () => adminClient as any;
 
-  const req = makeRequest(
-    { merchant_id: "m1", booking_id: "b1", event_type: "booking_updated", change_summary: "服務人員改為 王小明" },
-    { Authorization: "Bearer fake-jwt" },
-  );
-  const res = await handleRequest(req, deps);
+    const req = makeRequest(
+      {
+        merchant_id: "m1",
+        booking_id: "b1",
+        event_type: "booking_updated",
+        change_summary: "服務人員改為 王小明",
+      },
+      { Authorization: "Bearer fake-jwt" },
+    );
+    const res = await handleRequest(req, deps);
 
-  assertEquals(res.status, 200);
-  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new"]);
-});
+    assertEquals(res.status, 200);
+    assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-new"]);
+  },
+);
 
 Deno.test("#823:previous_staff_id 是空字串或只有空白 → 視同沒帶,不會拿空字串去查", async () => {
   for (const previous of ["", "   "]) {
@@ -250,7 +271,12 @@ Deno.test("#823:previous_staff_id 是空字串或只有空白 → 視同沒帶,�
     deps.createAdminClient = () => adminClient as any;
 
     const req = makeRequest(
-      { merchant_id: "m1", booking_id: "b1", event_type: "booking_updated", previous_staff_id: previous },
+      {
+        merchant_id: "m1",
+        booking_id: "b1",
+        event_type: "booking_updated",
+        previous_staff_id: previous,
+      },
       { Authorization: "Bearer fake-jwt" },
     );
     const res = await handleRequest(req, deps);
@@ -267,7 +293,10 @@ Deno.test("#823:previous_staff_id 是空字串或只有空白 → 視同沒帶,�
 // 不替換歸屬檢查(走真正的 buildNotifySubjectOwnershipLookup),假資料庫會依 .eq() 條件回應。
 // =========================================================================
 function makeOwnershipAwareAdminClient() {
-  const bookingsOwner: Record<string, string> = { "booking-A": "merchant-A", "booking-B": "merchant-B" };
+  const bookingsOwner: Record<string, string> = {
+    "booking-A": "merchant-A",
+    "booking-B": "merchant-B",
+  };
   const rpcCalls: string[] = [];
   const inserts: string[] = [];
   const bookingSelects: Record<string, unknown>[] = [];
@@ -279,9 +308,13 @@ function makeOwnershipAwareAdminClient() {
           if (table === "bookings") {
             bookingSelects.push({ ...filters });
             const owner = bookingsOwner[String(filters.id)];
-            const ok = owner !== undefined &&
+            const ok =
+              owner !== undefined &&
               (filters.merchant_id === undefined || filters.merchant_id === owner);
-            return Promise.resolve({ data: ok ? { id: filters.id, staff_id: null } : null, error: null });
+            return Promise.resolve({
+              data: ok ? { id: filters.id, staff_id: null } : null,
+              error: null,
+            });
           }
           if (table === "merchant_push_event_settings") {
             return Promise.resolve({
@@ -316,44 +349,50 @@ function makeOwnershipAwareAdminClient() {
   return { adminClient, rpcCalls, inserts, bookingSelects };
 }
 
-Deno.test("#972(核心必測):A 商家帶 B 商家的 booking_id → 404,推播紀錄/站內通知一筆都不寫、不呼叫任何 RPC", async () => {
-  const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
-  const deps = makeDeps(true);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  deps.createAdminClient = () => adminClient as any;
-  const res = await handleRequest(
-    makeRequest(
-      { merchant_id: "merchant-A", booking_id: "booking-B", event_type: "booking_created" },
-      { Authorization: "Bearer fake-jwt" },
-    ),
-    deps,
-  );
-  assertEquals(res.status, 404);
-  assertEquals(rpcCalls, []);
-  assertEquals(inserts, []);
-});
+Deno.test(
+  "#972(核心必測):A 商家帶 B 商家的 booking_id → 404,推播紀錄/站內通知一筆都不寫、不呼叫任何 RPC",
+  async () => {
+    const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
+    const deps = makeDeps(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deps.createAdminClient = () => adminClient as any;
+    const res = await handleRequest(
+      makeRequest(
+        { merchant_id: "merchant-A", booking_id: "booking-B", event_type: "booking_created" },
+        { Authorization: "Bearer fake-jwt" },
+      ),
+      deps,
+    );
+    assertEquals(res.status, 404);
+    assertEquals(rpcCalls, []);
+    assertEquals(inserts, []);
+  },
+);
 
-Deno.test("#972 正向對照:同商家的 booking_id → 照常進入派送(行為不變),歸屬查詢帶了 merchant_id 條件", async () => {
-  const { adminClient, rpcCalls, inserts, bookingSelects } = makeOwnershipAwareAdminClient();
-  const deps = makeDeps(true);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  deps.createAdminClient = () => adminClient as any;
-  const res = await handleRequest(
-    makeRequest(
-      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
-      { Authorization: "Bearer fake-jwt" },
-    ),
-    deps,
-  );
-  assertEquals(res.status, 200);
-  assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
-  assertEquals(inserts.includes("push_notification_log"), true);
-  // 第一筆是歸屬檢查,第二筆是 pushDbAdapter.getBookingStaffId —— 兩者都要帶 merchant_id。
-  assertEquals(bookingSelects, [
-    { id: "booking-A", merchant_id: "merchant-A" },
-    { id: "booking-A", merchant_id: "merchant-A" },
-  ]);
-});
+Deno.test(
+  "#972 正向對照:同商家的 booking_id → 照常進入派送(行為不變),歸屬查詢帶了 merchant_id 條件",
+  async () => {
+    const { adminClient, rpcCalls, inserts, bookingSelects } = makeOwnershipAwareAdminClient();
+    const deps = makeDeps(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deps.createAdminClient = () => adminClient as any;
+    const res = await handleRequest(
+      makeRequest(
+        { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+        { Authorization: "Bearer fake-jwt" },
+      ),
+      deps,
+    );
+    assertEquals(res.status, 200);
+    assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
+    assertEquals(inserts.includes("push_notification_log"), true);
+    // 第一筆是歸屬檢查,第二筆是 pushDbAdapter.getBookingStaffId —— 兩者都要帶 merchant_id。
+    assertEquals(bookingSelects, [
+      { id: "booking-A", merchant_id: "merchant-A" },
+      { id: "booking-A", merchant_id: "merchant-A" },
+    ]);
+  },
+);
 
 Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed),不進派送", async () => {
   const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
@@ -376,36 +415,46 @@ Deno.test("#972:歸屬查詢本身出錯 → 500(fail closed),不進派送", asy
   assertEquals(inserts, []);
 });
 
-Deno.test("#972:render_booking_notification_variables 一律帶 p_merchant_id(資料庫第二層檢查需要)", async () => {
-  const rpcArgs: { fn: string; args: Record<string, unknown> }[] = [];
-  const { adminClient } = makeOwnershipAwareAdminClient();
-  const deps = makeDeps(true);
-  deps.createAdminClient = () =>
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ({
-      ...adminClient,
-      rpc: (fn: string, args: Record<string, unknown>) => {
-        rpcArgs.push({ fn, args });
-        if (fn === "resolve_push_recipients") {
-          return Promise.resolve({
-            data: [{ target_type: "admin", target_id: "a1", target_user_id: "u1", target_name: "管理員" }],
-            error: null,
-          });
-        }
-        return Promise.resolve({ data: {}, error: null });
-      },
-    }) as any;
-  const res = await handleRequest(
-    makeRequest(
-      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
-      { Authorization: "Bearer fake-jwt" },
-    ),
-    deps,
-  );
-  assertEquals(res.status, 200);
-  const render = rpcArgs.find((c) => c.fn === "render_booking_notification_variables");
-  assertEquals(render?.args, { p_booking_id: "booking-A", p_merchant_id: "merchant-A" });
-});
+Deno.test(
+  "#972:render_booking_notification_variables 一律帶 p_merchant_id(資料庫第二層檢查需要)",
+  async () => {
+    const rpcArgs: { fn: string; args: Record<string, unknown> }[] = [];
+    const { adminClient } = makeOwnershipAwareAdminClient();
+    const deps = makeDeps(true);
+    deps.createAdminClient = () =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ({
+        ...adminClient,
+        rpc: (fn: string, args: Record<string, unknown>) => {
+          rpcArgs.push({ fn, args });
+          if (fn === "resolve_push_recipients") {
+            return Promise.resolve({
+              data: [
+                {
+                  target_type: "admin",
+                  target_id: "a1",
+                  target_user_id: "u1",
+                  target_name: "管理員",
+                },
+              ],
+              error: null,
+            });
+          }
+          return Promise.resolve({ data: {}, error: null });
+        },
+      }) as any;
+    const res = await handleRequest(
+      makeRequest(
+        { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" },
+        { Authorization: "Bearer fake-jwt" },
+      ),
+      deps,
+    );
+    assertEquals(res.status, 200);
+    const render = rpcArgs.find((c) => c.fn === "render_booking_notification_variables");
+    assertEquals(render?.args, { p_booking_id: "booking-A", p_merchant_id: "merchant-A" });
+  },
+);
 
 // =========================================================================
 // SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人自己建單 / 改單 / 取消 / 拖拉後發推播。
@@ -432,29 +481,36 @@ function makeStaffPushDeps(caller: CallerRpcClient, adminClient: unknown): Handl
   return deps;
 }
 
-Deno.test("#977-7:管理員檢查不過、服務人員本人自己的單 → 放行並派送(200),問的是 can_staff_dispatch_booking_notification", async () => {
-  const { adminClient, rpcCalls } = makeOwnershipAwareAdminClient();
-  const caller = makeStaffPushCaller({
-    can_manage_bookings: { data: false, error: null },
-    can_staff_dispatch_booking_notification: { data: true, error: null },
-  });
-  const res = await handleRequest(
-    makeRequest(
-      { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_updated" },
-      { Authorization: "Bearer fake-jwt" },
-    ),
-    makeStaffPushDeps(caller.client, adminClient),
-  );
-  assertEquals(res.status, 200);
-  assertEquals(caller.calls, [
-    { fn: "can_manage_bookings", args: { p_merchant_id: "merchant-A" } },
-    {
-      fn: "can_staff_dispatch_booking_notification",
-      args: { p_merchant_id: "merchant-A", p_booking_id: "booking-A", p_event_type: "booking_updated" },
-    },
-  ]);
-  assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
-});
+Deno.test(
+  "#977-7:管理員檢查不過、服務人員本人自己的單 → 放行並派送(200),問的是 can_staff_dispatch_booking_notification",
+  async () => {
+    const { adminClient, rpcCalls } = makeOwnershipAwareAdminClient();
+    const caller = makeStaffPushCaller({
+      can_manage_bookings: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      makeRequest(
+        { merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_updated" },
+        { Authorization: "Bearer fake-jwt" },
+      ),
+      makeStaffPushDeps(caller.client, adminClient),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(caller.calls, [
+      { fn: "can_manage_bookings", args: { p_merchant_id: "merchant-A" } },
+      {
+        fn: "can_staff_dispatch_booking_notification",
+        args: {
+          p_merchant_id: "merchant-A",
+          p_booking_id: "booking-A",
+          p_event_type: "booking_updated",
+        },
+      },
+    ]);
+    assertEquals(rpcCalls.includes("resolve_push_recipients"), true);
+  },
+);
 
 Deno.test("#977-7:別人的單 / 協助人員 / 事件不符(資料庫回 false)→ 403,不進派送", async () => {
   const { adminClient, rpcCalls, inserts } = makeOwnershipAwareAdminClient();
@@ -505,7 +561,10 @@ Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多�
     makeStaffPushDeps(caller.client, adminClient),
   );
   assertEquals(res.status, 200);
-  assertEquals(caller.calls.map((c) => c.fn), ["can_manage_bookings"]);
+  assertEquals(
+    caller.calls.map((c) => c.fn),
+    ["can_manage_bookings"],
+  );
 });
 
 // =========================================================================
@@ -513,7 +572,7 @@ Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多�
 // 用「會記下每一列寫入內容」的假 adminClient,讓收件人有一位管理員(沒有裝置 ⇒ 寫一列 no_subscription,
 // 但 rendered_body 照樣是套完範本的內容),直接看寫進推播紀錄的文字是不是呼叫端塞的那句。
 // =========================================================================
-function makeBodyRecordingAdminClient() {
+function makeBodyRecordingAdminClient(extraRecipients: Record<string, unknown>[] = []) {
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
   const rows: { table: string; row: unknown }[] = [];
   const adminClient = {
@@ -522,12 +581,19 @@ function makeBodyRecordingAdminClient() {
         const single = () => {
           if (table === "merchant_push_event_settings") {
             return Promise.resolve({
-              data: { enabled: true, message_title: "訂單內容異動", message_body: "{{change_summary}}" },
+              data: {
+                enabled: true,
+                message_title: "訂單內容異動",
+                message_body: "{{change_summary}}",
+              },
               error: null,
             });
           }
           if (table === "bookings") {
-            return Promise.resolve({ data: { id: "booking-A", staff_id: "staff-self" }, error: null });
+            return Promise.resolve({
+              data: { id: "booking-A", staff_id: "staff-self" },
+              error: null,
+            });
           }
           return Promise.resolve({ data: null, error: null });
         };
@@ -548,11 +614,15 @@ function makeBodyRecordingAdminClient() {
       rpcCalls.push({ fn, args });
       if (fn === "resolve_push_recipients") {
         return Promise.resolve({
-          data: [{ target_type: "admin", target_id: "a1", target_user_id: "u1", target_name: "管理員" }],
+          data: [
+            { target_type: "admin", target_id: "a1", target_user_id: "u1", target_name: "管理員" },
+            ...extraRecipients,
+          ],
           error: null,
         });
       }
-      if (fn === "render_booking_notification_variables") return Promise.resolve({ data: {}, error: null });
+      if (fn === "render_booking_notification_variables")
+        return Promise.resolve({ data: {}, error: null });
       return Promise.resolve({ data: null, error: null });
     },
   };
@@ -574,28 +644,40 @@ function staffPathRequest() {
   );
 }
 
-Deno.test("#977-7 資安:服務人員路徑 ⇒ 忽略 previous_staff_id(不會多通知別人)、change_summary 改用伺服器固定文字", async () => {
-  const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
-  const caller = makeStaffPushCaller({
-    can_manage_bookings: { data: false, error: null },
-    can_staff_dispatch_booking_notification: { data: true, error: null },
-  });
-  const res = await handleRequest(staffPathRequest(), makeStaffPushDeps(caller.client, adminClient));
-  assertEquals(res.status, 200);
-  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self"]);
-  const text = JSON.stringify(rows);
-  assertEquals(text.includes(INJECTED), false);
-  assertEquals(text.includes(STAFF_PATH_CHANGE_SUMMARY), true);
-});
+Deno.test(
+  "#977-7 資安:服務人員路徑 ⇒ 忽略 previous_staff_id(不會多通知別人)、change_summary 改用伺服器固定文字",
+  async () => {
+    const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
+    const caller = makeStaffPushCaller({
+      can_manage_bookings: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      staffPathRequest(),
+      makeStaffPushDeps(caller.client, adminClient),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self"]);
+    const text = JSON.stringify(rows);
+    assertEquals(text.includes(INJECTED), false);
+    assertEquals(text.includes(STAFF_PATH_CHANGE_SUMMARY), true);
+  },
+);
 
-Deno.test("#977-7 資安 正向對照:管理員 / 客服路徑照舊採用 previous_staff_id 與 change_summary(行為不變)", async () => {
-  const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
-  const caller = makeStaffPushCaller({ can_manage_bookings: { data: true, error: null } });
-  const res = await handleRequest(staffPathRequest(), makeStaffPushDeps(caller.client, adminClient));
-  assertEquals(res.status, 200);
-  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self", "staff-someone-else"]);
-  assertEquals(JSON.stringify(rows).includes(INJECTED), true);
-});
+Deno.test(
+  "#977-7 資安 正向對照:管理員 / 客服路徑照舊採用 previous_staff_id 與 change_summary(行為不變)",
+  async () => {
+    const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
+    const caller = makeStaffPushCaller({ can_manage_bookings: { data: true, error: null } });
+    const res = await handleRequest(
+      staffPathRequest(),
+      makeStaffPushDeps(caller.client, adminClient),
+    );
+    assertEquals(res.status, 200);
+    assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self", "staff-someone-else"]);
+    assertEquals(JSON.stringify(rows).includes(INJECTED), true);
+  },
+);
 
 Deno.test("#977-7 資安:resolveStaffSafeDispatchFields 純函式", () => {
   const body = { change_summary: INJECTED, previous_staff_id: " staff-x " };
@@ -607,5 +689,61 @@ Deno.test("#977-7 資安:resolveStaffSafeDispatchFields 純函式", () => {
     changeSummary: INJECTED,
     previousStaffId: "staff-x",
   });
-  assertEquals(resolveStaffSafeDispatchFields(false, { previous_staff_id: "  " }).previousStaffId, null);
+  assertEquals(
+    resolveStaffSafeDispatchFields(false, { previous_staff_id: "  " }).previousStaffId,
+    null,
+  );
+});
+
+// =========================================================================
+// #986 第 9 批(使用者裁決):服務人員改單 / 拖拉不通知客戶。
+//   ・內部推播句改成內部口吻
+//   ・服務人員路徑 + booking_updated ⇒ 收件人硬過濾只留 admin / agent / staff(假資料塞一個 member 收件人 ⇒ 被濾掉)
+// =========================================================================
+const FAKE_MEMBER_RECIPIENT = {
+  target_type: "member",
+  target_id: "m1",
+  target_user_id: "u-member",
+  target_name: "客人",
+};
+
+function writtenTargetTypes(rows: { table: string; row: unknown }[]): string[] {
+  return rows
+    .map((r) => (r.row as { target_type?: string | null }).target_type)
+    .filter((t): t is string => typeof t === "string");
+}
+
+Deno.test("#986-9:STAFF_PATH_CHANGE_SUMMARY 是內部口吻的新句子", () => {
+  assertEquals(STAFF_PATH_CHANGE_SUMMARY, "服務人員已修改預約內容，請至系統查看");
+});
+
+Deno.test(
+  "#986-9:服務人員路徑 + booking_updated ⇒ 非 admin/agent/staff 的收件人被硬過濾掉,內文用新句",
+  async () => {
+    const { adminClient, rows } = makeBodyRecordingAdminClient([FAKE_MEMBER_RECIPIENT]);
+    const caller = makeStaffPushCaller({
+      can_manage_bookings: { data: false, error: null },
+      can_staff_dispatch_booking_notification: { data: true, error: null },
+    });
+    const res = await handleRequest(
+      staffPathRequest(),
+      makeStaffPushDeps(caller.client, adminClient),
+    );
+    assertEquals(res.status, 200);
+    const types = writtenTargetTypes(rows);
+    assertEquals(types.includes("member"), false);
+    assertEquals(types.includes("admin"), true);
+    assertEquals(JSON.stringify(rows).includes("服務人員已修改預約內容，請至系統查看"), true);
+  },
+);
+
+Deno.test("#986-9 對照:管理員 / 客服路徑不套硬過濾(行為不變)", async () => {
+  const { adminClient, rows } = makeBodyRecordingAdminClient([FAKE_MEMBER_RECIPIENT]);
+  const caller = makeStaffPushCaller({ can_manage_bookings: { data: true, error: null } });
+  const res = await handleRequest(
+    staffPathRequest(),
+    makeStaffPushDeps(caller.client, adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(writtenTargetTypes(rows).includes("member"), true);
 });

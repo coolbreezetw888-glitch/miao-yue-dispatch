@@ -117,7 +117,7 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
           // 「確定是關的」,商家會以為自己的設定被清掉。
           <ErrorState
             title="讀不到料錢成本功能的開關狀態"
-            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
+            reason="可能是網路斷了；現在畫面上不會顯示開或關，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -205,7 +205,7 @@ export function MaterialCostCommissionToggle({ merchantId }: { merchantId: strin
           // 8-2:讀不到時不顯示開關(不能顯示預設值讓人誤以為是自己的設定)。
           <ErrorState
             title="讀不到料錢影響抽成的設定"
-            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
+            reason="可能是網路斷了；現在畫面上不會顯示開或關，避免給你錯誤的訊息"
             onRetry={() => void settingQuery.refetch()}
           />
         ) : (

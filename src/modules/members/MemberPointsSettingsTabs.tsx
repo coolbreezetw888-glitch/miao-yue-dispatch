@@ -231,7 +231,7 @@ export function MemberPointsSettingsTabs({
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>這個分頁還有改動沒有儲存</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              直接切換的話，這個分頁剛剛改的內容會被丟掉(資料庫裡原本的設定不受影響)。要先按「儲存設定」嗎?
+              直接切換的話，這個分頁剛剛改的內容會被丟掉(資料庫裡原本的設定不受影響)。要先按「儲存設定」嗎？
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>
@@ -278,7 +278,7 @@ function CalcTab({ merchantId, onDirtyChange, onSaved, settings }: TabBodyProps)
         <CardContent className="pt-6">
           <ErrorState
             title="讀不到紅利計算的設定"
-            reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的空白公式當成目前的設定存回去"
+            reason="可能是網路斷了；現在先不顯示欄位，避免你把畫面上的空白公式當成目前的設定存回去"
             onRetry={() => {
               void formulasQuery.refetch();
               void itemsQuery.refetch();
@@ -465,7 +465,7 @@ function CalcTabForm({
           {/* §4.2 第 5 點 (d):分頁最上方的 `?`,完整例子逐字採用(使用者第 2 題定案文案)。 */}
           <HelpToggle label="說明：「全部服務項目」跟個別項目的公式怎麼一起算">
             <p>
-              每張訂單派幾點，有兩種算法二選一：「基本設定」整張訂單一個規則;「進階設定」每個服務項目各自設公式。
+              每張訂單派幾點，有兩種算法二選一：「基本設定」整張訂單一個規則；「進階設定」每個服務項目各自設公式。
             </p>
             <p className="mt-2">
               例：設定『全部服務項目 → 每 1 件 1 點』+『冷氣安裝 → 每 1 件 5 點』。客人買了 1
@@ -478,7 +478,7 @@ function CalcTabForm({
         <SwitchRow
           id="earn-mode-advanced"
           title="進階設定"
-          description="開啟後改成「每個服務項目各自的公式」;基本設定的欄位會先收起來，值會保留，關掉就回來。"
+          description="開啟後改成「每個服務項目各自的公式」；基本設定的欄位會先收起來，值會保留，關掉就回來。"
           checked={advanced}
           onCheckedChange={setAdvanced}
         />
@@ -525,7 +525,7 @@ function CalcTabForm({
             <SwitchRow
               id="basic-tiered"
               title="每滿額累計贈點"
-              description="開啟：每滿額就再贈一次;關閉：單筆達門檻只贈一次"
+              description="開啟：每滿額就再贈一次；關閉：單筆達門檻只贈一次"
               checked={basic.tieredEnabled}
               onCheckedChange={(v) => setBasic((b) => ({ ...b, tieredEnabled: v }))}
             />
@@ -647,9 +647,9 @@ function FormulaCard({
           </CardAlertDialogTrigger>
           <CardAlertDialogContent>
             <CardAlertDialogHeader>
-              <CardAlertDialogTitle>確定要刪除「{displayName}」嗎?</CardAlertDialogTitle>
+              <CardAlertDialogTitle>確定要刪除「{displayName}」嗎？</CardAlertDialogTitle>
               <CardAlertDialogDescription>
-                按「儲存設定」之後才會真的刪除;刪除後，之後新建的訂單就不會再用這條公式派點(已經建好的訂單點數不受影響)。
+                按「儲存設定」之後才會真的刪除；刪除後，之後新建的訂單就不會再用這條公式派點(已經建好的訂單點數不受影響)。
               </CardAlertDialogDescription>
             </CardAlertDialogHeader>
             <CardAlertDialogFooter>
@@ -1042,7 +1042,7 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
           // 第 14、15 題:關掉只擋「累積」,不擋折抵 / 兌換;同時是推薦者與被推薦者的人,任一關閉就不累積。
           <AlertNote>
             關閉後，這類會員之後的訂單<strong>不會再累積紅利點數</strong>
-            (既有的點數照樣可以折抵或兌換);同時是推薦者也是被推薦者的會員，兩個開關任一個關閉就不累積。
+            (既有的點數照樣可以折抵或兌換)；同時是推薦者也是被推薦者的會員，兩個開關任一個關閉就不累積。
           </AlertNote>
         ) : null}
 
@@ -1112,14 +1112,14 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
             {/* 第 11、12 題:補發窗口是「看過一次就懂」的規則說明 ⇒ `?`。 */}
             <HelpToggle label="說明：錯過當天的生日會不會補發">
               如果當天系統維護或您當天才開啟這個功能，生日在最近 7
-              天內、今年還沒收到的會員會自動補發;超過 7 天就不補。
+              天內、今年還沒收到的會員會自動補發；超過 7 天就不補。
             </HelpToggle>
           </div>
 
           <SwitchRow
             id="birthday-bonus-enabled"
             title="是否啟用生日贈點"
-            description="依台北時區比對生日月、日;每位會員每年只發放一次;每天 00:05 自動發放點數，09:10 發送 LINE 訊息"
+            description="依台北時區比對生日月、日；每位會員每年只發放一次；每天 00:05 自動發放點數，09:10 發送 LINE 訊息"
             checked={draft.enabled}
             onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
           />

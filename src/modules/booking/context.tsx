@@ -22,6 +22,8 @@ import {
   fetchMerchantCalendarStateStyles,
   fetchMerchantDaySchedule,
   fetchMerchantMaterialCostItems,
+  fetchBookingStartTimeInterval,
+  type BookingStartTimeInterval,
   fetchMerchantPaymentMethods,
   fetchMerchantTaxSettings,
   fetchStaffAvailabilityWindows,
@@ -107,6 +109,21 @@ export type { BookingDetail };
 
 /** 建單功能擴充 6.1 對外介面:回傳某商家目前上架中的料錢成本品項清單,唯讀。
  * 供本模組建單/編輯表單使用,也保留給未來模組 6(訂單管理顯示成本明細)直接複用。 */
+/**
+ * #986 第 9 批(9-10):商家「建單時間間隔」,商家端行事曆拖拉放開時吸附用。
+ * query key 跟營業時間設定頁(BookingStartTimeIntervalSetting)同一把 ⇒ 那邊改完 invalidate,這裡也會更新。
+ * 讀取失敗 / 還沒讀到 ⇒ data 是 undefined,呼叫端一律當 30(跟改版前一樣)。
+ */
+export function useBookingStartTimeInterval(
+  merchantId: string | null | undefined,
+): UseQueryResult<BookingStartTimeInterval> {
+  return useQuery({
+    queryKey: ["booking-module", "start-time-interval", merchantId],
+    queryFn: () => fetchBookingStartTimeInterval(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
 export function useMerchantMaterialCostItems(
   merchantId: string | null | undefined,
 ): UseQueryResult<MaterialCostItem[]> {

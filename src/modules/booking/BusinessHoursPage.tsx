@@ -182,7 +182,7 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
           // 把「不知道」講成「確定開著」。出錯就不顯示開關狀態。
           <ErrorState
             title="讀不到嚴格工時衝突檢查的開關狀態"
-            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
+            reason="可能是網路斷了；現在畫面上不會顯示開或關，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -311,7 +311,7 @@ function BusinessHoursPageInner() {
             // 商家會以為自己的營業時間被清空,而且一動開關就真的寫進去了。出錯就不給表單。
             <ErrorState
               title="讀不到營業時間設定"
-              reason="可能是網路斷了，或你沒有管理營業時間的權限;現在先不顯示每一天的設定，避免你把空白當成真的沒設定"
+              reason="可能是網路斷了，或你沒有管理營業時間的權限；現在先不顯示每一天的設定，避免你把空白當成真的沒設定"
               onRetry={() => void refetchRows()}
             />
           ) : (

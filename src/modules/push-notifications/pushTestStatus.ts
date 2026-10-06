@@ -79,7 +79,7 @@ export function describePushTestState(state: PushTestState): PushTestMessage | n
     case "no_ack":
       return {
         text: "通知已送出，但系統沒有收到你裝置的回報",
-        hint: "如果你的手機剛剛有跳出通知就沒問題;如果沒有，請看下方的排查建議。",
+        hint: "如果你的手機剛剛有跳出通知就沒問題；如果沒有，請看下方的排查建議。",
         tone: "warning",
       };
     case "no_device":

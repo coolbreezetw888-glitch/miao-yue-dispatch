@@ -103,7 +103,7 @@ describe("服務人員端預約詳情(#977 第 7 批)", () => {
     renderDialog(makeBooking({ status: "accepted" }), true);
     fireEvent.click(screen.getByTestId("staff-cancel-booking-button"));
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("確定要取消這筆預約嗎?")).toBeInTheDocument();
+    expect(within(dialog).getByText("確定要取消這筆預約嗎？")).toBeInTheDocument();
     fireEvent.change(within(dialog).getByPlaceholderText("取消原因(選填)"), {
       target: { value: "客人改期" },
     });

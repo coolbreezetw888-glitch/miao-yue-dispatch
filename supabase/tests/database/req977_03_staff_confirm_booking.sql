@@ -241,17 +241,19 @@ select is(
    from user_notifications where booking_id = :'b1_id'::uuid and event_type = 'booking_confirmed'),
   array[
     row('f9774000-0000-4000-8000-000000000001'::uuid, 'admin', 'f9774000-0000-4000-8000-000000000025'::uuid, 'f9774000-0000-4000-8000-000000000020'::uuid)::text,
-    row('f9774000-0000-4000-8000-000000000002'::uuid, 'admin', 'f9774000-0000-4000-8000-000000000026'::uuid, 'f9774000-0000-4000-8000-000000000020'::uuid)::text
+    row('f9774000-0000-4000-8000-000000000002'::uuid, 'admin', 'f9774000-0000-4000-8000-000000000026'::uuid, 'f9774000-0000-4000-8000-000000000020'::uuid)::text,
+    -- #986 第 9 批(使用者裁決 10):有「訂單管理」權限的在職客服也收到(target_type agent、target_id = merchant_agents.id)。
+    row('f9774000-0000-4000-8000-000000000003'::uuid, 'agent', 'f9774000-0000-4000-8000-000000000028'::uuid, 'f9774000-0000-4000-8000-000000000020'::uuid)::text
   ],
-  '⑭ 這間商家的兩位管理員各收到一筆 booking_confirmed(target_type admin、target_id = merchant_admins.id)'
+  '⑭ 這間商家的兩位管理員 + 有訂單管理權限的客服各收到一筆 booking_confirmed(#986 第 9 批起客服也收到)'
 );
 select is(
   (select count(*)::int from user_notifications
-   where user_id in ('f9774000-0000-4000-8000-000000000003', 'f9774000-0000-4000-8000-000000000004',
+   where user_id in ('f9774000-0000-4000-8000-000000000004',
                      'f9774000-0000-4000-8000-000000000005', 'f9774000-0000-4000-8000-000000000009',
                      'f9774000-0000-4000-8000-000000000014')),
   0,
-  '⑮ 客服、服務人員本人、協助人員、別家管理員都沒有收到(主腦裁決 ②:只通知商家管理員)'
+  '⑮ 服務人員本人、協助人員、別家管理員都沒有收到(#986 第 9 批起有訂單管理權限的客服會收到,見 ⑭)'
 );
 select is(
   (select distinct title || '|' || body from user_notifications where booking_id = :'b1_id'::uuid),

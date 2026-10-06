@@ -307,5 +307,5 @@ export function groupPushLogRows(
 export function formatSameUserNote(note: SameUserNote): string {
   const who = note.name ?? "同一個人";
   const roles = note.targetTypes.map((t) => PUSH_TARGET_TYPE_LABELS[t]).join("和");
-  return `${who}同時是${roles}，所以這裡有 ${note.targetTypes.length} 列;他的手機只會收到一次。`;
+  return `${who}同時是${roles}，所以這裡有 ${note.targetTypes.length} 列；他的手機只會收到一次。`;
 }

@@ -346,7 +346,7 @@ export default function MerchantDetailPage() {
                 <p className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
                   {INDUSTRY_TYPE_LABELS[merchant.industry_type as IndustryType] ??
                     merchant.industry_type}
-                  <span className="ml-2 text-xs">(唯讀,可在商家設定頁隨時切換)</span>
+                  <span className="ml-2 text-xs">(唯讀，可在商家設定頁隨時切換)</span>
                 </p>
               </div>
               <div>
@@ -429,7 +429,7 @@ export default function MerchantDetailPage() {
                           撐開容器)。手機/Email 在寬螢幕併成一行、窄螢幕自動換行,
                           用 flex-wrap + gap 而不是兩個獨立段落,進一步壓低列高。 */}
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        <span className="break-all">手機:{adminPhone(admin)}</span>
+                        <span className="break-all">手機：{adminPhone(admin)}</span>
                         <span className="break-all">Email:{admin.email}</span>
                       </div>
                     </div>
@@ -446,7 +446,7 @@ export default function MerchantDetailPage() {
                       </CardAlertDialogTrigger>
                       <CardAlertDialogContent>
                         <CardAlertDialogHeader>
-                          <CardAlertDialogTitle>確定要移除這位管理員嗎?</CardAlertDialogTitle>
+                          <CardAlertDialogTitle>確定要移除這位管理員嗎？</CardAlertDialogTitle>
                           {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在以暱稱為主要辨識資訊,
                               確認視窗只講 email 會讓人要自己回頭對照是哪一位,而移除是不可逆的
                               操作。比照商家端 MerchantAdminList.tsx 的同一個處理。
@@ -454,7 +454,7 @@ export default function MerchantDetailPage() {
                           <CardAlertDialogDescription className="break-words">
                             {adminDisplayName(admin)}({admin.email})將無法再登入管理「
                             {merchant.name}」。如果這是最後一位管理員(且集團也沒有設定集團
-                            管理者),系統會擋下這個操作並提示。
+                            管理者)，系統會擋下這個操作並提示。
                           </CardAlertDialogDescription>
                         </CardAlertDialogHeader>
                         <CardAlertDialogFooter>
@@ -499,7 +499,7 @@ export default function MerchantDetailPage() {
           <CardHeader>
             <CardTitle>集團管理者</CardTitle>
             <CardDescription>
-              {group?.name ? `所屬集團:${group.name}` : "所屬集團"}
+              {group?.name ? `所屬集團：${group.name}` : "所屬集團"}
               。設定了集團管理者的人，會自動可以管理集團底下所有分店。
             </CardDescription>
           </CardHeader>
@@ -512,7 +512,7 @@ export default function MerchantDetailPage() {
                 {/* 手機版容器寬度溢出修正(編號 190 同類排查補充):email 沒有空白字元,
                     預設文字換行規則不會自動斷行,長 email 會撐出這個區塊,加 break-words。 */}
                 <p className="break-words text-sm text-muted-foreground">
-                  目前的集團管理者:
+                  目前的集團管理者：
                   <span className="ml-1 font-medium text-foreground">
                     {group?.group_admin_user_id ? (groupAdminEmail ?? "讀取中⋯") : "尚未設定"}
                   </span>
@@ -565,7 +565,7 @@ export default function MerchantDetailPage() {
           <CardHeader>
             <CardTitle>服務人員名單</CardTitle>
             <CardDescription>
-              唯讀。這間店目前登記的服務人員。新增/修改/移除請由商家自己在「人員管理」頁操作,平台方不代為修改。
+              唯讀。這間店目前登記的服務人員。新增/修改/移除請由商家自己在「人員管理」頁操作，平台方不代為修改。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -579,7 +579,7 @@ export default function MerchantDetailPage() {
               /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
               <LoadingSkeleton variant="lines" rows={3} />
             ) : staffError ? (
-              <p className="text-sm text-destructive">載入失敗:{getErrorMessage(staffError)}</p>
+              <p className="text-sm text-destructive">載入失敗：{getErrorMessage(staffError)}</p>
             ) : (staffList ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">目前沒有服務人員紀錄</p>
             ) : (
@@ -601,7 +601,7 @@ export default function MerchantDetailPage() {
                           {personDisplayName(staff)}
                         </p>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                          <span className="break-all">手機:{staff.phone}</span>
+                          <span className="break-all">手機：{staff.phone}</span>
                           <span className="break-all">Email:{personLoginEmail(staff)}</span>
                         </div>
                       </div>
@@ -641,7 +641,7 @@ export default function MerchantDetailPage() {
           <CardHeader>
             <CardTitle>客服名單</CardTitle>
             <CardDescription>
-              唯讀。這間店目前登記的客服。新增/修改/移除與權限設定請由商家自己在「人員管理」頁操作,平台方不代為修改。
+              唯讀。這間店目前登記的客服。新增/修改/移除與權限設定請由商家自己在「人員管理」頁操作，平台方不代為修改。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -649,7 +649,7 @@ export default function MerchantDetailPage() {
               /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
               <LoadingSkeleton variant="lines" rows={2} />
             ) : agentsError ? (
-              <p className="text-sm text-destructive">載入失敗:{getErrorMessage(agentsError)}</p>
+              <p className="text-sm text-destructive">載入失敗：{getErrorMessage(agentsError)}</p>
             ) : (agentList ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">目前沒有客服紀錄</p>
             ) : (
@@ -670,7 +670,7 @@ export default function MerchantDetailPage() {
                           </span>
                         </p>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                          <span className="break-all">手機:{agent.phone}</span>
+                          <span className="break-all">手機：{agent.phone}</span>
                           <span className="break-all">Email:{personLoginEmail(agent)}</span>
                         </div>
                       </div>

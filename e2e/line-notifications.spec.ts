@@ -227,7 +227,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):商家未串接 LINE 時直接�
   await page.getByRole("button", { name: "確認訂單" }).click();
 
   // 沒有任何綁定對象(商家根本沒有串接 LINE)→ 不應該出現 2.5 的通知彈窗。
-  await expect(page.getByText("要透過 LINE 通知這次確認嗎?")).toHaveCount(0, {
+  await expect(page.getByText("要透過 LINE 通知這次確認嗎？")).toHaveCount(0, {
     timeout: 3_000,
   });
   // 「已確認」這個文字同時也是 OrdersPage 上方狀態分頁籤的名稱,所以一定要縮到這一張訂單卡片裡。
@@ -276,7 +276,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時彈窗�
 
   await page.getByRole("button", { name: "確認訂單" }).click();
 
-  await expect(page.getByText("要透過 LINE 通知這次確認嗎?")).toBeVisible({
+  await expect(page.getByText("要透過 LINE 通知這次確認嗎？")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(
@@ -325,7 +325,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時,選「�
   await expect(page.getByText("預約詳情")).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   await page.getByRole("button", { name: "確認訂單" }).click();
-  await expect(page.getByText("要透過 LINE 通知這次確認嗎?")).toBeVisible({
+  await expect(page.getByText("要透過 LINE 通知這次確認嗎？")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 

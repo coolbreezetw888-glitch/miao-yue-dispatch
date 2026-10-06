@@ -207,7 +207,7 @@ function LineMarketingPageInner() {
           ) : isError ? (
             <ErrorState
               title="讀不到已綁定 LINE 的會員名單"
-              reason="可能是網路斷了;現在先不顯示名單，避免你把空白當成「會員的 LINE 綁定都不見了」"
+              reason="可能是網路斷了；現在先不顯示名單，避免你把空白當成「會員的 LINE 綁定都不見了」"
               onRetry={() => void refetchMarketableMembers()}
             />
           ) : memberList.length === 0 ? (
@@ -420,7 +420,7 @@ function LineMarketingPageInner() {
             </CardAlertDialogTrigger>
             <CardAlertDialogContent>
               <CardAlertDialogHeader>
-                <CardAlertDialogTitle>確定要發送嗎?</CardAlertDialogTitle>
+                <CardAlertDialogTitle>確定要發送嗎？</CardAlertDialogTitle>
                 <CardAlertDialogDescription>
                   即將發送給 {finalRecipientIds.length} 位會員。
                 </CardAlertDialogDescription>

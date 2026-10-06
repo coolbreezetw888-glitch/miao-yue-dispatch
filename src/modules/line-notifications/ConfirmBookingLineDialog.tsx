@@ -56,7 +56,7 @@ export function ConfirmBookingLineDialog({
     <CardAlertDialog open={open} onOpenChange={onOpenChange}>
       <CardAlertDialogContent>
         <CardAlertDialogHeader>
-          <CardAlertDialogTitle>要透過 LINE 通知這次確認嗎?</CardAlertDialogTitle>
+          <CardAlertDialogTitle>要透過 LINE 通知這次確認嗎？</CardAlertDialogTitle>
           <CardAlertDialogDescription>
             將會通知：{targetSummary || "(無)"}
           </CardAlertDialogDescription>

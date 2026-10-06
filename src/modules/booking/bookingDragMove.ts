@@ -42,7 +42,7 @@ export interface MoveBookingInput {
   draggedStaffId: string;
   /** 放開時落在哪位服務人員的欄位。 */
   targetStaffId: string;
-  /** 放開時色塊頂端落在哪一格(ISO 字串,已吸附到 30 分鐘格線)。助手模式會被後端忽略,但仍要帶。 */
+  /** 放開時色塊頂端落在哪一格(ISO 字串,已吸附到格線或 #986 的建單時間間隔)。助手模式會被後端忽略,但仍要帶。 */
   targetStartAt: string;
   /** 畫面上「拖之前」看到的 bookings.start_at(畫面過期偵測)。 */
   expectedStartAt: string;
@@ -246,11 +246,22 @@ export interface ComputeDropTargetInput {
   /** 被拖色塊的時長(分鐘)。有帶時,clamp 會讓「色塊的尾端」也留在格線內,不只是頂端。 */
   durationMin?: number;
   columnRects: readonly DropColumnRect[];
+  /**
+   * #986 第 9 批(9-10、9-11):放開時吸附的分鐘數 = 商家的「建單時間間隔」(5 / 10 / 15 / 30)。
+   * **沒帶 = 跟改版前逐位元相同**(吸附到格線 slotMinutes,走原本那段算法)。
+   * 有帶時:色塊頂端換成「當天第幾分鐘」,以當天 00:00 為基準四捨五入到 snapMinutes 的倍數;
+   * 最早 = 格線起點往上取到倍數、最晚 = 格線終點 − 色塊時長往下取到倍數。格線本身仍是 slotMinutes 一格,
+   * 只是放開時可以落在格子中間。
+   */
+  snapMinutes?: number | undefined;
 }
 
 export interface DropTarget {
   staffId: string;
-  /** 吸附後的第幾格(0 起算)。 */
+  /**
+   * 吸附後的第幾格(0 起算)。有帶 snapMinutes 時,落點可能在格子中間,這裡是「落點所在那一格」(往下取整);
+   * 要算殘影位置請用 startMin(calendarBookingDrag.tsx 已改用 startMin 換算,殘影跟實際落點一定對得上)。
+   */
   slotIndex: number;
   /** 吸附後的開始時間(當天第幾分鐘)。 */
   startMin: number;
@@ -292,6 +303,27 @@ export function computeDropTarget(input: ComputeDropTargetInput): DropTarget | n
 
   // --- Y:以「色塊頂端」算格,round 到最近格(半格以上就跳下一格)。
   const blockTopClientY = input.pointerClientY - input.grabOffsetY;
+
+  // #986 第 9 批:有帶 snapMinutes ⇒ 改用「當天第幾分鐘」吸附到建單時間間隔(沒帶 ⇒ 下面原本的算法,一字不改)。
+  const snap = input.snapMinutes;
+  if (snap != null && Number.isFinite(snap) && snap > 0) {
+    const blockTopMin =
+      input.gridStartMin + ((blockTopClientY - input.gridTopClientY) / slotPx) * slotMinutes;
+    const gridEndMin = input.gridStartMin + slotCount * slotMinutes;
+    const blockMinutes =
+      input.durationMin != null && input.durationMin > 0 ? input.durationMin : slotMinutes;
+    const earliest = Math.ceil(input.gridStartMin / snap) * snap;
+    const latest = Math.max(earliest, Math.floor((gridEndMin - blockMinutes) / snap) * snap);
+    const snapped = Math.round(blockTopMin / snap) * snap;
+    const snappedStartMin = Math.min(latest, Math.max(earliest, snapped));
+    return {
+      staffId: column.staffId,
+      slotIndex: Math.floor((snappedStartMin - input.gridStartMin) / slotMinutes),
+      startMin: snappedStartMin,
+      startTime: minutesToTime(snappedStartMin),
+    };
+  }
+
   const rawIndex = Math.round((blockTopClientY - input.gridTopClientY) / slotPx);
 
   // --- clamp:頂端不早於第 0 格;有帶時長時,尾端也不超出最後一格的底。

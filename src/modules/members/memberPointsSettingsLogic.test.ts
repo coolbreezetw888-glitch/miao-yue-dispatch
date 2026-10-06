@@ -133,16 +133,16 @@ describe("§4.2 一句話預覽", () => {
   it("個別項目:名稱 + [NT$現價] + 數量 × N點 + 門檻", () => {
     expect(
       formulaPreviewSentence({ item: ITEMS[0]!, pointsPerUnit: "50", minUnitPrice: "2200" }),
-    ).toBe("壁掛分離式 (普通機型) [NT$2,200]: 數量 × 50點 (單項金額≥2200元)");
+    ).toBe("壁掛分離式 (普通機型) [NT$2,200]：數量 × 50點 (單項金額≥2200元)");
   });
   it("全部服務項目", () => {
     expect(formulaPreviewSentence({ item: null, pointsPerUnit: "50", minUnitPrice: "2200" })).toBe(
-      "全部服務項目: 數量 × 50點 (單項金額≥2200元)",
+      "全部服務項目：數量 × 50點 (單項金額≥2200元)",
     );
   });
   it("門檻 0 時省略括號", () => {
     expect(formulaPreviewSentence({ item: null, pointsPerUnit: "1", minUnitPrice: "0" })).toBe(
-      "全部服務項目: 數量 × 1點",
+      "全部服務項目：數量 × 1點",
     );
   });
   it("欄位還沒填好 ⇒ null(不顯示半套句子)", () => {

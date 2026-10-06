@@ -626,7 +626,7 @@ export function BookingDetailDialog({
                     <CardAlertDialogContent>
                       <CardAlertDialogHeader>
                         <CardAlertDialogTitle>
-                          確定要把 {openedAssistantName} 從這張訂單移除嗎?
+                          確定要把 {openedAssistantName} 從這張訂單移除嗎？
                         </CardAlertDialogTitle>
                         <CardAlertDialogDescription>
                           只會移除這位協助人員，主服務人員 {primaryStaffName}{" "}
@@ -761,7 +761,7 @@ export function BookingDetailDialog({
               {openedAsAssistant && showEditAndCancel ? (
                 <AlertNote data-testid="opened-as-assistant-note">
                   這是從協助人員 {openedAssistantName} 的卡片打開的。「移除協助人員」只會移除{" "}
-                  {openedAssistantName};要取消整張訂單，請點主服務人員 {primaryStaffName} 的卡片。
+                  {openedAssistantName}；要取消整張訂單，請點主服務人員 {primaryStaffName} 的卡片。
                 </AlertNote>
               ) : null}
               {showAgentReversalNote ? (

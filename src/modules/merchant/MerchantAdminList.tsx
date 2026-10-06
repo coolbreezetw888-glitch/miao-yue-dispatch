@@ -201,7 +201,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
                   </CardAlertDialogTrigger>
                   <CardAlertDialogContent>
                     <CardAlertDialogHeader>
-                      <CardAlertDialogTitle>確定要移除這位管理員嗎?</CardAlertDialogTitle>
+                      <CardAlertDialogTitle>確定要移除這位管理員嗎？</CardAlertDialogTitle>
                       {/* 2026-09-24:確認訊息一併帶上暱稱——名單現在顯示暱稱,確認視窗只講 email
                           會讓人要自己對照是哪一位,移除是不可逆的操作,要讓對象一眼確認。 */}
                       <CardAlertDialogDescription>

@@ -70,11 +70,7 @@ export interface SendPushResult {
 }
 
 export type PushLogSkipReason =
-  | "event_disabled"
-  | "no_subscription"
-  | "no_target"
-  | "personal_disabled"
-  | "no_recipient";
+  "event_disabled" | "no_subscription" | "no_target" | "personal_disabled" | "no_recipient";
 
 export interface PushNotificationLogInsert {
   merchant_id: string;
@@ -186,6 +182,22 @@ export interface DispatchPushForBookingParams {
    * 所以 Edge Function 執行的時候,舊的那位是誰在資料庫裡已經查不到了。
    */
   previousStaffId?: string | null;
+  /**
+   * #986 第 9 批(使用者裁決:服務人員改單 / 拖拉不通知客戶):true ⇒ 收件人清單只留商家內部的人
+   * (INTERNAL_PUSH_TARGET_TYPES)。push-notify-dispatch 在「服務人員路徑 + booking_updated」時帶 true。
+   */
+  internalRecipientsOnly?: boolean;
+}
+
+/**
+ * #986 第 9 批:商家內部的收件人型別。現在 PushTargetType 本來就只有這三種(刻意不含 member),
+ * 這份清單是給 internalRecipientsOnly 做「明確的硬過濾」用的 —— 以後就算有人替推播加了客戶收件人,
+ * 服務人員改單 / 拖拉也不會送到客戶。不要只靠型別。
+ */
+export const INTERNAL_PUSH_TARGET_TYPES: readonly string[] = ["admin", "agent", "staff"];
+
+export function filterInternalRecipients<T extends { target_type: string }>(recipients: T[]): T[] {
+  return recipients.filter((r) => INTERNAL_PUSH_TARGET_TYPES.includes(r.target_type));
 }
 
 export interface DispatchPushForBookingResult {
@@ -267,7 +279,9 @@ export const PUSH_TARGET_PRIORITY: Record<PushTargetType, number> = {
   staff: 1,
 };
 
-export function pickPayloadForDevice(recipientsOnThisDevice: PushRecipient[]): PushRecipient | null {
+export function pickPayloadForDevice(
+  recipientsOnThisDevice: PushRecipient[],
+): PushRecipient | null {
   let picked: PushRecipient | null = null;
   for (const recipient of recipientsOnThisDevice) {
     if (
@@ -324,8 +338,15 @@ export async function dispatchPushForBooking(
   deps: PushDispatchDeps,
   params: DispatchPushForBookingParams,
 ): Promise<DispatchPushForBookingResult> {
-  const { merchantId, bookingId, eventType, changeSummary, onlyStaffRecipients, previousStaffId } =
-    params;
+  const {
+    merchantId,
+    bookingId,
+    eventType,
+    changeSummary,
+    onlyStaffRecipients,
+    previousStaffId,
+    internalRecipientsOnly,
+  } = params;
 
   // ---------------------------------------------------------------------
   // §4.2 第 1 層:商家總開關。關 → 整件事跳過(行為跟改寫前完全一樣)。
@@ -389,6 +410,14 @@ export async function dispatchPushForBooking(
         (r) => r.target_type === "staff" && r.target_id === previousStaffId,
       ) ?? null;
     if (reassignedAwayRecipient) recipients.push(reassignedAwayRecipient);
+  }
+
+  // #986 第 9 批:服務人員路徑的改單 / 拖拉 ⇒ 收件人只留商家內部(管理員 / 客服 / 服務人員)。
+  // 放在所有收件人都加完之後,原地過濾(recipients 是 const,下面都用同一個陣列)。
+  if (internalRecipientsOnly) {
+    const internalOnly = filterInternalRecipients(recipients);
+    recipients.length = 0;
+    recipients.push(...internalOnly);
   }
 
   // §4.2 第 3 點 / §5.2 第 3 點:被指派的服務人員如果自己關掉了這個事件,要補寫一列

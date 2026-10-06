@@ -38,6 +38,7 @@ import {
   FieldAmountInput,
   FieldInput,
   FieldSelect,
+  FieldTextarea,
   FormField,
   FullPageLayer,
   FullPageLayerClose,
@@ -70,7 +71,10 @@ import {
 } from "./api";
 import { RequireServiceItemsAccess } from "./RequireServiceItemsAccess";
 import {
+  SERVICE_ITEM_DESCRIPTION_MAX_LENGTH,
   SERVICE_ITEM_TYPE_LABELS,
+  serviceItemDescriptionError,
+  serviceItemDescriptionLength,
   UNCATEGORIZED_LABEL,
   type ServiceCategory,
   type ServiceItem,
@@ -256,7 +260,7 @@ function CategoryManager({
           <CardAlertDialogContent>
             <CardAlertDialogHeader>
               <CardAlertDialogTitle className="break-words">
-                確定要刪除「{deletingCategory?.name}」這個分類嗎?
+                確定要刪除「{deletingCategory?.name}」這個分類嗎？
               </CardAlertDialogTitle>
               <CardAlertDialogDescription>
                 刪除後，底下的服務項目會變回未分類，不會被刪除。
@@ -289,6 +293,8 @@ interface ItemFormState {
   itemType: ServiceItemType;
   durationMinutes: string;
   categoryId: string | null;
+  /** #986 第 9 批:項目描述(選填,最多 200 字)。 */
+  description: string;
 }
 
 const EMPTY_ITEM_FORM: ItemFormState = {
@@ -297,6 +303,7 @@ const EMPTY_ITEM_FORM: ItemFormState = {
   itemType: "primary",
   durationMinutes: "0",
   categoryId: null,
+  description: "",
 };
 
 function itemToFormState(item: ServiceItem): ItemFormState {
@@ -306,6 +313,7 @@ function itemToFormState(item: ServiceItem): ItemFormState {
     itemType: item.item_type as ServiceItemType,
     durationMinutes: String(item.duration_minutes),
     categoryId: item.category_id,
+    description: item.description ?? "",
   };
 }
 
@@ -333,11 +341,14 @@ function ServiceItemFormDialog({
   // 🔴 2026-09-30:金額欄位的錯誤改成顯示在欄位下面(skill 二之七:框變紅 + 一行 `!`),
   // 不是只丟一個 toast——toast 會飄走,使用者回頭看不出是哪一格有問題。
   const [priceError, setPriceError] = useState<string | null>(null);
+  // #986 第 9 批:描述超過 200 字 ⇒ 欄位下方一行錯誤、擋送出(資料庫 CHECK 是最後一道)。
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setForm(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
       setPriceError(null);
+      setDescriptionError(null);
     }
   }, [open, item]);
 
@@ -363,6 +374,12 @@ function ServiceItemFormDialog({
     }
     setPriceError(null);
     const price = parsedPrice.value;
+    const descError = serviceItemDescriptionError(form.description);
+    if (descError) {
+      setDescriptionError(descError);
+      return;
+    }
+    setDescriptionError(null);
     const durationMinutes = Number(form.durationMinutes);
     if (
       form.durationMinutes.trim() === "" ||
@@ -380,6 +397,8 @@ function ServiceItemFormDialog({
       itemType: form.itemType,
       durationMinutes,
       categoryId: form.categoryId,
+      // 送出前 trim,空白送 null(api.ts normalizeServiceItemDescription)。
+      description: form.description,
     };
 
     setSaving(true);
@@ -477,6 +496,29 @@ function ServiceItemFormDialog({
               />
             </FormField>
           </div>
+
+          {/* #986 第 9 批:項目描述(選填)。只顯示在這頁的列表卡片與建單「選擇項目」整頁。 */}
+          <FormField
+            label="項目描述(選填)"
+            htmlFor="item-description"
+            error={descriptionError}
+            counter={{
+              value: serviceItemDescriptionLength(form.description),
+              max: SERVICE_ITEM_DESCRIPTION_MAX_LENGTH,
+            }}
+            helpLabel="說明：項目描述會顯示在哪裡"
+            help="建單選擇服務項目時，會顯示在項目名稱下方，讓客服與服務人員知道這個項目包含什麼。"
+          >
+            <FieldTextarea
+              id="item-description"
+              rows={3}
+              value={form.description}
+              onChange={(e) => {
+                setField("description", e.target.value);
+                if (descriptionError) setDescriptionError(null);
+              }}
+            />
+          </FormField>
 
           <FormField label="類型" required>
             {/* skill 二之七:單選用 ChoiceChipGroup(role="radiogroup",方向鍵可切換),視覺跟多選方塊
@@ -684,7 +726,17 @@ function ServiceItemsPageInner() {
                         ? [{ label: "下架", onSelect: () => void handleRemoveItem(item.id) }]
                         : undefined
                     }
-                  />
+                  >
+                    {/* #986 第 9 批:有描述才顯示一行小字,超過兩行截斷(完整內容在編輯畫面與「選擇項目」整頁)。 */}
+                    {item.description ? (
+                      <p
+                        data-testid={`service-item-description-${item.id}`}
+                        className="mt-1 line-clamp-2 whitespace-pre-line break-words text-[13px] text-muted-foreground"
+                      >
+                        {item.description}
+                      </p>
+                    ) : null}
+                  </ListCard>
                 </li>
               ))}
             </ul>

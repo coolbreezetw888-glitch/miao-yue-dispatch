@@ -36,19 +36,21 @@ const CJK = "[\\u3000-\\u303f\\u3400-\\u9fff\\uff00-\\uffef]";
  *      例:「(客人消費、生日都不發),\n 建單表單…」—— 括號是半形(這批刻意不改),
  *      所以 ①② 都抓不到它,QA 第 5 批複驗時就在兩處漏網(MemberPointsPage、MembersListPage)。
  */
-const HALF_WIDTH_NEXT_TO_CJK = new RegExp(`${CJK}[,:]|[,:]${CJK}|[)\\]][,:]\\s*${CJK}`);
+// #986 第 9 批(9-13,使用者裁決 5):字元集從 , : 擴成 , : ; ! ?(括號、斜線維持半形,裁決 6)。
+const HALF_WIDTH_NEXT_TO_CJK = new RegExp(`${CJK}[,:;!?]|[,:;!?]${CJK}|[)\\]][,:;!?]\\s*${CJK}`);
+/**
+ * #986 第 9 批(9-13、9-15):④ 樣板字串「${...} 後面那一段」開頭就是半形標點 + 空白 + 中文。
+ *   例:`${head}: 數量 × ${points}點` —— 冒號左邊是 ${head}(不是中文字)、右邊隔了一個空白,①②③ 都抓不到,
+ *   紅利公式預覽就是這樣漏網的。只套用在樣板字串的中段 / 尾段(TemplateMiddle / TemplateTail)。
+ */
+const TEMPLATE_FRAGMENT_LEADING_HALF_WIDTH = new RegExp(`^[,:;!?]\\s+${CJK}`);
 
 /**
  * 整個資料夾先不掃。
- * - 平台超級管理員專屬頁面:規格書第二節第 5 點「先不改,列進待使用者確認清單」。
- *   使用者確認要改之後,把這一條刪掉,守門就會自動把那些頁面列出來。
+ * #986 第 9 批(使用者裁決 4):超級管理員頁也要改全形 ⇒ 原本那一條(src/modules/platform-admin/)刪掉,
+ * 目前是空陣列;結構留著,真的有整個資料夾不該掃的情況再加(每一條都要寫理由)。
  */
-const ALLOWLIST_DIRS: { dir: string; reason: string }[] = [
-  {
-    dir: "src/modules/platform-admin/",
-    reason: "超級管理員專屬頁面,第 5 批規格書明訂先不改,等使用者確認(#975 待確認清單)",
-  },
-];
+const ALLOWLIST_DIRS: { dir: string; reason: string }[] = [];
 
 /**
  * 個別放行的字串:用「檔案 + 字串裡的一小段原文」定位(不用行號,改了上下文也不會失效)。
@@ -138,7 +140,11 @@ function scanSource(file: string, source: string): PunctuationHit[] {
       node.kind === ts.SyntaxKind.JsxText;
     if (isText) {
       const text = (node as ts.LiteralLikeNode).text;
-      if (HALF_WIDTH_NEXT_TO_CJK.test(text) && !isInsideConsoleCall(node)) {
+      const isTemplateFragment = ts.isTemplateMiddle(node) || ts.isTemplateTail(node);
+      const violates =
+        HALF_WIDTH_NEXT_TO_CJK.test(text) ||
+        (isTemplateFragment && TEMPLATE_FRAGMENT_LEADING_HALF_WIDTH.test(text));
+      if (violates && !isInsideConsoleCall(node)) {
         hits.push({
           file,
           line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
@@ -212,6 +218,31 @@ describe("畫面文字標點守門(#975):中文句子用全形「，」「：」
         'const b = "(NT$ 1,200), 2026-10-06";',
         'const c = "arr[0]: value";',
         'const d = "說明(選填)，請填寫";',
+      ];
+      for (const src of ok) expect(scanSource("x.tsx", src), src).toEqual([]);
+    });
+    // #986 第 9 批(9-13):擴充到 ; ! ?,以及樣板字串片段開頭的半形標點。
+    it("中文旁邊的半形 ; ! ? ⇒ 抓到", () => {
+      expect(scanSource("x.ts", 'const a = "請稍後再試?";')).toHaveLength(1);
+      expect(scanSource("x.tsx", "const a = <p>要移除嗎?</p>;")).toHaveLength(1);
+      expect(scanSource("x.ts", 'const a = "歡迎加入!";')).toHaveLength(1);
+      expect(scanSource("x.ts", 'const a = "可能是網路斷了;現在先不顯示";')).toHaveLength(1);
+      expect(scanSource("x.ts", 'const a = "(例如 0912345678);市話";')).toHaveLength(1);
+    });
+    it("樣板字串片段開頭是半形標點 + 空白 + 中文 ⇒ 抓到(紅利公式預覽那種漏網寫法)", () => {
+      expect(scanSource("x.ts", "const a = `${head}: 數量 × ${points}點`;")).toHaveLength(1);
+      expect(scanSource("x.ts", "const a = `${a}; 下一句`;")).toHaveLength(1);
+      // 對照:全形冒號、或片段開頭不是標點 ⇒ 不抓
+      expect(scanSource("x.ts", "const a = `${head}：數量 × ${points}點`;")).toEqual([]);
+      expect(scanSource("x.ts", "const a = `${a} 點`;")).toEqual([]);
+    });
+    it("程式碼的 ? :、英文的 ! ?、括號裡的電話分機 ⇒ 不抓", () => {
+      const ok = [
+        'const a = flag ? "是" : "否";',
+        'const b = "Hello! Are you there?";',
+        'const c = "(例如 02-1234-5678#123)";',
+        'const d = "/app/calendar?date=2026-10-07";',
+        'const e = "確定要移除嗎？";',
       ];
       for (const src of ok) expect(scanSource("x.tsx", src), src).toEqual([]);
     });

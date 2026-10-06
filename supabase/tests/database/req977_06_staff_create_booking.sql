@@ -169,8 +169,9 @@ create temp table r977h_opt on commit drop as
 grant select on r977h_opt to authenticated;
 select is(
   (select array_agg(k order by k) from r977h_opt, jsonb_object_keys(o) k),
-  array['business_hours','industry_type','payment_methods','service_categories','service_items','staff_id','staff_name','tax_settings'],
-  '① 選項回傳的 key 清單(沒有客戶 / 會員 / 其他服務人員 / 料錢)'
+  -- #986 第 9 批:多了 material_cost_enabled、material_cost_items、start_time_interval_minutes(仍沒有客戶 / 會員 / 其他服務人員)。
+  array['business_hours','industry_type','material_cost_enabled','material_cost_items','payment_methods','service_categories','service_items','staff_id','staff_name','start_time_interval_minutes','tax_settings'],
+  '① 選項回傳的 key 清單(沒有客戶 / 會員 / 其他服務人員;#986 第 9 批起多了料錢與建單時間間隔)'
 );
 select is(
   (select string_agg(e ->> 'name', ',' order by e ->> 'name') from r977h_opt, jsonb_array_elements(o -> 'service_items') e),
@@ -271,8 +272,8 @@ select throws_ok(
 );
 reset role;
 select ok(
-  not has_function_privilege('anon', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid)', 'execute')
-  and has_function_privilege('authenticated', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid)', 'execute'),
+  not has_function_privilege('anon', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, uuid[])', 'execute')
+  and has_function_privilege('authenticated', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, uuid[])', 'execute'),
   '㉑ anon 沒有 EXECUTE(正向對照:authenticated 有)'
 );
 select pg_temp.test_set_auth('f9777000-0000-4000-8000-000000000004');

@@ -172,7 +172,7 @@ export function LeaveDeductionRuleDialog({
           // (不扣款 / 0 / 0),使用者以為那是現在的設定,一按儲存就把真實規則覆寫掉。
           <ErrorState
             title="讀不到這個假別現在的扣款規則"
-            reason="可能是網路斷了;現在先不顯示表單，避免你把預設值當成現有設定存回去"
+            reason="可能是網路斷了；現在先不顯示表單，避免你把預設值當成現有設定存回去"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -235,7 +235,7 @@ export function LeaveDeductionRuleDialog({
               試算：假設月薪 {exampleMonthlySalary} 元，以本月 {exampleDaysInMonth}{" "}
               天換算，一天薪水約 {exampleDayRate.toFixed(2)} 元，請這個假一天扣{" "}
               <strong>{previewPerDay}</strong> 元。
-              天數由系統依請假當月自動換算，不用另外設定;這裡的月薪只是範例，僅供參考，實際扣款以每位
+              天數由系統依請假當月自動換算，不用另外設定；這裡的月薪只是範例，僅供參考，實際扣款以每位
               服務人員自己的月薪計算為準。
             </p>
           </form>

@@ -266,7 +266,7 @@ function LineSettingsPageInner() {
               </CardAlertDialogTrigger>
               <CardAlertDialogContent>
                 <CardAlertDialogHeader>
-                  <CardAlertDialogTitle>確定要解除 LINE 串接嗎?</CardAlertDialogTitle>
+                  <CardAlertDialogTitle>確定要解除 LINE 串接嗎？</CardAlertDialogTitle>
                   <CardAlertDialogDescription>
                     解除後不會刪除通知設定/文案範本/發送記錄/已綁定的 LINE
                     帳號，重新填入正確憑證就能立刻恢復運作。
