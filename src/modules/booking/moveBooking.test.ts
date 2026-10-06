@@ -161,7 +161,10 @@ describe("moveBooking(#818 推播 + #823 previousStaffId 交接)", () => {
   });
 
   it("RPC 回錯誤 → 原樣 throw(前端用 getErrorMessage 取 message / code 判 40001),不送推播", async () => {
-    const error = { code: "40001", message: "這筆預約剛剛被其他人改過,畫面已重新整理,請再拖一次" };
+    const error = {
+      code: "40001",
+      message: "這筆預約剛剛被其他人改過，畫面已重新整理，請再拖一次",
+    };
     rpcMock.mockResolvedValue({ data: null, error });
     await expect(moveBooking(INPUT)).rejects.toBe(error);
     expect(dispatchPushMock).not.toHaveBeenCalled();

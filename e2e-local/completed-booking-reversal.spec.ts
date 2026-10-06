@@ -836,7 +836,7 @@ test("#965:差額小卡窗一插入畫面就按 Esc ⇒ 仍然走「知道了」
     points_shortfall: 6,
   });
 
-  // 差額資訊沒有遺失:重開詳情看得到「已收回 4 點,差額 6 點未收回」。
+  // 差額資訊沒有遺失:重開詳情看得到「已收回 4 點，差額 6 點未收回」。
   const reopened = await openDetail(page, name);
   await expect(reopened).toContainText("已收回 4 點，差額 6 點未收回", { timeout: LOAD_TIMEOUT });
 });

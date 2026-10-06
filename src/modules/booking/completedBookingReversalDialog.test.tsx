@@ -157,7 +157,7 @@ function preview(
       {
         code: "staff_removed",
         message:
-          "服務人員「服務人員甲」已經移除。還原後這張單無法編輯或改時間,只能重新完成或取消。",
+          "服務人員「服務人員甲」已經移除。還原後這張單無法編輯或改時間，只能重新完成或取消。",
       },
     ],
     ...overrides,
@@ -339,7 +339,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
         blocked_reasons: [
           {
             code: "import_cannot_revert",
-            message: "匯入的歷史訂單不能還原,只能取消。如果匯錯了,請取消後重新匯入。",
+            message: "匯入的歷史訂單不能還原，只能取消。如果匯錯了，請取消後重新匯入。",
           },
         ],
       }),
@@ -445,7 +445,7 @@ describe("§5.4 送出與成功後", () => {
 
   it("差額 > 0:先跳小卡窗(標題 + shortfall_hint 原文純文字),按「知道了」才關全頁層並重抓", async () => {
     const hint =
-      "應收回 50 點,會員目前只有 10 點,已收回 10 點,差額 40 點未收回。這 40 點是在訂單「2026/10/01 10:00 <b>李客人</b>」折抵掉的。";
+      "應收回 50 點，會員目前只有 10 點，已收回 10 點，差額 40 點未收回。這 40 點是在訂單「2026/10/01 10:00 <b>李客人</b>」折抵掉的。";
     mocks.revertCompletedBooking.mockResolvedValue(result("revert", 40, hint));
     renderDialog();
     await openReversal("還原完成");
@@ -469,7 +469,7 @@ describe("§5.4 送出與成功後", () => {
 
   async function openShortfallDialog() {
     mocks.revertCompletedBooking.mockResolvedValue(
-      result("revert", 40, "應收回 50 點,差額 40 點未收回。"),
+      result("revert", 40, "應收回 50 點，差額 40 點未收回。"),
     );
     renderDialog();
     await openReversal("還原完成");
@@ -545,7 +545,7 @@ describe("§5.4 送出與成功後", () => {
 
   it("「狀態已經改變」:提示重新整理、回到預約詳情並重抓", async () => {
     mocks.revertCompletedBooking.mockRejectedValue({
-      message: "這筆訂單的狀態已經改變,請重新整理後再試",
+      message: "這筆訂單的狀態已經改變，請重新整理後再試",
     });
     renderDialog();
     await openReversal("還原完成");

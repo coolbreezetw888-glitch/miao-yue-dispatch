@@ -111,7 +111,7 @@ describe("自訂總金額", () => {
     expect(result.hasError).toBe(true);
   });
 
-  it("留空不是錯誤,是「沒填」⇒ 交給 orderAmount 回「已開啟自訂總金額,請輸入金額」", () => {
+  it("留空不是錯誤,是「沒填」⇒ 交給 orderAmount 回「已開啟自訂總金額，請輸入金額」", () => {
     const result = fields({ customTotalAmountEnabled: true, customTotalAmount: "" });
     expect(result.customTotalAmount).toEqual({ value: null, error: null });
     expect(result.hasError).toBe(false);

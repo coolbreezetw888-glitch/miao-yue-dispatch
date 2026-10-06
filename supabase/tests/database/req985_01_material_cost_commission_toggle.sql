@@ -308,18 +308,18 @@ select pg_temp.test_set_auth('f9850000-0000-4000-8000-000000000001');
 select lives_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000062'::uuid])$$, :'e1_id'),
   '㉟ 商家端同樣情境(功能關 + 品項下架、原樣帶回)也能存');
 select throws_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000062'::uuid, 'f9850000-0000-4000-8000-000000000063'::uuid])$$, :'e1_id'),
-  'P0001', '這間商家尚未開啟料錢成本功能,無法選用料錢成本品項', '㊱ 功能關閉時「新加」品項照舊擋下');
+  'P0001', '這間商家尚未開啟料錢成本功能，無法選用料錢成本品項', '㊱ 功能關閉時「新加」品項照舊擋下');
 select pg_temp.test_clear_auth();
 update merchant_feature_flags set enabled = true
 where merchant_id = 'f9850000-0000-4000-8000-000000000020' and feature_key = 'material_cost_enabled';
 select pg_temp.test_set_auth('f9850000-0000-4000-8000-000000000001');
 select throws_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000062'::uuid, 'f9850000-0000-4000-8000-000000000064'::uuid])$$, :'e1_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊲ 「新加」已下架品項照舊擋下');
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㊲ 「新加」已下架品項照舊擋下');
 select throws_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000065'::uuid])$$, :'e1_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊳ 別家商家的品項照舊擋下');
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㊳ 別家商家的品項照舊擋下');
 select throws_ok(
   $$select pg_temp.mk(array['f9850000-0000-4000-8000-000000000035'::uuid], array['f9850000-0000-4000-8000-000000000062'::uuid], '2036-07-02 10:00+08')$$,
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊴ 新建訂單用已下架品項照舊擋下(不受放寬影響)');
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㊴ 新建訂單用已下架品項照舊擋下(不受放寬影響)');
 select throws_ok(format($$select pg_temp.aup(%L, array['f9850000-0000-4000-8000-000000000062'::uuid, 'f9850000-0000-4000-8000-000000000062'::uuid])$$, :'e1_id'),
   'P0001', '同一個料錢成本品項不能在同一筆預約裡選取兩次', '㊵ 原有品項重複選取照舊擋下');
 select pg_temp.test_clear_auth();
@@ -344,10 +344,10 @@ grant execute on function pg_temp.aup2(uuid, uuid[], timestamptz) to authenticat
 select pg_temp.test_set_auth('f9850000-0000-4000-8000-000000000001');
 select pg_temp.mk(array['f9850000-0000-4000-8000-000000000035'::uuid], '{}'::uuid[], '2036-07-05 10:00+08') as id \gset e2_
 select throws_ok(format($$select pg_temp.aup2(%L, array['f9850000-0000-4000-8000-000000000062'::uuid], '2036-07-05 10:00+08')$$, :'e2_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊶ 訂單 A 上的已下架品項,加進訂單 B 照舊擋下');
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㊶ 訂單 A 上的已下架品項,加進訂單 B 照舊擋下');
 select pg_temp.aup2(:'e1_id'::uuid, '{}'::uuid[], '2036-07-01 10:00+08');
 select throws_ok(format($$select pg_temp.aup2(%L, array['f9850000-0000-4000-8000-000000000062'::uuid], '2036-07-01 10:00+08')$$, :'e1_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㊷ 已下架品項從訂單拿掉後再加回來照舊擋下');
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㊷ 已下架品項從訂單拿掉後再加回來照舊擋下');
 select pg_temp.test_clear_auth();
 
 select * from finish();

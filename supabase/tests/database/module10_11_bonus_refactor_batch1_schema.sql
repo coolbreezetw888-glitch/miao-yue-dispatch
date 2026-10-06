@@ -728,7 +728,7 @@ select throws_ok(
 select throws_ok(
   format($$update bookings set points_redeemed = 10, points_redeem_amount_snapshot = 1, member_id = null where id = %L$$, :'bk_id'),
   '23514',
-  '這筆訂單沒有連結會員,不能使用紅利點數折抵',
+  '這筆訂單沒有連結會員，不能使用紅利點數折抵',
   'E7 §1.4 + v2.4 裁決 2(UPDATE 面):把訂單改成「有折抵但沒有會員」→ 新 trigger 擋下,白話訊息逐字正確'
 );
 select lives_ok(
@@ -758,7 +758,7 @@ update bk_copy set id = gen_random_uuid(), member_id = null, points_redeemed = 1
 select throws_ok(
   $$insert into bookings select * from bk_copy$$,
   '23514',
-  '這筆訂單沒有連結會員,不能使用紅利點數折抵',
+  '這筆訂單沒有連結會員，不能使用紅利點數折抵',
   'E12 §1.4 + v2.4 裁決 2(INSERT 面):直接新增一張「有折抵但沒有會員」的訂單 → 新 trigger 擋下'
 );
 

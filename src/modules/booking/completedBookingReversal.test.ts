@@ -363,7 +363,7 @@ describe("執行結果(§5.4)", () => {
 
   it("有差額 ⇒ 標題講合計(會員 + 推薦人),內文是 shortfall_hint 原文(不改寫、不解析)", () => {
     const hint =
-      "應收回 50 點,會員目前只有 10 點。這 40 點是在訂單「2026/09/30 14:00 <b>王小美</b>」折抵掉的。";
+      "應收回 50 點，會員目前只有 10 點。這 40 點是在訂單「2026/09/30 14:00 <b>王小美</b>」折抵掉的。";
     const notice = reversalShortfallNotice({
       points: { ...zero, points_shortfall: 40, referral_shortfall: 3, shortfall_hint: hint },
     });
@@ -377,7 +377,7 @@ describe("執行結果(§5.4)", () => {
   });
 
   it("「狀態已經改變」錯誤辨識", () => {
-    expect(isReversalStateChangedError("這筆訂單的狀態已經改變,請重新整理後再試")).toBe(true);
+    expect(isReversalStateChangedError("這筆訂單的狀態已經改變，請重新整理後再試")).toBe(true);
     expect(isReversalStateChangedError("請填寫還原/取消的原因")).toBe(false);
   });
 });

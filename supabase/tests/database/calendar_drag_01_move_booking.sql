@@ -517,7 +517,7 @@ select is((select staff_id from booking_assistants where booking_id = :'t1_id'::
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_b', :'staff_b', '2026-10-06 13:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '放開的位置跟原本一樣,沒有需要變更的內容',
+  'P0001', '放開的位置跟原本一樣，沒有需要變更的內容',
   '#12 Q2 助手同欄改時間:視為無操作擋下(助手沒有自己的時間)'
 );
 select is((select start_at from bookings where id = :'t1_id'::uuid), '2026-10-06 10:00:00+08'::timestamptz,
@@ -543,7 +543,7 @@ select is((select staff_id from booking_assistants where booking_id = :'t1_id'::
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_a', :'staff_b', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '「服務人員B」已經是這筆預約的助手,請先用編輯把助手改掉,或改拖給其他人',
+  'P0001', '「服務人員B」已經是這筆預約的助手，請先用編輯把助手改掉，或改拖給其他人',
   '#11 Q5=A 主轉派給既有助手 → 擋下'
 );
 select is((select staff_id from bookings where id = :'t1_id'::uuid), :'staff_a'::uuid,
@@ -555,7 +555,7 @@ select is((select staff_id from bookings where id = :'t1_id'::uuid), :'staff_a':
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_a', :'staff_a', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '放開的位置跟原本一樣,沒有需要變更的內容',
+  'P0001', '放開的位置跟原本一樣，沒有需要變更的內容',
   '主色塊放開在原位 → 後端也視為沒有變動擋下'
 );
 
@@ -566,7 +566,7 @@ select throws_ok(
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_c', :'staff_a', '2026-10-06 12:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '找不到這位服務人員在這筆預約裡的角色,請重新整理',
+  'P0001', '找不到這位服務人員在這筆預約裡的角色，請重新整理',
   '被拖的人(C)既不是 T1 的主也不是助手 → 擋下'
 );
 select throws_ok(
@@ -702,7 +702,7 @@ select pg_temp.test_set_auth(:'user_admin');
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_a', :'staff_c', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '主要服務人員這天是休假日(假別:特休),無法預約',
+  'P0001', '主要服務人員這天是休假日(假別：特休)，無法預約',
   '#16 目標服務人員 C 整天請假 → 主轉派被擋下,訊息含「休假日」'
 );
 select is((select staff_id from bookings where id = :'t1_id'::uuid), :'staff_a'::uuid,
@@ -711,7 +711,7 @@ select pg_temp.reset_t1(:'t1_id'::uuid, :'staff_a'::uuid, :'staff_b'::uuid);
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_b', :'staff_c', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '助手「服務人員C」這天是休假日(假別:特休),無法預約',
+  'P0001', '助手「服務人員C」這天是休假日(假別：特休)，無法預約',
   '#16 目標服務人員 C 整天請假 → 助手轉派也被擋下'
 );
 select is((select staff_id from booking_assistants where booking_id = :'t1_id'::uuid), :'staff_b'::uuid,

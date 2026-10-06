@@ -662,18 +662,18 @@ select throws_ok(
 select pg_temp.test_set_auth('db120000-0000-4000-8000-000000000001');
 select throws_ok(
   format($$select pg_temp.pv_edit(%L, null, jsonb_build_array(pg_temp.it('db120000-0000-4000-8000-000000000032', 1, 1000)))$$, :'bbooking_id'),
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'H4 IDOR:A 店管理員帶 B 店的訂單 id(商家 id 填自己的 A 店)⇒ 42501'
 );
 select throws_ok(
   $$select pg_temp.pv_edit('db120000-0000-4000-8000-00000000ffff', null, jsonb_build_array(pg_temp.it('db120000-0000-4000-8000-000000000032', 1, 1000)))$$,
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'H5 IDOR:不存在的訂單 id ⇒ 同一個 42501 訊息(不洩漏存不存在)'
 );
 select pg_temp.test_set_auth('db120000-0000-4000-8000-000000000003');
 select throws_ok(
   format($$select pg_temp.pv_edit(%L, null, jsonb_build_array(pg_temp.it('db120000-0000-4000-8000-000000000032', 1, 1000)))$$, :'bbooking_id'),
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'H6 IDOR:A 店客服(orders)帶 B 店訂單 id ⇒ 42501'
 );
 select pg_temp.test_set_auth('db120000-0000-4000-8000-000000000001');
@@ -795,7 +795,7 @@ select is(
 select pg_temp.test_set_auth('db120000-0000-4000-8000-000000000001');
 select throws_ok(
   format($$select pg_temp.pv_edit(%L, null, '[]'::jsonb)$$, :'bbooking_id'),
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'H23 IDOR:功能關閉時,別家訂單 id 仍然先被 42501 擋下(權限檢查在功能開關之前)'
 );
 select pg_temp.test_clear_auth();

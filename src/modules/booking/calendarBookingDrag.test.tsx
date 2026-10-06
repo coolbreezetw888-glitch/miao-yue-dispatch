@@ -736,13 +736,13 @@ describe("成功 / 失敗 / 復原(#814 #815)", () => {
   it("失敗(40001 畫面過期):toast.warning + 額外 refetch", async () => {
     moveBookingMock.mockRejectedValueOnce({
       code: "40001",
-      message: "這筆預約剛剛被其他人改過,畫面已重新整理,請再拖一次",
+      message: "這筆預約剛剛被其他人改過，畫面已重新整理，請再拖一次",
     });
     renderHarness();
     mouseDrag(mainBlock(), T1_MAIN_CENTER, { x: 172, y: 310 });
     await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(1));
     expect(toast.warning).toHaveBeenCalledWith(
-      "這筆預約剛剛被其他人改過,畫面已重新整理,請再拖一次",
+      "這筆預約剛剛被其他人改過，畫面已重新整理，請再拖一次",
     );
     expect(toast.error).not.toHaveBeenCalled();
     expect(onMoved).toHaveBeenCalledTimes(1);

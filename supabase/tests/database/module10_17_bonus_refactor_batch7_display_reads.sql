@@ -285,18 +285,18 @@ select is(
 select pg_temp.test_set_auth('db170000-0000-4000-8000-000000000003');  -- 只有 members(沒有 orders)
 select throws_ok(
   $$select public.get_booking_points_ledger('db170000-0000-4000-8000-000000000901')$$,
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'D6:沒有 orders 鑰匙 ⇒ 42501'
 );
 select pg_temp.test_set_auth('db170000-0000-4000-8000-000000000006');  -- B 店管理員
 select throws_ok(
   $$select public.get_booking_points_ledger('db170000-0000-4000-8000-000000000901')$$,
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'D7 IDOR:別家商家的訂單 ⇒ 42501'
 );
 select throws_ok(
   $$select public.get_booking_points_ledger('db170000-0000-4000-8000-00000000dead')$$,
-  '42501', '找不到這筆預約,或沒有權限查看',
+  '42501', '找不到這筆預約，或沒有權限查看',
   'D8:不存在的訂單 ⇒ 跟「別家的」同一個錯誤(不洩漏存不存在)'
 );
 

@@ -364,9 +364,9 @@ select is((select points_planned from bookings where id = :'b7_id'::uuid), 10000
 -- B8 功能關閉時覆寫被擋
 update merchant_member_settings set points_feature_enabled = false where merchant_id = 'db130000-0000-4000-8000-000000000021';
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
-select throws_like($$ select pg_temp.mk('0913000101', 1000, 7, 0, 5) $$, '紅利點數功能已關閉,無法設定派點',
+select throws_like($$ select pg_temp.mk('0913000101', 1000, 7, 0, 5) $$, '紅利點數功能已關閉，無法設定派點',
   'B8 §3.3 第 2 步:功能關閉時帶覆寫值被擋');
-select throws_like($$ select pg_temp.mk('0913000101', 1000, 7, 100) $$, '紅利點數功能已關閉,無法使用點數折抵',
+select throws_like($$ select pg_temp.mk('0913000101', 1000, 7, 100) $$, '紅利點數功能已關閉，無法使用點數折抵',
   'B8b §2.10 第 1 點:功能關閉時不可折抵');
 select pg_temp.test_clear_auth();
 update merchant_member_settings set points_feature_enabled = true where merchant_id = 'db130000-0000-4000-8000-000000000021';
@@ -397,7 +397,7 @@ select is((select created_by_user_id from member_point_transactions where bookin
 -- B11 餘額不足 ⇒ 擋下,而且整筆沒有建出來(交易原子性)
 select count(*)::int as n from bookings where merchant_id = 'db130000-0000-4000-8000-000000000021' \gset before11_
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
-select throws_like($$ select pg_temp.mk('0913000102', 1000, 10, 401) $$, '這位會員目前只有 400 點,無法折抵 401 點',
+select throws_like($$ select pg_temp.mk('0913000102', 1000, 10, 401) $$, '這位會員目前只有 400 點，無法折抵 401 點',
   'B11a §2.10 第 5 點:餘額不足被擋,白話錯誤');
 select pg_temp.test_clear_auth();
 select is(
@@ -409,25 +409,25 @@ select is(
 
 -- B12 換算為 0 元的點數擋下(v2.4 裁決 8 ③)
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
-select throws_like($$ select pg_temp.mk('0913000102', 1000, 11, 9) $$, '折抵 9 點換算後不到 1 元(目前 100 點 = 10 元),至少要使用 10 點才折得到 1 元',
+select throws_like($$ select pg_temp.mk('0913000102', 1000, 11, 9) $$, '折抵 9 點換算後不到 1 元(目前 100 點 = 10 元)，至少要使用 10 點才折得到 1 元',
   'B12 裁決 8 ③:9 點折不到 1 元 ⇒ 擋下並告訴客服最少要幾點');
 
 -- B13 cap:應付 1000、上限 50% = 500 元。5009 點(折 500 元)通過 —— max_points(5000)不是硬上限(v2.4 裁決 12)
 select pg_temp.mk('0913000103', 1000, 12, 5009) as id \gset b13_
-select throws_like($$ select pg_temp.mk('0913000103', 1000, 13, 992) $$, '這位會員目前只有 991 點,無法折抵 992 點',
+select throws_like($$ select pg_temp.mk('0913000103', 1000, 13, 992) $$, '這位會員目前只有 991 點，無法折抵 992 點',
   'B13z 前提確認:大戶餘額已被扣到 991(6000 − 5009)');
 select pg_temp.test_clear_auth();
 select is(pg_temp.redeem_of(:'b13_id'::uuid), row(5009, 500.00, 'db130000-0000-4000-8000-000000000063'::uuid)::text,
   'B13a 裁決 12 / 第 17 題:5009 點(換算 500 元 = cap)通過,不拿 max_points 5000 當硬上限');
 update members set points_balance = 6000 where id = 'db130000-0000-4000-8000-000000000063';
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
-select throws_like($$ select pg_temp.mk('0913000103', 1000, 14, 5010) $$, '本單最多可折抵 NT$500(應付金額 NT$1000 的 50%),折抵 5010 點可折 NT$501,已超過上限%',
+select throws_like($$ select pg_temp.mk('0913000103', 1000, 14, 5010) $$, '本單最多可折抵 NT$500(應付金額 NT$1000 的 50%)，折抵 5010 點可折 NT$501，已超過上限%',
   'B13b §2.10:5010 點(501 元 > cap 500)被擋,白話錯誤');
 
 -- B14 自動建立的新會員不能折抵,而且會員也不會被留下來(整筆回滾)
 -- (v2.4 裁決 22 ①:新客戶在送出前沒有會員 id,畫面不會提供折抵;直接打 API 時「要扣誰」對不上,
 --  在檢查餘額之前就被擋,訊息改成「客戶已變更…」。原本斷言的是「只有 0 點」。)
-select throws_like($$ select pg_temp.mk('0913999003', 1000, 15, 100) $$, '客戶已變更,紅利折抵已重設,請重新確認後送出',
+select throws_like($$ select pg_temp.mk('0913999003', 1000, 15, 100) $$, '客戶已變更，紅利折抵已重設，請重新確認後送出',
   'B14a §3.3 第 3 步:新客戶(自動建立的會員)⇒ 折抵被擋');
 select pg_temp.test_clear_auth();
 select is((select count(*)::int from members where phone = '0913999003'), 0,
@@ -557,7 +557,7 @@ select is(pg_temp.bal('db130000-0000-4000-8000-000000000070'), 500, 'C9b R7:原�
 -- C10 明確清空會員卻要折抵 ⇒ 擋下
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(format($f$ select pg_temp.upd(%L, null, 1000, 10) $f$, :'c_id'),
-  '這筆訂單沒有連結會員,不能使用紅利點數折抵', 'C10 沒有會員的訂單不可折抵');
+  '這筆訂單沒有連結會員，不能使用紅利點數折抵', 'C10 沒有會員的訂單不可折抵');
 
 -- C11 明確傳 p_member_id = null(清除會員)而原本有折抵 ⇒ 先退回
 select pg_temp.mk('0913000112', 1000, 21, 100) as id \gset c11_
@@ -571,7 +571,7 @@ select is(array[pg_temp.redeem_of(:'c11_id'::uuid), pg_temp.bal('db130000-0000-4
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select pg_temp.upd(:'c11_id'::uuid, 'db130000-0000-4000-8000-000000000072', 1000, 3000);
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000072', 400) $f$, :'c11_id'),
-  '本單目前最多可折 NT$200(應付 NT$400 的 50%),原本的紅利折抵 3000 點(NT$300)已超過上限,請先把折抵點數改成 2000 點以下',
+  '本單目前最多可折 NT$200(應付 NT$400 的 50%)，原本的紅利折抵 3000 點(NT$300)已超過上限，請先把折抵點數改成 2000 點以下',
   'C12a 判斷 21 / v2.4 裁決 14:1000 → 400 元,原折抵 300 元 > 新上限 200 元 ⇒ 擋下,通用句告訴客服上限與要改成幾點');
 select pg_temp.upd(:'c11_id'::uuid, 'db130000-0000-4000-8000-000000000072', 600);
 select pg_temp.test_clear_auth();
@@ -590,7 +590,7 @@ select is(
   'C12c v2.4 裁決 14:比例調低後只改時間(應付金額沒變)⇒ 放行,折抵 3000 點 / NT$300 原封不動');
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000072', 700) $f$, :'c11_id'),
-  '本單目前最多可折 NT$70(應付 NT$700 的 10%),原本的紅利折抵 3000 點(NT$300)已超過上限%',
+  '本單目前最多可折 NT$70(應付 NT$700 的 10%)，原本的紅利折抵 3000 點(NT$300)已超過上限%',
   'C12d v2.4 裁決 14:比例調低後改金額(600 → 700)⇒ 重驗上限,擋下');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000072', 600, 2500) $f$, :'c11_id'),
   '本單最多可折抵 NT$60(應付金額 NT$600 的 10%)%',
@@ -623,7 +623,7 @@ select is(pg_temp.redeem_of(:'c14_id'::uuid), row(100, 10.00, 'db130000-0000-400
 -- C15 已下架會員不可加大折抵
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000065', 1000, 150) $f$, :'c14_id'),
-  '這位會員已下架,不能增加紅利折抵%', 'C15 下架規則:不可增加折抵');
+  '這位會員已下架，不能增加紅利折抵%', 'C15 下架規則:不可增加折抵');
 
 select pg_temp.test_clear_auth();
 
@@ -634,7 +634,7 @@ select pg_temp.test_clear_auth();
 update members set status = 'removed' where id = 'db130000-0000-4000-8000-000000000073';
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000073', 1000, 400) $f$, :'c15_id'),
-  '這位會員已下架,不能增加紅利折抵%', 'C15b 裁決 15:已下架會員 300 → 400 點 ⇒ 擋下');
+  '這位會員已下架，不能增加紅利折抵%', 'C15b 裁決 15:已下架會員 300 → 400 點 ⇒ 擋下');
 select pg_temp.upd(:'c15_id'::uuid, 'db130000-0000-4000-8000-000000000073', 1000, 100);
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000073', 1000, 5) $f$, :'c15_id'),
   '折抵 5 點換算後不到 1 元%', 'C15d 裁決 15:調低後換算仍須 >= 1 元(100 → 5 點被擋)');
@@ -647,7 +647,7 @@ select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 
 -- C16 改掛到另一位已下架會員 ⇒ 跟以前一樣擋
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000066', 1000) $f$, :'c14_id'),
-  '找不到指定的會員,或會員不屬於這間商家/已被下架', 'C16 下架規則:不可改掛到別位已下架會員');
+  '找不到指定的會員，或會員不屬於這間商家/已被下架', 'C16 下架規則:不可改掛到別位已下架會員');
 
 -- C17 已下架會員,折抵改成 0 ⇒ 退回(退回不看狀態)
 select pg_temp.upd(:'c14_id'::uuid, 'db130000-0000-4000-8000-000000000065', 1000, 0);
@@ -697,9 +697,9 @@ select is((select array[points_redeemed::numeric, points_planned_auto::numeric] 
   'C21a 功能關閉:原折抵 3000 點維持(那時已沒有「上限」設定,不擋改單),派點建議值變 0');
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000072', 400, 3100) $f$, :'c11_id'),
-  '紅利點數功能已關閉,無法使用點數折抵', 'C21b 功能關閉:不可加大折抵');
+  '紅利點數功能已關閉，無法使用點數折抵', 'C21b 功能關閉:不可加大折抵');
 select throws_like(format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000072', 400, null, 5) $f$, :'c11_id'),
-  '紅利點數功能已關閉,無法設定派點', 'C21c 功能關閉:不可人工設定派點');
+  '紅利點數功能已關閉，無法設定派點', 'C21c 功能關閉:不可人工設定派點');
 select pg_temp.test_clear_auth();
 update merchant_member_settings set points_feature_enabled = true where merchant_id = 'db130000-0000-4000-8000-000000000021';
 
@@ -791,7 +791,7 @@ select is(
 select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(
   $$ select pg_temp.mk('0913000101', 1000, 40, 50, null, false, 'db130000-0000-4000-8000-000000000062') $$,
-  '客戶已變更,紅利折抵已重設,請重新確認後送出',
+  '客戶已變更，紅利折抵已重設，請重新確認後送出',
   'F1 🔴 QA 重現:畫面還停在會員二、電話已改成會員一就送出 ⇒ 擋下(不會扣會員一的點)');
 select throws_like(
   $$ select id from public.create_booking(
@@ -803,7 +803,7 @@ select throws_like(
        p_customer_phone => '0913000101',
        p_payment_method_id => 'db130000-0000-4000-8000-000000000071',
        p_points_redeemed => 50) $$,
-  '客戶已變更,紅利折抵已重設,請重新確認後送出',
+  '客戶已變更，紅利折抵已重設，請重新確認後送出',
   'F2:折抵 > 0 卻沒帶 p_points_redeem_member_id ⇒ 擋下');
 select pg_temp.test_clear_auth();
 select is((select count(*)::int from bookings where customer_phone = '0913000101'
@@ -825,7 +825,7 @@ select pg_temp.test_set_auth('db130000-0000-4000-8000-000000000001');
 select throws_like(
   format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000063', 1000, 150, null, false,
                                 'db130000-0000-4000-8000-000000000061') $f$, :'f5_id'),
-  '客戶已變更,紅利折抵已重設,請重新確認後送出',
+  '客戶已變更，紅利折抵已重設，請重新確認後送出',
   'F6 update_booking:改折抵 > 0 但要扣的會員 ≠ 這張單送出的會員 ⇒ 擋下');
 select lives_ok(
   format($f$ select pg_temp.upd(%L, 'db130000-0000-4000-8000-000000000063', 1000, null, null, false,

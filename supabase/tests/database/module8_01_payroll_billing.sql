@@ -544,7 +544,7 @@ select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000004');
 
 select throws_ok(
   format($$select recalculate_booking_commission('%s')$$, :'rule24_booking1_id'::text),
-  '42501', '重新計算已完成訂單的抽成金額,只有商家管理員可以操作',
+  '42501', '重新計算已完成訂單的抽成金額，只有商家管理員可以操作',
   '規則 2.6(核心):被授權 commission_settings 的客服呼叫 recalculate_booking_commission 被擋下,即使已經被開通商家設定權限也一樣'
 );
 
@@ -582,7 +582,7 @@ select is(
 -- 邊界情況:對月薪制訂單(完全沒有抽成紀錄)呼叫 recalculate_booking_commission 應該被擋下。
 select throws_ok(
   format($$select recalculate_booking_commission('%s')$$, :'monthly_staff_booking_id'::text),
-  'P0001', '這筆訂單目前沒有抽成紀錄,無法重新計算(可能是月薪制服務人員,不適用抽成)',
+  'P0001', '這筆訂單目前沒有抽成紀錄，無法重新計算(可能是月薪制服務人員，不適用抽成)',
   '規則 2.6 邊界情況:對月薪制服務人員的訂單(沒有抽成紀錄)呼叫 recalculate_booking_commission 被擋下,訊息正確'
 );
 

@@ -121,12 +121,12 @@ begin
   limit 1;
 
   if v_leave_type_name is not null then
-    raise exception '%這天是休假日(假別:%),無法預約', p_role_label, v_leave_type_name;
+    raise exception '%這天是休假日(假別：%)，無法預約', p_role_label, v_leave_type_name;
   end if;
 
   if not v_bypass_bounds then
     if date(p_start_at at time zone 'Asia/Taipei') <> date(p_end_at at time zone 'Asia/Taipei') then
-      raise exception '%的預約時段跨到隔天,目前系統不支援,請拆成同一天內的時段', p_role_label;
+      raise exception '%的預約時段跨到隔天，目前系統不支援，請拆成同一天內的時段', p_role_label;
     end if;
 
     v_local_date := date(p_start_at at time zone 'Asia/Taipei');
@@ -232,7 +232,7 @@ begin
       from private.same_person_staff_ids_in_group(p_staff.id) as other_staff(staff_id)
       where private.staff_booking_conflict_exists(other_staff.staff_id, p_start_at, p_end_at, p_exclude_booking_id)
     ) then
-      raise exception '%在這個時段已經有同集團其他分店的預約,請改選其他時段或其他服務人員',
+      raise exception '%在這個時段已經有同集團其他分店的預約，請改選其他時段或其他服務人員',
         case
           when strpos(p_role_label, '「') > 0 then p_role_label
           else format('%s「%s」', p_role_label, p_staff.name)

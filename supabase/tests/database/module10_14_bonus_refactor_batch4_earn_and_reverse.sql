@@ -54,6 +54,22 @@ create trigger req977_full_day_windows
 
 select plan(117);
 
+-- #987 第 10 批(2026-10-07):complete_booking 的錯誤訊息半形標點改成全形。
+-- 這裡先把第 10 批改過的訊息換回舊訊息(完整 SQL 字串字面值,含單引號),再套原本的還原規則比指紋;
+-- 第 10 批自己「只動訊息」的證明見 req987_0*_fullwidth_messages_*.sql。
+create function pg_temp.req987_revert(p_src text) returns text language plpgsql immutable as $req987$
+declare
+  v_pairs text[] := array[
+    $m$'只有「已接受」狀態的預約可以標記完成，目前狀態不允許這個操作'$m$, $m$'只有「已接受」狀態的預約可以標記完成,目前狀態不允許這個操作'$m$
+  ];
+begin
+  for i in 1 .. array_length(v_pairs, 1) / 2 loop
+    p_src := replace(p_src, v_pairs[2 * i - 1], v_pairs[2 * i]);
+  end loop;
+  return p_src;
+end $req987$;
+
+
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
 begin
@@ -254,8 +270,8 @@ select ok(
 --   A7 原本:earn_booking 每單一筆唯一索引仍在。migration C 依規格移除 ⇒ 改成斷言「已不存在」
 --      (冪等改淨額判斷,下面 B4/B5「重複呼叫不重複入帳」照守)。
 select is(
-  (select md5(replace(replace(prosrc, E'\r\n', E'\n'), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
-          || '/' || length(replace(replace(prosrc, E'\r\n', E'\n'), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
+  (select md5(replace(pg_temp.req987_revert(replace(prosrc, E'\r\n', E'\n')), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
+          || '/' || length(replace(pg_temp.req987_revert(replace(prosrc, E'\r\n', E'\n')), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
    from pg_proc where oid = 'public.complete_booking(uuid)'::regprocedure),
   '4cfb14875fbb5ffc365373b046907520/1088',
   'A6 §3.5 + #844 §3.11:complete_booking 除了 #844 加的 for update 之外,本體與正式庫指紋一致'
@@ -578,7 +594,7 @@ select is(
   row(-10, 0, '應收回 50 點、實收回 10 點、差額 40 點未收回')::text,
   'D14 分類帳 −10、balance_after 0、note 三個數字正確');
 select ok(
-  (:'d2_r'::jsonb ->> 'shortfall_hint') like '應收回 50 點,會員目前只有 10 點,已收回 10 點,差額 40 點未收回。%'
+  (:'d2_r'::jsonb ->> 'shortfall_hint') like '應收回 50 點，會員目前只有 10 點，已收回 10 點，差額 40 點未收回。%'
   and (:'d2_r'::jsonb ->> 'shortfall_hint') like '%批次4客人130%取消紅利折抵%手動調整點數%',
   'D15 shortfall_hint:有差額 ⇒ 有提示,且指出在哪張訂單折抵掉(用預約時間 + 客戶姓名辨識)');
 select is(
@@ -605,7 +621,7 @@ select is(
   :'d3_r'::jsonb - 'referrer_member_id' - 'shortfall_hint',
   '{"points_due":30,"points_recovered":0,"points_shortfall":30,"referral_due":0,"referral_recovered":0,"referral_shortfall":0}'::jsonb,
   'D20 回傳 points_recovered = 0、points_shortfall = due(30),由呼叫端 #844 記錄');
-select ok((:'d3_r'::jsonb ->> 'shortfall_hint') like '應收回 30 點,會員目前只有 0 點,已收回 0 點,差額 30 點未收回。%',
+select ok((:'d3_r'::jsonb ->> 'shortfall_hint') like '應收回 30 點，會員目前只有 0 點，已收回 0 點，差額 30 點未收回。%',
   'D21 有差額 ⇒ shortfall_hint 有值(找不到折抵訂單就省略「訂單」那一句)');
 select ok((:'d3_r'::jsonb ->> 'shortfall_hint') not like '%訂單「%', 'D22 沒有折抵訂單 ⇒ 提示不提訂單');
 
@@ -827,23 +843,23 @@ select is(
   'H1 前提:兩位會員(30+40)、兩位推薦人(5+5)的加總數字不變(回傳鍵仍是加總)');
 select ok(
   (:'h1_r'::jsonb ->> 'shortfall_hint')
-    ~ '^會員「換會員舊會員」應收回 30 點,目前只有 5 點,已收回 5 點,差額 25 點未收回。 會員「換會員新會員」',
+    ~ '^會員「換會員舊會員」應收回 30 點，目前只有 5 點，已收回 5 點，差額 25 點未收回。 會員「換會員新會員」',
   'H2(核心):舊會員自己一句、冠姓名、只講自己的 30 / 5 / 25;他沒有折抵單 ⇒ 句尾直接接下一位會員(沒有借用新會員的折抵單)');
 select ok(
   (:'h1_r'::jsonb ->> 'shortfall_hint')
-    like '%會員「換會員新會員」應收回 40 點,目前只有 15 點,已收回 15 點,差額 25 點未收回。這 25 點是在訂單「% 批次4客人151」折抵掉的%',
+    like '%會員「換會員新會員」應收回 40 點，目前只有 15 點，已收回 15 點，差額 25 點未收回。這 25 點是在訂單「% 批次4客人151」折抵掉的%',
   'H3(核心):新會員自己一句,並指出他自己的折抵單(批次4客人151)');
 select ok(
   (:'h1_r'::jsonb ->> 'shortfall_hint') not like '%應收回 70 點%'
   and (:'h1_r'::jsonb ->> 'shortfall_hint') not like '%會員目前只有 20 點%',
-  'H4 不再把兩位會員的應收回 / 餘額加總成一句(修正前會寫「應收回 70 點,會員目前只有 20 點」)');
+  'H4 不再把兩位會員的應收回 / 餘額加總成一句(修正前會寫「應收回 70 點，會員目前只有 20 點」)');
 select ok(
   (:'h1_r'::jsonb ->> 'shortfall_hint')
-    like '%推薦人「分句推薦人甲」應收回推薦獎勵 5 點,目前只有 2 點,已收回 2 點,差額 3 點未收回%',
+    like '%推薦人「分句推薦人甲」應收回推薦獎勵 5 點，目前只有 2 點，已收回 2 點，差額 3 點未收回%',
   'H5 推薦人甲自己一句(5 / 2 / 3)');
 select ok(
   (:'h1_r'::jsonb ->> 'shortfall_hint')
-    like '%推薦人「分句推薦人乙」應收回推薦獎勵 5 點,目前只有 0 點,已收回 0 點,差額 5 點未收回%'
+    like '%推薦人「分句推薦人乙」應收回推薦獎勵 5 點，目前只有 0 點，已收回 0 點，差額 5 點未收回%'
   and (:'h1_r'::jsonb ->> 'shortfall_hint') not like '%推薦人應收回推薦獎勵 10 點%',
   'H6 推薦人乙自己一句,不再加總成「推薦人應收回推薦獎勵 10 點」');
 select ok(

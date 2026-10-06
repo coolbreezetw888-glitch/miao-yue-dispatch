@@ -84,10 +84,10 @@ describe("#844 api", () => {
   it("RPC 失敗:往上丟(不發通知)", async () => {
     rpcMock.mockResolvedValue({
       data: null,
-      error: { message: "這筆訂單的狀態已經改變,請重新整理後再試" },
+      error: { message: "這筆訂單的狀態已經改變，請重新整理後再試" },
     });
     await expect(cancelCompletedBooking("b-1", "作廢", { notify: true })).rejects.toMatchObject({
-      message: "這筆訂單的狀態已經改變,請重新整理後再試",
+      message: "這筆訂單的狀態已經改變，請重新整理後再試",
     });
     expect(lineMock).not.toHaveBeenCalled();
   });

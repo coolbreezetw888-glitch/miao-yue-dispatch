@@ -441,7 +441,7 @@ select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000002');
 
 select throws_ok(
   format($$select recalculate_booking_commission('%s')$$, :'multi_item_booking_id'::text),
-  '42501', '重新計算已完成訂單的抽成金額,只有商家管理員可以操作',
+  '42501', '重新計算已完成訂單的抽成金額，只有商家管理員可以操作',
   '§2.7.3:被授權 commission_settings 的客服呼叫 recalculate_booking_commission(新簽章)一樣被擋下,只有管理員能操作'
 );
 

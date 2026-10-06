@@ -18,6 +18,27 @@ begin;
 
 select plan(12);
 
+-- #987 第 10 批(2026-10-07):create_booking 的錯誤訊息半形標點改成全形。
+-- 這裡先把第 10 批改過的訊息換回舊訊息(完整 SQL 字串字面值,含單引號),再套原本的還原規則比指紋;
+-- 第 10 批自己「只動訊息」的證明見 req987_0*_fullwidth_messages_*.sql。
+create function pg_temp.req987_revert(p_src text) returns text language plpgsql immutable as $req987$
+declare
+  v_pairs text[] := array[
+    $m$'客戶電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678)；市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456)，有分機的話用 # 接在後面(例如 02-1234-5678#123)'$m$, $m$'客戶電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678);市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456),有分機的話用 # 接在後面(例如 02-1234-5678#123)'$m$,
+    $m$'單筆訂單最多只能設定 100,000 點，請確認是否多打了零'$m$, $m$'單筆訂單最多只能設定 100,000 點,請確認是否多打了零'$m$,
+    $m$'這支電話底下有 % 位客戶，請先在建單畫面選擇這筆訂單是哪一位'$m$, $m$'這支電話底下有 % 位客戶,請先在建單畫面選擇這筆訂單是哪一位'$m$,
+    $m$'找不到指定的會員，或會員不屬於這間商家/已被下架'$m$, $m$'找不到指定的會員,或會員不屬於這間商家/已被下架'$m$,
+    $m$'紅利點數功能已關閉，無法設定派點'$m$, $m$'紅利點數功能已關閉,無法設定派點'$m$,
+    $m$'客戶已變更，紅利折抵已重設，請重新確認後送出'$m$, $m$'客戶已變更,紅利折抵已重設,請重新確認後送出'$m$
+  ];
+begin
+  for i in 1 .. array_length(v_pairs, 1) / 2 loop
+    p_src := replace(p_src, v_pairs[2 * i - 1], v_pairs[2 * i]);
+  end loop;
+  return p_src;
+end $req987$;
+
+
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
 begin
@@ -42,7 +63,7 @@ create temp table r977e_src on commit drop as
     replace(p.prosrc, E'\r\n', E'\n') as new_src,
     replace(
       regexp_replace(
-        replace(p.prosrc, E'\r\n', E'\n'),
+        pg_temp.req987_revert(replace(p.prosrc, E'\r\n', E'\n')),
         '  -- \[req977-batch[47] begin\].*?-- \[req977-batch[47] end\]\n', '', 'g'),
       'v_initial_status', '''pending_confirmation''') as reverted_src,
     pg_get_functiondef(p.oid) as def

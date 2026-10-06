@@ -17,6 +17,24 @@ begin;
 
 select plan(33);
 
+-- #987 第 10 批(2026-10-07):complete_booking、recalculate_booking_commission 的錯誤訊息半形標點改成全形。
+-- 這裡先把第 10 批改過的訊息換回舊訊息(完整 SQL 字串字面值,含單引號),再套原本的還原規則比指紋;
+-- 第 10 批自己「只動訊息」的證明見 req987_0*_fullwidth_messages_*.sql。
+create function pg_temp.req987_revert(p_src text) returns text language plpgsql immutable as $req987$
+declare
+  v_pairs text[] := array[
+    $m$'只有「已接受」狀態的預約可以標記完成，目前狀態不允許這個操作'$m$, $m$'只有「已接受」狀態的預約可以標記完成,目前狀態不允許這個操作'$m$,
+    $m$'重新計算已完成訂單的抽成金額，只有商家管理員可以操作'$m$, $m$'重新計算已完成訂單的抽成金額,只有商家管理員可以操作'$m$,
+    $m$'這筆訂單目前沒有抽成紀錄，無法重新計算(可能是月薪制服務人員，不適用抽成)'$m$, $m$'這筆訂單目前沒有抽成紀錄,無法重新計算(可能是月薪制服務人員,不適用抽成)'$m$
+  ];
+begin
+  for i in 1 .. array_length(v_pairs, 1) / 2 loop
+    p_src := replace(p_src, v_pairs[2 * i - 1], v_pairs[2 * i]);
+  end loop;
+  return p_src;
+end $req987$;
+
+
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
 begin
@@ -83,7 +101,7 @@ select is(
   '⑧ 4 支都還是 SECURITY DEFINER;兩支讀取仍是 STABLE、兩支寫入仍是 VOLATILE'
 );
 select is(
-  (select string_agg(p.proname || ':' || md5(replace(p.prosrc, E'\r\n', E'\n')), ' ' order by p.proname)
+  (select string_agg(p.proname || ':' || md5(pg_temp.req987_revert(replace(p.prosrc, E'\r\n', E'\n'))), ' ' order by p.proname)
    from pg_proc p
    where p.oid in ('private.calculate_booking_staff_commission(uuid, uuid)'::regprocedure,
                    'public.compute_booking_commission(uuid)'::regprocedure,
@@ -91,7 +109,7 @@ select is(
                    'public.complete_booking(uuid)'::regprocedure)),
   'calculate_booking_staff_commission:0a46ab26a17bc373589b14d17173bbc2 complete_booking:a1b9c712eac0b47e99f57e13a9013705 '
   || 'compute_booking_commission:cc8e2a2b366c5a83b1fb65c8261e6062 recalculate_booking_commission:cdabc100207b2e27cc062f3303b5f501',
-  '⑨ 抽成計算 4 支(calculate / compute / recalculate / complete)指紋未變'
+  '⑨ 抽成計算 4 支(calculate / compute / recalculate / complete)指紋未變(#987 第 10 批的錯誤訊息標點先換回舊訊息再比)'
 );
 
 -- =========================================================================
@@ -303,7 +321,7 @@ select is(
 select pg_temp.test_set_auth('f9860000-0000-4000-8000-000000000005');
 select throws_ok(
   $$select pg_temp.smk('f9860000-0000-4000-8000-000000000040', '2036-08-07 09:00+08', array['f9860000-0000-4000-8000-000000000060'::uuid])$$,
-  'P0001', '這間商家尚未開啟料錢成本功能,無法選用料錢成本品項', '⑯ 總開關關時帶品項 ⇒ 擋(錯誤訊息同客服)'
+  'P0001', '這間商家尚未開啟料錢成本功能，無法選用料錢成本品項', '⑯ 總開關關時帶品項 ⇒ 擋(錯誤訊息同客服)'
 );
 select pg_temp.test_clear_auth();
 update merchant_feature_flags set enabled = true
@@ -313,11 +331,11 @@ select pg_temp.test_set_auth('f9860000-0000-4000-8000-000000000005');
 select pg_temp.smk('f9860000-0000-4000-8000-000000000040', '2036-08-01 09:00+08', array['f9860000-0000-4000-8000-000000000060'::uuid]) as id \gset s1_
 select throws_ok(
   $$select pg_temp.smk('f9860000-0000-4000-8000-000000000040', '2036-08-01 11:00+08', array['f9860000-0000-4000-8000-000000000065'::uuid])$$,
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '⑰ 帶別家商家的品項 ⇒ 擋'
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '⑰ 帶別家商家的品項 ⇒ 擋'
 );
 select throws_ok(
   $$select pg_temp.smk('f9860000-0000-4000-8000-000000000040', '2036-08-07 13:00+08', array['f9860000-0000-4000-8000-000000000064'::uuid])$$,
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '⑱ 帶已下架品項 ⇒ 擋'
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '⑱ 帶已下架品項 ⇒ 擋'
 );
 select pg_temp.smk('f9860000-0000-4000-8000-000000000040', '2036-08-01 13:00+08', null) as id \gset s2_
 select pg_temp.smk_old('f9860000-0000-4000-8000-000000000040', '2036-08-01 15:00+08') as id \gset s3_
@@ -351,11 +369,11 @@ select is(pg_temp.mats(:'u1_id'::uuid), 'M_old:120.00,M600:600.00',
 select pg_temp.test_set_auth('f9860000-0000-4000-8000-000000000005');
 select throws_ok(
   format($$select pg_temp.sup(%L, '2036-08-02 09:00+08', array['f9860000-0000-4000-8000-000000000062'::uuid, 'f9860000-0000-4000-8000-000000000064'::uuid])$$, :'u1_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㉔ 新加已下架品項 ⇒ 擋'
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㉔ 新加已下架品項 ⇒ 擋'
 );
 select throws_ok(
   format($$select pg_temp.sup(%L, '2036-08-02 09:00+08', array['f9860000-0000-4000-8000-000000000065'::uuid])$$, :'u1_id'),
-  'P0001', '找不到其中一個料錢成本品項,或已下架', '㉕ 新加別家商家的品項 ⇒ 擋'
+  'P0001', '找不到其中一個料錢成本品項，或已下架', '㉕ 新加別家商家的品項 ⇒ 擋'
 );
 select pg_temp.sup(:'u1_id'::uuid, '2036-08-02 09:00+08', '{}'::uuid[]);
 select pg_temp.test_clear_auth();

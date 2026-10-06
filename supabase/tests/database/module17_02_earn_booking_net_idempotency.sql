@@ -544,7 +544,7 @@ select is(public.render_booking_notification_variables(:'zero_id'::uuid, 'e84400
 -- =========================================================================
 select pg_temp.test_set_auth('e8440000-0000-4000-8000-000000000301');
 select throws_ok(format($$select complete_booking('%s')$$, :'topup_id'),
-  'P0001', '只有「已接受」狀態的預約可以標記完成,目前狀態不允許這個操作',
+  'P0001', '只有「已接受」狀態的預約可以標記完成，目前狀態不允許這個操作',
   'K1 已完成的單再按完成 → 同一句錯誤訊息(邊界 22 第二個人看到的就是這句)');
 select is(
   (select count(*)::int from booking_status_change_logs where booking_id = :'topup_id'::uuid and to_status = 'completed'),

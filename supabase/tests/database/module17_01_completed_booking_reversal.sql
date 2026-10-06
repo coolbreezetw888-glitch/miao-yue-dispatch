@@ -628,13 +628,13 @@ select ok(
 -- 有訂單鑰匙的客服:三支都 42501,而且對「已完成」與「已確認」的單錯誤訊息一模一樣(不洩漏狀態)
 select pg_temp.test_set_auth('e8440000-0000-4000-8000-000000000006');
 select throws_ok(format($$select get_completed_booking_reversal_preview('%s')$$, :'rv_id'),
-  '42501', '還原或取消已完成的訂單,只有商家管理員可以操作', 'D5 🔴:客服呼叫預覽 → 42501');
+  '42501', '還原或取消已完成的訂單，只有商家管理員可以操作', 'D5 🔴:客服呼叫預覽 → 42501');
 select throws_ok(format($$select revert_completed_booking('%s', '誤按')$$, :'rv_id'),
-  '42501', '還原或取消已完成的訂單,只有商家管理員可以操作', 'D6 🔴:客服呼叫還原 → 42501');
+  '42501', '還原或取消已完成的訂單，只有商家管理員可以操作', 'D6 🔴:客服呼叫還原 → 42501');
 select throws_ok(format($$select cancel_completed_booking('%s', '誤按', true)$$, :'rv_id'),
-  '42501', '還原或取消已完成的訂單,只有商家管理員可以操作', 'D7 🔴:客服呼叫取消 → 42501');
+  '42501', '還原或取消已完成的訂單，只有商家管理員可以操作', 'D7 🔴:客服呼叫取消 → 42501');
 select throws_ok(format($$select revert_completed_booking('%s', '誤按')$$, :'acc_id'),
-  '42501', '還原或取消已完成的訂單,只有商家管理員可以操作',
+  '42501', '還原或取消已完成的訂單，只有商家管理員可以操作',
   'D8:客服對「已確認」的單呼叫 → 同一個 42501 訊息(先擋權限再回報狀態,不洩漏訂單狀態)');
 select pg_temp.test_clear_auth();
 
@@ -660,11 +660,11 @@ select is(
 -- 管理員丙:狀態與參數檢查
 select pg_temp.test_set_auth('e8440000-0000-4000-8000-000000000005');
 select throws_ok(format($$select revert_completed_booking('%s', '誤按')$$, :'acc_id'),
-  'P0001', '這筆訂單的狀態已經改變,請重新整理後再試', 'D13:對「已確認」的單還原 → 狀態已改變');
+  'P0001', '這筆訂單的狀態已經改變，請重新整理後再試', 'D13:對「已確認」的單還原 → 狀態已改變');
 select throws_ok(format($$select cancel_completed_booking('%s', '誤按')$$, :'acc_id'),
-  'P0001', '這筆訂單的狀態已經改變,請重新整理後再試', 'D14:對「已確認」的單取消 → 狀態已改變');
+  'P0001', '這筆訂單的狀態已經改變，請重新整理後再試', 'D14:對「已確認」的單取消 → 狀態已改變');
 select throws_ok(format($$select get_completed_booking_reversal_preview('%s')$$, :'acc_id'),
-  'P0001', '這筆訂單的狀態已經改變,請重新整理後再試', 'D15:對「已確認」的單預覽 → 狀態已改變');
+  'P0001', '這筆訂單的狀態已經改變，請重新整理後再試', 'D15:對「已確認」的單預覽 → 狀態已改變');
 select throws_ok(format($$select revert_completed_booking('%s', '')$$, :'rv_id'),
   '22023', '請填寫還原/取消的原因', 'D16:原因空字串 → 擋下');
 select throws_ok(format($$select cancel_completed_booking('%s', E'  \t ')$$, :'rv_id'),
@@ -674,7 +674,7 @@ select throws_ok(format($$select revert_completed_booking('%s', E'　　\n')$$, 
 select throws_ok(format($$select revert_completed_booking('%s', null)$$, :'rv_id'),
   '22023', '請填寫還原/取消的原因', 'D18:原因 null → 擋下');
 select throws_ok(format($$select revert_completed_booking('%s', repeat('字', 501))$$, :'rv_id'),
-  '22023', '原因最多 500 個字,目前是 501 個字,請精簡後再送出', 'D19:原因 501 字 → 擋下');
+  '22023', '原因最多 500 個字，目前是 501 個字，請精簡後再送出', 'D19:原因 501 字 → 擋下');
 select throws_ok($$select revert_completed_booking('e8440000-0000-4000-8000-0000000009ff', '誤按')$$,
   'P0002', '找不到這筆預約', 'D20:不存在的訂單 → 找不到');
 select pg_temp.test_clear_auth();
@@ -748,7 +748,7 @@ select is(
 -- 冪等:再按一次還原、再按一次取消 → 狀態已改變,不會重複反轉
 select pg_temp.test_set_auth('e8440000-0000-4000-8000-000000000005');
 select throws_ok(format($$select revert_completed_booking('%s', '又按一次')$$, :'rv_id'),
-  'P0001', '這筆訂單的狀態已經改變,請重新整理後再試', 'E8:同一張單重複按還原 → 狀態已改變');
+  'P0001', '這筆訂單的狀態已經改變，請重新整理後再試', 'E8:同一張單重複按還原 → 狀態已改變');
 select pg_temp.test_clear_auth();
 select is(
   (select count(*)::int from booking_completion_reversals where booking_id = :'rv_id'::uuid)
@@ -895,7 +895,7 @@ select is(
   'H5:匯入單預覽 can_revert=false、can_cancel=true、blocked_reasons 只有 import_cannot_revert'
 );
 select throws_ok(format($$select revert_completed_booking('%s', '想還原匯入單')$$, :'im_id'),
-  'P0001', '匯入的歷史訂單不能還原,只能取消。如果匯錯了,請取消後重新匯入', 'H6:匯入單還原 → 擋下');
+  'P0001', '匯入的歷史訂單不能還原，只能取消。如果匯錯了，請取消後重新匯入', 'H6:匯入單還原 → 擋下');
 select lives_ok(format($$select cancel_completed_booking('%s', '匯錯了')$$, :'im_id'),
   'H7:匯入單取消 → 成功');
 select pg_temp.test_clear_auth();

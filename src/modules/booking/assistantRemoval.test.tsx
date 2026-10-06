@@ -346,7 +346,7 @@ describe("預約詳情:從「(協助)」色塊打開", () => {
   it("移除失敗(40001 畫面過期)→ 紅字 toast、不跳提示", async () => {
     mocks.removeBookingAssistant.mockReset().mockRejectedValue({
       code: "40001",
-      message: "這位協助人員已經不在這筆預約上,畫面已重新整理",
+      message: "這位協助人員已經不在這筆預約上，畫面已重新整理",
     });
     renderHarness("staff-help");
     fireEvent.click(await screen.findByRole("button", { name: "移除協助人員" }));

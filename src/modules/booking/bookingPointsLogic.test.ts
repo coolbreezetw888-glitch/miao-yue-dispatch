@@ -597,7 +597,7 @@ describe("describeBookingDetailPoints(§4.7 訂單詳情)", () => {
     };
     expect(describeBookingDetailPoints(empty, null).show).toBe(false);
     // #844 改寫:原本斷言「accepted + 有效入帳 50 ⇒ 不顯示」。#844 起 accepted 的單若有入帳紀錄,
-    // 一定是「完成後被還原」的(會員餘額 0、一點都沒收回):要講清楚「已收回 0 點,差額 50 點未收回」,
+    // 一定是「完成後被還原」的(會員餘額 0、一點都沒收回):要講清楚「已收回 0 點，差額 50 點未收回」,
     // 不能什麼都不說。從未入帳的已確認單仍不顯示(上一個 it)。
     expect(
       describeBookingDetailPoints(
