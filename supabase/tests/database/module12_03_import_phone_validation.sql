@@ -272,7 +272,7 @@ select ok(
 -- 品管實測到的原狀:三列匯入、其中一列的電話跟前一列重複(只是寫法不同)⇒ 那一列既不算成功也不算
 -- 失敗,error_report 裡一個字都沒有,商家永遠不知道是哪一列、跟誰撞、那個人叫什麼名字。
 -- 根因:import_members_batch 在呼叫 create_member **之前**就先短路略過了,所以 create_member 裡
--- #931 那句「這支電話已經有會員:某某某」從匯入這條路徑走不到。而 insert_only 是匯入精靈的**預設**模式。
+-- #931 那句「這支電話已經有會員：某某某」從匯入這條路徑走不到。而 insert_only 是匯入精靈的**預設**模式。
 -- 修在 20260930040500_req931_import_duplicate_phone_error_report.sql。
 --
 -- 🔴 修法刻意「只加訊息、不改計數」:那一列仍然算 skipped_duplicate_rows。E1 就是在守這件事 ——
@@ -308,7 +308,7 @@ select is(
 select ok(
   (select e->>'error_message' from merchant_bulk_operations o, jsonb_array_elements(o.error_report) e
    where o.id = :'opE_import_members_batch'::uuid)
-  like '這支電話已經有會員:E1新客戶%已略過%',
+  like '這支電話已經有會員：E1新客戶%已略過%',
   'E4 訊息**指名是誰**(使用者原話:「要擋下來並指名是誰…不能只說失敗」),而且明講這一列是「已略過」');
 
 select is(

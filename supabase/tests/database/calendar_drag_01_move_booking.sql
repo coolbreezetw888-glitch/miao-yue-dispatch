@@ -572,13 +572,13 @@ select throws_ok(
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_a', :'staff_d', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '找不到這位服務人員,或這位服務人員已被移除',
+  'P0001', '找不到這位服務人員，或這位服務人員已被移除',
   '目標服務人員屬於另一間商家(D)→ 擋下'
 );
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     :'t1_id', :'staff_a', :'staff_e', '2026-10-06 10:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '找不到這位服務人員,或這位服務人員已被移除',
+  'P0001', '找不到這位服務人員，或這位服務人員已被移除',
   '目標服務人員已移除(E)→ 擋下'
 );
 select throws_ok(

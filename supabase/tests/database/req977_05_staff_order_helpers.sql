@@ -20,6 +20,22 @@ begin;
 
 select plan(50);
 
+-- #987 第 10 批(2026-10-07):set_staff_day_override、clear_staff_day_override 的錯誤訊息半形標點改成全形。
+-- 這裡先把第 10 批改過的訊息換回舊訊息(完整 SQL 字串字面值,含單引號),再套原本的還原規則比指紋;
+-- 第 10 批自己「只動訊息」的證明見 req987_0*_fullwidth_messages_*.sql。
+create function pg_temp.req987_revert(p_src text) returns text language plpgsql immutable as $req987$
+declare
+  v_pairs text[] := array[
+    $m$'找不到這位服務人員，或這位服務人員已被移除'$m$, $m$'找不到這位服務人員,或這位服務人員已被移除'$m$
+  ];
+begin
+  for i in 1 .. array_length(v_pairs, 1) / 2 loop
+    p_src := replace(p_src, v_pairs[2 * i - 1], v_pairs[2 * i]);
+  end loop;
+  return p_src;
+end $req987$;
+
+
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
 begin
@@ -150,7 +166,7 @@ create temp table r977g_fp on commit drop as
     p.provolatile::text || '/' || p.prosecdef::text || '/' || array_to_string(p.proacl, ',') as attrs,
     md5(
       replace(replace(replace(
-        regexp_replace(replace(p.prosrc, E'\r\n', E'\n'),
+        regexp_replace(pg_temp.req987_revert(replace(p.prosrc, E'\r\n', E'\n')),
           '  -- \[req977-batch7 begin\].*?-- \[req977-batch7 end\]\n', '', 'g'),
         E'    )\n    ;\n', E'    );\n'),
         E'agent_match.agent_name,\n      ''(已移除的人員)'')', E'agent_match.agent_name, ''(已移除的人員)'')'),

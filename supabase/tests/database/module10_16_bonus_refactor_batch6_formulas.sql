@@ -199,7 +199,7 @@ select throws_ok(
     '[{"name":"公式甲","service_item_id":"db160000-0000-4000-8000-000000000031","points_per_unit":1},
       {"name":"公式乙","service_item_id":"db160000-0000-4000-8000-000000000031","points_per_unit":2}]'::jsonb)$$,
   '23505',
-  '「冷氣安裝」已經被公式「公式甲」設定過了,同一個服務項目只能有一條公式',
+  '「冷氣安裝」已經被公式「公式甲」設定過了，同一個服務項目只能有一條公式',
   'B8 §3.9:同一個服務項目出現兩次 ⇒ 白話錯誤,含項目名「冷氣安裝」與先設定它的公式名「公式甲」'
 );
 select throws_ok(
@@ -207,7 +207,7 @@ select throws_ok(
     '[{"name":"全部一","service_item_id":null,"points_per_unit":1},
       {"name":"全部二","service_item_id":null,"points_per_unit":2}]'::jsonb)$$,
   '23505',
-  '「全部服務項目」已經被公式「全部一」設定過了,同一個服務項目只能有一條公式',
+  '「全部服務項目」已經被公式「全部一」設定過了，同一個服務項目只能有一條公式',
   'B9 §1.2:兩條「全部服務項目」⇒ 同樣的白話錯誤'
 );
 
@@ -264,7 +264,7 @@ select throws_ok(
   $$select * from upsert_member_point_formulas('db160000-0000-4000-8000-000000000020',
     '[{"id":"db160000-0000-4000-8000-000000000091","name":"搶過來","service_item_id":null,"points_per_unit":99}]'::jsonb)$$,
   '22023',
-  '公式「搶過來」已經不存在,請重新整理後再儲存',
+  '公式「搶過來」已經不存在，請重新整理後再儲存',
   'B17 IDOR:payload 帶別家商家的公式 id ⇒ 擋下(錯誤訊息不透露那筆存不存在)'
 );
 select pg_temp.test_clear_auth();
