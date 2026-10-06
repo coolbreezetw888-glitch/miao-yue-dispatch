@@ -51,10 +51,10 @@ function readVapidPublicKey(): string | undefined {
  * 集中放在這裡,測試可以直接比對字串,不用把文案抄兩份。 */
 export const PUSH_SUBSCRIBE_BLOCKED_MESSAGES = {
   unsupported:
-    "這個瀏覽器不支援推播通知,請改用 Chrome、Edge,或 iOS 16.4 以上的 Safari(需先加入主畫面)",
-  noMerchant: "目前沒有選定商家,請重新整理頁面後再試一次",
-  noTarget: "找不到你在這間商家的身份資料,請聯絡商家管理員確認你的帳號設定",
-  missingVapidKey: "推播功能尚未完成設定,請聯絡系統管理員",
+    "這個瀏覽器不支援推播通知，請改用 Chrome、Edge，或 iOS 16.4 以上的 Safari(需先加入主畫面)",
+  noMerchant: "目前沒有選定商家，請重新整理頁面後再試一次",
+  noTarget: "找不到你在這間商家的身份資料，請聯絡商家管理員確認你的帳號設定",
+  missingVapidKey: "推播功能尚未完成設定，請聯絡系統管理員",
 } as const;
 
 export type BrowserNotificationPermission = NotificationPermission | "unsupported";
@@ -178,7 +178,7 @@ export function usePushSubscription(
       const p256dh = json.keys?.["p256dh"];
       const auth = json.keys?.["auth"];
       if (!p256dh || !auth) {
-        throw new Error("瀏覽器沒有回傳完整的訂閱金鑰,請稍後再試一次");
+        throw new Error("瀏覽器沒有回傳完整的訂閱金鑰，請稍後再試一次");
       }
 
       await upsertMyPushSubscription({

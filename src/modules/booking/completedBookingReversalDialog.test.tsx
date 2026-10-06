@@ -279,7 +279,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
     renderDialog();
     await openReversal("還原完成");
     const cross = screen.getByTestId("reversal-cross-month");
-    expect(cross.textContent).toContain("這張單是 2026 年 9 月 完成的,已經是 1 個月前");
+    expect(cross.textContent).toContain("這張單是 2026 年 9 月 完成的，已經是 1 個月前");
     // 跨月是 DOM 裡第一塊 `!`
     const notes = screen.getAllByRole("note");
     expect(notes[0]).toBe(cross);
@@ -287,7 +287,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
     expect(screen.getByTestId("reversal-expected-shortfall").textContent).toContain(
       "預計有 40 點收不回來",
     );
-    expect(screen.getByRole("button", { name: "我了解影響,確定還原" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "我了解影響，確定還原" })).toBeTruthy();
     // 還原路徑沒有通知開關(§3.7 一律不發)
     expect(screen.queryByText(/同時發送取消通知/)).toBeNull();
   });
@@ -306,7 +306,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
     renderDialog();
     await openReversal("還原完成");
     const confirm = screen.getByRole("button", {
-      name: "我了解影響,確定還原",
+      name: "我了解影響，確定還原",
     }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
     expect(screen.getByTestId("reversal-confirm-disabled-reason").textContent).toContain(
@@ -326,7 +326,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
     await openReversal("還原完成");
     fireEvent.change(reasonBox(), { target: { value: "字".repeat(501) } });
     expect(
-      (screen.getByRole("button", { name: "我了解影響,確定還原" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "我了解影響，確定還原" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByText("501 / 500")).toBeTruthy();
   });
@@ -348,7 +348,7 @@ describe("§5.2 / §5.3 確認子畫面", () => {
     await openReversal("還原完成");
     fireEvent.change(reasonBox(), { target: { value: "匯錯了" } });
     expect(
-      (screen.getByRole("button", { name: "我了解影響,確定還原" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "我了解影響，確定還原" }) as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(screen.getByTestId("reversal-blocked-import_cannot_revert")).toBeTruthy();
     expect(screen.getByTestId("reversal-confirm-disabled-reason").textContent).toContain(
@@ -389,7 +389,7 @@ describe("§5.4 送出與成功後", () => {
     await openReversal("還原完成");
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
     fireEvent.change(reasonBox(), { target: { value: `${IDEOGRAPHIC_SPACE} 誤按完成 \n` } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(mocks.revertCompletedBooking).toHaveBeenCalledWith(BOOKING_ID, "誤按完成");
@@ -413,7 +413,7 @@ describe("§5.4 送出與成功後", () => {
     const sw = screen.getByRole("switch");
     expect(sw.getAttribute("aria-checked")).toBe("false");
     fireEvent.change(reasonBox(), { target: { value: "客人要求作廢" } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定取消" }));
     await waitFor(() =>
       expect(mocks.cancelCompletedBooking).toHaveBeenCalledWith(BOOKING_ID, "客人要求作廢", {
         notify: false,
@@ -426,7 +426,7 @@ describe("§5.4 送出與成功後", () => {
     await openReversal("取消訂單");
     fireEvent.click(screen.getByRole("switch"));
     fireEvent.change(reasonBox(), { target: { value: "客人要求作廢" } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定取消" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定取消" }));
     await waitFor(() =>
       expect(mocks.cancelCompletedBooking).toHaveBeenLastCalledWith(BOOKING_ID, "客人要求作廢", {
         notify: true,
@@ -450,7 +450,7 @@ describe("§5.4 送出與成功後", () => {
     renderDialog();
     await openReversal("還原完成");
     fireEvent.change(reasonBox(), { target: { value: "誤按" } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
 
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText("有 40 點未能收回")).toBeTruthy();
@@ -483,7 +483,7 @@ describe("§5.4 送出與成功後", () => {
     // 治本:把「送出 → 小卡窗疊上來 → 圖層重新排好」整段包在 act 裡,act 結束前 React 會把這些更新與 effect
     // 全部跑完,按 Esc 時圖層一定已經排好;不需要長時間等待。
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+      fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
     });
     return screen.getByRole("alertdialog");
   }
@@ -525,7 +525,7 @@ describe("§5.4 送出與成功後", () => {
     // #963:原本是 waitFor(5000) + 固定等 50ms。改成整段送出包在 act 裡:act 結束前,送出 → 關子畫面 →
     // effect 呼叫 onChanged → invalidate 觸發的重抓(如果有)全部已經發生,不用猜要等多久。
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+      fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
     });
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(mocks.fetchCompletedBookingReversalPreview).toHaveBeenCalledTimes(1);
@@ -550,7 +550,7 @@ describe("§5.4 送出與成功後", () => {
     renderDialog();
     await openReversal("還原完成");
     fireEvent.change(reasonBox(), { target: { value: "誤按" } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
     await waitFor(() => expect(mocks.toast.error).toHaveBeenCalled());
     expect(mocks.toast.error.mock.calls[0]?.[1]?.description).toContain("重新整理");
     // #963:同上,onChanged 在重新渲染後的 effect 才呼叫,要用 waitFor 等。
@@ -565,7 +565,7 @@ describe("§5.4 送出與成功後", () => {
     renderDialog();
     await openReversal("還原完成");
     fireEvent.change(reasonBox(), { target: { value: "誤按" } });
-    fireEvent.click(screen.getByRole("button", { name: "我了解影響,確定還原" }));
+    fireEvent.click(screen.getByRole("button", { name: "我了解影響，確定還原" }));
     await waitFor(() =>
       expect(mocks.toast.error).toHaveBeenCalledWith("操作失敗", {
         description: "原因最多 500 個字",
@@ -586,7 +586,7 @@ describe("§4.8 / 批次 3 QA 觀察 ①:紅利分類帳查詢條件", () => {
       effectivePoints: 40,
     });
     renderDialog();
-    expect(await screen.findByText("已收回 10 點,差額 40 點未收回")).toBeTruthy();
+    expect(await screen.findByText("已收回 10 點，差額 40 點未收回")).toBeTruthy();
     expect(mocks.getBookingPointsLedger).toHaveBeenCalledWith(BOOKING_ID);
   });
 

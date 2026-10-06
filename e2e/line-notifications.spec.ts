@@ -263,7 +263,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時彈窗�
     page.getByRole("alertdialog").getByText(new RegExp(fixture.staffName)),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "否,只確認不通知" }).click();
+  await page.getByRole("button", { name: "否，只確認不通知" }).click();
   await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
@@ -309,7 +309,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時,選「�
     timeout: LOAD_TIMEOUT,
   });
 
-  await page.getByRole("button", { name: "是,確認並通知" }).click();
+  await page.getByRole("button", { name: "是，確認並通知" }).click();
   await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });

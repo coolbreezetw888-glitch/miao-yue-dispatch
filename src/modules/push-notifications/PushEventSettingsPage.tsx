@@ -119,8 +119,8 @@ function EventSettingCard({
           title={PUSH_NOTIFICATION_EVENT_LABELS[eventType]}
           description={
             form.enabled
-              ? "推播已開啟,符合條件時會推播給這筆訂單指定的服務人員。"
-              : "推播目前關閉,這類事件不會發出任何推播。"
+              ? "推播已開啟，符合條件時會推播給這筆訂單指定的服務人員。"
+              : "推播目前關閉，這類事件不會發出任何推播。"
           }
           checked={form.enabled}
           onCheckedChange={(v) => setField("enabled", v)}
@@ -130,8 +130,8 @@ function EventSettingCard({
           label="通知標題"
           htmlFor={titleFieldId}
           counter={{ value: form.messageTitle.length, max: 40 }}
-          help="建議 20 字以內。手機的通知列顯示空間有限,超出的部分會被系統自己截掉,寫再多對方也看不到。"
-          helpLabel="說明:通知標題建議寫多長"
+          help="建議 20 字以內。手機的通知列顯示空間有限，超出的部分會被系統自己截掉，寫再多對方也看不到。"
+          helpLabel="說明：通知標題建議寫多長"
         >
           <FieldInput
             id={titleFieldId}
@@ -145,8 +145,8 @@ function EventSettingCard({
           label="通知內文"
           htmlFor={bodyFieldId}
           counter={{ value: form.messageBody.length, max: 120 }}
-          help="建議 50 字以內。手機的通知列空間比標題還少,超出的部分會被系統自己截掉。"
-          helpLabel="說明:通知內文建議寫多長"
+          help="建議 50 字以內。手機的通知列空間比標題還少，超出的部分會被系統自己截掉。"
+          helpLabel="說明：通知內文建議寫多長"
         >
           <FieldTextarea
             id={bodyFieldId}

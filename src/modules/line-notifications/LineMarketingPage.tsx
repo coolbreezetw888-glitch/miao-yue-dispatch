@@ -173,7 +173,7 @@ function LineMarketingPageInner() {
         message: message.trim(),
       });
       toast.success(
-        `已送出:成功 ${result.sentCount} 筆、失敗 ${result.failedCount} 筆、跳過 ${result.skippedCount} 筆`,
+        `已送出：成功 ${result.sentCount} 筆、失敗 ${result.failedCount} 筆、跳過 ${result.skippedCount} 筆`,
       );
       navigate(canViewLineLogs ? "/app/line-logs" : "/app/manage");
     } catch (err) {
@@ -197,7 +197,9 @@ function LineMarketingPageInner() {
       <Card>
         <CardHeader>
           <CardTitle>選擇會員</CardTitle>
-          <CardDescription>只列出已綁定 LINE 的會員,還沒綁定的會員不會出現在這裡。</CardDescription>
+          <CardDescription>
+            只列出已綁定 LINE 的會員，還沒綁定的會員不會出現在這裡。
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {isLoading ? (
@@ -205,14 +207,14 @@ function LineMarketingPageInner() {
           ) : isError ? (
             <ErrorState
               title="讀不到已綁定 LINE 的會員名單"
-              reason="可能是網路斷了;現在先不顯示名單,避免你把空白當成「會員的 LINE 綁定都不見了」"
+              reason="可能是網路斷了;現在先不顯示名單，避免你把空白當成「會員的 LINE 綁定都不見了」"
               onRetry={() => void refetchMarketableMembers()}
             />
           ) : memberList.length === 0 ? (
             <EmptyState
               icon={<Users className="h-6 w-6" aria-hidden="true" />}
               title="還沒有任何會員完成 LINE 綁定"
-              description="會員在 LINE 加商家官方帳號好友、傳送綁定碼之後就會出現在這裡,才能收到行銷訊息。綁定碼在「會員管理 > 會員詳情頁」產生。"
+              description="會員在 LINE 加商家官方帳號好友、傳送綁定碼之後就會出現在這裡，才能收到行銷訊息。綁定碼在「會員管理 > 會員詳情頁」產生。"
             />
           ) : (
             <Tabs defaultValue="individual">
@@ -262,7 +264,7 @@ function LineMarketingPageInner() {
               <TabsContent value="by-tier" className="mt-3 flex flex-col gap-3">
                 {!tiers || tiers.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    這個商家目前還沒有設定任何會員等級,請先到會員系統設定頁新增等級。
+                    這個商家目前還沒有設定任何會員等級，請先到會員系統設定頁新增等級。
                   </p>
                 ) : (
                   <ul className="flex flex-col gap-1.5" data-testid="line-marketing-tier-list">
@@ -288,13 +290,14 @@ function LineMarketingPageInner() {
                 )}
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   勾選等級會把該等級底下所有已綁定 LINE
-                  的會員一次整批選入名單,也可以跟「單獨選擇」分頁的選取結果並存。
+                  的會員一次整批選入名單，也可以跟「單獨選擇」分頁的選取結果並存。
                 </p>
               </TabsContent>
             </Tabs>
           )}
           <p className="text-xs leading-relaxed tabular-nums text-muted-foreground">
-            目前選取 {selectedIds.length} 位會員(單獨選擇 + 依分類批量選擇合計,尚未扣除下方排除清單)
+            目前選取 {selectedIds.length} 位會員(單獨選擇 +
+            依分類批量選擇合計，尚未扣除下方排除清單)
           </p>
         </CardContent>
       </Card>
@@ -303,7 +306,7 @@ function LineMarketingPageInner() {
         <CardHeader>
           <CardTitle>排除清單</CardTitle>
           <CardDescription>
-            這裡排除的會員,即使符合上面「單獨選擇」或「依分類批量選擇」的條件,最終送出名單裡也不會包含。
+            這裡排除的會員，即使符合上面「單獨選擇」或「依分類批量選擇」的條件，最終送出名單裡也不會包含。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -325,7 +328,7 @@ function LineMarketingPageInner() {
                   >
                     <span className="min-w-0 break-words">{m.name}</span>
                     {m.phone ? <span className="text-xs tabular-nums">{m.phone}</span> : null}
-                    <AttributeTag wrap>黑名單客戶・已自動排除,不需要手動勾選</AttributeTag>
+                    <AttributeTag wrap>黑名單客戶・已自動排除，不需要手動勾選</AttributeTag>
                   </li>
                 ))}
               </ul>
@@ -387,7 +390,7 @@ function LineMarketingPageInner() {
               maxLength={MESSAGE_MAX_LENGTH}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="輸入要發送的訊息內容,可搭配下方的可用變數"
+              placeholder="輸入要發送的訊息內容，可搭配下方的可用變數"
             />
           </FormField>
           {/* skill 二之七:變數說明要完整(三欄:變數 / 中文意思 / 範例值)+ 預覽框。 */}
@@ -423,7 +426,7 @@ function LineMarketingPageInner() {
                 </CardAlertDialogDescription>
               </CardAlertDialogHeader>
               {/* 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。 */}
-              <AlertNote>訊息一旦送到會員的 LINE 就無法收回,也不能編輯。</AlertNote>
+              <AlertNote>訊息一旦送到會員的 LINE 就無法收回，也不能編輯。</AlertNote>
               <CardAlertDialogFooter>
                 <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
                 <CardAlertDialogAction onClick={handleSend}>確定發送</CardAlertDialogAction>

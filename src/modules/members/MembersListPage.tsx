@@ -263,7 +263,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
       {/* 7 個欄位、一定要捲 ⇒ 全頁層(skill 三「📐 分類原則」)。 */}
       <FullPageLayerContent
         title="新增會員"
-        subtitle="會員由商家建立,不是消費者自己註冊。只有姓名是必填的。"
+        subtitle="會員由商家建立，不是消費者自己註冊。只有姓名是必填的。"
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -292,8 +292,8 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <FormField
             label="電話"
             htmlFor="member-phone"
-            help="電話是選填,留空也可以建立會員 —— 它只是用來在建單時查出這位客戶,不是會員的唯一身分。要填的話手機或市話都可以。"
-            helpLabel="說明:會員電話要不要填、有什麼用"
+            help="電話是選填，留空也可以建立會員 —— 它只是用來在建單時查出這位客戶，不是會員的唯一身分。要填的話手機或市話都可以。"
+            helpLabel="說明：會員電話要不要填、有什麼用"
           >
             <FieldInput
               id="member-phone"
@@ -315,8 +315,8 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <FormField
             label="生日"
             htmlFor="member-birthday"
-            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
-            helpLabel="說明:填生日會發生什麼事"
+            help="填了生日，系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話，7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
+            helpLabel="說明：填生日會發生什麼事"
           >
             <FieldDate
               id="member-birthday"
@@ -339,8 +339,8 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           </FormField>
           <FormField
             label="推薦人(選填)"
-            help="推薦人只能在建立當下設定,建立完成之後就無法再變更了 —— 因為推薦獎勵是依這筆關係核發的。"
-            helpLabel="說明:推薦人為什麼之後不能改"
+            help="推薦人只能在建立當下設定，建立完成之後就無法再變更了 —— 因為推薦獎勵是依這筆關係核發的。"
+            helpLabel="說明：推薦人為什麼之後不能改"
           >
             <ReferrerPicker merchantId={merchantId} value={referrer} onChange={setReferrer} />
           </FormField>
@@ -453,13 +453,13 @@ function MembersListInner() {
               HelpToggle 展開的說明區塊是 basis-full,所以這一列必須是 flex flex-wrap。 */}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <CardTitle>會員名單</CardTitle>
-            <HelpToggle label="說明:「尚未驗證」和「已完成驗證」有什麼差別">
+            <HelpToggle label="說明：「尚未驗證」和「已完成驗證」有什麼差別">
               <strong>尚未驗證</strong>
-              :這位客戶的資料已經在你的會員管理裡(建單時自動登記,或你自己新增/匯入的),
-              但本人還沒有完成身分驗證。這種客戶<strong>照樣會累積紅利點數</strong>,但
+              ：這位客戶的資料已經在你的會員管理裡(建單時自動登記，或你自己新增/匯入的)，
+              但本人還沒有完成身分驗證。這種客戶<strong>照樣會累積紅利點數</strong>，但
               <strong>不會收到通知</strong>。
               <br />
-              <strong>已完成驗證</strong>:本人已經證明過自己就是這支手機的主人,通知才會寄得出去。
+              <strong>已完成驗證</strong>：本人已經證明過自己就是這支手機的主人，通知才會寄得出去。
             </HelpToggle>
           </div>
           <FieldInput
@@ -537,7 +537,7 @@ function MembersListInner() {
             // 「沒有符合條件的會員」,商家以為會員被刪掉了。
             <ErrorState
               title="讀不到會員名單"
-              reason="可能是網路斷了,或你沒有查看會員的權限;現在先不顯示名單,避免你把空白當成「會員不見了」"
+              reason="可能是網路斷了，或你沒有查看會員的權限;現在先不顯示名單，避免你把空白當成「會員不見了」"
               onRetry={() => void refetchMembers()}
             />
           ) : visibleMembers.length === 0 ? (
@@ -549,7 +549,7 @@ function MembersListInner() {
               // (違反 skill 二之三),而且是同一個動作的兩個實例。改在文案裡指路。
               description={
                 allMembers.length === 0
-                  ? "按右上角的「新增會員」建立第一位。建立之後,建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 再行銷通知。"
+                  ? "按右上角的「新增會員」建立第一位。建立之後，建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 再行銷通知。"
                   : "換一個篩選條件或清空搜尋關鍵字再看看。"
               }
             />
@@ -655,7 +655,7 @@ function MembersListInner() {
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>確定要下架「{deactivatingMember?.name}」嗎?</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
+              這是軟刪除，資料不會不見，之後隨時可以重新上架恢復。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>

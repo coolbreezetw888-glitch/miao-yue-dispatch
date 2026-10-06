@@ -24,6 +24,8 @@ const FORBIDDEN_PHRASES = [
   "已確認生效",
   "通知功能正常",
   "設定完成,你會收到通知",
+  // #975 起畫面文字改用全形逗號,同一句的全形寫法也要擋(不然這條守門會變成空轉)。
+  "設定完成，你會收到通知",
   "已成功開啟並生效",
 ];
 
@@ -77,7 +79,7 @@ describe("§6.5(🔴 核心必測):文案不可以寫成無法兌現的承諾", 
     // 這正是這個系統之前犯過的同一類錯(usePushSubscription.ts 檔頭記錄的「假成功訊息」):
     // 拿「我們把信交給郵局了」當成「對方收到了」。
     const message = describePushTestState("no_ack");
-    expect(message?.text).toBe("通知已送出,但系統沒有收到你裝置的回報");
+    expect(message?.text).toBe("通知已送出，但系統沒有收到你裝置的回報");
     expect(message?.tone).toBe("warning");
   });
 });

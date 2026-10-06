@@ -164,14 +164,14 @@ export function PieceRateStaffReport({
       // 改成白話,寫法照同模組 BillingReportPage 的 ErrorState。
       <ErrorState
         title="讀不到這份報表"
-        reason="可能是網路斷了,或你沒有查看這位服務人員報表的權限"
+        reason="可能是網路斷了，或你沒有查看這位服務人員報表的權限"
         onRetry={() => void refetch()}
       />
     );
 
   const assistantLine = (
     <p className="text-sm text-muted-foreground">
-      以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算,只是參考資訊)
+      以助手身份參與 {summary.assistant_booking_count} 筆訂單(不列入抽成計算，只是參考資訊)
     </p>
   );
   const csvButton = showCsvExport ? (
@@ -212,7 +212,7 @@ export function PieceRateStaffReport({
                formatAmount(摘要卡片)一邊直接印原始值(這裡跟下面的明細列),
                否則同一個數字在同一頁會長得不一樣,服務人員會懷疑是不是被扣了錢。 */
             <CardDescription>
-              總計 {summary.total_orders} 筆訂單,抽成合計{" "}
+              總計 {summary.total_orders} 筆訂單，抽成合計{" "}
               {formatAmount(summary.total_commission_amount)}
             </CardDescription>
           ) : null}
@@ -221,7 +221,7 @@ export function PieceRateStaffReport({
           {summary.details.length === 0 ? (
             <EmptyState
               title={dateRange ? "這段期間沒有已完成的訂單" : "這個月沒有已完成的訂單"}
-              description="訂單要按下「標記完成」之後才會列進抽成報表,可以換一個期間再查。"
+              description="訂單要按下「標記完成」之後才會列進抽成報表，可以換一個期間再查。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">
@@ -268,7 +268,7 @@ export function PieceRateStaffReport({
                             <DetailDivider className="my-1" />
                             {d.item_breakdown.length === 0 && d.legacy_rate_percentage !== null ? (
                               <p className="text-[13px] text-muted-foreground">
-                                這筆是改版前的舊制紀錄,抽成比例 {d.legacy_rate_percentage}%
+                                這筆是改版前的舊制紀錄，抽成比例 {d.legacy_rate_percentage}%
                               </p>
                             ) : d.item_breakdown.length === 0 ? (
                               <p className="text-[13px] text-muted-foreground">沒有抽成明細</p>
@@ -372,7 +372,7 @@ export function MonthlySalaryStaffReport({
       // 🔴 2026-09-30 QA:同上,不要把資料庫原文吐給使用者。
       <ErrorState
         title="讀不到這份報表"
-        reason="可能是網路斷了,或你沒有查看這位服務人員報表的權限"
+        reason="可能是網路斷了，或你沒有查看這位服務人員報表的權限"
         onRetry={() => void refetch()}
       />
     );
@@ -382,7 +382,7 @@ export function MonthlySalaryStaffReport({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm tabular-nums text-muted-foreground">
           {dateRange ? "月休假額度" : "本月休假額度"} {summary.monthly_leave_quota_days ?? "未設定"}{" "}
-          天(僅供參考,不影響薪資計算),這段期間實際請假 {summary.total_leave_days} 天
+          天(僅供參考，不影響薪資計算)，這段期間實際請假 {summary.total_leave_days} 天
         </p>
         {showCsvExport ? (
           <Button
@@ -405,7 +405,7 @@ export function MonthlySalaryStaffReport({
 
       {/* skill 二:「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐。 */}
       {summary.over_deduction_warning ? (
-        <AlertNote>扣款金額已超過月薪基本額,請留意這個月的請假紀錄或薪資設定是否正確。</AlertNote>
+        <AlertNote>扣款金額已超過月薪基本額，請留意這個月的請假紀錄或薪資設定是否正確。</AlertNote>
       ) : null}
 
       {/* 模組 8 §11.10:這個月(或查詢區間內有部分月份)早於系統開始記錄薪資歷史的時間,「月薪
@@ -414,7 +414,7 @@ export function MonthlySalaryStaffReport({
           不需要各自重複實作。 */}
       {summary.salary_history_estimated ? (
         <AlertNote>
-          這段期間早於系統開始記錄薪資歷史的時間,月薪基本額是用最早的已知薪資回推估算,僅供參考。
+          這段期間早於系統開始記錄薪資歷史的時間，月薪基本額是用最早的已知薪資回推估算，僅供參考。
         </AlertNote>
       ) : null}
 
@@ -520,7 +520,7 @@ function StaffReportPageInner() {
         // 空狀態(asChild + react-router <Link>,不是 navigate)。
         <EmptyState
           title="目前沒有在職的服務人員"
-          description="新增服務人員並完成訂單之後,這裡才會有報表可以看。"
+          description="新增服務人員並完成訂單之後，這裡才會有報表可以看。"
           action={
             <Button asChild variant="neutral" size="touch">
               <Link to="/app/staff">前往服務人員管理</Link>

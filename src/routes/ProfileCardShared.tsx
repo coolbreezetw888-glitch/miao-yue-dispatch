@@ -40,7 +40,7 @@ export function LoginEmailSection({
     <div className="flex flex-col gap-2 border-t border-border pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 text-sm">
-          <span className="text-muted-foreground">登入信箱:</span>
+          <span className="text-muted-foreground">登入信箱：</span>
           <span className="break-all font-semibold text-foreground">{email ?? "-"}</span>
         </div>
         <ChangeLoginEmailDialog
@@ -55,9 +55,9 @@ export function LoginEmailSection({
       {newEmail ? (
         // 🟡 常駐 `!`:他以為信箱已經改好了,其實還沒生效(skill 二,第三類)。
         <AlertNote>
-          已寄出驗證信到 <span className="break-all font-semibold">{newEmail}</span>,
+          已寄出驗證信到 <span className="break-all font-semibold">{newEmail}</span>，
           <strong>還沒完成驗證</strong>
-          ,所以目前登入還是要用上面那個舊信箱。請到新信箱收信並點連結完成確認。
+          ，所以目前登入還是要用上面那個舊信箱。請到新信箱收信並點連結完成確認。
         </AlertNote>
       ) : null}
     </div>
@@ -85,7 +85,7 @@ export function PendingAdminLoginEmailSuggestionCard({
       if (error) throw error;
       await onClear();
       toast.success("驗證信已寄出", {
-        description: `請到「${pendingEmail}」收信,點連結完成確認後登入信箱才會真正生效。`,
+        description: `請到「${pendingEmail}」收信，點連結完成確認後登入信箱才會真正生效。`,
       });
     } catch (err) {
       toast.error("套用失敗", { description: getErrorMessage(err) });
@@ -111,7 +111,7 @@ export function PendingAdminLoginEmailSuggestionCard({
       <p className="text-sm leading-relaxed text-foreground">
         商家管理員建議把你的登入信箱改成「
         <span className="break-all font-semibold">{pendingEmail}</span>
-        」,要套用嗎？套用後系統會寄一封驗證信到這個新信箱,你點連結確認後才會真正生效。
+        」，要套用嗎？套用後系統會寄一封驗證信到這個新信箱，你點連結確認後才會真正生效。
       </p>
       <div className="flex flex-wrap gap-2">
         {/* 這張卡片最主要的動作 ⇒ ① 主要;「忽略」⇒ ② 次要(skill 二之三)。 */}

@@ -341,7 +341,7 @@ export function validateStaffAvatarFile(file: File): string | null {
     return "只能上傳 PNG、JPG 或 WEBP 格式的圖片";
   }
   if (file.size > MAX_AVATAR_SIZE_BYTES) {
-    return "檔案大小不能超過 2MB,請壓縮後再上傳";
+    return "檔案大小不能超過 2MB，請壓縮後再上傳";
   }
   return null;
 }

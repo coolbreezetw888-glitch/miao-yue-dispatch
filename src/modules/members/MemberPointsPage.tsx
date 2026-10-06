@@ -187,7 +187,7 @@ function MemberPointsPageInner() {
   async function saveSettingsPatch(patch: MerchantMemberSettingsPatch) {
     if (!settings) {
       throw new Error(
-        "目前讀不到這間商家的會員設定,為了不覆寫原本的設定,這次沒有儲存。請重新載入再試一次。",
+        "目前讀不到這間商家的會員設定，為了不覆寫原本的設定，這次沒有儲存。請重新載入再試一次。",
       );
     }
     await saveMerchantMemberSettings(merchantId, patch);
@@ -242,12 +242,12 @@ function MemberPointsPageInner() {
         // 🟡 常駐 `!`:skill 二的表格裡「功能已關閉,資料不會被清空」就是這一類的原始例子。
         <AlertNote>
           <strong>目前紅利點數功能已關閉</strong>
-          ,系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發),
-          建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空,
+          ，系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發)，
+          建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空，
           重新開啟後會完整還原顯示。
           {canManagePointsRules
-            ? "要重新開啟,請到下方「啟用紅利點數功能」切換開關。"
-            : "要重新開啟這個功能需要「紅利點數」權限,請找商家管理員處理。"}
+            ? "要重新開啟，請到下方「啟用紅利點數功能」切換開關。"
+            : "要重新開啟這個功能需要「紅利點數」權限，請找商家管理員處理。"}
         </AlertNote>
       ) : null}
 
@@ -258,7 +258,7 @@ function MemberPointsPageInner() {
           <CardContent className="pt-6">
             <ErrorState
               title="讀不到紅利點數的設定"
-              reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值(0 點、功能已啟用)當成自己的設定存回去"
+              reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值(0 點、功能已啟用)當成自己的設定存回去"
               onRetry={() => void refetchSettings()}
             />
           </CardContent>
@@ -269,7 +269,7 @@ function MemberPointsPageInner() {
             <CardHeader>
               <CardTitle>核發獎勵資格條件</CardTitle>
               <CardDescription>
-                消費紅利/推薦獎勵/生日贈點核發前,是否要求會員符合特定資格。選了就直接存,沒有另外的儲存按鈕。
+                消費紅利/推薦獎勵/生日贈點核發前，是否要求會員符合特定資格。選了就直接存，沒有另外的儲存按鈕。
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
@@ -298,7 +298,7 @@ function MemberPointsPageInner() {
                   </FormField>
                   <AlertNote>
                     「電話已驗證」只是<strong>客服人工標記</strong>
-                    ,不是真的簡訊驗證,無法擋住用假電話註冊的人。
+                    ，不是真的簡訊驗證，無法擋住用假電話註冊的人。
                   </AlertNote>
                 </>
               )}
@@ -322,9 +322,9 @@ function MemberPointsPageInner() {
                 >
                   <AlertNote>
                     關閉後<strong>系統就不再自動給點數了</strong>
-                    :客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
-                    顯示任何點數相關的數字與入口(要結清某位會員剩下的點數,請先重新開啟功能、
-                    結清後再關閉);既有的點數餘額與異動歷史不會被清空,重新開啟後會完整還原顯示。
+                    ：客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
+                    顯示任何點數相關的數字與入口(要結清某位會員剩下的點數，請先重新開啟功能、
+                    結清後再關閉);既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
                   </AlertNote>
                 </SwitchRow>
               )}
@@ -346,7 +346,7 @@ function MemberPointsPageInner() {
           <CardContent className="pt-6">
             <EmptyState
               title="你目前的權限看不到這頁的規則設定"
-              description="個別會員的點數餘額、登記兌換與異動歷史,在「會員管理」點進該位會員就能操作;要調整點數核發規則,請找商家管理員開放「紅利點數」權限。"
+              description="個別會員的點數餘額、登記兌換與異動歷史，在「會員管理」點進該位會員就能操作;要調整點數核發規則，請找商家管理員開放「紅利點數」權限。"
               action={
                 <Button asChild variant="primary" size="touch">
                   <Link to="/app/members">去會員管理</Link>

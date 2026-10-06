@@ -171,7 +171,7 @@ function CreateLeaveDialog({
       return;
     }
     if (hasConflicts && !confirmDespiteConflicts) {
-      toast.error("這段期間已經有既有預約,請先勾選「我已知悉,仍要登記」再送出");
+      toast.error("這段期間已經有既有預約，請先勾選「我已知悉，仍要登記」再送出");
       return;
     }
 
@@ -200,7 +200,7 @@ function CreateLeaveDialog({
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
         title="登記請假"
-        subtitle="只有月薪制的服務人員可以登記請假紀錄,建立即生效(這次不做審核流程)。"
+        subtitle="只有月薪制的服務人員可以登記請假紀錄，建立即生效(這次不做審核流程)。"
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -242,8 +242,8 @@ function CreateLeaveDialog({
               ui-v1-full:這屬於 skill 二「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐,不收進 `?`
               (沒有人會為了「怎麼找不到某個人」去點問號)。 */}
           <AlertNote>
-            這個選單只會列出月薪制的服務人員。找不到某位服務人員,表示他的計酬類型是抽成制——抽成制
-            不需要登記請假,他不接單的時段由他本人在服務人員端的「休假設定」自己設定。
+            這個選單只會列出月薪制的服務人員。找不到某位服務人員，表示他的計酬類型是抽成制——抽成制
+            不需要登記請假，他不接單的時段由他本人在服務人員端的「休假設定」自己設定。
           </AlertNote>
 
           <FormField label="假別" htmlFor="leave-type" required>
@@ -256,7 +256,7 @@ function CreateLeaveDialog({
             >
               {(leaveTypes ?? []).length === 0 ? (
                 <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                  目前沒有可用的假別,請先到「月薪人員假別設定」新增
+                  目前沒有可用的假別，請先到「月薪人員假別設定」新增
                 </div>
               ) : null}
             </FieldSelect>
@@ -299,7 +299,7 @@ function CreateLeaveDialog({
             // 規則 2.6:有衝突就一定要讓人看到並明確勾選,skill 二的 `!` 常駐區塊。
             <AlertNote>
               <p className="font-semibold">
-                這段期間已經有 {conflicts!.length} 筆預約,系統不會自動處理,請確認後再登記:
+                這段期間已經有 {conflicts!.length} 筆預約，系統不會自動處理，請確認後再登記：
               </p>
               <ul className="mt-2 flex flex-col gap-1 text-xs tabular-nums">
                 {conflicts!.map((c) => (
@@ -315,7 +315,7 @@ function CreateLeaveDialog({
                   checked={confirmDespiteConflicts}
                   onCheckedChange={(v) => setConfirmDespiteConflicts(v === true)}
                 />
-                我已知悉,仍要登記
+                我已知悉，仍要登記
               </label>
             </AlertNote>
           ) : null}
@@ -447,14 +447,14 @@ function LeaveRecordsPageInner() {
             // 紀錄真的不存在,重複登記一次。skill 二之八 出錯。
             <ErrorState
               title="讀不到請假紀錄"
-              reason="可能是網路斷了,或你沒有查看請假紀錄的權限"
+              reason="可能是網路斷了，或你沒有查看請假紀錄的權限"
               onRetry={() => void refetchRecords()}
             />
           ) : !records || records.length === 0 ? (
             // 下一步就在同一個畫面上(上方的篩選卡 + 頁首的「登記請假」),用一句話指路即可。
             <EmptyState
               title="沒有符合篩選條件的請假紀錄"
-              description="可以調整上方的篩選條件,或用右上角「登記請假」新增一筆。"
+              description="可以調整上方的篩選條件，或用右上角「登記請假」新增一筆。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">
@@ -511,7 +511,7 @@ function LeaveRecordsPageInner() {
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>確定要取消這筆請假紀錄嗎?</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              取消後這位服務人員這段期間恢復正常排班,可以正常被預約。要改期或改假別,
+              取消後這位服務人員這段期間恢復正常排班，可以正常被預約。要改期或改假別，
               取消後重新登記一筆新的即可。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>

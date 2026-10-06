@@ -153,7 +153,7 @@ export function ReportPeriodPicker({
         />
       ) : (
         <p className="text-xs tabular-nums text-muted-foreground">
-          查詢範圍:{startDate} ~ {endDate}
+          查詢範圍：{startDate} ~ {endDate}
         </p>
       )}
     </div>

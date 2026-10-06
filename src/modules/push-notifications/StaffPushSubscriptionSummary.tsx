@@ -44,11 +44,11 @@ export function StaffPushSubscriptionSummary({ staffId }: { staffId: string }) {
           // 永久狀態就是屬性,屬性不給警示色(skill 二之五末段,#846 同一條通則)。
           <StatusTag tone="neutral">尚未開通</StatusTag>
         ) : anyEventEnabled ? (
-          <StatusTag tone="success">已開通 {deviceCount} 台,會收到通知</StatusTag>
+          <StatusTag tone="success">已開通 {deviceCount} 台，會收到通知</StatusTag>
         ) : (
           // 🔴 第三種狀態刻意跟上面兩種都不一樣(warning):老闆需要一眼看出「他收不到」,
           // 如果沿用跟「會收到通知」一樣的樣式,掃過去只會看到「已開通」三個字 —— 那正是 Q6 要修掉的誤導。
-          <StatusTag tone="warning">已開通 {deviceCount} 台,但他關閉了全部通知</StatusTag>
+          <StatusTag tone="warning">已開通 {deviceCount} 台，但他關閉了全部通知</StatusTag>
         )}
       </div>
       {!isLoading && deviceCount === 0 ? (
@@ -59,7 +59,7 @@ export function StaffPushSubscriptionSummary({ staffId }: { staffId: string }) {
       {!isLoading && deviceCount > 0 && !anyEventEnabled ? (
         // 🟡 常駐 `!`:「為什麼他收不到」屬於絕對不能收起來的那一類(skill 二)。
         <AlertNote>
-          他的手機可以收通知,但他自己把四種事件全部關掉了——所以這間店的訂單不會通知他。
+          他的手機可以收通知，但他自己把四種事件全部關掉了——所以這間店的訂單不會通知他。
         </AlertNote>
       ) : null}
     </div>

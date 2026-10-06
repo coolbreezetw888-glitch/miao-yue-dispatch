@@ -37,17 +37,17 @@ export const REVERSAL_EXPLANATION_SEGMENTS: Record<CompletedBookingReversalActio
   {
     revert: [
       {
-        text: "這張單會退回「已確認」,可以繼續編輯,之後要再按一次「標記完成」。服務人員抽成與會員紅利會先收回,重新完成時依",
+        text: "這張單會退回「已確認」，可以繼續編輯，之後要再按一次「標記完成」。服務人員抽成與會員紅利會先收回，重新完成時依",
       },
       { text: "當時", strong: true },
       { text: "的設定重新計算。" },
     ],
     cancel: [
-      { text: "這張單會變成「已取消」," },
+      { text: "這張單會變成「已取消」，" },
       { text: "無法再復原", strong: true },
       { text: "。系統會自動更新服務人員抽成與店家報表。" },
       { text: "但實際退款要另外處理", strong: true },
-      { text: "——系統沒有退款功能,請自行與客人結清。" },
+      { text: "——系統沒有退款功能，請自行與客人結清。" },
     ],
   };
 
@@ -59,12 +59,12 @@ export const REVERSAL_EXPLANATIONS: Record<CompletedBookingReversalAction, strin
 
 /** §5.1 / Q4 定案 A:客服(非管理員)看已完成訂單時的常駐 `!`。 */
 export const AGENT_CANNOT_REVERSE_NOTE =
-  "已完成的訂單只有商家管理員可以還原或取消。如果是誤按完成,請聯絡管理員。";
+  "已完成的訂單只有商家管理員可以還原或取消。如果是誤按完成，請聯絡管理員。";
 
 /** §5.2 第 8 點:取消路徑的通知開關(預設關,Q2 定案 C)。 */
 export const CANCEL_NOTIFY_SWITCH = {
   title: "同時發送取消通知(LINE 給客戶、推播給服務人員)",
-  description: "這張單的服務已經完成過,通常不需要再通知。打開後會依 LINE / 推播設定發送。",
+  description: "這張單的服務已經完成過，通常不需要再通知。打開後會依 LINE / 推播設定發送。",
 } as const;
 
 /** §5.4 成功 toast(已經發生的事,過去式)。 */
@@ -97,7 +97,7 @@ export function reversalReasonError(raw: string): string | null {
   const length = reversalReasonLength(raw);
   if (length === 0) return "請先填寫原因";
   if (length > REVERSAL_REASON_MAX) {
-    return `原因最多 ${REVERSAL_REASON_MAX} 個字,目前是 ${length} 個字,請精簡後再送出`;
+    return `原因最多 ${REVERSAL_REASON_MAX} 個字，目前是 ${length} 個字，請精簡後再送出`;
   }
   return null;
 }
@@ -138,12 +138,12 @@ export function crossMonthWarningSegments(
   const segments: TextSegment[] = [
     { text: "這張單是 " },
     { text: month, strong: true },
-    { text: " 完成的,已經是 " },
+    { text: " 完成的，已經是 " },
     { text: `${preview.months_ago} 個月前`, strong: true },
     { text: "。那個月的薪資與店家報表" },
     { text: "可能已經結算發放", strong: true },
     { text: "。" },
-    { text: `${verb}之後,` },
+    { text: `${verb}之後，` },
     { text: month, strong: true },
     { text: "的" },
   ];
@@ -157,7 +157,7 @@ export function crossMonthWarningSegments(
   segments.push(
     { text: "營收會少 " },
     { text: formatAmount(Number(preview.revenue_amount)), strong: true },
-    { text: ",報表數字會跟當時不一樣。請先確認財務端是否需要同步調整。" },
+    { text: "，報表數字會跟當時不一樣。請先確認財務端是否需要同步調整。" },
   );
   return segments;
 }
@@ -294,7 +294,7 @@ export function buildCompletedBookingReversalView(
     blockedReasons,
     allowed: flagAllowed && blockedReasons.length === 0,
     confirmLabel: preview.is_cross_month
-      ? `我了解影響,確定${verb}`
+      ? `我了解影響，確定${verb}`
       : action === "revert"
         ? "確定還原"
         : "確定取消訂單",
@@ -310,7 +310,7 @@ export function reversalConfirmDisabledReason(
   view: Pick<CompletedBookingReversalView, "allowed" | "blockedReasons"> | null,
   reason: string,
 ): string | null {
-  if (!view) return "正在計算連帶影響,請稍候";
+  if (!view) return "正在計算連帶影響，請稍候";
   if (!view.allowed) {
     return view.blockedReasons[0]?.message ?? "這筆訂單目前不能執行這個動作";
   }
@@ -344,7 +344,7 @@ export function reversalShortfallNotice(
   const hint =
     typeof p.shortfall_hint === "string" && p.shortfall_hint.trim()
       ? p.shortfall_hint
-      : `有 ${total} 點因為餘額不足沒有收回。如果要一併追回,請用「手動調整點數」扣除。`;
+      : `有 ${total} 點因為餘額不足沒有收回。如果要一併追回，請用「手動調整點數」扣除。`;
   return { points: total, title: `有 ${total} 點未能收回`, hint };
 }
 

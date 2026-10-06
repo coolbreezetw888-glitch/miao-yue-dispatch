@@ -143,7 +143,7 @@ function IndustryTransferWizardPageInner() {
       {step === "new-merchant" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟一:建立新商家</CardTitle>
+            <CardTitle>步驟一：建立新商家</CardTitle>
             <CardDescription>直接沿用既有的新增分店流程，選擇新的產業模組。</CardDescription>
           </CardHeader>
           <CardContent>
@@ -159,7 +159,7 @@ function IndustryTransferWizardPageInner() {
       {step === "select-members" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟二:選擇要搬遷的會員</CardTitle>
+            <CardTitle>步驟二：選擇要搬遷的會員</CardTitle>
             <CardDescription>
               列出來源商家目前上架中的會員，勾選要搬到「{newMerchantName}」的會員(支援全選)。
             </CardDescription>
@@ -169,14 +169,14 @@ function IndustryTransferWizardPageInner() {
             {!membersLoading && membersError ? (
               <ErrorState
                 title="讀不到來源商家的會員名單"
-                reason="可能是網路斷了;現在先不顯示名單,避免你把空白當成「這間商家沒有會員」而直接跳過這一步"
+                reason="可能是網路斷了;現在先不顯示名單，避免你把空白當成「這間商家沒有會員」而直接跳過這一步"
                 onRetry={() => void refetchSourceMembers()}
               />
             ) : null}
             {!membersLoading && !membersError && activeMembers.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的會員可以搬遷"
-                description="只有「上架中」的會員可以搬到新商家。要先在會員管理把會員上架,或是先用資料匯入把客戶匯進來。"
+                description="只有「上架中」的會員可以搬到新商家。要先在會員管理把會員上架，或是先用資料匯入把客戶匯進來。"
                 action={
                   <Button asChild variant="primary" size="touch">
                     <Link to="/app/members">去看會員管理</Link>
@@ -234,7 +234,7 @@ function IndustryTransferWizardPageInner() {
       {step === "confirm" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟三:確認搬遷</CardTitle>
+            <CardTitle>步驟三：確認搬遷</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-sm leading-relaxed tabular-nums text-foreground">
@@ -290,7 +290,7 @@ function IndustryTransferWizardPageInner() {
       {step === "result" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟四:結果 + 後續提醒</CardTitle>
+            <CardTitle>步驟四：結果 + 後續提醒</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-sm leading-relaxed tabular-nums text-foreground">

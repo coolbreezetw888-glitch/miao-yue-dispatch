@@ -209,7 +209,7 @@ describe("MyCalendarPage", () => {
     render(<MyCalendarPage />);
 
     expect(
-      screen.getByText("尚未開放此功能,請洽商家管理員開通「行事曆檢視」權限。"),
+      screen.getByText("尚未開放此功能，請洽商家管理員開通「行事曆檢視」權限。"),
     ).toBeInTheDocument();
   });
 
@@ -238,9 +238,9 @@ describe("MyCalendarPage", () => {
 
     render(<MyCalendarPage />);
 
-    expect(screen.getByText("內部備註:上次尾款沒收")).toBeInTheDocument();
+    expect(screen.getByText("內部備註：上次尾款沒收")).toBeInTheDocument();
     // 兩種備註要分得開(skill 二之六):客戶備註有自己的前綴,不會被混在一起。
-    expect(screen.getByText("客戶備註:有養狗")).toBeInTheDocument();
+    expect(screen.getByText("客戶備註：有養狗")).toBeInTheDocument();
   });
 
   it("#851/#855:客服勾了「不讓服務人員看到」時 notes 已經在資料層被遮成 null,卡片上整塊不出現", async () => {
@@ -257,7 +257,7 @@ describe("MyCalendarPage", () => {
 
     expect(screen.queryByText(/內部備註/)).not.toBeInTheDocument();
     // 客戶備註不受影響(它從來不是這個旗標的範圍)。
-    expect(screen.getByText("客戶備註:有養狗")).toBeInTheDocument();
+    expect(screen.getByText("客戶備註：有養狗")).toBeInTheDocument();
   });
 
   // =========================================================================

@@ -159,7 +159,7 @@ function WholeDayOffTab({ merchantId, staffId }: { merchantId: string; staffId: 
         const conflictCount = await setMyDayOverride(staffId, dateKey, "00:00", "24:00", false);
         if (conflictCount > 0) {
           toast.success("已將這天標記為整天休假", {
-            description: `這天已經有 ${conflictCount} 筆預約,系統不會自動取消,請自行確認。`,
+            description: `這天已經有 ${conflictCount} 筆預約，系統不會自動取消，請自行確認。`,
           });
         } else {
           toast.success("已將這天標記為整天休假");
@@ -189,7 +189,7 @@ function WholeDayOffTab({ merchantId, staffId }: { merchantId: string; staffId: 
         />
       )}
       <p className="text-sm text-muted-foreground">
-        本月已排休 {wholeDaysOffCount} 天,點擊已選日期可取消
+        本月已排休 {wholeDaysOffCount} 天，點擊已選日期可取消
       </p>
     </div>
   );
@@ -237,7 +237,7 @@ function BySlotOffTab({ merchantId, staffId }: { merchantId: string; staffId: st
         const conflictCount = await setMyDayOverride(staffId, selectedDateKey, start, end, false);
         if (conflictCount > 0) {
           toast.success("已標記為休息", {
-            description: `這段時間已經有 ${conflictCount} 筆預約,系統不會自動取消,請自行確認。`,
+            description: `這段時間已經有 ${conflictCount} 筆預約，系統不會自動取消，請自行確認。`,
           });
         } else {
           toast.success("已標記為休息");
@@ -271,7 +271,7 @@ function BySlotOffTab({ merchantId, staffId }: { merchantId: string; staffId: st
           <LoadingSkeleton variant="lines" rows={4} />
         ) : !businessHours?.has_setting || businessHours.is_closed ? (
           <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-sm text-muted-foreground">
-            這天商家沒有營業/沒有設定營業時間,不需要另外設定時段休息
+            這天商家沒有營業/沒有設定營業時間，不需要另外設定時段休息
           </p>
         ) : (
           <ul className="max-h-72 space-y-1 overflow-y-auto">
@@ -323,8 +323,8 @@ export function DayOffTabsSection({
         <div>
           <CardTitle>排休設定</CardTitle>
           <CardDescription>
-            「整天排休」用月曆整天標記休假,「時段排休」可以精細調整單一半小時時段,兩者是同一份
-            資料的兩種操作入口,可以交互使用。
+            「整天排休」用月曆整天標記休假，「時段排休」可以精細調整單一半小時時段，兩者是同一份
+            資料的兩種操作入口，可以交互使用。
           </CardDescription>
         </div>
         <button

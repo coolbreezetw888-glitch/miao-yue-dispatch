@@ -166,11 +166,11 @@ function BookingListItem({
             ) : null}
             {/* SPECS-INDEX #851:客服勾了「不讓服務人員看到」時,booking.notes 在資料庫那一層就
                 已經是 null(不是前端藏起來),所以這個既有的條件式不用改就自動什麼都不顯示。 */}
-            {booking.notes ? <span>內部備註:{booking.notes}</span> : null}
-            {booking.customer_notes ? <span>客戶備註:{booking.customer_notes}</span> : null}
+            {booking.notes ? <span>內部備註：{booking.notes}</span> : null}
+            {booking.customer_notes ? <span>客戶備註：{booking.customer_notes}</span> : null}
             {booking.is_member ? (
               <span>
-                會員{booking.member_name ? `:${booking.member_name}` : ""}
+                會員{booking.member_name ? `：${booking.member_name}` : ""}
                 {booking.member_points_balance != null
                   ? `(目前點數 ${booking.member_points_balance})`
                   : ""}
@@ -255,7 +255,7 @@ export default function MyCalendarPage() {
     return (
       <Card>
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          尚未開放此功能,請洽商家管理員開通「行事曆檢視」權限。
+          尚未開放此功能，請洽商家管理員開通「行事曆檢視」權限。
         </CardContent>
       </Card>
     );
@@ -306,7 +306,7 @@ export default function MyCalendarPage() {
       </div>
 
       {error ? (
-        <p className="text-sm text-destructive">載入失敗:{getErrorMessage(error)}</p>
+        <p className="text-sm text-destructive">載入失敗：{getErrorMessage(error)}</p>
       ) : (
         <div className="grid grid-cols-7 gap-1 text-center text-xs">
           {WEEKDAY_LABELS.map((label) => (

@@ -111,13 +111,13 @@ function SchedulingOverviewPageInner() {
         // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有在職的服務人員」,商家會以為人都不見了。
         <ErrorState
           title="讀不到排班一覽"
-          reason="可能是網路斷了,或你沒有查看排班的權限"
+          reason="可能是網路斷了，或你沒有查看排班的權限"
           onRetry={() => void refetch()}
         />
       ) : !overview || overview.staff.length === 0 ? (
         <EmptyState
           title="目前沒有在職的服務人員"
-          description="新增服務人員並設定可預約時段後,這裡會列出每個人一週的排班狀況。"
+          description="新增服務人員並設定可預約時段後，這裡會列出每個人一週的排班狀況。"
           action={
             <Button asChild variant="primary" size="touch">
               <Link to="/app/staff">前往服務人員管理</Link>

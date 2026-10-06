@@ -108,12 +108,12 @@ export function MyLineBindingCard() {
           : await generateOwnAgentLineBindingCode(merchantId);
       setIssuedCode({ code: result.code, expiresAt: result.expiresAt });
       setNow(Date.now());
-      toast.success("已產生綁定碼,請在 10 分鐘內完成綁定");
+      toast.success("已產生綁定碼，請在 10 分鐘內完成綁定");
     } catch (err) {
       toast.error("產生綁定碼失敗", {
         description: toFriendlyLineBindingErrorMessage(
           err,
-          "目前沒辦法產生綁定碼,請稍後再試一次。",
+          "目前沒辦法產生綁定碼，請稍後再試一次。",
         ),
       });
     } finally {
@@ -134,7 +134,7 @@ export function MyLineBindingCard() {
       await refetchBindingStatus();
     } catch (err) {
       toast.error("解除綁定失敗", {
-        description: toFriendlyLineBindingErrorMessage(err, "目前沒辦法解除綁定,請稍後再試一次。"),
+        description: toFriendlyLineBindingErrorMessage(err, "目前沒辦法解除綁定，請稍後再試一次。"),
       });
     } finally {
       setUnbinding(false);
@@ -152,7 +152,7 @@ export function MyLineBindingCard() {
       <CardHeader>
         <CardTitle>我的 LINE 綁定</CardTitle>
         <CardDescription>
-          綁定後,商家開啟通知時,你可以直接在自己的 LINE 收到訂單/請假相關通知。
+          綁定後，商家開啟通知時，你可以直接在自己的 LINE 收到訂單/請假相關通知。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
@@ -196,7 +196,7 @@ export function MyLineBindingCard() {
             {issuedCode && !codeExpired ? (
               <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3.5 py-3">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  請在 LINE 加好友後,把這組數字當作一則訊息傳送過去完成綁定
+                  請在 LINE 加好友後，把這組數字當作一則訊息傳送過去完成綁定
                 </p>
                 <p className="text-2xl font-bold tracking-widest tabular-nums text-foreground">
                   {issuedCode.code}
@@ -212,12 +212,12 @@ export function MyLineBindingCard() {
                     rel="noreferrer"
                     className="block min-w-0 break-all text-xs text-brand hover:underline"
                   >
-                    點此加好友:{addFriendUrl}
+                    點此加好友：{addFriendUrl}
                   </a>
                 ) : (
                   <AlertNote>
-                    商家還沒完成 LINE 串接的測試連線,所以這裡暫時沒有加好友連結可以顯示。
-                    綁定碼仍然有效,加好友之後一樣可以把它傳過去完成綁定。
+                    商家還沒完成 LINE 串接的測試連線，所以這裡暫時沒有加好友連結可以顯示。
+                    綁定碼仍然有效，加好友之後一樣可以把它傳過去完成綁定。
                   </AlertNote>
                 )}
                 {/* 綁定是在 LINE 那邊完成的(Webhook 收到那則訊息才會寫入 line_bound),這個頁面
@@ -232,11 +232,11 @@ export function MyLineBindingCard() {
                   className="self-start"
                   onClick={() => void refetchBindingStatus()}
                 >
-                  我已經傳送完成,重新檢查
+                  我已經傳送完成，重新檢查
                 </Button>
               </div>
             ) : issuedCode && codeExpired ? (
-              <AlertNote>這組綁定碼已經過期,請按「產生綁定碼」重新產生一組。</AlertNote>
+              <AlertNote>這組綁定碼已經過期，請按「產生綁定碼」重新產生一組。</AlertNote>
             ) : null}
           </div>
         )}

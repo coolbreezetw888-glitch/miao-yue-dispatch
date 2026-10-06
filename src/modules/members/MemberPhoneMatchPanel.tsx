@@ -57,7 +57,7 @@ export interface PendingAttachDisplay {
 function BlacklistNote({ reason }: { reason: string | null }) {
   // skill 二之三 / 三之二:「現在的狀態跟你以為的不一樣」要一直提醒 ⇒ 常駐 `!`,不可收合,
   // 不是 toast(toast 幾秒後就消失,而這位客戶還是在黑名單上)。純警告,不擋單。
-  return <AlertNote>這位客戶被列入黑名單{reason ? `:${reason}` : ""}</AlertNote>;
+  return <AlertNote>這位客戶被列入黑名單{reason ? `：${reason}` : ""}</AlertNote>;
 }
 
 function formatLastBookingDate(iso: string | null): string {
@@ -100,7 +100,7 @@ export function MemberPhoneMatchPanel({
     return (
       <div className="flex min-h-11 items-center rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
         <span className="min-w-0 break-words text-foreground">
-          <span className="text-muted-foreground">已連結會員:</span> {linkedMember.name}
+          <span className="text-muted-foreground">已連結會員：</span> {linkedMember.name}
         </span>
       </div>
     );
@@ -115,7 +115,7 @@ export function MemberPhoneMatchPanel({
         ) : null}
         <div className="flex min-h-11 items-center rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
           <span className="min-w-0 break-words text-foreground">
-            <span className="text-muted-foreground">儲存後會連結到會員:</span>{" "}
+            <span className="text-muted-foreground">儲存後會連結到會員：</span>{" "}
             {pendingAttachMember.name}
           </span>
         </div>
@@ -140,13 +140,13 @@ export function MemberPhoneMatchPanel({
             className="min-h-11 w-full cursor-pointer rounded-md border border-border bg-background px-3 py-2 text-left text-sm leading-relaxed transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => onApplyCandidate(match)}
           >
-            <span className="text-muted-foreground">這支電話是既有客戶:</span>
+            <span className="text-muted-foreground">這支電話是既有客戶：</span>
             <span className="break-words text-foreground">{match.name}</span>
             <span className="text-muted-foreground">(點一下即可連結到這筆訂單)</span>
           </button>
         ) : (
           <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed">
-            <span className="text-muted-foreground">將連結既有客戶:</span>
+            <span className="text-muted-foreground">將連結既有客戶：</span>
             <span className="break-words text-foreground">{match.name}</span>
           </p>
         )}

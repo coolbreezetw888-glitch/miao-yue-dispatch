@@ -142,7 +142,7 @@ describe("describeIneligibleReason(§4.6 第 1 點)", () => {
       "此會員未符合商家設定的核發資格條件(需 電話已驗證且 LINE 已綁定)",
     );
     expect(describeIneligibleReason("reward_condition", "new", "line_bound")).toBe(
-      "新客戶尚未完成驗證,依商家設定這筆訂單不派點",
+      "新客戶尚未完成驗證，依商家設定這筆訂單不派點",
     );
     expect(describeIneligibleReason("reward_condition", "existing", null)).toBe(
       "此會員未符合商家設定的核發資格條件",
@@ -232,13 +232,13 @@ describe("validateRedeemPoints(v2.4 裁決 8 ③ / 12)", () => {
 
   it("超過可用點數 ⇒ 擋", () => {
     expect(validateRedeemPoints("6001", redeemInfo).error).toBe(
-      "這位會員目前只有 6000 點,無法折抵 6001 點",
+      "這位會員目前只有 6000 點，無法折抵 6001 點",
     );
   });
 
   it("裁決 8 ③:換算不到 1 元 ⇒ 擋,並告訴客服最少要幾點", () => {
     expect(validateRedeemPoints("9", redeemInfo).error).toBe(
-      "折抵 9 點換算後不到 1 元(目前 100 點 = 10 元),至少要使用 10 點才折得到 1 元",
+      "折抵 9 點換算後不到 1 元(目前 100 點 = 10 元)，至少要使用 10 點才折得到 1 元",
     );
   });
 
@@ -295,7 +295,7 @@ describe("describeEditPointsChange(§2.4 裁決 11 / 第 6 題)", () => {
   it("已人工設定、建議值變了 ⇒ 「系統建議值已從 A 變成 B,目前人工設定為 C」", () => {
     expect(describeEditPointsChange(original, 25)).toEqual({
       kind: "override_kept",
-      text: "系統建議值已從 10 點變成 25 點,目前人工設定為 50 點",
+      text: "系統建議值已從 10 點變成 25 點，目前人工設定為 50 點",
     });
     expect(describeEditPointsChange(original, 10)).toBeNull();
   });
@@ -547,14 +547,14 @@ describe("describeBookingDetailPoints(§4.7 訂單詳情)", () => {
 
   it("v2.4 裁決 22 L2:從未入帳的已取消單 ⇒ 「已取消,不入帳」(查詢前、查到從未入帳都一樣)", () => {
     expect(describeBookingDetailPoints({ ...booking, status: "cancelled" }, null).earnedText).toBe(
-      "已取消,不入帳",
+      "已取消，不入帳",
     );
     expect(
       describeBookingDetailPoints(
         { ...booking, status: "cancelled" },
         { earnedPoints: null, effectivePoints: null, reversedPoints: 0 },
       ).earnedText,
-    ).toBe("已取消,不入帳");
+    ).toBe("已取消，不入帳");
   });
 
   it("#844:取消已完成訂單後 ⇒ 「已取消,已收回 N 點」(不再說「不入帳」);有差額再講差額", () => {
@@ -563,13 +563,13 @@ describe("describeBookingDetailPoints(§4.7 訂單詳情)", () => {
         { ...booking, status: "cancelled" },
         { earnedPoints: 50, effectivePoints: 0, reversedPoints: 50 },
       ).earnedText,
-    ).toBe("已取消,已收回 50 點");
+    ).toBe("已取消，已收回 50 點");
     expect(
       describeBookingDetailPoints(
         { ...booking, status: "cancelled" },
         { earnedPoints: 50, effectivePoints: 40, reversedPoints: 10 },
       ).earnedText,
-    ).toBe("已取消,已收回 10 點,差額 40 點未收回");
+    ).toBe("已取消，已收回 10 點，差額 40 點未收回");
   });
 
   it("#844:還原後的已確認單 ⇒ 「已收回 N 點」;從未入帳的已確認單 ⇒ 不顯示", () => {
@@ -604,7 +604,7 @@ describe("describeBookingDetailPoints(§4.7 訂單詳情)", () => {
         { ...booking, status: "accepted" },
         { earnedPoints: 50, effectivePoints: 50, reversedPoints: 0 },
       ).earnedText,
-    ).toBe("已收回 0 點,差額 50 點未收回");
+    ).toBe("已收回 0 點，差額 50 點未收回");
     expect(
       describeBookingDetailPoints({ ...booking, status: "accepted" }, null).earnedText,
     ).toBeNull();
@@ -626,7 +626,7 @@ describe("describeBookingDetailPoints(§4.7 訂單詳情)", () => {
     });
     expect(view.show).toBe(true);
     expect(view.plannedText).toBe("0 點");
-    expect(view.earnedText).toBe("已收回 10 點,差額 40 點未收回");
+    expect(view.earnedText).toBe("已收回 10 點，差額 40 點未收回");
     // 從未入帳的派點 0 單:維持不顯示
     expect(
       describeBookingDetailPoints(zeroPlanned, {
@@ -667,16 +667,16 @@ describe("describeEarnedPoints(#844 §4.8 已入帳看淨額)", () => {
     ).toBe("已收回 50 點");
     expect(
       describeEarnedPoints({ status: "accepted", earned: 50, reversed: 10, effective: 40 }),
-    ).toBe("已收回 10 點,差額 40 點未收回");
+    ).toBe("已收回 10 點，差額 40 點未收回");
   });
 
   it("取消後的已取消", () => {
     expect(
       describeEarnedPoints({ status: "cancelled", earned: 50, reversed: 50, effective: 0 }),
-    ).toBe("已取消,已收回 50 點");
+    ).toBe("已取消，已收回 50 點");
     expect(
       describeEarnedPoints({ status: "cancelled", earned: 50, reversed: 10, effective: 40 }),
-    ).toBe("已取消,已收回 10 點,差額 40 點未收回");
+    ).toBe("已取消，已收回 10 點，差額 40 點未收回");
   });
 
   it("有效入帳為 null 或負數時當成 0(防呆,不會顯示「差額 -5 點」)", () => {

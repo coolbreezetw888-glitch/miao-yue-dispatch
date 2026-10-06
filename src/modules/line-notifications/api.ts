@@ -165,7 +165,7 @@ async function extractEdgeFunctionError(error: unknown): Promise<Error> {
       // 讀不到 JSON 本文就退回原本的 error。
     }
   }
-  return error instanceof Error ? error : new Error("呼叫失敗,請稍後再試");
+  return error instanceof Error ? error : new Error("呼叫失敗，請稍後再試");
 }
 
 /** 3.13:呼叫 line-test-connection Edge Function,測試 LINE 憑證是否有效。 */
@@ -184,7 +184,7 @@ export async function testLineConnection(
 // =========================================================================
 function firstBindingCodeRow(rows: { code: string; expires_at: string }[]): LineBindingCodeResult {
   const row = rows[0];
-  if (!row) throw new Error("產生綁定碼失敗,沒有取得任何資料");
+  if (!row) throw new Error("產生綁定碼失敗，沒有取得任何資料");
   return { code: row.code, expiresAt: row.expires_at };
 }
 

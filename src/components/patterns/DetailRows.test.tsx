@@ -87,20 +87,20 @@ describe("InternalNote 的 🔒 標記(#854)", () => {
 
   it("不給 audience 時維持原本那句「客戶看不到,服務人員看得到」(會員備註等既有使用點不受影響)", () => {
     render(<InternalNote>上次尾款沒收</InternalNote>);
-    expect(screen.getByText("客戶看不到,服務人員看得到")).toBeInTheDocument();
+    expect(screen.getByText("客戶看不到，服務人員看得到")).toBeInTheDocument();
     expect(screen.queryByText("客戶與服務人員都看不到")).not.toBeInTheDocument();
     expect(screen.getByText("上次尾款沒收")).toBeInTheDocument();
   });
 
   it('audience="staff-visible" 跟不給是同一句', () => {
     render(<InternalNote audience="staff-visible">上次尾款沒收</InternalNote>);
-    expect(screen.getByText("客戶看不到,服務人員看得到")).toBeInTheDocument();
+    expect(screen.getByText("客戶看不到，服務人員看得到")).toBeInTheDocument();
   });
 
   it('🔴 audience="staff-hidden" 時改成「客戶與服務人員都看不到」,不再說謊', () => {
     render(<InternalNote audience="staff-hidden">上次尾款沒收</InternalNote>);
     expect(screen.getByText("客戶與服務人員都看不到")).toBeInTheDocument();
-    expect(screen.queryByText("客戶看不到,服務人員看得到")).not.toBeInTheDocument();
+    expect(screen.queryByText("客戶看不到，服務人員看得到")).not.toBeInTheDocument();
     // 備註內容本身照樣顯示 —— 商家自己永遠看得到,否則他沒辦法取消勾選。
     expect(screen.getByText("上次尾款沒收")).toBeInTheDocument();
   });

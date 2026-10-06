@@ -55,7 +55,7 @@ export function LoginEmailStatusDisplay({
       /* 用 <span className="flex"> 而不是 <p>:Skeleton 本身是 <div>,包在 <p> 裡是不合法的
          HTML 嵌套(React 會在 dev console 噴 validateDOMNesting 警告)。 */
       <span className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-busy="true">
-        登入信箱:
+        登入信箱：
         <Skeleton className="h-2.5 w-36 rounded-sm bg-muted" />
       </span>
     );
@@ -65,13 +65,13 @@ export function LoginEmailStatusDisplay({
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-      <span className="break-all">登入信箱:{status.currentLoginEmail ?? "-"}</span>
+      <span className="break-all">登入信箱：{status.currentLoginEmail ?? "-"}</span>
       {status.pendingAdminSuggestedEmail ? (
-        <TodoTag wrap>已建議新信箱「{status.pendingAdminSuggestedEmail}」,待本人確認套用</TodoTag>
+        <TodoTag wrap>已建議新信箱「{status.pendingAdminSuggestedEmail}」，待本人確認套用</TodoTag>
       ) : null}
       {status.pendingConfirmationEmail ? (
         <StatusTag tone="warning" wrap>
-          待驗證變更中(新信箱:{status.pendingConfirmationEmail}),尚未生效
+          待驗證變更中(新信箱：{status.pendingConfirmationEmail})，尚未生效
         </StatusTag>
       ) : null}
     </div>
@@ -111,7 +111,7 @@ export function AdminSuggestLoginEmailDialog({
       setOpen(false);
       toast.success("已送出建議", {
         description:
-          "這只是建議,要等對方本人登入後自己按套用、新信箱主人也點了驗證信,才會真的改成這個信箱。",
+          "這只是建議，要等對方本人登入後自己按套用、新信箱主人也點了驗證信，才會真的改成這個信箱。",
       });
     } catch (err) {
       toast.error("送出失敗", { description: getErrorMessage(err) });
@@ -145,15 +145,15 @@ export function AdminSuggestLoginEmailDialog({
             建議「{personLabel}」的新登入信箱
           </CardDialogTitle>
           <CardDialogDescription>
-            這只是建議,不會立刻生效,也不會馬上寄出任何驗證信——要等對方本人登入後自己按套用、
-            新信箱主人也點了驗證信,才會真的改成這個信箱。
+            這只是建議，不會立刻生效，也不會馬上寄出任何驗證信——要等對方本人登入後自己按套用、
+            新信箱主人也點了驗證信，才會真的改成這個信箱。
           </CardDialogDescription>
         </CardDialogHeader>
 
         {currentSuggestion ? (
           <div className="rounded-md border border-border bg-muted/50 px-3.5 py-3 text-sm">
             <p className="break-all">
-              目前已建議的新信箱:<span className="font-medium">{currentSuggestion}</span>
+              目前已建議的新信箱：<span className="font-medium">{currentSuggestion}</span>
             </p>
             <Button
               type="button"

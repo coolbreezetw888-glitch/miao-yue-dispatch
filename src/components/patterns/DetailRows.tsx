@@ -196,7 +196,7 @@ export function CustomerNote({
 export type InternalNoteAudience = "staff-visible" | "staff-hidden";
 
 const INTERNAL_NOTE_AUDIENCE_LABEL: Record<InternalNoteAudience, string> = {
-  "staff-visible": "客戶看不到,服務人員看得到",
+  "staff-visible": "客戶看不到，服務人員看得到",
   "staff-hidden": "客戶與服務人員都看不到",
 };
 

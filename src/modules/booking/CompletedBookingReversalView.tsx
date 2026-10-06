@@ -174,7 +174,7 @@ export function CompletedBookingReversalContent({
           rows={3}
           value={reason}
           disabled={busy}
-          placeholder={action === "revert" ? "例如:誤按完成" : "例如:客人要求作廢這筆紀錄"}
+          placeholder={action === "revert" ? "例如：誤按完成" : "例如：客人要求作廢這筆紀錄"}
           onChange={(e) => onReasonChange(e.target.value)}
         />
       </FormField>
@@ -224,6 +224,9 @@ export function CompletedBookingReversalFooter({
             type="button"
             variant={view.confirmVariant}
             size="touch"
+            // #975:確認文案改成全形逗號(「我了解影響，確定取消」)後,320px 寬時字比按鈕寬 3px;
+            // 讓這顆按鈕在放不下時可以折成兩行(高度至少維持 h-11 觸控尺寸),按鈕仍跟「返回」等寬。
+            className="h-auto min-h-11 whitespace-normal py-1.5 leading-tight"
             onClick={onConfirm}
             disabled={busy || disabledReason !== null}
           >

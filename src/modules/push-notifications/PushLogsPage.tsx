@@ -119,7 +119,7 @@ function RecipientLine({ recipient }: { recipient: PushLogRecipientView }) {
           data-testid="push-log-recipient-hint"
           className="mt-1 text-xs leading-relaxed text-muted-foreground"
         >
-          可以怎麼做:{recipient.hint}
+          可以怎麼做：{recipient.hint}
         </p>
       ) : null}
     </li>
@@ -187,9 +187,9 @@ function EventGroupItem({
           {expanded ? (
             <div className="mt-2.5 flex flex-col gap-1 border-t border-border pt-2.5 text-xs leading-relaxed text-muted-foreground">
               {group.rendered_title ? (
-                <p className="break-words">標題:{group.rendered_title}</p>
+                <p className="break-words">標題：{group.rendered_title}</p>
               ) : null}
-              <p className="whitespace-pre-wrap break-words">內容:{group.rendered_body}</p>
+              <p className="whitespace-pre-wrap break-words">內容：{group.rendered_body}</p>
             </div>
           ) : null}
         </>
@@ -247,7 +247,7 @@ function PushLogsPageInner() {
         backTo="/app/manage"
         helpMode
         title="推播發送記錄"
-        description="每一次嘗試發送手機推播的記錄。沒發成功的會直接寫出原因,以及可以怎麼處理。"
+        description="每一次嘗試發送手機推播的記錄。沒發成功的會直接寫出原因，以及可以怎麼處理。"
       />
 
       <Card>
@@ -284,7 +284,7 @@ function PushLogsPageInner() {
           ) : isError ? (
             <ErrorState
               title="讀不到發送記錄"
-              reason="可能是網路斷了;現在先不顯示記錄,避免你把空白當成「推播從來沒發過」"
+              reason="可能是網路斷了;現在先不顯示記錄，避免你把空白當成「推播從來沒發過」"
               onRetry={() => void refetchLogs()}
             />
           ) : !logs || logs.length === 0 ? (
@@ -295,8 +295,8 @@ function PushLogsPageInner() {
               }
               description={
                 outcomeFilter === "problems"
-                  ? "全部都發出去了,或是這個範圍內還沒有任何推播。切回「全部結果」可以看完整記錄。"
-                  : "每次系統嘗試發推播都會記在這裡,沒發成功的會直接寫出原因與可以怎麼處理。"
+                  ? "全部都發出去了，或是這個範圍內還沒有任何推播。切回「全部結果」可以看完整記錄。"
+                  : "每次系統嘗試發推播都會記在這裡，沒發成功的會直接寫出原因與可以怎麼處理。"
               }
               action={
                 <Button asChild variant="primary" size="touch">

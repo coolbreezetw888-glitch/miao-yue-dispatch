@@ -92,7 +92,7 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>料錢成本功能</CardTitle>
         <CardDescription>
-          開啟後,建單/編輯表單會出現「料錢成本」勾選區塊,可以記錄這次服務預期會用掉的材料成本
+          開啟後，建單/編輯表單會出現「料錢成本」勾選區塊，可以記錄這次服務預期會用掉的材料成本
           (不是訂單金額計算)。
         </CardDescription>
       </CardHeader>
@@ -104,7 +104,7 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
           // 「確定是關的」,商家會以為自己的設定被清掉。
           <ErrorState
             title="讀不到料錢成本功能的開關狀態"
-            reason="可能是網路斷了;現在畫面上不會顯示開或關,避免給你錯誤的訊息"
+            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -114,8 +114,8 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
             title="啟用料錢成本功能"
             description={
               enabled
-                ? "目前已開啟,建單表單會出現「料錢成本」區塊。"
-                : "目前已關閉,建單表單不會出現「料錢成本」區塊。"
+                ? "目前已開啟，建單表單會出現「料錢成本」區塊。"
+                : "目前已關閉，建單表單不會出現「料錢成本」區塊。"
             }
             checked={enabled ?? false}
             onCheckedChange={handleToggle}
@@ -217,7 +217,7 @@ function MaterialCostItemFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯料錢成本品項" : "新增料錢成本品項"}</CardDialogTitle>
           <CardDialogDescription>
-            記錄「這次服務預期會用掉的材料成本」,不等於訂單金額計算。
+            記錄「這次服務預期會用掉的材料成本」，不等於訂單金額計算。
           </CardDialogDescription>
         </CardDialogHeader>
 
@@ -236,8 +236,8 @@ function MaterialCostItemFormDialog({
             htmlFor="material-cost-amount"
             required
             error={amountError}
-            help="只能填數字和小數點,例如 120 或 12.5。"
-            helpLabel="說明:金額要怎麼填"
+            help="只能填數字和小數點，例如 120 或 12.5。"
+            helpLabel="說明：金額要怎麼填"
           >
             {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證走 parseAmountInput(handleSubmit)。 */}
             <FieldAmountInput
@@ -350,7 +350,7 @@ function MaterialCostsPageInner() {
             // 商家會以為自己的品項不見了。skill 二之八 出錯:什麼壞了 / 可能原因 / 下一步。
             <ErrorState
               title="讀不到料錢成本品項"
-              reason="可能是網路斷了,或你沒有管理料錢成本的權限"
+              reason="可能是網路斷了，或你沒有管理料錢成本的權限"
               onRetry={() => void refetch()}
             />
           ) : !items || items.length === 0 ? (
@@ -358,7 +358,7 @@ function MaterialCostsPageInner() {
             // 唯一豁免,這裡不放第二顆主要按鈕(一個畫面只能有一顆),用一句話指路就好。
             <EmptyState
               title="還沒有任何料錢成本品項"
-              description="建立品項後,建單時就能勾選這次會用掉的材料,方便之後算成本。請用右上角的「新增品項」建立第一個。"
+              description="建立品項後，建單時就能勾選這次會用掉的材料，方便之後算成本。請用右上角的「新增品項」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

@@ -75,7 +75,7 @@ describe("describeRelatedBookingPointsTags(預定 / 已入帳 / 折抵)", () => 
         reversedPoints: 10,
         pointsRedeemed: 0,
       }),
-    ).toEqual(["預定 50 點", "已取消,已收回 10 點,差額 40 點未收回"]);
+    ).toEqual(["預定 50 點", "已取消，已收回 10 點，差額 40 點未收回"]);
   });
 });
 

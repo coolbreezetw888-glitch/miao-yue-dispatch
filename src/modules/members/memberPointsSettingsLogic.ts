@@ -117,7 +117,7 @@ export interface BasicValidation {
 }
 
 export const TIERED_NEEDS_MIN_AMOUNT_MESSAGE =
-  "開啟「每滿額累計贈點」時,每滿額消費金額要大於 0(否則系統不知道每滿多少要再送一次)";
+  "開啟「每滿額累計贈點」時，每滿額消費金額要大於 0(否則系統不知道每滿多少要再送一次)";
 
 export function validateBasicDraft(draft: BasicDraft): BasicValidation {
   const pointsPerOrder = parsePointsField(draft.pointsPerOrder);
@@ -263,7 +263,7 @@ export function findDuplicateFormula(
 }
 
 export function duplicateFormulaMessage(dup: { itemLabel: string; formulaName: string }): string {
-  return `「${dup.itemLabel}」已被公式「${dup.formulaName}」設定,同一個服務項目只能有一條公式`;
+  return `「${dup.itemLabel}」已被公式「${dup.formulaName}」設定，同一個服務項目只能有一條公式`;
 }
 
 /** 新公式預設名稱「公式 N」:N = 目前最大的「公式 k」+ 1(刪掉中間的不會撞名),沒有就用張數 + 1。 */
@@ -325,7 +325,7 @@ export interface RedeemDraft {
 }
 
 export const REDEEM_PAIR_MESSAGE =
-  "「點數」跟「金額」要一起填(兩個都大於 0),或兩個都留 0 代表不開放折抵";
+  "「點數」跟「金額」要一起填(兩個都大於 0)，或兩個都留 0 代表不開放折抵";
 
 export interface RedeemValidation {
   pointsUnit: ParseAmountInputResult;

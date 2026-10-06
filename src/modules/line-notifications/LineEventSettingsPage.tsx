@@ -138,8 +138,8 @@ function EventSettingCard({
           title={LINE_NOTIFICATION_EVENT_LABELS[eventType]}
           description={
             form.enabled
-              ? "通知已開啟,符合條件時會依下方設定發送 LINE 訊息。"
-              : "通知目前關閉,這類事件不會發出任何 LINE 訊息。"
+              ? "通知已開啟，符合條件時會依下方設定發送 LINE 訊息。"
+              : "通知目前關閉，這類事件不會發出任何 LINE 訊息。"
           }
           checked={form.enabled}
           onCheckedChange={(v) => setField("enabled", v)}
@@ -150,10 +150,10 @@ function EventSettingCard({
           help={
             <>
               勾選這類事件發生時要通知誰。<strong>只有已經綁定 LINE 的人收得到</strong>
-              ,沒綁定的人會被安靜略過,不會報錯。
+              ，沒綁定的人會被安靜略過，不會報錯。
             </>
           }
-          helpLabel="說明:通知對象怎麼選、沒綁定 LINE 的人會怎樣"
+          helpLabel="說明：通知對象怎麼選、沒綁定 LINE 的人會怎樣"
         >
           <div className="flex flex-wrap gap-2">
             {targetOptions.map((option) => (

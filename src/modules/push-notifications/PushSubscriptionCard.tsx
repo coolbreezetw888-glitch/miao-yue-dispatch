@@ -208,7 +208,7 @@ export function PushSubscriptionCard({
         return;
       }
       toast.error("尚未開啟通知", {
-        description: "瀏覽器沒有取得通知權限,請在跳出的視窗選擇「允許」後再試一次。",
+        description: "瀏覽器沒有取得通知權限，請在跳出的視窗選擇「允許」後再試一次。",
       });
     } catch (err) {
       toast.error("開啟通知失敗", { description: getErrorMessage(err) });
@@ -242,31 +242,31 @@ export function PushSubscriptionCard({
       <CardHeader>
         <CardTitle>手機推播通知(以{targetLabel}身份)</CardTitle>
         <CardDescription>
-          開啟後,即使沒有打開秒約網頁,這間店有新訂單/訂單異動時,你的手機也會跳出通知。
+          開啟後，即使沒有打開秒約網頁，這間店有新訂單/訂單異動時，你的手機也會跳出通知。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
         {/* §4.8 第 3 點:同時服務多間店的人要知道這頁設定的範圍。 */}
         <p className="text-xs leading-relaxed text-muted-foreground">
           這裡的設定只影響「{merchantName?.trim() || "目前這間店"}
-          」這間店,其他商家要分別設定。
+          」這間店，其他商家要分別設定。
         </p>
 
         {/* 🔴 下面三種情況都是「為什麼你連按都按不了」⇒ 一律用常駐 `!`(skill 二)。 */}
         {!isSupported ? (
           <AlertNote>
-            這個瀏覽器不支援推播通知,請改用 Chrome、Edge 或 Safari(16.4 以上,且已加入主畫面)。
+            這個瀏覽器不支援推播通知，請改用 Chrome、Edge 或 Safari(16.4 以上，且已加入主畫面)。
           </AlertNote>
         ) : isIosBlocked ? (
           // §7.6:iOS 的限制對管理員/客服影響更大(他們常在電腦/iPad 的瀏覽器分頁裡用後台)。
           <AlertNote>
             {targetType === "staff"
-              ? "請先依照畫面下方提示把秒約加入主畫面,才能開啟推播通知(iPhone 的系統限制:Safari 分頁狀態下,即使按了「允許通知」也無法真的收到推播)。"
-              : "你用的是 iPhone/iPad 的 Safari。Apple 的限制是:一定要先把秒約加到手機主畫面,才能開啟推播通知。加好之後,請從主畫面的圖示打開秒約,再回到這一頁開啟。"}
+              ? "請先依照畫面下方提示把秒約加入主畫面，才能開啟推播通知(iPhone 的系統限制：Safari 分頁狀態下，即使按了「允許通知」也無法真的收到推播)。"
+              : "你用的是 iPhone/iPad 的 Safari。Apple 的限制是：一定要先把秒約加到手機主畫面，才能開啟推播通知。加好之後，請從主畫面的圖示打開秒約，再回到這一頁開啟。"}
           </AlertNote>
         ) : permission === "denied" ? (
           <AlertNote>
-            通知權限已被封鎖,請到瀏覽器/系統設定裡手動開啟這個網站的通知權限後再回來。
+            通知權限已被封鎖，請到瀏覽器/系統設定裡手動開啟這個網站的通知權限後再回來。
           </AlertNote>
         ) : isThisDeviceSubscribed ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -376,7 +376,7 @@ export function PushSubscriptionCard({
           <div id={eventSectionBodyId} className="flex flex-col gap-2 empty:hidden">
             {isEventSectionOpen ? (
               subscriptions.length === 0 ? (
-                <p className="text-xs text-muted-foreground">先開啟通知,才能選擇要收哪幾種。</p>
+                <p className="text-xs text-muted-foreground">先開啟通知，才能選擇要收哪幾種。</p>
               ) : (
                 <PushEventToggleList
                   merchantId={merchantId}
@@ -434,8 +434,8 @@ export function PushSubscriptionCard({
         </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
-          提醒:iPhone 需要 iOS 16.4 以上版本且已加入主畫面才能使用推播通知,體驗會跟 Android
-          有落差,這是蘋果的系統限制,不是這個功能做得不完整。
+          提醒：iPhone 需要 iOS 16.4 以上版本且已加入主畫面才能使用推播通知，體驗會跟 Android
+          有落差，這是蘋果的系統限制，不是這個功能做得不完整。
         </p>
       </CardContent>
     </Card>

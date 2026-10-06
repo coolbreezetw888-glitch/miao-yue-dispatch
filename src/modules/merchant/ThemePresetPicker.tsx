@@ -33,8 +33,8 @@ export function ThemePresetPicker({
     <div className="flex flex-col gap-4">
       <FormField
         label="基礎色系"
-        help="選一組現成的色系最快。這個顏色會套用到全站的主要按鈕、選中狀態、標籤等地方(skill 一:元件不寫死品牌色,一律跟著這裡走)。"
-        helpLabel="說明:基礎色系會影響哪些地方"
+        help="選一組現成的色系最快。這個顏色會套用到全站的主要按鈕、選中狀態、標籤等地方(skill 一：元件不寫死品牌色，一律跟著這裡走)。"
+        helpLabel="說明：基礎色系會影響哪些地方"
       >
         {/* 可點的方塊 = 單選(skill 二之七),選中 = 主題色框 + 勾。每顆至少 44px 觸控目標。
             這裡用原生 radiogroup 語意自己組(而不是 ChoiceChipGroup),因為每一顆裡面要放一個
@@ -77,8 +77,8 @@ export function ThemePresetPicker({
       <FormField
         label="自選色(選填)"
         htmlFor="theme-custom-color"
-        help="想用自己的品牌色就填這裡,會蓋過上面選的基礎色系。可以直接點左邊的色塊挑,或在右邊輸入 6 位色碼(例如 #FF7A30)。"
-        helpLabel="說明:自選色怎麼填、跟基礎色系的關係"
+        help="想用自己的品牌色就填這裡，會蓋過上面選的基礎色系。可以直接點左邊的色塊挑，或在右邊輸入 6 位色碼(例如 #FF7A30)。"
+        helpLabel="說明：自選色怎麼填、跟基礎色系的關係"
       >
         <div className="flex items-center gap-2">
           <FieldColor

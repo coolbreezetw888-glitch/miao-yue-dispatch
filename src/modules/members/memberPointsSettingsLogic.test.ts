@@ -189,7 +189,7 @@ describe("§4.2 第 6 點:儲存前重複偵測", () => {
     );
     expect(dup).toEqual({ itemLabel: "壁掛分離式 (普通機型)", formulaName: "公式甲" });
     expect(duplicateFormulaMessage(dup!)).toBe(
-      "「壁掛分離式 (普通機型)」已被公式「公式甲」設定,同一個服務項目只能有一條公式",
+      "「壁掛分離式 (普通機型)」已被公式「公式甲」設定，同一個服務項目只能有一條公式",
     );
   });
   it("兩條「全部服務項目」⇒ 也擋", () => {
@@ -312,8 +312,8 @@ describe("§4.5 生日獎勵", () => {
       failed: "發送失敗",
       skipped_not_bound: "未綁定略過",
       skipped_not_connected: "商家未連線略過",
-      skipped_member_removed: "會員已下架,未發送",
-      skipped_merchant_disabled: "商家已停用,未發送",
+      skipped_member_removed: "會員已下架，未發送",
+      skipped_merchant_disabled: "商家已停用，未發送",
     });
   });
   it("狀態顏色:已發送綠、待發送黃、失敗紅、各種略過灰", () => {

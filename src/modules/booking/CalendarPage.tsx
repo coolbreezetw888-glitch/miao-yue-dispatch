@@ -438,7 +438,7 @@ function BookingDateTimeField({
               ) : panelState.kind === "on-leave" ? (
                 /* 2026-09-24 稽核修正(問題 5):整天請假時明確說明原因(含假別名稱快照)。 */
                 <AlertNote>
-                  這位服務人員這天休假({panelState.leaveTypeName}),無法建立預約。
+                  這位服務人員這天休假({panelState.leaveTypeName})，無法建立預約。
                 </AlertNote>
               ) : panelState.kind === "loading" ? (
                 <div className="grid grid-cols-3 gap-1.5" aria-label="正在查詢可預約的時間">
@@ -948,7 +948,7 @@ export function BookingFormDialog({
             discountAmount: Number.NaN,
             taxAmount: Number.NaN,
             finalAmount: Number.NaN,
-            error: "有金額欄位填錯了(上面標紅的那幾格),修好之後才算得出金額。",
+            error: "有金額欄位填錯了(上面標紅的那幾格)，修好之後才算得出金額。",
           }
         : calculateBookingAmountPreview({
             itemsSubtotal,
@@ -1238,7 +1238,7 @@ export function BookingFormDialog({
     // (見底部 ActionBar),這一道是防呆:欄位錯誤絕對不可以只顯示紅字就讓人送出去。
     if (amountFields.hasError) {
       toast.error("金額欄位有填錯的地方", {
-        description: "請看金額區塊裡標紅的欄位,只能填數字和小數點。",
+        description: "請看金額區塊裡標紅的欄位，只能填數字和小數點。",
       });
       return;
     }
@@ -1254,7 +1254,7 @@ export function BookingFormDialog({
     ) {
       // §4.3 邊界情況:開啟自訂工時但沒有填(或填了 <=0)的總服務時長,體驗層先擋一次,
       // 真正的邊界仍在後端 private.validate_booking_selection。
-      toast.error("已開啟自訂工時,請輸入大於 0 的總服務時長(分鐘)");
+      toast.error("已開啟自訂工時，請輸入大於 0 的總服務時長(分鐘)");
       return;
     }
 
@@ -1503,7 +1503,7 @@ export function BookingFormDialog({
           <div className="flex flex-col gap-2.5">
             {amountFields.hasError ? (
               <AlertNote>
-                金額欄位有填錯的地方(上面標紅的那幾格),修好之後才能送出。金額只能填數字和小數點。
+                金額欄位有填錯的地方(上面標紅的那幾格)，修好之後才能送出。金額只能填數字和小數點。
               </AlertNote>
             ) : null}
             <ActionBar>
@@ -1609,13 +1609,13 @@ export function BookingFormDialog({
                 的那一位,可留空;未選定主要服務人員前整個區塊停用(方塊 disabled + `!` 說明原因),
                 因為助手是依附在「這次由誰負責」之下的角色,順序上要先決定主要服務人員。
                 skill 二之七:多選用可點的方塊(ChoiceChip),不用打勾方框。 */}
-            <FormField label="助手(可留空,可多選)">
+            <FormField label="助手(可留空，可多選)">
               <div
                 ref={assistantsFieldRef}
                 data-testid="booking-form-assistants"
                 className="flex flex-col gap-2.5"
               >
-                {!staffId ? <AlertNote>請先選擇服務人員,才能指派助手。</AlertNote> : null}
+                {!staffId ? <AlertNote>請先選擇服務人員，才能指派助手。</AlertNote> : null}
                 {assistantCandidates.length === 0 ? (
                   <p className="text-[13px] text-muted-foreground">沒有其他可指派的服務人員。</p>
                 ) : (
@@ -1673,7 +1673,7 @@ export function BookingFormDialog({
                 (含單日例外第三層),不是只影響畫面顯示。 */}
             <SwitchRow
               title="自訂工時"
-              description="開啟後用輸入的總服務時長取代逐項加總,實際佔用的時段跟衝突檢查都會依這個值計算。"
+              description="開啟後用輸入的總服務時長取代逐項加總，實際佔用的時段跟衝突檢查都會依這個值計算。"
               checked={customDurationEnabled}
               onCheckedChange={setCustomDurationEnabled}
             >
@@ -1706,7 +1706,7 @@ export function BookingFormDialog({
               label="選擇項目"
               required
               htmlFor="booking-service-items"
-              helpLabel="說明:服務項目怎麼選"
+              helpLabel="說明：服務項目怎麼選"
               help="點「選擇項目」進到選擇頁，可以切換分類、勾選多個項目、調整數量；勾選後打開「自訂金額」就能改這一項的單價。按「確認」才會套用，按左上角返回則不會改動。"
             >
               <div className="flex flex-col gap-2.5">
@@ -1748,8 +1748,8 @@ export function BookingFormDialog({
                 ) : null}
 
                 <p className="text-xs tabular-nums text-muted-foreground">
-                  已選 {serviceItemIds.length} 項,逐項加總工時 {itemsTotalDurationMinutes} 分鐘
-                  {customDurationEnabled ? "(已套用自訂工時,實際採用上方輸入的總服務時長)" : ""}。
+                  已選 {serviceItemIds.length} 項，逐項加總工時 {itemsTotalDurationMinutes} 分鐘
+                  {customDurationEnabled ? "(已套用自訂工時，實際採用上方輸入的總服務時長)" : ""}。
                 </p>
               </div>
             </FormField>
@@ -1774,11 +1774,11 @@ export function BookingFormDialog({
                 <div className="flex flex-col gap-2.5">
                   {customTotalAmountLocked ? (
                     <AlertNote>
-                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,無法再套用自訂總金額。要改用自訂總金額,請先把單價改回預設值。`}
+                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價，無法再套用自訂總金額。要改用自訂總金額，請先把單價改回預設值。`}
                     </AlertNote>
                   ) : hasAdjustedUnitPrice ? (
                     <AlertNote>
-                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價,但自訂總金額仍在開啟中,金額會以下方輸入的總金額為準;關閉後,在單價改回預設值之前無法再開啟。`}
+                      {`已手動調整「${adjustedUnitPriceItemNames.join("、")}」的單價，但自訂總金額仍在開啟中，金額會以下方輸入的總金額為準;關閉後，在單價改回預設值之前無法再開啟。`}
                     </AlertNote>
                   ) : null}
                   {customTotalAmountEnabled ? (
@@ -1787,8 +1787,8 @@ export function BookingFormDialog({
                       htmlFor="booking-custom-total"
                       required
                       error={amountFields.customTotalAmount.error}
-                      helpLabel="說明:總金額要怎麼填"
-                      help="只能填數字和小數點,例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法,也不能填文字。"
+                      helpLabel="說明：總金額要怎麼填"
+                      help="只能填數字和小數點，例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法，也不能填文字。"
                     >
                       <FieldAmountInput
                         id="booking-custom-total"
@@ -2016,9 +2016,9 @@ export function BookingFormDialog({
           {materialCostEnabled ? (
             <DetailSection label="料錢成本" className="gap-4">
               <FormField
-                label="料錢成本(可留空,可多選)"
-                helpLabel="說明:料錢成本是什麼"
-                help="記錄這次服務預期會用掉的材料成本,僅供操作者參考與之後算抽成基準用,不代表訂單金額。"
+                label="料錢成本(可留空，可多選)"
+                helpLabel="說明：料錢成本是什麼"
+                help="記錄這次服務預期會用掉的材料成本，僅供操作者參考與之後算抽成基準用，不代表訂單金額。"
               >
                 <div className="flex flex-col gap-2.5">
                   {(materialCostItems ?? []).length === 0 ? (
@@ -2047,8 +2047,8 @@ export function BookingFormDialog({
                   )}
                   {materialCostItemIds.length > 0 ? (
                     <p className="text-xs tabular-nums text-muted-foreground">
-                      已選 {materialCostItemIds.length} 項,金額加總 ${materialCostTotal.toFixed(0)}
-                      (僅供操作者參考,不代表訂單金額)。
+                      已選 {materialCostItemIds.length} 項，金額加總 ${materialCostTotal.toFixed(0)}
+                      (僅供操作者參考，不代表訂單金額)。
                     </p>
                   ) : null}
                 </div>
@@ -2113,7 +2113,7 @@ export function BookingFormDialog({
             <SwitchRow
               id="booking-hide-notes-from-staff"
               title="不讓服務人員看到這則內部備註"
-              description="開啟後,這一筆訂單的內部備註只有商家內部看得到,指派的服務人員在自己的手機上不會看到。只影響這一筆,不影響其他訂單。"
+              description="開啟後，這一筆訂單的內部備註只有商家內部看得到，指派的服務人員在自己的手機上不會看到。只影響這一筆，不影響其他訂單。"
               checked={hideNotesFromStaff}
               onCheckedChange={setHideNotesFromStaff}
             />
@@ -2151,7 +2151,7 @@ export function BookingFormDialog({
             <CardAlertDialogHeader>
               <CardAlertDialogTitle>請確認這筆訂單的派點數</CardAlertDialogTitle>
               <CardAlertDialogDescription>
-                {`本單有自訂總金額/折扣,系統建議 ${pointsSuggested ?? 0} 點僅供參考,是否以 ${
+                {`本單有自訂總金額/折扣，系統建議 ${pointsSuggested ?? 0} 點僅供參考，是否以 ${
                   pointsWillAssign ?? 0
                 } 點送出?`}
               </CardAlertDialogDescription>
@@ -2543,7 +2543,7 @@ function CalendarPageInner() {
       if (conflictCount > 0) {
         // §1 第 4 點:不阻擋操作,只提示既有預約筆數,不做自動取消/自動通知。
         toast.warning(
-          `這個時段目前還有 ${conflictCount} 筆既有預約,系統不會自動取消或搬移,請自行確認是否需要另外處理。`,
+          `這個時段目前還有 ${conflictCount} 筆既有預約，系統不會自動取消或搬移，請自行確認是否需要另外處理。`,
         );
       } else {
         toast.success(currentlyAvailable ? "已關閉這個時段" : "已開啟這個時段");
@@ -2743,13 +2743,13 @@ function CalendarPageInner() {
       ) : scheduleError ? (
         <ErrorState
           title="讀不到這天的排班與預約"
-          reason="可能是網路斷了;現在先不顯示時間軸,避免你把空白當成「服務人員都不見了」或「這天沒有任何預約」"
+          reason="可能是網路斷了;現在先不顯示時間軸，避免你把空白當成「服務人員都不見了」或「這天沒有任何預約」"
           onRetry={() => void refetchSchedule()}
         />
       ) : !schedule || schedule.staff.length === 0 ? (
         <EmptyState
           title="目前沒有在職的服務人員"
-          description="新增服務人員並設定可預約時段後,這裡會出現每個人的時間軸,就能開始排預約。"
+          description="新增服務人員並設定可預約時段後，這裡會出現每個人的時間軸，就能開始排預約。"
           action={
             <Button asChild variant="primary" size="touch">
               <Link to="/app/staff">前往服務人員管理</Link>
@@ -2759,7 +2759,7 @@ function CalendarPageInner() {
       ) : !businessHours?.has_setting ? (
         <EmptyState
           title="尚未設定這天的營業時間"
-          description="目前無法被預約,請先到營業時間設定完成設定。"
+          description="目前無法被預約，請先到營業時間設定完成設定。"
           action={
             <Button asChild variant="primary" size="touch">
               <Link to="/app/business-hours">前往營業時間設定</Link>
@@ -2769,7 +2769,7 @@ function CalendarPageInner() {
       ) : businessHours.is_closed ? (
         <EmptyState
           title="商家這天公休"
-          description="公休日無法建立預約,可以切換到其他日期,或到營業時間設定調整。"
+          description="公休日無法建立預約，可以切換到其他日期，或到營業時間設定調整。"
         />
       ) : (
         // skill 六:放不下橫向捲、時間欄固定在左邊、服務人員名字列固定在上面、右緣漸層陰影暗示還有內容。
@@ -2904,7 +2904,7 @@ function CalendarPageInner() {
                         原文提到的「可透過無限制編輯覆寫」特殊標示。 */}
                     {s.on_leave ? (
                       <span className="max-w-full truncate text-[10px] font-normal text-muted-foreground">
-                        休假:{s.on_leave.leave_type_name}
+                        休假：{s.on_leave.leave_type_name}
                       </span>
                     ) : null}
                   </div>
@@ -2929,7 +2929,7 @@ function CalendarPageInner() {
                           effectiveCalendarStateStyles,
                           "full_day_leave",
                         )}
-                        aria-label={`休假:${s.on_leave.leave_type_name},無法預約`}
+                        aria-label={`休假：${s.on_leave.leave_type_name}，無法預約`}
                       />
                     ) : null}
                     {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:

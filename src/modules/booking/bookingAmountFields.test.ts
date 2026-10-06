@@ -127,7 +127,7 @@ describe("自訂總金額", () => {
       taxMode: null,
       taxValue: null,
     });
-    expect(preview.error).toBe("已開啟自訂總金額,請輸入金額");
+    expect(preview.error).toBe("已開啟自訂總金額，請輸入金額");
   });
 
   it("只有空白 = 沒填,跟留空一樣不報錯(不要把空白變成新的錯誤去改動既有流程)", () => {

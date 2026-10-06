@@ -83,7 +83,9 @@ function ImportHistoryPageInner() {
       await queryClient.invalidateQueries({
         queryKey: ["data-tools-module", "bulk-operations", merchantId],
       });
-      toast.success(`復原完成:成功復原 ${result.restoredCount} 筆，跳過 ${result.skippedCount} 筆`);
+      toast.success(
+        `復原完成：成功復原 ${result.restoredCount} 筆，跳過 ${result.skippedCount} 筆`,
+      );
     } catch (err) {
       toast.error("復原失敗", { description: getErrorMessage(err) });
     } finally {
@@ -107,7 +109,7 @@ function ImportHistoryPageInner() {
       {!isLoading && isError ? (
         <ErrorState
           title="讀不到匯入紀錄"
-          reason="可能是網路斷了;現在先不顯示紀錄,避免你把空白當成「那批匯入沒成功」而重複匯一次"
+          reason="可能是網路斷了;現在先不顯示紀錄，避免你把空白當成「那批匯入沒成功」而重複匯一次"
           onRetry={() => void refetchOperations()}
         />
       ) : null}
@@ -116,7 +118,7 @@ function ImportHistoryPageInner() {
         <EmptyState
           icon={<History className="h-6 w-6" aria-hidden="true" />}
           title="還沒有任何批次操作紀錄"
-          description="用 CSV 匯入客戶、服務項目或服務人員之後,每一個批次都會記在這裡,發現匯錯了可以整批復原。"
+          description="用 CSV 匯入客戶、服務項目或服務人員之後，每一個批次都會記在這裡，發現匯錯了可以整批復原。"
           action={
             <Button asChild variant="primary" size="touch">
               <Link to="/app/data-import">去匯入資料</Link>
@@ -168,7 +170,7 @@ function ImportHistoryPageInner() {
                       </CardAlertDialogHeader>
                       {/* 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。 */}
                       <AlertNote>
-                        這批匯進來的資料會被移除,<strong>復原之後沒辦法再復原回來</strong>。
+                        這批匯進來的資料會被移除，<strong>復原之後沒辦法再復原回來</strong>。
                       </AlertNote>
                       <CardAlertDialogFooter>
                         <CardAlertDialogCancel>取消</CardAlertDialogCancel>
@@ -185,11 +187,11 @@ function ImportHistoryPageInner() {
               }
             >
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] tabular-nums text-muted-foreground">
-                <span>總筆數:{op.total_rows}</span>
+                <span>總筆數：{op.total_rows}</span>
                 {/* 語意色 token,不寫死 emerald(深色模式下寫死的色碼對比會不夠)。 */}
-                <span className="text-success-strong">成功:{op.success_rows}</span>
-                <span className="text-destructive-strong">失敗:{op.failed_rows}</span>
-                <span>略過:{op.skipped_duplicate_rows}</span>
+                <span className="text-success-strong">成功：{op.success_rows}</span>
+                <span className="text-destructive-strong">失敗：{op.failed_rows}</span>
+                <span>略過：{op.skipped_duplicate_rows}</span>
               </div>
 
               {errors.length > 0 ? (
@@ -208,7 +210,7 @@ function ImportHistoryPageInner() {
                     <div className="mt-1.5 max-h-48 divide-y divide-border overflow-y-auto rounded-md border border-border">
                       {errors.map((e, i) => (
                         <div key={i} className="break-words px-3 py-2 text-xs leading-relaxed">
-                          <span className="tabular-nums">第 {e.row_number} 列</span>:
+                          <span className="tabular-nums">第 {e.row_number} 列</span>：
                           {e.error_message}
                         </div>
                       ))}
@@ -220,7 +222,7 @@ function ImportHistoryPageInner() {
               {rollbackResult ? (
                 <div className="mt-2 rounded-md bg-muted px-3 py-2.5 text-xs leading-relaxed">
                   <p className="tabular-nums">
-                    復原結果:成功 {rollbackResult.restoredCount} 筆，跳過{" "}
+                    復原結果：成功 {rollbackResult.restoredCount} 筆，跳過{" "}
                     {rollbackResult.skippedCount} 筆
                   </p>
                   {rollbackResult.skippedReasons.length > 0 ? (

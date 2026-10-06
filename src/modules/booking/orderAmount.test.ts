@@ -126,7 +126,7 @@ describe("calculateBookingAmountPreview", () => {
       customTotalAmountEnabled: true,
       customTotalAmount: null,
     });
-    expect(result.error).toBe("已開啟自訂總金額,請輸入金額");
+    expect(result.error).toBe("已開啟自訂總金額，請輸入金額");
   });
 });
 

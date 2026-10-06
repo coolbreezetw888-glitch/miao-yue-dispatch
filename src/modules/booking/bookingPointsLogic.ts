@@ -232,7 +232,7 @@ export function describeIneligibleReason(
 ): string | null {
   switch (reason) {
     case "reward_condition": {
-      if (resolution === "new") return "新客戶尚未完成驗證,依商家設定這筆訂單不派點";
+      if (resolution === "new") return "新客戶尚未完成驗證，依商家設定這筆訂單不派點";
       const requirement = rewardConditionMode
         ? REWARD_CONDITION_REQUIREMENT_TEXT[rewardConditionMode]
         : undefined;
@@ -252,11 +252,11 @@ export function describeIneligibleReason(
 /** 進階模式逐項明細的一行字(預覽時用,讀的是這次預覽的計算結果)。 */
 export function describeBreakdownItem(item: PointsBreakdownItem): string {
   const name = item.name ?? "(服務項目)";
-  if (item.formulaName === null) return `${name}:沒有適用的公式,0 點`;
+  if (item.formulaName === null) return `${name}：沒有適用的公式，0 點`;
   if (item.points === 0) {
-    return `${name}:公式「${item.formulaName}」單價未達 NT$${item.threshold ?? 0},0 點`;
+    return `${name}：公式「${item.formulaName}」單價未達 NT$${item.threshold ?? 0}，0 點`;
   }
-  return `${name}:公式「${item.formulaName}」${item.quantity ?? 0} × ${item.pointsPerUnit ?? 0} 點 = ${item.points} 點`;
+  return `${name}：公式「${item.formulaName}」${item.quantity ?? 0} × ${item.pointsPerUnit ?? 0} 點 = ${item.points} 點`;
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ export function describeBreakdownItem(item: PointsBreakdownItem): string {
 // ---------------------------------------------------------------------------
 
 export const POINTS_OVERRIDE_MAX = 100_000;
-export const POINTS_OVERRIDE_MAX_ERROR = "單筆訂單最多只能設定 100,000 點,請確認是否多打了零";
+export const POINTS_OVERRIDE_MAX_ERROR = "單筆訂單最多只能設定 100,000 點，請確認是否多打了零";
 
 export type PointsInputResult = { ok: true; value: number } | { ok: false; error: string };
 
@@ -361,7 +361,7 @@ export function validateRedeemPoints(raw: string, redeem: PointsRedeemInfo): Red
     return {
       points,
       amount,
-      error: `這位會員目前只有 ${redeem.availablePoints} 點,無法折抵 ${points} 點`,
+      error: `這位會員目前只有 ${redeem.availablePoints} 點，無法折抵 ${points} 點`,
       hint: null,
     };
   }
@@ -372,7 +372,7 @@ export function validateRedeemPoints(raw: string, redeem: PointsRedeemInfo): Red
       amount,
       error: `折抵 ${points} 點換算後不到 1 元(目前 ${formatUnit(redeem.pointsUnit)} 點 = ${formatUnit(
         redeem.amountUnit,
-      )} 元)${min !== null ? `,至少要使用 ${min} 點才折得到 1 元` : ""}`,
+      )} 元)${min !== null ? `，至少要使用 ${min} 點才折得到 1 元` : ""}`,
       hint: null,
     };
   }
@@ -382,7 +382,7 @@ export function validateRedeemPoints(raw: string, redeem: PointsRedeemInfo): Red
       amount,
       error: `本單最多可折抵 ${formatAmount(redeem.capAmount)}(應付金額的 ${
         redeem.maxRatioPercent ?? 0
-      }%),折抵 ${points} 點可折 ${formatAmount(amount)},已超過上限;建議改成 ${redeem.maxPoints} 點`,
+      }%)，折抵 ${points} 點可折 ${formatAmount(amount)}，已超過上限;建議改成 ${redeem.maxPoints} 點`,
       hint: null,
     };
   }
@@ -438,7 +438,7 @@ export function describeEditPointsChange(
     if (newAuto === original.plannedAuto) return null;
     return {
       kind: "override_kept",
-      text: `系統建議值已從 ${original.plannedAuto} 點變成 ${newAuto} 點,目前人工設定為 ${original.planned} 點`,
+      text: `系統建議值已從 ${original.plannedAuto} 點變成 ${newAuto} 點，目前人工設定為 ${original.planned} 點`,
     };
   }
   if (newAuto === original.planned) return null;
@@ -531,7 +531,7 @@ export function buildUpdatePointsParams(
 }
 
 /** v2.4 裁決 22 ① (b):預覽還沒跟上目前輸入時,擋送出用的提示。 */
-export const POINTS_PREVIEW_STALE_MESSAGE = "紅利點數正在重新計算,請稍候再送出";
+export const POINTS_PREVIEW_STALE_MESSAGE = "紅利點數正在重新計算，請稍候再送出";
 
 /**
  * v2.4 裁決 22 ① (b):預覽不是「目前這份輸入」的結果(debounce 還沒送、正在重查、或畫面上顯示的是上一次的
@@ -614,8 +614,8 @@ export function describeEarnedPoints(input: EarnedPointsInput): string | null {
       ? `已入帳 ${effective} 點(曾收回 ${reversed} 點)`
       : `已入帳 ${effective} 點`;
   }
-  const prefix = input.status === "cancelled" ? "已取消," : "";
-  const shortfall = effective > 0 ? `,差額 ${effective} 點未收回` : "";
+  const prefix = input.status === "cancelled" ? "已取消，" : "";
+  const shortfall = effective > 0 ? `，差額 ${effective} 點未收回` : "";
   return `${prefix}已收回 ${reversed} 點${shortfall}`;
 }
 
@@ -655,7 +655,7 @@ export function describeBookingDetailPoints(
   // v2.4 裁決 22 L2:取消的單不會入帳,講清楚(不然畫面上只剩「預定派點 N 點」,看起來像還會入帳)。
   // 只用在「從來沒入帳過」的取消單;入帳過又被收回的取消單由上面講「已取消,已收回 N 點」。
   if (earnedText === null && booking.status === "cancelled") {
-    earnedText = "已取消,不入帳";
+    earnedText = "已取消，不入帳";
   }
   return {
     show,

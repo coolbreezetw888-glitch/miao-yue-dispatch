@@ -124,7 +124,7 @@ export function resolveMoveMode(input: ResolveMoveModeInput): MoveModeResolution
 
     // 列 5(Q5=A):主轉派給「已經是本單助手」的人 → 擋下。時間有沒有變都一樣擋(對照表「任意」)。
     if (staffChanged && targetIsAssistant) {
-      return { kind: "forbidden", reason: `${targetName}已經是助手,請先用編輯改掉` };
+      return { kind: "forbidden", reason: `${targetName}已經是助手，請先用編輯改掉` };
     }
 
     // 列 2:同一欄、其他時間 → time。
@@ -139,7 +139,7 @@ export function resolveMoveMode(input: ResolveMoveModeInput): MoveModeResolution
 
   // 列 6:助手拖回自己那一欄(不論時間)→ 無操作,給輕提示。
   if (targetStaffId === draggedStaffId) {
-    return { kind: "noop", hint: "助手沒有自己的時間,要改時間請拖主服務人員的色塊" };
+    return { kind: "noop", hint: "助手沒有自己的時間，要改時間請拖主服務人員的色塊" };
   }
 
   // 列 8:目標是本單主服務人員;列 9:目標是本單另一位助手 → 都擋下,同一句話。
@@ -164,7 +164,7 @@ export function formatMoveHint(
   if (resolution.mode === "time") return `改時間 → ${ctx.startTime}`;
   if (resolution.mode === "reassign_assistant") return `助手改為 ${ctx.targetStaffName}`;
   return resolution.timeChanged
-    ? `轉派給 ${ctx.targetStaffName},並改時間 → ${ctx.startTime}`
+    ? `轉派給 ${ctx.targetStaffName}，並改時間 → ${ctx.startTime}`
     : `轉派給 ${ctx.targetStaffName}`;
 }
 

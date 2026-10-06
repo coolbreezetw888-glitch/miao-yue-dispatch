@@ -60,7 +60,7 @@ test("資料匯入精靈(§10.1):「← 返回功能」導向 /app/manage,且跟
 
   // 進到步驟二,確認「← 返回功能」跟「上一步」同時可見、文字不同。
   await page.getByRole("button", { name: "會員資料" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const returnLink = page.getByRole("link", { name: "← 返回功能" });
   const previousStepButton = page.getByRole("button", { name: "上一步" });
@@ -69,7 +69,7 @@ test("資料匯入精靈(§10.1):「← 返回功能」導向 /app/manage,且跟
 
   // 「上一步」只會留在精靈內回到步驟一,不會離開頁面。
   await previousStepButton.click();
-  await expect(page.getByText("步驟一:選擇匯入類型", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟一：選擇匯入類型", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/app\/data-import$/);
 
   // 「← 返回功能」才會離開整個匯入流程,導回 /app/manage。

@@ -22,7 +22,7 @@ export interface ImportRowPreviewResult {
 
 /** 預覽欄位空間有限,這裡用一句精簡版提示;完整的白話說明(含範例)由後端 error_report 提供。 */
 export const IMPORT_PHONE_FORMAT_HINT =
-  "手機 09 開頭共 10 碼,市話含區碼共 9~10 碼,分機用 # 接在後面";
+  "手機 09 開頭共 10 碼，市話含區碼共 9~10 碼，分機用 # 接在後面";
 
 // ⚠️ 跨模組異動說明(2026-09-22,模組 10 會員與紅利 SPECS-INDEX #618 疊加,由該批次的
 // engineer 順手修正,已在回報時提出讓主腦知悉,不是本模組自己的規劃):

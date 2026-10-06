@@ -380,8 +380,8 @@ function ReportExportCenterPageInner() {
               <FormField
                 label="月份"
                 htmlFor="report-commission-month"
-                help="選一個月份,匯出那一個月所有已完成訂單的抽成明細。原本要分開填「年」跟「月」兩格,現在直接選一次就好。"
-                helpLabel="說明:抽成報表的月份怎麼選"
+                help="選一個月份，匯出那一個月所有已完成訂單的抽成明細。原本要分開填「年」跟「月」兩格，現在直接選一次就好。"
+                helpLabel="說明：抽成報表的月份怎麼選"
               >
                 <FieldMonth
                   id="report-commission-month"

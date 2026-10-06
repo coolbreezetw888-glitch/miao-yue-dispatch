@@ -64,7 +64,7 @@ export function StaffLineBindingSection({ staffId }: { staffId: string }) {
       const result = await generateStaffLineBindingCode(staffId);
       setIssuedCode({ code: result.code, expiresAt: result.expiresAt });
       setNow(Date.now());
-      toast.success("已產生綁定碼,請把這組碼交給這位服務人員");
+      toast.success("已產生綁定碼，請把這組碼交給這位服務人員");
     } catch (err) {
       toast.error("產生綁定碼失敗", { description: getErrorMessage(err) });
     } finally {
@@ -101,9 +101,9 @@ export function StaffLineBindingSection({ staffId }: { staffId: string }) {
         ) : (
           <StatusTag tone="neutral">未綁定</StatusTag>
         )}
-        <HelpToggle label="說明:服務人員的 LINE 綁定碼怎麼用">
-          產生綁定碼後,請這位<strong>服務人員</strong>在 LINE
-          加商家官方帳號好友,把這組數字當作訊息傳送過去,就完成綁定。綁定碼有時效,過期就重新產生一組。
+        <HelpToggle label="說明：服務人員的 LINE 綁定碼怎麼用">
+          產生綁定碼後，請這位<strong>服務人員</strong>在 LINE
+          加商家官方帳號好友，把這組數字當作訊息傳送過去，就完成綁定。綁定碼有時效，過期就重新產生一組。
         </HelpToggle>
       </div>
 
@@ -141,7 +141,7 @@ export function StaffLineBindingSection({ staffId }: { staffId: string }) {
               </p>
             </div>
           ) : issuedCode && codeExpired ? (
-            <AlertNote>這組綁定碼已經過期,請按「產生綁定碼」重新產生一組。</AlertNote>
+            <AlertNote>這組綁定碼已經過期，請按「產生綁定碼」重新產生一組。</AlertNote>
           ) : null}
         </div>
       )}

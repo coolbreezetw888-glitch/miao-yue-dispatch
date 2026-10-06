@@ -155,7 +155,7 @@ describe('MerchantSwitcher variant="compact"(頁首用:只顯示 LOGO)', () => {
 
     // 為什麼 label 要帶店名:compact 版頁首上看不到店名,如果只寫「切換商家」,讀螢幕的人就完全
     // 不知道自己現在在哪一間店。
-    const trigger = screen.getByRole("button", { name: "切換商家(目前:涼風工匠)" });
+    const trigger = screen.getByRole("button", { name: "切換商家(目前：涼風工匠)" });
     expect(trigger).toBeTruthy();
   });
 
@@ -237,7 +237,7 @@ describe('MerchantSwitcher variant="compact"(頁首用:只顯示 LOGO)', () => {
       <MerchantSwitcher variant="compact" canSwitchToStaffView={false} onSignOut={() => {}} />,
     );
 
-    expect(screen.getByRole("button", { name: "切換商家(目前:涼風工匠)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "切換商家(目前：涼風工匠)" })).toBeTruthy();
     openDropdown();
     expect(screen.getByRole("menuitem", { name: "登出" })).toBeTruthy();
     // 店名在選單裡以純標籤顯示(既有行為:單一商家時名稱不可點選)。

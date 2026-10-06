@@ -275,7 +275,7 @@ test.describe("#762 /app/leave-records 請假紀錄", () => {
     for (const name of ["事假", "病假", "特休"]) {
       await expect(page.getByRole("option", { name, exact: true })).toBeVisible();
     }
-    await expect(page.getByText("目前沒有可用的假別,請先到「月薪人員假別設定」新增")).toHaveCount(
+    await expect(page.getByText("目前沒有可用的假別，請先到「月薪人員假別設定」新增")).toHaveCount(
       0,
     );
     await page.keyboard.press("Escape");
@@ -403,14 +403,14 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
       String(COMMISSION_RATE_PERCENTAGE),
       { timeout: LOAD_TIMEOUT },
     );
-    await expect(itemRow).toContainText(`試算:1 件約 ${EXPECTED_COMMISSION_AMOUNT} 元`);
+    await expect(itemRow).toContainText(`試算：1 件約 ${EXPECTED_COMMISSION_AMOUNT} 元`);
 
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
 
     // 行為斷言 ②:回到清單,統計文字已經從「尚未設定任何可接服務項目」變成真的計數。
     // 現在 total = 1(剛剛打開的那一項)、configured = 1(fixture 的 20% 抽成)。
-    await expect(row).toContainText("已設定 1 項服務的抽成,0 項尚未設定", {
+    await expect(row).toContainText("已設定 1 項服務的抽成，0 項尚未設定", {
       timeout: LOAD_TIMEOUT,
     });
   });
@@ -455,7 +455,7 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     await expect(cardByTitle(page, "抽成制服務人員")).toHaveCount(1);
     await expect(cardByTitle(page, "月薪制服務人員")).toHaveCount(1);
     await expect(
-      page.getByText("逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元"),
+      page.getByText("逐一設定每位服務人員每個服務項目的抽成，沒有設定的項目視為 0 元"),
     ).toBeVisible();
   });
 });

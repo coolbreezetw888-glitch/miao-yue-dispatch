@@ -59,7 +59,7 @@ export function describePushTestState(state: PushTestState): PushTestMessage | n
       return null;
     case "waiting":
       return {
-        text: "已送出測試通知,正在確認你的裝置是否收到⋯",
+        text: "已送出測試通知，正在確認你的裝置是否收到⋯",
         hint: null,
         tone: "muted",
       };
@@ -67,37 +67,37 @@ export function describePushTestState(state: PushTestState): PushTestMessage | n
       return {
         // ✅ 只陳述系統真的知道的事:通知抵達了「裝置」。沒有承諾使用者看得到。
         text: "已確認你的裝置收到通知",
-        hint: "如果手機上沒看到橫幅,請檢查手機是否在靜音或專注模式。",
+        hint: "如果手機上沒看到橫幅，請檢查手機是否在靜音或專注模式。",
         tone: "success",
       };
     case "clicked":
       return {
-        text: "你剛剛點了測試通知——從送出到你看到,整條路都通了",
+        text: "你剛剛點了測試通知——從送出到你看到，整條路都通了",
         hint: null,
         tone: "success",
       };
     case "no_ack":
       return {
-        text: "通知已送出,但系統沒有收到你裝置的回報",
-        hint: "如果你的手機剛剛有跳出通知就沒問題;如果沒有,請看下方的排查建議。",
+        text: "通知已送出，但系統沒有收到你裝置的回報",
+        hint: "如果你的手機剛剛有跳出通知就沒問題;如果沒有，請看下方的排查建議。",
         tone: "warning",
       };
     case "no_device":
       return {
-        text: "你還沒有在任何裝置上開啟通知,所以沒有東西可以測試",
+        text: "你還沒有在任何裝置上開啟通知，所以沒有東西可以測試",
         hint: null,
         tone: "muted",
       };
     case "rate_limited":
       return {
-        text: "測試通知發太多次了,請等一分鐘再試",
+        text: "測試通知發太多次了，請等一分鐘再試",
         hint: null,
         tone: "warning",
       };
     case "error":
       return {
         text: "測試通知沒有送出去",
-        hint: "可能是網路不穩或伺服器暫時有狀況,稍後再試一次。",
+        hint: "可能是網路不穩或伺服器暫時有狀況，稍後再試一次。",
         tone: "warning",
       };
   }

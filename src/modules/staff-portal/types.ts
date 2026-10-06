@@ -66,7 +66,7 @@ export const STAFF_PERMISSION_SECTIONS: StaffPermissionSectionDef[] = [
     // 另外 WholeDayOffTab/BySlotOffTab 排休時若該時段已有預約,系統不會自動取消(只跳提示),
     // 這點對管理員判斷份量也有影響,一併寫出來。
     description:
-      "開放後這位服務人員可以自己設定每週固定可預約時段,並自行排休 —— 除了整天排休,也可以精細到單一半小時時段。排休時如果那段時間已經有預約,系統不會自動取消那些預約。僅抽成制服務人員可以使用,月薪制服務人員即使開通這項也不會生效。",
+      "開放後這位服務人員可以自己設定每週固定可預約時段，並自行排休 —— 除了整天排休，也可以精細到單一半小時時段。排休時如果那段時間已經有預約，系統不會自動取消那些預約。僅抽成制服務人員可以使用，月薪制服務人員即使開通這項也不會生效。",
   },
   {
     key: "staff_payroll_view",
@@ -79,7 +79,7 @@ export const STAFF_PERMISSION_SECTIONS: StaffPermissionSectionDef[] = [
     // 所以開這一項也會看到客戶姓名。範圍比行事曆檢視小:只有姓名,沒有電話/地址/備註,
     // 而且自助視角的 CSV 匯出是關掉的(MyPayrollPage.tsx 傳 showCsvExport={false}),這點一併寫清楚。
     description:
-      "開放後這位服務人員可以自訂起訖日期(或起訖月份)區間,查詢自己該期間的抽成明細或薪資扣款明細,一次最長查一年。抽成制的訂單明細會逐筆列出,每一筆都顯示客戶姓名(只有姓名,不含電話、地址與備註)。",
+      "開放後這位服務人員可以自訂起訖日期(或起訖月份)區間，查詢自己該期間的抽成明細或薪資扣款明細，一次最長查一年。抽成制的訂單明細會逐筆列出，每一筆都顯示客戶姓名(只有姓名，不含電話、地址與備註)。",
   },
   {
     key: "staff_profile_edit",
@@ -87,6 +87,6 @@ export const STAFF_PERMISSION_SECTIONS: StaffPermissionSectionDef[] = [
     // 🔴 SPECS-INDEX #879 ③:五個欄位確實都能改,只是原本沒寫出電話的必填與格式限制
     // (EditMyStaffProfileDialog.tsx 用 isValidTaiwanMobilePhone,資料庫也有 NOT NULL + CHECK)。
     description:
-      "開放後這位服務人員可以自己修改姓名/暱稱/電話/頭像/簡介。其中電話是必填,而且必須是 09 開頭的 10 碼手機號碼。",
+      "開放後這位服務人員可以自己修改姓名/暱稱/電話/頭像/簡介。其中電話是必填，而且必須是 09 開頭的 10 碼手機號碼。",
   },
 ];

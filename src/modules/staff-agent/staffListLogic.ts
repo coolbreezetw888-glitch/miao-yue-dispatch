@@ -145,7 +145,7 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
     // Number.isInteger 同時擋掉小數點與 NaN(輸入框打了無法解析的內容時會是 NaN)。
     // 資料庫欄位是 integer,送 1.5 進去會得到一段看不懂的型別錯誤,所以前端先擋。
     if (!Number.isInteger(minDays)) {
-      return "「最少要提前幾天預約」請填整數天數,不能有小數點";
+      return "「最少要提前幾天預約」請填整數天數，不能有小數點";
     }
     if (minDays < MIN_ADVANCE_BOOKING_DAYS_LIMIT) {
       // 用語跟欄位說明文字對齊(2026-09-24 使用者最終規格:0 = 不需要提前,當天預約當天服務也可以)
@@ -156,16 +156,16 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
 
   if (maxDays !== null) {
     if (!Number.isInteger(maxDays)) {
-      return "「最遠可以預約到幾天後」請填整數天數,不能有小數點";
+      return "「最遠可以預約到幾天後」請填整數天數，不能有小數點";
     }
     // 2026-09-24 使用者澄清後,0 變成合法值(= 最遠只能約到今天,只接受當天預約當天服務),
     // 所以這裡只剩負數要擋,原本那句「至少要是 1 天」已經不成立。訊息比照欄位一的寫法,
     // 順便告訴商家「只接受當天預約」該怎麼填,不只說他錯了。
     if (maxDays < MIN_BOOKING_DAYS_AHEAD_LIMIT) {
-      return `「最遠可以預約到幾天後」不能是負數;只接受當天預約請填 0,不確定要填多少請留空(留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天)`;
+      return `「最遠可以預約到幾天後」不能是負數;只接受當天預約請填 0，不確定要填多少請留空(留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天)`;
     }
     if (maxDays > MAX_BOOKING_DAYS_AHEAD_LIMIT) {
-      return `「最遠可以預約到幾天後」最多只能填 ${MAX_BOOKING_DAYS_AHEAD_LIMIT} 天(大約 10 年),請確認是不是多打了幾個 0`;
+      return `「最遠可以預約到幾天後」最多只能填 ${MAX_BOOKING_DAYS_AHEAD_LIMIT} 天(大約 10 年)，請確認是不是多打了幾個 0`;
     }
   }
 
@@ -176,8 +176,8 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
   const effectiveMaxDays = maxDays ?? DEFAULT_MAX_BOOKING_DAYS_AHEAD;
   if (effectiveMinDays > effectiveMaxDays) {
     return maxDays === null
-      ? `「最少要提前幾天預約」不能大於 ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天,否則客戶永遠約不到——「最遠可以預約到幾天後」留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天,要約更遠請直接把那一欄填大一點`
-      : "「最遠可以預約到幾天後」不能小於「最少要提前幾天預約」,否則客戶永遠約不到";
+      ? `「最少要提前幾天預約」不能大於 ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天，否則客戶永遠約不到——「最遠可以預約到幾天後」留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天，要約更遠請直接把那一欄填大一點`
+      : "「最遠可以預約到幾天後」不能小於「最少要提前幾天預約」，否則客戶永遠約不到";
   }
 
   return null;

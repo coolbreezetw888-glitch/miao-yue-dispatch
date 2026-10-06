@@ -126,7 +126,7 @@ function LineSettingsPageInner() {
         channelSecret: channelSecret.trim(),
         channelAccessToken: channelAccessToken.trim(),
       });
-      toast.success("已儲存憑證,開始測試連線⋯");
+      toast.success("已儲存憑證，開始測試連線⋯");
       await refetchStatus();
 
       const result = await testLineConnection(merchantId);
@@ -169,7 +169,7 @@ function LineSettingsPageInner() {
       setCopyLabel("已複製");
       setTimeout(() => setCopyLabel("複製"), 1500);
     } catch {
-      toast.error("複製失敗,請手動抄寫連結");
+      toast.error("複製失敗，請手動抄寫連結");
     }
   }
 
@@ -217,7 +217,7 @@ function LineSettingsPageInner() {
               {addFriendUrl ? (
                 // 網址很長,320px 下必須能折行 ⇒ 不並排、標籤自成一行(比照 skill 二之六地址那條)。
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                  <span className="text-muted-foreground">加好友連結:</span>
+                  <span className="text-muted-foreground">加好友連結：</span>
                   <a
                     href={addFriendUrl}
                     target="_blank"
@@ -244,7 +244,7 @@ function LineSettingsPageInner() {
           )}
           {status?.lastTestedAt ? (
             <p className="text-xs tabular-nums text-muted-foreground">
-              最後測試時間:
+              最後測試時間：
               {new Date(status.lastTestedAt).toLocaleString("zh-TW", { hour12: false })}
               {status.lastTestResult ? `・${status.lastTestResult}` : ""}
             </p>
@@ -269,7 +269,7 @@ function LineSettingsPageInner() {
                   <CardAlertDialogTitle>確定要解除 LINE 串接嗎?</CardAlertDialogTitle>
                   <CardAlertDialogDescription>
                     解除後不會刪除通知設定/文案範本/發送記錄/已綁定的 LINE
-                    帳號,重新填入正確憑證就能立刻恢復運作。
+                    帳號，重新填入正確憑證就能立刻恢復運作。
                   </CardAlertDialogDescription>
                 </CardAlertDialogHeader>
                 <CardAlertDialogFooter>
@@ -295,7 +295,7 @@ function LineSettingsPageInner() {
             >
               LINE Developers Console
             </a>{" "}
-            建立一個 Messaging API 頻道,在「Basic settings」找到 Channel ID/Channel Secret,在
+            建立一個 Messaging API 頻道，在「Basic settings」找到 Channel ID/Channel Secret，在
             「Messaging API」分頁點擊「Issue」核發一組 Channel Access Token。
           </CardDescription>
         </CardHeader>
@@ -317,7 +317,7 @@ function LineSettingsPageInner() {
                   className="min-w-0 flex-1"
                   value={channelSecret}
                   onChange={(e) => setChannelSecret(e.target.value)}
-                  placeholder={status?.isConnected ? "(已設定,重新輸入以更換)" : undefined}
+                  placeholder={status?.isConnected ? "(已設定，重新輸入以更換)" : undefined}
                 />
                 <RevealToggle
                   shown={showSecret}
@@ -337,7 +337,7 @@ function LineSettingsPageInner() {
                   onChange={(e) => setChannelAccessToken(e.target.value)}
                   placeholder={
                     status?.channelAccessTokenMasked
-                      ? `(目前:${status.channelAccessTokenMasked},重新輸入以更換)`
+                      ? `(目前：${status.channelAccessTokenMasked}，重新輸入以更換)`
                       : undefined
                   }
                 />

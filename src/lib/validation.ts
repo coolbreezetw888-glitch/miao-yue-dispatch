@@ -18,7 +18,7 @@ export function isValidTaiwanMobilePhone(phone: string): boolean {
 }
 
 /** 白話錯誤訊息,§8.1/§8.2 表單驗證失敗時共用同一句文案。 */
-export const TW_MOBILE_PHONE_ERROR_MESSAGE = "請輸入正確的手機號碼格式,例如 0912345678";
+export const TW_MOBILE_PHONE_ERROR_MESSAGE = "請輸入正確的手機號碼格式，例如 0912345678";
 
 // ---------------------------------------------------------------------------
 // Email 格式驗證。
@@ -50,7 +50,7 @@ export function isValidEmail(email: string): boolean {
 }
 
 /** 白話錯誤訊息,各表單 Email 驗證失敗時共用同一句文案。 */
-export const EMAIL_ERROR_MESSAGE = "請輸入正確的 Email 格式,例如 name@example.com";
+export const EMAIL_ERROR_MESSAGE = "請輸入正確的 Email 格式，例如 name@example.com";
 
 // ---------------------------------------------------------------------------
 // 「客戶電話」格式驗證(手機或市話皆可)。SPECS-INDEX #822。
@@ -94,4 +94,4 @@ export function isValidTaiwanPhone(phone: string): boolean {
 
 /** 白話錯誤訊息,建單/會員各表單的客戶電話驗證失敗時共用同一句文案。 */
 export const TW_PHONE_ERROR_MESSAGE =
-  "電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678);市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456),有分機的話用 # 接在後面(例如 02-1234-5678#123)";
+  "電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678);市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456)，有分機的話用 # 接在後面(例如 02-1234-5678#123)";

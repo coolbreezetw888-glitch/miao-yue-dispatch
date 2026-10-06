@@ -219,7 +219,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     expect(phoneInput().value).toBe("0903111111");
     expect(nameInput().value).toBe("李小華");
     expect(addressInput()?.value).toBe("台北市信義路 1 號");
-    expect(screen.getByText("將連結既有客戶:")).toBeInTheDocument();
+    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
     // 狀態 C 不再列出其他開頭相符的候選
     expect(screen.queryByText(/開頭相符的客戶/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /陳大同/ })).not.toBeInTheDocument();
@@ -253,7 +253,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     type(addressInput() as HTMLInputElement, "客服自己打的地址");
     type(phoneInput(), "0903111111");
 
-    expect(screen.getByText("將連結既有客戶:")).toBeInTheDocument();
+    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
     expect(screen.getByText("李小華")).toBeInTheDocument();
     expect(nameInput().value).toBe("客服自己打的名字");
     expect(addressInput()?.value).toBe("客服自己打的地址");
@@ -263,7 +263,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     renderForm("on_site_dispatch");
     type(phoneInput(), "0903222222");
     const note = screen.getByRole("note");
-    expect(note).toHaveTextContent("這位客戶被列入黑名單:多次爽約");
+    expect(note).toHaveTextContent("這位客戶被列入黑名單：多次爽約");
     expect(toastMock.warning).not.toHaveBeenCalled();
   });
 
@@ -290,7 +290,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     renderForm("on_site_dispatch");
     type(phoneInput(), "0903");
     fireEvent.click(screen.getByRole("button", { name: /李小華/ }));
-    expect(screen.getByText("將連結既有客戶:")).toBeInTheDocument();
+    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
 
     // SPECS-INDEX #979:服務項目改從「選擇項目」整頁勾選、付款方式改下拉選單(只改操作步驟)。
     pickServiceItems([/冷氣清洗/]);
@@ -361,7 +361,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     it("已連結會員的訂單:顯示「已連結會員」,沒動就儲存 ⇒ payload 帶回同一個 member_id", async () => {
       getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
       renderForm("on_site_dispatch", BOOKING_ID);
-      await waitFor(() => expect(screen.getByText("已連結會員:")).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
       expect(screen.getByText("王小明")).toBeInTheDocument();
       // 編輯模式不查候選、不顯示「將連結」(update_booking 不會依電話自動比對,那會是一句假話)
       expect(screen.queryByText(/將連結既有客戶/)).not.toBeInTheDocument();
@@ -377,7 +377,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
       getBookingMock.mockResolvedValue(editingDetail(null, null));
       renderForm("on_site_dispatch", BOOKING_ID);
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: /這支電話是既有客戶:/ })).toBeInTheDocument(),
+        expect(screen.getByRole("button", { name: /這支電話是既有客戶：/ })).toBeInTheDocument(),
       );
       expect(screen.getByText("(點一下即可連結到這筆訂單)")).toBeInTheDocument();
       expect(screen.queryByText(/將連結既有客戶/)).not.toBeInTheDocument();
@@ -387,10 +387,10 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     it("§12.7 ③ 未連結的訂單:點狀態 C 那一行 ⇒ 顯示「儲存後會連結」,儲存時補掛這位會員", async () => {
       getBookingMock.mockResolvedValue(editingDetail(null, null));
       renderForm("on_site_dispatch", BOOKING_ID);
-      const row = await screen.findByRole("button", { name: /這支電話是既有客戶:/ });
+      const row = await screen.findByRole("button", { name: /這支電話是既有客戶：/ });
       fireEvent.click(row);
 
-      expect(screen.getByText("儲存後會連結到會員:")).toBeInTheDocument();
+      expect(screen.getByText("儲存後會連結到會員：")).toBeInTheDocument();
       expect(nameInput().value).toBe("李小華");
 
       screen.getByRole("button", { name: "儲存變更" }).click();
@@ -405,7 +405,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
       type(phoneInput(), "0903");
       fireEvent.click(screen.getByRole("button", { name: /陳大同/ }));
       expect(phoneInput().value).toBe("0903222222");
-      expect(screen.getByText("儲存後會連結到會員:")).toBeInTheDocument();
+      expect(screen.getByText("儲存後會連結到會員：")).toBeInTheDocument();
       // 點選後面板切到「儲存後會連結到會員」;陳大同是黑名單客戶,黑名單 `!` 提醒會繼續常駐(§12.8 ①,另有專門測試)
       screen.getByRole("button", { name: "儲存變更" }).click();
       await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
@@ -419,31 +419,31 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
       type(phoneInput(), "0903");
       fireEvent.click(screen.getByRole("button", { name: /陳大同/ }));
 
-      expect(screen.getByText("儲存後會連結到會員:")).toBeInTheDocument();
-      expect(screen.getByRole("note")).toHaveTextContent("這位客戶被列入黑名單:多次爽約");
+      expect(screen.getByText("儲存後會連結到會員：")).toBeInTheDocument();
+      expect(screen.getByRole("note")).toHaveTextContent("這位客戶被列入黑名單：多次爽約");
       expect(toastMock.warning).not.toHaveBeenCalled();
     });
 
     it("§12.8 ① 補掛的不是黑名單客戶 ⇒ 沒有黑名單提醒", async () => {
       getBookingMock.mockResolvedValue(editingDetail(null, null));
       renderForm("on_site_dispatch", BOOKING_ID);
-      fireEvent.click(await screen.findByRole("button", { name: /這支電話是既有客戶:/ }));
-      expect(screen.getByText("儲存後會連結到會員:")).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole("button", { name: /這支電話是既有客戶：/ }));
+      expect(screen.getByText("儲存後會連結到會員：")).toBeInTheDocument();
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
 
     it("🔴 §12.7 ④ 點選補掛之後又改了電話 ⇒ 面板當下取消補掛,儲存送出 null", async () => {
       getBookingMock.mockResolvedValue(editingDetail(null, null));
       renderForm("on_site_dispatch", BOOKING_ID);
-      fireEvent.click(await screen.findByRole("button", { name: /這支電話是既有客戶:/ }));
-      expect(screen.getByText("儲存後會連結到會員:")).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole("button", { name: /這支電話是既有客戶：/ }));
+      expect(screen.getByText("儲存後會連結到會員：")).toBeInTheDocument();
 
       type(phoneInput(), "0912345678");
-      expect(screen.queryByText("儲存後會連結到會員:")).not.toBeInTheDocument();
+      expect(screen.queryByText("儲存後會連結到會員：")).not.toBeInTheDocument();
 
       // 改回原本那支電話也**不會**自己恢復 —— 補掛一定要客服再點一次
       type(phoneInput(), "0903111111");
-      expect(screen.queryByText("儲存後會連結到會員:")).not.toBeInTheDocument();
+      expect(screen.queryByText("儲存後會連結到會員：")).not.toBeInTheDocument();
 
       screen.getByRole("button", { name: "儲存變更" }).click();
       await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
@@ -455,7 +455,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
       getBookingMock.mockResolvedValue(editingDetail(null, null));
       renderForm("on_site_dispatch", BOOKING_ID);
       await waitFor(() => expect(phoneInput().value).toBe("0903111111"));
-      expect(screen.queryByText("已連結會員:")).not.toBeInTheDocument();
+      expect(screen.queryByText("已連結會員：")).not.toBeInTheDocument();
 
       screen.getByRole("button", { name: "儲存變更" }).click();
       await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));

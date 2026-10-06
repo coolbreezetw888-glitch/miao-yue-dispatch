@@ -109,10 +109,10 @@ export default function InstallPwaHint() {
     >
       <div className="min-w-0 flex-1">
         {deferredPrompt ? (
-          <p className="text-sm text-foreground">安裝秒約 App,以後更快打開</p>
+          <p className="text-sm text-foreground">安裝秒約 App，以後更快打開</p>
         ) : (
           <p className="text-sm text-foreground">
-            點選下方分享按鈕 →「加入主畫面」,把秒約加到手機桌面
+            點選下方分享按鈕 →「加入主畫面」，把秒約加到手機桌面
           </p>
         )}
       </div>

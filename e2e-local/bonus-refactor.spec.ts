@@ -39,7 +39,7 @@ import {
 } from "./support/bonus-fixture";
 
 const LOAD_TIMEOUT = 20_000;
-const STALE_MESSAGE = "紅利點數正在重新計算,請稍候再送出";
+const STALE_MESSAGE = "紅利點數正在重新計算，請稍候再送出";
 
 test.describe.configure({ mode: "serial", timeout: 120_000 });
 
@@ -120,7 +120,7 @@ test("§4.6:建單看到派點、改數量跟著變、新電話顯示新客戶",
 
   await dialog.locator("#booking-customer-phone").fill(MEMBER_A_PHONE);
   await expect(pointsSection(dialog).getByRole("heading")).toContainText(
-    `會員:${fixture.memberAName}`,
+    `會員：${fixture.memberAName}`,
     { timeout: LOAD_TIMEOUT },
   );
   await expect(suggestedRow(dialog)).toContainText("10 點", { timeout: LOAD_TIMEOUT });
@@ -155,7 +155,7 @@ test("§2.10 / 裁決 22:折抵超額被擋;改電話立刻送出被擋,沒有�
   // ① 超過可用點數 ⇒ 欄位錯誤 + 送出被擋。
   await enableRedeem(dialog, "400");
   await expect(pointsSection(dialog)).toContainText(
-    `這位會員目前只有 ${MEMBER_A_INITIAL} 點,無法折抵 400 點`,
+    `這位會員目前只有 ${MEMBER_A_INITIAL} 點，無法折抵 400 點`,
   );
   await dialog.getByRole("button", { name: "建立預約" }).click();
   await expect(page.getByText("紅利折抵點數有問題").first()).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -176,10 +176,10 @@ test("§2.10 / 裁決 22:折抵超額被擋;改電話立刻送出被擋,沒有�
 
   // 預覽回來後:對到會員乙,折抵被重設。
   await expect(pointsSection(dialog).getByRole("heading")).toContainText(
-    `會員:${fixture.memberBName}`,
+    `會員：${fixture.memberBName}`,
     { timeout: LOAD_TIMEOUT },
   );
-  await expect(pointsSection(dialog)).toContainText("客戶電話已變更,紅利折抵已重設");
+  await expect(pointsSection(dialog)).toContainText("客戶電話已變更，紅利折抵已重設");
   await page.unroute("**/rest/v1/rpc/preview_booking_points");
 
   // 資料庫:沒有任何訂單、兩位會員都沒被扣。
@@ -209,7 +209,7 @@ test("§2.5:有折扣 ⇒ 兩層重疊的人工確認窗;返回修改不送出;�
   await dialog.locator("#booking-discount-value").fill("10");
   await expect(suggestedRow(dialog)).toContainText("9 點", { timeout: LOAD_TIMEOUT });
   await expect(pointsSection(dialog)).toContainText(
-    "本單有自訂總金額/折扣,系統建議值僅供參考,請確認派點數",
+    "本單有自訂總金額/折扣，系統建議值僅供參考，請確認派點數",
   );
 
   await dialog.getByRole("button", { name: "建立預約" }).click();

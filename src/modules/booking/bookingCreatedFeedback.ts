@@ -107,8 +107,8 @@ export function buildBookingCreatedToast(
   if (booking.member_id && memberName) {
     lines.push(
       booking.member_auto_created === true
-        ? `已自動建立會員:${memberName}`
-        : `已連結既有會員:${memberName}`,
+        ? `已自動建立會員：${memberName}`
+        : `已連結既有會員：${memberName}`,
     );
   }
   const finalAmount = Number(booking.final_amount_snapshot);
@@ -119,7 +119,7 @@ export function buildBookingCreatedToast(
   if (booking.points_redeemed > 0) {
     const redeemAmount = Number(booking.points_redeem_amount_snapshot);
     lines.push(
-      `紅利折抵 ${booking.points_redeemed} 點(−${formatAmount(redeemAmount)}),實付 ${formatAmount(
+      `紅利折抵 ${booking.points_redeemed} 點(−${formatAmount(redeemAmount)})，實付 ${formatAmount(
         finalAmount - redeemAmount,
       )}`,
     );

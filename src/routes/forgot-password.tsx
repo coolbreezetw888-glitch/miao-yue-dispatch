@@ -36,7 +36,7 @@ export default function ForgotPassword() {
     return (
       <AuthShell title="請檢查信箱" subtitle="重設密碼信可能需要幾分鐘才會送達">
         <p className="text-sm text-muted-foreground">
-          如果這個 email 有對應的帳號,系統已經寄出重設密碼信,請檢查收件匣(含垃圾郵件夾)。
+          如果這個 email 有對應的帳號，系統已經寄出重設密碼信，請檢查收件匣(含垃圾郵件夾)。
         </p>
         <Button className="mt-6 w-full" variant="outline" asChild>
           <Link to="/signin">返回登入頁</Link>
@@ -46,7 +46,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <AuthShell title="忘記密碼" subtitle="輸入登入用的 Email,我們會寄一封重設密碼信給你。">
+    <AuthShell title="忘記密碼" subtitle="輸入登入用的 Email，我們會寄一封重設密碼信給你。">
       <form onSubmit={onSubmit} className="space-y-5">
         <div>
           <Label htmlFor="forgot-password-email">Email</Label>

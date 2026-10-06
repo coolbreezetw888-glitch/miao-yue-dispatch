@@ -144,14 +144,14 @@ describe("PushSubscriptionCard 的「開啟通知」", () => {
   });
 
   it("subscribe() 丟出錯誤(例如缺 VAPID 金鑰)時,把那句中文原因顯示出來,不是靜默沒反應", async () => {
-    subscribeMock.mockRejectedValue(new Error("推播功能尚未完成設定,請聯絡系統管理員"));
+    subscribeMock.mockRejectedValue(new Error("推播功能尚未完成設定，請聯絡系統管理員"));
     renderCard();
     await clickSubscribeButton();
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
     expect(toastSuccessMock).not.toHaveBeenCalled();
     expect(toastErrorMock).toHaveBeenCalledWith("開啟通知失敗", {
-      description: "推播功能尚未完成設定,請聯絡系統管理員",
+      description: "推播功能尚未完成設定，請聯絡系統管理員",
     });
   });
 
@@ -256,7 +256,7 @@ describe("PushSubscriptionCard 的「要收哪幾種通知」收合行為(#868)"
     renderCard();
 
     expect(getSectionToggle()).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("先開啟通知,才能選擇要收哪幾種。")).not.toBeInTheDocument();
+    expect(screen.queryByText("先開啟通知，才能選擇要收哪幾種。")).not.toBeInTheDocument();
   });
 
   it("點一下標題就展開:aria-expanded 變 true,事件開關清單出現", async () => {
@@ -277,7 +277,7 @@ describe("PushSubscriptionCard 的「要收哪幾種通知」收合行為(#868)"
 
     await userEvent.click(getSectionToggle());
 
-    expect(screen.getByText("先開啟通知,才能選擇要收哪幾種。")).toBeInTheDocument();
+    expect(screen.getByText("先開啟通知，才能選擇要收哪幾種。")).toBeInTheDocument();
     expect(screen.queryByTestId("push-event-toggle-list-stub")).not.toBeInTheDocument();
   });
 

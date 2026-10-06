@@ -21,8 +21,8 @@ export const INDUSTRY_TYPE_LABELS: Record<IndustryType, string> = {
 };
 
 export const INDUSTRY_TYPE_DESCRIPTIONS: Record<IndustryType, string> = {
-  on_site_dispatch: "服務人員到客戶指定地點提供服務,例如冷氣、水電、防水工程。",
-  in_store_beauty: "客戶到店消費,例如美髮美容、按摩整骨、洗車美容等。",
+  on_site_dispatch: "服務人員到客戶指定地點提供服務，例如冷氣、水電、防水工程。",
+  in_store_beauty: "客戶到店消費，例如美髮美容、按摩整骨、洗車美容等。",
 };
 
 /** 建單表單細節修正規格書第二節第 2 點:哪些產業類型的建單表單需要必填「客戶地址」欄位,

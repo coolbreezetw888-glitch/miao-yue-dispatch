@@ -83,8 +83,8 @@ export function LogoUploader({ currentLogoUrl, onUpload }: LogoUploaderProps) {
           >
             {uploading ? "上傳中⋯" : "更換 LOGO"}
           </Button>
-          <HelpToggle label="說明:LOGO 可以上傳什麼格式、多大的檔案">
-            支援 PNG / JPG / WEBP，單檔上限 2MB。選好檔案就會<strong>立刻上傳並生效</strong>,
+          <HelpToggle label="說明：LOGO 可以上傳什麼格式、多大的檔案">
+            支援 PNG / JPG / WEBP，單檔上限 2MB。選好檔案就會<strong>立刻上傳並生效</strong>，
             不用再按下面的「儲存變更」。
           </HelpToggle>
         </div>

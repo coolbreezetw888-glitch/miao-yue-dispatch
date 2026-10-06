@@ -70,16 +70,16 @@ export function parseAmountInput(
   }
   if (!DECIMAL_PATTERN.test(text)) {
     // 一句話講完就好:使用者不需要知道「科學記號」「十六進位」這些名詞。
-    return { ok: false, value: null, error: `請輸入數字${noun},只能填數字和小數點` };
+    return { ok: false, value: null, error: `請輸入數字${noun}，只能填數字和小數點` };
   }
   if (integerOnly && text.includes(".")) {
-    return { ok: false, value: null, error: "這個欄位只能填整數,不能有小數點" };
+    return { ok: false, value: null, error: "這個欄位只能填整數，不能有小數點" };
   }
 
   const value = Number(text);
   // 走到這裡一定是有限數(pattern 已經擋掉 Infinity / NaN),這行是防呆,不是主要防線。
   if (!Number.isFinite(value)) {
-    return { ok: false, value: null, error: `請輸入數字${noun},只能填數字和小數點` };
+    return { ok: false, value: null, error: `請輸入數字${noun}，只能填數字和小數點` };
   }
   if (value < min) {
     return {

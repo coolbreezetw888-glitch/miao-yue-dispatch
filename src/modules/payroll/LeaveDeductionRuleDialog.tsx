@@ -160,7 +160,7 @@ export function LeaveDeductionRuleDialog({
           {/* 假別名稱是商家自填的,長度不固定 ⇒ 標題要能折行。 */}
           <CardDialogTitle className="break-words">「{leaveTypeName}」的扣款規則</CardDialogTitle>
           <CardDialogDescription>
-            設定請這個假的扣款計算模式與數值,系統不會自動幫你套用任何非零數字,請自己填入實際
+            設定請這個假的扣款計算模式與數值，系統不會自動幫你套用任何非零數字，請自己填入實際
             要扣多少。
           </CardDialogDescription>
         </CardDialogHeader>
@@ -172,7 +172,7 @@ export function LeaveDeductionRuleDialog({
           // (不扣款 / 0 / 0),使用者以為那是現在的設定,一按儲存就把真實規則覆寫掉。
           <ErrorState
             title="讀不到這個假別現在的扣款規則"
-            reason="可能是網路斷了;現在先不顯示表單,避免你把預設值當成現有設定存回去"
+            reason="可能是網路斷了;現在先不顯示表單，避免你把預設值當成現有設定存回去"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -212,8 +212,8 @@ export function LeaveDeductionRuleDialog({
                 htmlFor="fixed-amount-value"
                 required
                 error={fixedAmountError}
-                helpLabel="說明:每天扣的金額要怎麼填"
-                help="只能填整數(不含小數點),例如 500。"
+                helpLabel="說明：每天扣的金額要怎麼填"
+                help="只能填整數(不含小數點)，例如 500。"
               >
                 <FieldAmountInput
                   id="fixed-amount-value"
@@ -232,9 +232,10 @@ export function LeaveDeductionRuleDialog({
                 「僅供參考、實際以每位服務人員自己的月薪為準」這句不能省;(2) 這裡不在薪資設定頁,
                 不寫「詳見上方【月薪制】月折算天數」,那個欄位不在這一頁,指過去會讓人找不到。 */}
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
-              試算:假設月薪 {exampleMonthlySalary} 元,以本月 {exampleDaysInMonth} 天換算,一天薪水約{" "}
-              {exampleDayRate.toFixed(2)} 元,請這個假一天扣 <strong>{previewPerDay}</strong> 元。
-              天數由系統依請假當月自動換算,不用另外設定;這裡的月薪只是範例,僅供參考,實際扣款以每位
+              試算：假設月薪 {exampleMonthlySalary} 元，以本月 {exampleDaysInMonth}{" "}
+              天換算，一天薪水約 {exampleDayRate.toFixed(2)} 元，請這個假一天扣{" "}
+              <strong>{previewPerDay}</strong> 元。
+              天數由系統依請假當月自動換算，不用另外設定;這裡的月薪只是範例，僅供參考，實際扣款以每位
               服務人員自己的月薪計算為準。
             </p>
           </form>

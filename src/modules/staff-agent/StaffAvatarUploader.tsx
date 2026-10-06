@@ -73,7 +73,7 @@ export function StaffAvatarUploader({ currentAvatarUrl, onUpload }: StaffAvatarU
         >
           {uploading ? "上傳中⋯" : "上傳頭像"}
         </Button>
-        <p className="mt-1 text-xs text-muted-foreground">支援 PNG / JPG / WEBP,單檔上限 2MB</p>
+        <p className="mt-1 text-xs text-muted-foreground">支援 PNG / JPG / WEBP，單檔上限 2MB</p>
       </div>
     </div>
   );

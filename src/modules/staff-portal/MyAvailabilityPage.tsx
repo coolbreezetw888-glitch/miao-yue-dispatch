@@ -80,7 +80,7 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
       <CardHeader>
         <CardTitle>每週固定可預約時段</CardTitle>
         <CardDescription>
-          這裡設定的是你自己願意接單的時段,完全沒有設定時這次還不可預約。
+          這裡設定的是你自己願意接單的時段，完全沒有設定時這次還不可預約。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -177,7 +177,7 @@ function MyAvailabilityPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">休假設定</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          這裡設定的是你自己願意接單的時段,只有抽成制的服務人員才能使用這個功能。
+          這裡設定的是你自己願意接單的時段，只有抽成制的服務人員才能使用這個功能。
         </p>
       </div>
 

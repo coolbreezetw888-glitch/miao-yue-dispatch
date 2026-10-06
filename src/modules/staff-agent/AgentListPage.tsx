@@ -214,8 +214,8 @@ function AgentFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>編輯客服資料</CardDialogTitle>
           <CardDialogDescription>
-            這裡只會更新基本資料,不會影響對方的登入帳號——登入信箱要用清單上的「修改登入信箱」
-            另外處理,權限要用「權限設定」另外調整。
+            這裡只會更新基本資料，不會影響對方的登入帳號——登入信箱要用清單上的「修改登入信箱」
+            另外處理，權限要用「權限設定」另外調整。
           </CardDialogDescription>
         </CardDialogHeader>
         {/* 底部按鈕列在 <form> 外面(小卡窗的 Footer 是獨立區塊),儲存鈕用 form 屬性指回這張表單。 */}
@@ -249,8 +249,8 @@ function AgentFormDialog({
             label="電話"
             htmlFor="agent-edit-phone"
             required
-            helpLabel="說明:電話要怎麼填"
-            help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+            helpLabel="說明：電話要怎麼填"
+            help="請輸入台灣手機號碼，09 開頭共 10 碼數字，例如 0912345678。"
           >
             <FieldInput
               id="agent-edit-phone"
@@ -359,11 +359,11 @@ function AgentListInner() {
       setPhone("");
       if (result.alreadyHadAccount) {
         toast.success("已加為客服", {
-          description: "這個 email 已經有秒約帳號,已直接加為客服,對方下次登入就能看到這間店。",
+          description: "這個 email 已經有秒約帳號，已直接加為客服，對方下次登入就能看到這間店。",
         });
       } else {
         toast.success("邀請信已寄出", {
-          description: "請提醒對方檢查信箱(含垃圾郵件夾),點連結設定密碼後即可登入。",
+          description: "請提醒對方檢查信箱(含垃圾郵件夾)，點連結設定密碼後即可登入。",
         });
       }
     } catch (err) {
@@ -432,7 +432,7 @@ function AgentListInner() {
         <CardHeader>
           <CardTitle>邀請新客服</CardTitle>
           <CardDescription>
-            對方會收到一封邀請信,點連結設定密碼後即可登入;如果對方已經有秒約帳號,會直接加為客服。
+            對方會收到一封邀請信，點連結設定密碼後即可登入;如果對方已經有秒約帳號，會直接加為客服。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -465,8 +465,8 @@ function AgentListInner() {
               label="電話"
               htmlFor="agent-phone"
               required
-              helpLabel="說明:電話要怎麼填"
-              help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+              helpLabel="說明：電話要怎麼填"
+              help="請輸入台灣手機號碼，09 開頭共 10 碼數字，例如 0912345678。"
             >
               <FieldInput
                 id="agent-phone"
@@ -496,7 +496,7 @@ function AgentListInner() {
       <Card>
         <CardHeader>
           <CardTitle>客服名單</CardTitle>
-          <CardDescription>包含在職與已移除的客服,可用下方分類篩選</CardDescription>
+          <CardDescription>包含在職與已移除的客服，可用下方分類篩選</CardDescription>
           {/* #797:三顆分頁籤「全部 / 在職 (n) / 已移除 (n)」。只有名單非空才顯示(比照服務人員頁),
               空名單顯示分頁籤沒有意義。
               ⚠️ 客服只有三顆、沒有服務人員頁的「未上架 / 已上架」——客服沒有 is_listed(#792)。
@@ -530,7 +530,7 @@ function AgentListInner() {
             // 一眼看得到,所以不做按鈕、用一句話指路就夠了。
             <EmptyState
               title="還沒有任何客服"
-              description="邀請客服加入後,可以指派權限,讓他們協助建單、管理會員等日常工作。用上方的邀請表單新增第一位客服。"
+              description="邀請客服加入後，可以指派權限，讓他們協助建單、管理會員等日常工作。用上方的邀請表單新增第一位客服。"
             />
           ) : filteredAgents.length === 0 ? (
             <p className="text-sm text-muted-foreground">這個分類目前沒有客服。</p>
@@ -643,8 +643,8 @@ function AgentListInner() {
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>確定要移除這位客服嗎?</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              移除後對方無法再看到這間店的任何資料,但對方的秒約帳號本身不受影響,
-              資料採軟刪除,之後仍可查詢紀錄。
+              移除後對方無法再看到這間店的任何資料，但對方的秒約帳號本身不受影響，
+              資料採軟刪除，之後仍可查詢紀錄。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>
@@ -674,10 +674,10 @@ function AgentListInner() {
               確定要真正刪除「{hardDeletingAgent?.name}」嗎?
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這個動作無法復原!這位客服的紀錄與權限設定會被徹底刪除,之後在名單上
-              再也找不到,也無法用「恢復」救回。對方的秒約帳號本身不受影響,同一個 Email
+              這個動作無法復原!這位客服的紀錄與權限設定會被徹底刪除，之後在名單上
+              再也找不到，也無法用「恢復」救回。對方的秒約帳號本身不受影響，同一個 Email
               之後仍然可以重新邀請。只有在確定不再需要這筆資料(例如邀請時 Email
-              打錯字、對方永遠不會來註冊)時才使用;若只是暫時停用,請維持 「已移除」狀態即可。
+              打錯字、對方永遠不會來註冊)時才使用;若只是暫時停用，請維持 「已移除」狀態即可。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>

@@ -490,7 +490,7 @@ describe("三條規則的落點與送出的 MoveBookingInput(#811 #813;坑 4、�
     fireEvent.pointerDown(el, ptr(T1_MAIN_CENTER));
     fireEvent.pointerMove(el, ptr({ clientX: 572, clientY: 250 }));
     expect(screen.getByTestId("booking-drag-hint")).toHaveTextContent(
-      "轉派給 服務人員C,並改時間 → 11:00",
+      "轉派給 服務人員C，並改時間 → 11:00",
     );
     expect(screen.getByTestId("booking-drag-ghost").style.top).toBe("220px");
     fireEvent.pointerUp(el, ptr({ clientX: 572, clientY: 250 }));
@@ -540,7 +540,7 @@ describe("三條規則的落點與送出的 MoveBookingInput(#811 #813;坑 4、�
     expect(screen.getByTestId("booking-drag-hint")).toHaveTextContent("助手沒有自己的時間");
     fireEvent.pointerUp(el, ptr({ clientX: 372, clientY: 310 }));
     expect(moveBookingMock).not.toHaveBeenCalled();
-    expect(toast.info).toHaveBeenCalledWith("助手沒有自己的時間,要改時間請拖主服務人員的色塊");
+    expect(toast.info).toHaveBeenCalledWith("助手沒有自己的時間，要改時間請拖主服務人員的色塊");
   });
 
   it("坑 5:10:10 起的單放回「原位」也算 timeChanged(吸附到 10:00),會打 RPC —— 這是規格書 §七 的預期行為", async () => {
@@ -677,7 +677,7 @@ describe("成功 / 失敗 / 復原(#814 #815)", () => {
     mouseDrag(el, T1_MAIN_CENTER, { x: 572, y: 250 });
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(2));
     expect(vi.mocked(toast.success).mock.calls[1]![0]).toBe(
-      "已把 陳小姐 的預約轉派給 服務人員C,並改到 11:00",
+      "已把 陳小姐 的預約轉派給 服務人員C，並改到 11:00",
     );
 
     moveBookingMock.mockResolvedValueOnce(

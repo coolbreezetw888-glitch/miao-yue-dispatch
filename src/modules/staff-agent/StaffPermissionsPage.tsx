@@ -69,9 +69,9 @@ function StaffPermissionsInner() {
               「行事曆檢視」開放的預約明細裡有**客戶**的姓名、電話、地址、備註,那不是「自己的資料」。
               舊寫法會讓管理員低估這個開關的份量,所以改成明講客戶個資會一起被看到。 */}
           <CardDescription>
-            這四項決定這位服務人員登入服務人員端後能看到/操作哪些內容,不涉及商家層級的設定。
+            這四項決定這位服務人員登入服務人員端後能看到/操作哪些內容，不涉及商家層級的設定。
             其中「行事曆檢視」開放的不只是他自己的班表 ——
-            預約明細裡會一併顯示客戶的姓名、電話、地址與備註,開啟前請先確認這位服務人員可以接觸客戶個資。
+            預約明細裡會一併顯示客戶的姓名、電話、地址與備註，開啟前請先確認這位服務人員可以接觸客戶個資。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -85,9 +85,9 @@ function StaffPermissionsInner() {
                  在資料異常時往寬鬆的方向猜,方向錯誤(#877 備註)。 */}
           {staff && staff.login_status !== "active" ? (
             <AlertNote>
-              這位服務人員還沒完成登入,
+              這位服務人員還沒完成登入，
               <strong className="font-bold">四項權限會在他第一次登入時預設全部開啟</strong>
-              ;現在顯示的關閉狀態不代表他登入後會是關的。等他完成登入後再回來這頁調整,才會是實際生效的設定。
+              ;現在顯示的關閉狀態不代表他登入後會是關的。等他完成登入後再回來這頁調整，才會是實際生效的設定。
             </AlertNote>
           ) : null}
           {isLoading ? (
@@ -107,7 +107,7 @@ function StaffPermissionsInner() {
                       {section.key === "staff_availability_self_manage" &&
                       staff?.compensation_type === "monthly_salary" ? (
                         <span className="ml-1 text-warn">
-                          (這位是月薪制服務人員,即使開啟也不會生效)
+                          (這位是月薪制服務人員，即使開啟也不會生效)
                         </span>
                       ) : null}
                     </p>

@@ -189,7 +189,7 @@ function EditProfileDialog({
     const trimmedPhone = phone.trim();
     if (isAgentRole) {
       if (!agent) {
-        toast.error("讀不到你的客服資料,請重新整理頁面再試一次");
+        toast.error("讀不到你的客服資料，請重新整理頁面再試一次");
         return;
       }
       if (!agentName.trim()) {
@@ -261,7 +261,7 @@ function EditProfileDialog({
       <CardDialogContent>
         <CardDialogHeader>
           <CardDialogTitle>編輯個人資料</CardDialogTitle>
-          <CardDialogDescription>只會更新你自己的資料,不會影響到其他人。</CardDialogDescription>
+          <CardDialogDescription>只會更新你自己的資料，不會影響到其他人。</CardDialogDescription>
         </CardDialogHeader>
         <form onSubmit={handleSubmit} id={PROFILE_FORM_ID} className="flex flex-col gap-3.5">
           {/* 2026-09-24 使用者裁決:客服新增「姓名」欄位。放在最前面,因為這是真正的姓名
@@ -284,8 +284,8 @@ function EditProfileDialog({
                   // 2026-09-24 主腦裁決把顯示 fallback 改成「暱稱 → 姓名 → 登入信箱前半段」之後,
                   // 這句說明也要跟著改成實際行為——原本寫「留空會顯示登入信箱前半段」現在只在姓名
                   // 也沒填的時候才成立,照實改寫成「會顯示你的姓名」。
-                  help: "給客戶看的稱呼,可以跟本名不一樣;留空的話畫面上會顯示你的姓名。",
-                  helpLabel: "說明:暱稱留空會顯示什麼",
+                  help: "給客戶看的稱呼，可以跟本名不一樣;留空的話畫面上會顯示你的姓名。",
+                  helpLabel: "說明：暱稱留空會顯示什麼",
                 }
               : {})}
           >
@@ -305,10 +305,10 @@ function EditProfileDialog({
             label="電話"
             htmlFor="profile-phone"
             required={isAgentRole}
-            help={`請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。${
-              isAgentRole ? "" : "可以留空,但填了就要填對格式。"
+            help={`請輸入台灣手機號碼，09 開頭共 10 碼數字，例如 0912345678。${
+              isAgentRole ? "" : "可以留空，但填了就要填對格式。"
             }`}
-            helpLabel="說明:電話要填什麼格式"
+            helpLabel="說明：電話要填什麼格式"
           >
             <FieldInput
               id="profile-phone"
@@ -357,7 +357,7 @@ function BookingUrlCard() {
     const url = `${window.location.origin}/booking/${bookingSlug}`;
     void navigator.clipboard.writeText(url).then(
       () => toast.success("已複製預約網址"),
-      () => toast.error("複製失敗,請手動到商家設定頁查看"),
+      () => toast.error("複製失敗，請手動到商家設定頁查看"),
     );
   }
 
@@ -366,7 +366,7 @@ function BookingUrlCard() {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-foreground">預約網址</p>
         <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-          顧客預約用的專屬連結,實際頁面會在「客戶端自助預約」模組推出後才能使用。
+          顧客預約用的專屬連結，實際頁面會在「客戶端自助預約」模組推出後才能使用。
         </p>
       </div>
       {/* ② 次要(skill 二之三)。 */}
@@ -678,7 +678,7 @@ export default function ManagePage() {
       label: "會員管理",
       // SPECS-INDEX #830(2026-09-29):點數的餘額/異動歷史/登記兌換/手動調整整組從「紅利點數管理」
       // 搬到這裡的會員詳情頁,描述補上,讓使用者從卡片就看得出點數交易在這裡操作。
-      description: "管理會員基本資料、電話驗證、推薦名單,以及各會員的點數兌換、調整與異動歷史",
+      description: "管理會員基本資料、電話驗證、推薦名單，以及各會員的點數兌換、調整與異動歷史",
       icon: UserRound,
       visible: showMembersCard,
     },
@@ -734,7 +734,7 @@ export default function ManagePage() {
       key: "line-marketing",
       to: "/app/line-marketing",
       label: "再行銷通知",
-      description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
+      description: "手動挑選已綁定會員名單，發送一次性自訂訊息",
       icon: Megaphone,
       visible: showLineMarketingCard,
     },
@@ -792,7 +792,7 @@ export default function ManagePage() {
     <div data-testid="manage-page" className="mx-auto max-w-3xl space-y-6 px-5 py-10">
       {/* 這一頁是功能入口頁,沒有「返回」也沒有單一主要動作(skill 二之八的骨架允許只有標題 +
           說明)。 */}
-      <PageHeader title="功能" description="依照你的權限,顯示你能操作的功能項目" />
+      <PageHeader title="功能" description="依照你的權限，顯示你能操作的功能項目" />
 
       {/* 使用者決策(2026-09-23):「首頁」分頁籤拔掉,個人資料卡片搬到這裡最上方
           (原封不動搬自舊版 HomePage.tsx,服務人員版本留在 HomePage.tsx)。 */}
@@ -851,7 +851,7 @@ export default function ManagePage() {
             ) : (
               <>
                 請聯絡商家管理員開通權限。如果你是<span className="font-semibold">其他分店</span>
-                的服務人員,請先用左上角的商家切換器切換到那間商家。
+                的服務人員，請先用左上角的商家切換器切換到那間商家。
               </>
             )
           }

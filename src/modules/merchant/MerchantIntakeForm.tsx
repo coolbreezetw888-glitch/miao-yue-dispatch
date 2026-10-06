@@ -96,7 +96,7 @@ export function MerchantIntakeForm({
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="例如:秒約冷氣水電行"
+          placeholder="例如：秒約冷氣水電行"
         />
       </FormField>
 
@@ -106,14 +106,14 @@ export function MerchantIntakeForm({
         required
         help={
           <>
-            決定的是「新增 / 編輯預約時要不要填客戶地址」:
+            決定的是「新增 / 編輯預約時要不要填客戶地址」：
             <strong>到府派工</strong>要填、<strong>到店服務</strong>不用。
             {industryType ? (
               <span className="mt-1 block">{INDUSTRY_TYPE_DESCRIPTIONS[industryType]}</span>
             ) : null}
           </>
         }
-        helpLabel="說明:產業模組會影響什麼"
+        helpLabel="說明：產業模組會影響什麼"
       >
         <FieldSelect<IndustryType>
           id="merchant-industry"
@@ -131,7 +131,7 @@ export function MerchantIntakeForm({
       </FormField>
       {/* 🟡 常駐 `!`:現在的狀態跟使用者以為的不一樣 —— 新開店的人最怕「選錯就定終身」,
           這句要一直看得到,不能收進 `?`(skill 二,第三類)。 */}
-      <AlertNote>之後可以隨時到「商家設定」頁重新切換,不影響已經建立的訂單資料。</AlertNote>
+      <AlertNote>之後可以隨時到「商家設定」頁重新切換，不影響已經建立的訂單資料。</AlertNote>
 
       <FormField label="地址" htmlFor="merchant-address">
         <FieldInput
@@ -145,8 +145,8 @@ export function MerchantIntakeForm({
       <FormField
         label="對外聯絡 Email"
         htmlFor="merchant-contact-email"
-        help="這是顯示給客戶看的聯絡信箱,跟你登入帳號用的 Email 是分開的兩件事,可以留空。"
-        helpLabel="說明:對外聯絡 Email 跟登入信箱的差別"
+        help="這是顯示給客戶看的聯絡信箱，跟你登入帳號用的 Email 是分開的兩件事，可以留空。"
+        helpLabel="說明：對外聯絡 Email 跟登入信箱的差別"
       >
         <FieldInput
           id="merchant-contact-email"
@@ -163,7 +163,7 @@ export function MerchantIntakeForm({
           rows={3}
           value={intro}
           onChange={(e) => setIntro(e.target.value)}
-          placeholder="選填,簡單介紹這間店"
+          placeholder="選填，簡單介紹這間店"
         />
       </FormField>
 

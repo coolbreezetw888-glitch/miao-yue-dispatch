@@ -354,7 +354,7 @@ function ImportWizardPageInner() {
       {step === "type" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟一:選擇匯入類型</CardTitle>
+            <CardTitle>步驟一：選擇匯入類型</CardTitle>
             <CardDescription>
               請先確認匯出的 CSV 為 UTF-8 編碼;如果用 Excel 另存新檔，請選擇「CSV
               UTF-8(逗號分隔)」格式。 單批匯入上限 {MAX_ROWS} 筆，筆數過多請分批匯入。
@@ -395,7 +395,7 @@ function ImportWizardPageInner() {
       {step === "upload" && importKind && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟二:上傳 CSV + 欄位對應</CardTitle>
+            <CardTitle>步驟二：上傳 CSV + 欄位對應</CardTitle>
             <CardDescription>
               上傳檔案後，把 CSV 欄位對應到秒約的欄位，必填欄位有星號標示。
             </CardDescription>
@@ -412,7 +412,7 @@ function ImportWizardPageInner() {
                 ) : (
                   <>
                     還沒整理好 CSV?可以先下載範例模板對照欄位。服務時長沒填預設 60
-                    分鐘,訂單狀態沒填預設「已完成」,付款方式為選填(留空也能成功匯入)。
+                    分鐘，訂單狀態沒填預設「已完成」，付款方式為選填(留空也能成功匯入)。
                   </>
                 )}
               </p>
@@ -446,13 +446,13 @@ function ImportWizardPageInner() {
                     htmlFor="import-write-mode"
                     help={
                       <>
-                        <strong>只新增</strong>:CSV 裡的電話如果系統已經有了,就整列跳過不動,
+                        <strong>只新增</strong>：CSV 裡的電話如果系統已經有了，就整列跳過不動，
                         既有資料一定不會被改到(不確定時選這個)。
                         <br />
-                        <strong>電話重複時更新</strong>:CSV 會蓋掉系統既有那一筆會員的資料。
+                        <strong>電話重複時更新</strong>：CSV 會蓋掉系統既有那一筆會員的資料。
                       </>
                     }
-                    helpLabel="說明:兩種寫入模式的差別是什麼"
+                    helpLabel="說明：兩種寫入模式的差別是什麼"
                   >
                     <FieldSelect<MemberImportWriteMode>
                       id="import-write-mode"
@@ -539,7 +539,7 @@ function ImportWizardPageInner() {
       {step === "value-mapping" && importKind === "historical_bookings" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟三:服務人員數值對應</CardTitle>
+            <CardTitle>步驟三：服務人員數值對應</CardTitle>
             <CardDescription>
               CSV 裡每一個不重複的服務人員文字值，請選擇對應到既有服務人員，或建立一筆新的服務人員
               (姓名+手機號碼)。如果中途離開沒完成匯入，已建立的新服務人員不會被自動刪除。
@@ -563,7 +563,7 @@ function ImportWizardPageInner() {
                 </span>
                 {staffValueMapping[name] ? (
                   <span className="text-[13px] text-muted-foreground">
-                    已對應:
+                    已對應：
                     {staffList?.find((s) => s.id === staffValueMapping[name])?.name ??
                       "(新建立的服務人員)"}
                   </span>
@@ -584,8 +584,8 @@ function ImportWizardPageInner() {
                       <FieldInput
                         type="tel"
                         inputMode="numeric"
-                        aria-label={`「${name}」如果要建立成新服務人員,他的手機號碼`}
-                        placeholder="手機號碼,例如 0912345678"
+                        aria-label={`「${name}」如果要建立成新服務人員，他的手機號碼`}
+                        placeholder="手機號碼，例如 0912345678"
                         className="min-w-0 flex-1 tabular-nums"
                         data-testid={`staff-new-phone-${name}`}
                         value={newStaffPhoneDrafts[name] ?? ""}
@@ -636,7 +636,7 @@ function ImportWizardPageInner() {
       {step === "preview" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟四:預覽</CardTitle>
+            <CardTitle>步驟四：預覽</CardTitle>
             <CardDescription>顯示前 20 筆解析結果，確認沒問題後再正式匯入。</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -717,7 +717,7 @@ function ImportWizardPageInner() {
       {step === "confirm" && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟五:確認匯入</CardTitle>
+            <CardTitle>步驟五：確認匯入</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <p className="text-sm leading-relaxed tabular-nums text-foreground">
@@ -771,7 +771,7 @@ function ImportWizardPageInner() {
       {step === "result" && result && (
         <Card>
           <CardHeader>
-            <CardTitle>步驟六:結果報告</CardTitle>
+            <CardTitle>步驟六：結果報告</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {/* ⚠️ 這四塊統計方塊的 `rounded-md border` 與 `text-2xl` 是 e2e 的選擇器
@@ -818,7 +818,7 @@ function ImportWizardPageInner() {
                   {result.errors.map((e, i) => (
                     <div key={i} className="px-3 py-2 text-[13px] leading-relaxed">
                       <p className="break-words">
-                        <span className="font-semibold tabular-nums">第 {e.row_number} 列</span>:
+                        <span className="font-semibold tabular-nums">第 {e.row_number} 列</span>：
                         {e.error_message}
                       </p>
                     </div>

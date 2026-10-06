@@ -175,7 +175,7 @@ function MerchantSettingsPageInner() {
       <main className="mx-auto max-w-2xl px-5 py-12">
         <ErrorState
           title="找不到目前操作中的商家"
-          reason="可能是剛剛切換商家的時候斷線,或是這個帳號在這間店的管理員身分被移除了"
+          reason="可能是剛剛切換商家的時候斷線，或是這個帳號在這間店的管理員身分被移除了"
           action={
             <Button asChild variant="primary" size="touch">
               <Link to="/app">回到後台首頁</Link>
@@ -254,8 +254,8 @@ function MerchantSettingsPageInner() {
             <FormField
               label="產業模組"
               htmlFor="settings-industry-type"
-              help="可隨時切換,只影響之後新增/編輯預約時「客戶地址」欄位要不要顯示/必填(到府派工要填、到店服務不用),不會更動已經建立的訂單資料。"
-              helpLabel="說明:切換產業模組會影響什麼"
+              help="可隨時切換，只影響之後新增/編輯預約時「客戶地址」欄位要不要顯示/必填(到府派工要填、到店服務不用)，不會更動已經建立的訂單資料。"
+              helpLabel="說明：切換產業模組會影響什麼"
             >
               <FieldSelect<IndustryType>
                 id="settings-industry-type"
@@ -299,8 +299,8 @@ function MerchantSettingsPageInner() {
             <FormField
               label="對外聯絡 Email"
               htmlFor="settings-contact-email"
-              help="這是顯示給客戶看的信箱,跟你登入帳號用的 Email 是不同的兩件事。改這裡不會影響你怎麼登入。"
-              helpLabel="說明:對外聯絡 Email 跟登入信箱的差別"
+              help="這是顯示給客戶看的信箱，跟你登入帳號用的 Email 是不同的兩件事。改這裡不會影響你怎麼登入。"
+              helpLabel="說明：對外聯絡 Email 跟登入信箱的差別"
             >
               <FieldInput
                 id="settings-contact-email"
@@ -321,8 +321,8 @@ function MerchantSettingsPageInner() {
 
             <FormField
               label="預約網址"
-              help="這組網址代碼由系統自動產生,目前不開放自行修改。實際的客戶預約頁面會在「客戶端自助預約」模組推出。"
-              helpLabel="說明:預約網址是什麼、可以改嗎"
+              help="這組網址代碼由系統自動產生，目前不開放自行修改。實際的客戶預約頁面會在「客戶端自助預約」模組推出。"
+              helpLabel="說明：預約網址是什麼、可以改嗎"
             >
               {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
                   輸入框(disabled 的輸入框會讓人一直想點它)。 */}
@@ -336,7 +336,7 @@ function MerchantSettingsPageInner() {
         <Card>
           <CardHeader>
             <CardTitle>主題色系</CardTitle>
-            <CardDescription>選一組基礎色系,或自訂一個顏色</CardDescription>
+            <CardDescription>選一組基礎色系，或自訂一個顏色</CardDescription>
           </CardHeader>
           <CardContent>
             <ThemePresetPicker
@@ -358,7 +358,7 @@ function MerchantSettingsPageInner() {
             <SwitchRow
               id="settings-announcement-enabled"
               title="啟用公告"
-              description="關閉時,即使填了內容,客戶端也不會顯示(內容會保留)。"
+              description="關閉時，即使填了內容，客戶端也不會顯示(內容會保留)。"
               checked={announcementEnabled}
               onCheckedChange={setAnnouncementEnabled}
             />
@@ -368,7 +368,7 @@ function MerchantSettingsPageInner() {
                 rows={3}
                 value={announcementContent}
                 onChange={(e) => setAnnouncementContent(e.target.value)}
-                placeholder="公告關閉時,這裡的內容不會顯示,但會保留"
+                placeholder="公告關閉時，這裡的內容不會顯示，但會保留"
               />
             </FormField>
           </CardContent>
@@ -497,8 +497,9 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>訂單狀態顏色設定</CardTitle>
         <CardDescription>
-          自訂 4 種訂單狀態在行事曆、訂單管理頁顯示的代表色。訂單卡片上的狀態標籤會實心填入這個顏色,
-          文字一律是白色,所以<strong>挑太淺的顏色會看不清楚字</strong>,建議挑中等深度以上的顏色。
+          自訂 4
+          種訂單狀態在行事曆、訂單管理頁顯示的代表色。訂單卡片上的狀態標籤會實心填入這個顏色，
+          文字一律是白色，所以<strong>挑太淺的顏色會看不清楚字</strong>，建議挑中等深度以上的顏色。
           右側色塊就是實際會顯示的樣子。
         </CardDescription>
       </CardHeader>
@@ -613,9 +614,9 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>行事曆排程狀態顏色設定</CardTitle>
         <CardDescription>
-          自訂「全天休假」「時段排休」「跨店佔用」這 3 種行事曆排程狀態的底色,同時套用到商家/
-          客服端行事曆跟服務人員自己的行事曆,兩邊看到的顏色一致。每種狀態固定搭配一種圖樣
-          (不是純色塊),方便一眼分辨是哪一種狀態,不用只靠顏色判斷。
+          自訂「全天休假」「時段排休」「跨店佔用」這 3 種行事曆排程狀態的底色，同時套用到商家/
+          客服端行事曆跟服務人員自己的行事曆，兩邊看到的顏色一致。每種狀態固定搭配一種圖樣
+          (不是純色塊)，方便一眼分辨是哪一種狀態，不用只靠顏色判斷。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">

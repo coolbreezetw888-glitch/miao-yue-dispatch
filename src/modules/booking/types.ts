@@ -95,8 +95,8 @@ export function buildPaymentMethodOptions(
  * merchant_tax_settings.tax_mode 的判斷邏輯或任何資料寫入/計算邏輯。 */
 export function getTaxModeHelperText(mode: AmountAdjustmentMode): string {
   return mode === "percentage"
-    ? "依商家設定稅率百分比,數字可個別調整。"
-    : "依商家設定稅額,金額可個別調整。";
+    ? "依商家設定稅率百分比，數字可個別調整。"
+    : "依商家設定稅額，金額可個別調整。";
 }
 
 /** 規則 2.9,建單功能擴充決策記錄 5 更新:六個狀態值,這次會真的用到

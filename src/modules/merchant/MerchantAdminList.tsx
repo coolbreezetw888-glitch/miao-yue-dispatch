@@ -127,7 +127,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
     return (
       <ErrorState
         title="讀不到管理員名單"
-        reason={`可能是網路斷了,或是這間店的權限剛剛被調整過(原始訊息:${error.message})`}
+        reason={`可能是網路斷了，或是這間店的權限剛剛被調整過(原始訊息：${error.message})`}
         onRetry={() => void refetch()}
       />
     );
@@ -177,7 +177,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
               }
               meta={
                 <>
-                  <span className="block break-all">手機:{adminPhone(admin)}</span>
+                  <span className="block break-all">手機：{adminPhone(admin)}</span>
                   {/* 2026-09-24 使用者裁決:一位管理員只有**一個** Email,就是登入 Email
                       (原話:「登入和聯絡信箱應該要是一致的(所以理論上不該出現不同的信箱)」)。
                       原本這裡下面還有一行「聯絡信箱」(merchant_admins.contact_email),連同那個
@@ -206,7 +206,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
                           會讓人要自己對照是哪一位,移除是不可逆的操作,要讓對象一眼確認。 */}
                       <CardAlertDialogDescription>
                         {adminDisplayName(admin)}({admin.email})將無法再登入管理這間店。如果這是
-                        最後一位管理員(且集團也沒有設定集團管理者),系統會擋下這個操作並提示。
+                        最後一位管理員(且集團也沒有設定集團管理者)，系統會擋下這個操作並提示。
                       </CardAlertDialogDescription>
                     </CardAlertDialogHeader>
                     <CardAlertDialogFooter>
@@ -230,7 +230,7 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
         // 所以不硬做一顆「聚焦上方欄位」的按鈕,改在 description 用一句話指路。
         <EmptyState
           title="目前沒有管理員紀錄"
-          description="用下面的「新增管理員(Email)」把人加進來,對方就能登入管理這間店。"
+          description="用下面的「新增管理員(Email)」把人加進來，對方就能登入管理這間店。"
         />
       ) : null}
 
@@ -241,8 +241,8 @@ export function MerchantAdminList({ merchantId }: { merchantId: string | null | 
           label="新增管理員(Email)"
           htmlFor="new-merchant-admin-email"
           className="min-w-0 flex-1"
-          help="對方必須先自己註冊過秒約帳號,你才加得進來。加進來的人跟你一樣是商家管理員,看得到也改得動這間店的所有設定。"
-          helpLabel="說明:新增管理員要注意什麼"
+          help="對方必須先自己註冊過秒約帳號，你才加得進來。加進來的人跟你一樣是商家管理員，看得到也改得動這間店的所有設定。"
+          helpLabel="說明：新增管理員要注意什麼"
         >
           <FieldInput
             id="new-merchant-admin-email"

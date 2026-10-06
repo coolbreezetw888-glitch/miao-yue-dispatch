@@ -84,7 +84,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
         ? "新客戶(送出後自動建立會員)"
         : (preview.resolution === "existing" || preview.resolution === "given") &&
             preview.memberName
-          ? `會員:${preview.memberName}`
+          ? `會員：${preview.memberName}`
           : null
       : null;
 
@@ -106,7 +106,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
       <MutedLine>
         這張單已使用紅利折抵 {props.original.redeemed} 點(−
         {formatAmount(props.original.redeemAmount)}
-        ),這次不會變動。
+        )，這次不會變動。
       </MutedLine>
     ) : null;
 
@@ -124,13 +124,13 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
     return (
       <DetailSection label={label} className="gap-3">
         {props.amountInvalid ? (
-          <MutedLine>金額欄位修好之後,這裡會顯示這筆訂單的紅利點數。</MutedLine>
+          <MutedLine>金額欄位修好之後，這裡會顯示這筆訂單的紅利點數。</MutedLine>
         ) : props.noServiceItems ? (
-          <MutedLine>選好服務項目後,這裡會顯示這筆訂單的紅利點數。</MutedLine>
+          <MutedLine>選好服務項目後，這裡會顯示這筆訂單的紅利點數。</MutedLine>
         ) : (
           // v2.4 裁決 8 ④:預覽出錯要講出來,不可以默默顯示成 0 點。
           <AlertNote>
-            {`目前算不出這筆訂單的紅利點數:${message ?? "原因不明"}。送出時系統會再算一次。`}
+            {`目前算不出這筆訂單的紅利點數：${message ?? "原因不明"}。送出時系統會再算一次。`}
           </AlertNote>
         )}
         {keptRedeemLine}
@@ -141,7 +141,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
   if (view === "phone_incomplete") {
     return (
       <DetailSection label={label} className="gap-3">
-        <MutedLine>填好客戶電話後,這裡會顯示這筆訂單的紅利點數</MutedLine>
+        <MutedLine>填好客戶電話後，這裡會顯示這筆訂單的紅利點數</MutedLine>
       </DetailSection>
     );
   }
@@ -152,14 +152,14 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
       return (
         <DetailSection label={label} className="gap-3">
           <MutedLine>
-            {`這位會員已下架,本單維持原本的派點 ${props.original.planned} 點與折抵`}
+            {`這位會員已下架，本單維持原本的派點 ${props.original.planned} 點與折抵`}
           </MutedLine>
         </DetailSection>
       );
     }
     return (
       <DetailSection label={label} className="gap-3">
-        <MutedLine>這筆訂單沒有連結會員,不會派點</MutedLine>
+        <MutedLine>這筆訂單沒有連結會員，不會派點</MutedLine>
         {keptRedeemLine}
       </DetailSection>
     );
@@ -226,7 +226,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
 
       {/* 3. 有自訂總金額 / 折扣 ⇒ 常駐 `!`(送出時另外跳確認小卡窗) */}
       {props.reviewRequired ? (
-        <AlertNote>本單有自訂總金額/折扣,系統建議值僅供參考,請確認派點數</AlertNote>
+        <AlertNote>本單有自訂總金額/折扣，系統建議值僅供參考，請確認派點數</AlertNote>
       ) : null}
 
       {/* 編輯模式:重算後的提示(§2.4 裁決 11 / 第 6 題) */}
@@ -251,7 +251,7 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
       <SwitchRow
         id="booking-points-override"
         title="手動修改派點"
-        description={`不用系統建議值,直接設定這筆訂單要派幾點(0~${POINTS_OVERRIDE_MAX.toLocaleString()} 點)。`}
+        description={`不用系統建議值，直接設定這筆訂單要派幾點(0~${POINTS_OVERRIDE_MAX.toLocaleString()} 點)。`}
         checked={props.overrideEnabled}
         onCheckedChange={props.onOverrideEnabledChange}
       >
@@ -290,8 +290,8 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
                 label="折抵點數"
                 htmlFor="booking-points-redeem-input"
                 error={props.redeemValidation.error}
-                helpLabel="說明:點數折抵怎麼換算"
-                help={`目前 ${redeem.pointsUnit ?? "—"} 點 = ${redeem.amountUnit ?? "—"} 元,金額無條件捨去到整數元;本單最多可折應付金額的 ${redeem.maxRatioPercent ?? 0}%。點數在建單當下就會先從會員餘額扣下,訂單取消會退回。`}
+                helpLabel="說明：點數折抵怎麼換算"
+                help={`目前 ${redeem.pointsUnit ?? "—"} 點 = ${redeem.amountUnit ?? "—"} 元，金額無條件捨去到整數元;本單最多可折應付金額的 ${redeem.maxRatioPercent ?? 0}%。點數在建單當下就會先從會員餘額扣下，訂單取消會退回。`}
               >
                 <FieldInput
                   id="booking-points-redeem-input"
@@ -313,13 +313,13 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
           ) : null}
         </SwitchRow>
       ) : redeemNoPoints ? (
-        <MutedLine>這位會員目前沒有可用點數,無法使用點數折抵</MutedLine>
+        <MutedLine>這位會員目前沒有可用點數，無法使用點數折抵</MutedLine>
       ) : (
         keptRedeemLine
       )}
 
       {/* 判斷 24 */}
-      {props.redeemResetNotice ? <AlertNote>客戶電話已變更,紅利折抵已重設</AlertNote> : null}
+      {props.redeemResetNotice ? <AlertNote>客戶電話已變更，紅利折抵已重設</AlertNote> : null}
     </DetailSection>
   );
 }

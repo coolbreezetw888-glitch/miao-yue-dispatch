@@ -31,7 +31,7 @@ function MyPayrollPageInner() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">薪資報表</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          查看自己的抽成明細或薪資扣款明細,可選起訖日期或起訖月份,最長查詢一年範圍
+          查看自己的抽成明細或薪資扣款明細，可選起訖日期或起訖月份，最長查詢一年範圍
         </p>
       </div>
 

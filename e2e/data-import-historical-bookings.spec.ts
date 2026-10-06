@@ -63,7 +63,7 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
 
   // 步驟一。
   await page.getByRole("button", { name: "歷史訂單" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   // 步驟二:上傳 CSV + 欄位對應。
   const customerA = `E2E客戶甲${fixture.runId}`;
@@ -89,7 +89,7 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
   await page.getByRole("button", { name: "下一步" }).click();
 
   // 步驟三:數值對應。
-  await expect(page.getByText("步驟三:服務人員數值對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟三：服務人員數值對應", { exact: true })).toBeVisible();
 
   const existingRow = page.getByTestId(`staff-mapping-${fixture.existingStaffName}`);
   await existingRow.getByRole("combobox").click();
@@ -109,7 +109,7 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
   await page.getByRole("button", { name: "下一步" }).click();
 
   // 步驟四:預覽——兩列都應該顯示「看起來會成功」。
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   const rows = page.locator("table tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("看起來會成功");
@@ -121,7 +121,7 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
 
   // 步驟六:結果報告。
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(
@@ -179,7 +179,7 @@ test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/�
     timeout: LOAD_TIMEOUT,
   });
   await page.getByRole("button", { name: "歷史訂單" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const staffTextValue = `E2E邊界測試服務人員${fixture.runId}`;
   const csv = [
@@ -200,7 +200,7 @@ test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/�
   await mapColumn(page, "final_amount", "訂單金額");
   await page.getByRole("button", { name: "下一步" }).click();
 
-  await expect(page.getByText("步驟三:服務人員數值對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟三：服務人員數值對應", { exact: true })).toBeVisible();
   const row = page.getByTestId(`staff-mapping-${staffTextValue}`);
   const phoneInput = row.getByTestId(`staff-new-phone-${staffTextValue}`);
   const createButton = row.getByRole("button", { name: "建立新服務人員" });
@@ -215,7 +215,7 @@ test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/�
   // 情境二:電話格式不對(不是 09 開頭 10 碼),一樣被擋下。
   await phoneInput.fill("12345");
   await createButton.click();
-  await expect(page.getByText("請輸入正確的手機號碼格式,例如 0912345678")).toBeVisible({
+  await expect(page.getByText("請輸入正確的手機號碼格式，例如 0912345678")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(row).not.toContainText("已對應");
@@ -232,7 +232,7 @@ test("歷史訂單匯入模板下載(§10.4):欄位跟解析邏輯一致，填�
     timeout: LOAD_TIMEOUT,
   });
   await page.getByRole("button", { name: "歷史訂單" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: LOAD_TIMEOUT }),
@@ -288,14 +288,14 @@ test("歷史訂單匯入模板下載(§10.4):欄位跟解析邏輯一致，填�
   await page.getByRole("button", { name: "下一步" }).click();
 
   // 步驟三:對應到 fixture 既有的服務人員(繞過上述無關的既有迴歸)。
-  await expect(page.getByText("步驟三:服務人員數值對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟三：服務人員數值對應", { exact: true })).toBeVisible();
   const staffRow = page.getByTestId(`staff-mapping-${fixture.existingStaffName}`);
   await staffRow.getByRole("combobox").click();
   await page.getByRole("option", { name: fixture.existingStaffName, exact: true }).click();
   await expect(staffRow).toContainText("已對應");
 
   await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   await expect(page.locator("table tbody tr")).toHaveCount(1);
   await expect(page.locator("table tbody tr").first()).toContainText("看起來會成功");
 
@@ -303,7 +303,7 @@ test("歷史訂單匯入模板下載(§10.4):欄位跟解析邏輯一致，填�
   await page.getByRole("button", { name: "確認匯入" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
 
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(

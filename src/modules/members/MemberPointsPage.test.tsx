@@ -208,7 +208,7 @@ describe("§4.2 紅利計算", () => {
     const card = screen.getByTestId("formula-card");
     expect(within(card).getByLabelText("公式名稱")).toHaveValue("公式 1");
     expect(card.textContent).toContain(
-      "這條套用在還沒有自己公式的服務項目。已經單獨設過公式的項目,吃它自己那條,不會兩邊都拿。",
+      "這條套用在還沒有自己公式的服務項目。已經單獨設過公式的項目，吃它自己那條，不會兩邊都拿。",
     );
     expect(within(card).getByTestId("formula-preview")).toHaveTextContent(
       "全部服務項目: 數量 × 1點",
@@ -234,9 +234,9 @@ describe("§4.2 紅利計算", () => {
     ];
     renderPage();
     const cards = screen.getAllByTestId("formula-card");
-    expect(cards[1]!.textContent).toContain("這個項目有自己的公式,不吃『全部服務項目』那條。");
+    expect(cards[1]!.textContent).toContain("這個項目有自己的公式，不吃『全部服務項目』那條。");
     expect(cards[1]!.textContent).toContain(
-      "把這條公式關掉後,這個項目會改吃『全部服務項目』那條。",
+      "把這條公式關掉後，這個項目會改吃『全部服務項目』那條。",
     );
     expect(cards[0]!.textContent).not.toContain("這個項目有自己的公式");
   });
@@ -301,8 +301,8 @@ describe("§4.3 / §4.4", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole("tab", { name: "點數使用" }));
-    await user.type(screen.getByLabelText("兌換比例:點數"), "{Control>}a{/Control}100");
-    await user.type(screen.getByLabelText("兌換比例:金額"), "{Control>}a{/Control}10");
+    await user.type(screen.getByLabelText("兌換比例：點數"), "{Control>}a{/Control}100");
+    await user.type(screen.getByLabelText("兌換比例：金額"), "{Control>}a{/Control}10");
     await user.type(screen.getByLabelText("單次最大使用比例"), "{Control>}a{/Control}50");
     expect(screen.getByTestId("redeem-example").textContent).toContain("5000");
     await user.click(screen.getByRole("button", { name: "儲存設定" }));
@@ -319,7 +319,7 @@ describe("§4.3 / §4.4", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole("tab", { name: "點數使用" }));
-    await user.type(screen.getByLabelText("兌換比例:點數"), "{Control>}a{/Control}100");
+    await user.type(screen.getByLabelText("兌換比例：點數"), "{Control>}a{/Control}100");
     expect(screen.getByRole("button", { name: "儲存設定" })).toBeDisabled();
     expect(screen.getAllByText(/要一起填/).length).toBeGreaterThan(0);
   });
@@ -353,8 +353,8 @@ describe("§4.5 生日獎勵", () => {
     ["failed", "發送失敗"],
     ["skipped_not_bound", "未綁定略過"],
     ["skipped_not_connected", "商家未連線略過"],
-    ["skipped_member_removed", "會員已下架,未發送"],
-    ["skipped_merchant_disabled", "商家已停用,未發送"],
+    ["skipped_member_removed", "會員已下架，未發送"],
+    ["skipped_merchant_disabled", "商家已停用，未發送"],
   ] as const;
 
   it("發送紀錄:7 種 LINE 狀態都顯示對應中文標籤", async () => {
@@ -383,7 +383,7 @@ describe("§4.5 生日獎勵", () => {
     renderPage();
     await user.click(screen.getByRole("tab", { name: "生日獎勵" }));
     expect(
-      screen.getByText("目前尚未完成 LINE 串接,訊息不會發送,點數仍會照發。"),
+      screen.getByText("目前尚未完成 LINE 串接，訊息不會發送，點數仍會照發。"),
     ).toBeInTheDocument();
     cleanup();
     state.lineConnected = true;
@@ -417,7 +417,7 @@ describe("§4.5 生日獎勵", () => {
     renderPage();
     await user.click(screen.getByRole("tab", { name: "生日獎勵" }));
     expect(screen.getByRole("button", { name: "儲存設定" })).toBeDisabled();
-    expect(screen.getByText(/最多 1000 個字,目前 1001 個字/)).toBeInTheDocument();
+    expect(screen.getByText(/最多 1000 個字，目前 1001 個字/)).toBeInTheDocument();
   });
 });
 

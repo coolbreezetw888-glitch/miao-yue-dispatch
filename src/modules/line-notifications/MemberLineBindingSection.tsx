@@ -69,7 +69,7 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
       const result = await generateMemberLineBindingCode(memberId);
       setIssuedCode({ code: result.code, expiresAt: result.expiresAt });
       setNow(Date.now());
-      toast.success("已產生綁定碼,可以出示或口頭告知這位會員");
+      toast.success("已產生綁定碼，可以出示或口頭告知這位會員");
     } catch (err) {
       toast.error("產生綁定碼失敗", { description: getErrorMessage(err) });
     } finally {
@@ -106,10 +106,10 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
         ) : (
           <StatusTag tone="neutral">未綁定</StatusTag>
         )}
-        <HelpToggle label="說明:會員的 LINE 綁定碼怎麼用">
-          產生綁定碼後,當面出示或口頭告知這位會員,請對方在 LINE
-          加商家官方帳號好友,把這組數字當作訊息傳送過去就完成綁定,
-          <strong>不需要會員先有系統登入帳號</strong>。綁定碼有時效,過期就重新產生一組。
+        <HelpToggle label="說明：會員的 LINE 綁定碼怎麼用">
+          產生綁定碼後，當面出示或口頭告知這位會員，請對方在 LINE
+          加商家官方帳號好友，把這組數字當作訊息傳送過去就完成綁定，
+          <strong>不需要會員先有系統登入帳號</strong>。綁定碼有時效，過期就重新產生一組。
         </HelpToggle>
       </div>
 
@@ -147,7 +147,7 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
               </p>
             </div>
           ) : issuedCode && codeExpired ? (
-            <AlertNote>這組綁定碼已經過期,請按「產生綁定碼」重新產生一組。</AlertNote>
+            <AlertNote>這組綁定碼已經過期，請按「產生綁定碼」重新產生一組。</AlertNote>
           ) : null}
         </div>
       )}

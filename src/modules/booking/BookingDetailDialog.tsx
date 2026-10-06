@@ -135,7 +135,7 @@ function RelatedBookingsView({
       ) : bookings.length === 0 ? (
         <EmptyState
           title="這位客戶目前沒有其他訂單紀錄"
-          description="之後這位客戶再預約,會自動列在這裡,方便對照上次做過什麼。"
+          description="之後這位客戶再預約，會自動列在這裡，方便對照上次做過什麼。"
           action={
             <Button type="button" variant="neutral" size="touch" onClick={onBack}>
               返回訂單詳情
@@ -461,7 +461,7 @@ export function BookingDetailDialog({
         // 讓畫面直接顯示最新狀態。
         toast.error("操作失敗", {
           description:
-            "這筆訂單的狀態已經改變(可能有其他人剛處理過),畫面已重新整理,請確認後再操作。",
+            "這筆訂單的狀態已經改變(可能有其他人剛處理過)，畫面已重新整理，請確認後再操作。",
         });
         setReversalAction(null);
         refreshAfterReversal(booking.id);
@@ -629,8 +629,8 @@ export function BookingDetailDialog({
                           確定要把 {openedAssistantName} 從這張訂單移除嗎?
                         </CardAlertDialogTitle>
                         <CardAlertDialogDescription>
-                          只會移除這位協助人員,主服務人員 {primaryStaffName}{" "}
-                          的訂單維持不變,不會取消。
+                          只會移除這位協助人員，主服務人員 {primaryStaffName}{" "}
+                          的訂單維持不變，不會取消。
                         </CardAlertDialogDescription>
                       </CardAlertDialogHeader>
                       <CardAlertDialogFooter>
@@ -653,7 +653,7 @@ export function BookingDetailDialog({
                       <CardAlertDialogHeader>
                         <CardAlertDialogTitle>確定要取消這筆預約嗎?</CardAlertDialogTitle>
                         <CardAlertDialogDescription>
-                          取消後這個時段會恢復可預約,可以填寫取消原因(選填)。
+                          取消後這個時段會恢復可預約，可以填寫取消原因(選填)。
                         </CardAlertDialogDescription>
                       </CardAlertDialogHeader>
                       <FieldTextarea
@@ -782,7 +782,7 @@ export function BookingDetailDialog({
               {openedAsAssistant && showEditAndCancel ? (
                 <AlertNote data-testid="opened-as-assistant-note">
                   這是從協助人員 {openedAssistantName} 的卡片打開的。「移除協助人員」只會移除{" "}
-                  {openedAssistantName};要取消整張訂單,請點主服務人員 {primaryStaffName} 的卡片。
+                  {openedAssistantName};要取消整張訂單，請點主服務人員 {primaryStaffName} 的卡片。
                 </AlertNote>
               ) : null}
               {showAgentReversalNote ? (

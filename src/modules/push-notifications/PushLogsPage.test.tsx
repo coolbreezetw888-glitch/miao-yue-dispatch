@@ -163,7 +163,7 @@ describe("PushLogsPage(#778)", () => {
     expect(recipients[0]).toHaveTextContent("客服 阿金");
     expect(recipients[1]).toHaveTextContent("服務人員 阿金");
     expect(screen.getByTestId("push-log-same-user-note")).toHaveTextContent(
-      "阿金同時是客服和服務人員,所以這裡有 2 列;他的手機只會收到一次。",
+      "阿金同時是客服和服務人員，所以這裡有 2 列;他的手機只會收到一次。",
     );
     expect(screen.getByText("部分送達")).toBeInTheDocument();
   });
@@ -184,9 +184,9 @@ describe("PushLogsPage(#778)", () => {
   it("通知內容收在「查看通知內容」裡(白話原因不在裡面,不用點就看得到)", () => {
     setLogs([makeRow({ id: "a", target_type: "admin", target_id: "admin-1" })]);
     render(<PushLogsPage />);
-    expect(screen.queryByText(/內容:10\/01 10:00 王小明 剪髮/)).toBeNull();
+    expect(screen.queryByText(/內容：10\/01 10:00 王小明 剪髮/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "查看通知內容" }));
-    expect(screen.getByText(/內容:10\/01 10:00 王小明 剪髮/)).toBeInTheDocument();
+    expect(screen.getByText(/內容：10\/01 10:00 王小明 剪髮/)).toBeInTheDocument();
   });
 
   it("hook 一開始就用「全部事件 / 全部結果 / 第 0 頁 / 每頁 20 列」呼叫", () => {

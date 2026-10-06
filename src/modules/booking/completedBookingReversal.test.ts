@@ -89,7 +89,7 @@ describe("原因(§3.3):字數與空白規則跟後端 btrim + char_length 一�
   it("剛好 500 字可以;501 字擋下,訊息跟後端同句型", () => {
     expect(reversalReasonError("字".repeat(REVERSAL_REASON_MAX))).toBeNull();
     expect(reversalReasonError("字".repeat(REVERSAL_REASON_MAX + 1))).toBe(
-      "原因最多 500 個字,目前是 501 個字,請精簡後再送出",
+      "原因最多 500 個字，目前是 501 個字，請精簡後再送出",
     );
   });
 
@@ -119,7 +119,7 @@ describe("跨月(§3.8 / §5.3)", () => {
       "cancel",
     );
     expect(segmentsToText(segments)).toBe(
-      "這張單是 2026 年 9 月 完成的,已經是 1 個月前。那個月的薪資與店家報表可能已經結算發放。取消之後,2026 年 9 月的服務人員抽成會少 $300、營收會少 $1,500,報表數字會跟當時不一樣。請先確認財務端是否需要同步調整。",
+      "這張單是 2026 年 9 月 完成的，已經是 1 個月前。那個月的薪資與店家報表可能已經結算發放。取消之後，2026 年 9 月的服務人員抽成會少 $300、營收會少 $1,500，報表數字會跟當時不一樣。請先確認財務端是否需要同步調整。",
     );
     expect(segments.filter((s) => s.strong).map((s) => s.text)).toEqual([
       "2026 年 9 月",
@@ -144,7 +144,7 @@ describe("跨月(§3.8 / §5.3)", () => {
       ),
     );
     expect(text).toContain("已經是 31 個月前");
-    expect(text).toContain("還原之後,2024 年 3 月的營收會少 $1,500");
+    expect(text).toContain("還原之後，2024 年 3 月的營收會少 $1,500");
     expect(text).not.toContain("抽成");
   });
 
@@ -179,10 +179,10 @@ describe("§3.12 文案守門:帳務會更新 vs 退款不處理是兩件事", (
     expect(bold("revert")).toEqual(["當時"]);
     expect(bold("cancel")).toEqual(["無法再復原", "但實際退款要另外處理"]);
     expect(REVERSAL_EXPLANATIONS.cancel).toBe(
-      "這張單會變成「已取消」,無法再復原。系統會自動更新服務人員抽成與店家報表。但實際退款要另外處理——系統沒有退款功能,請自行與客人結清。",
+      "這張單會變成「已取消」，無法再復原。系統會自動更新服務人員抽成與店家報表。但實際退款要另外處理——系統沒有退款功能，請自行與客人結清。",
     );
     expect(REVERSAL_EXPLANATIONS.revert).toBe(
-      "這張單會退回「已確認」,可以繼續編輯,之後要再按一次「標記完成」。服務人員抽成與會員紅利會先收回,重新完成時依當時的設定重新計算。",
+      "這張單會退回「已確認」，可以繼續編輯，之後要再按一次「標記完成」。服務人員抽成與會員紅利會先收回，重新完成時依當時的設定重新計算。",
     );
   });
 
@@ -293,8 +293,12 @@ describe("預覽 → 畫面資料(§5.2)", () => {
 
   it("跨月:有紅色警告;按鈕文字改「我了解影響,確定{還原/取消}」", () => {
     const p = preview({ is_cross_month: true, months_ago: 1 });
-    expect(buildCompletedBookingReversalView(p, "revert").confirmLabel).toBe("我了解影響,確定還原");
-    expect(buildCompletedBookingReversalView(p, "cancel").confirmLabel).toBe("我了解影響,確定取消");
+    expect(buildCompletedBookingReversalView(p, "revert").confirmLabel).toBe(
+      "我了解影響，確定還原",
+    );
+    expect(buildCompletedBookingReversalView(p, "cancel").confirmLabel).toBe(
+      "我了解影響，確定取消",
+    );
     expect(buildCompletedBookingReversalView(p, "cancel").crossMonthSegments).not.toBeNull();
   });
 
@@ -325,7 +329,7 @@ describe("預覽 → 畫面資料(§5.2)", () => {
 
 describe("確定鈕為什麼不能按(skill 二之三)", () => {
   it("預覽還沒好 ⇒ 請稍候;被擋 ⇒ 擋下原因優先;原因空白 ⇒ 請先填寫原因;都好 ⇒ null", () => {
-    expect(reversalConfirmDisabledReason(null, "誤按")).toBe("正在計算連帶影響,請稍候");
+    expect(reversalConfirmDisabledReason(null, "誤按")).toBe("正在計算連帶影響，請稍候");
     const blocked = buildCompletedBookingReversalView(
       preview({
         can_revert: false,

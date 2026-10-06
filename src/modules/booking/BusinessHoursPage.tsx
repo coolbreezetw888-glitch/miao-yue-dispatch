@@ -171,7 +171,7 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>嚴格工時衝突檢查</CardTitle>
         <CardDescription>
-          開啟後,同一位服務人員(含在其他商家有登記、電話號碼相同的同一人)不能有兩筆時間重疊的預約。
+          開啟後，同一位服務人員(含在其他商家有登記、電話號碼相同的同一人)不能有兩筆時間重疊的預約。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -182,14 +182,16 @@ function StrictConflictCheckToggle({ merchantId }: { merchantId: string }) {
           // 把「不知道」講成「確定開著」。出錯就不顯示開關狀態。
           <ErrorState
             title="讀不到嚴格工時衝突檢查的開關狀態"
-            reason="可能是網路斷了;現在畫面上不會顯示開或關,避免給你錯誤的訊息"
+            reason="可能是網路斷了;現在畫面上不會顯示開或關，避免給你錯誤的訊息"
             onRetry={() => void refetch()}
           />
         ) : (
           <SwitchRow
             title="啟用嚴格工時衝突檢查"
             description={
-              (enabled ?? true) ? "目前已開啟,會擋下時間重疊的預約。" : "目前已關閉,允許重疊預約。"
+              (enabled ?? true)
+                ? "目前已開啟，會擋下時間重疊的預約。"
+                : "目前已關閉，允許重疊預約。"
             }
             checked={enabled ?? true}
             onCheckedChange={handleToggle}
@@ -293,13 +295,13 @@ function BusinessHoursPageInner() {
           預約」這個**假警報**,商家明明設好了卻被告知全部關著。所以要多一個 `!isError`——
           讀不到資料的時候我們根本不知道有沒有設定,不能亂講。 */}
       {!isLoading && !isError && !hasAnySetting ? (
-        <AlertNote>尚未設定營業時間,目前所有日期都無法被預約,請先完成以下設定。</AlertNote>
+        <AlertNote>尚未設定營業時間，目前所有日期都無法被預約，請先完成以下設定。</AlertNote>
       ) : null}
 
       <Card>
         <CardHeader>
           <CardTitle>每週營業時間</CardTitle>
-          <CardDescription>沒有設定的那一天視為公休,無法建立預約。</CardDescription>
+          <CardDescription>沒有設定的那一天視為公休，無法建立預約。</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2.5">
           {isLoading ? (
@@ -309,7 +311,7 @@ function BusinessHoursPageInner() {
             // 商家會以為自己的營業時間被清空,而且一動開關就真的寫進去了。出錯就不給表單。
             <ErrorState
               title="讀不到營業時間設定"
-              reason="可能是網路斷了,或你沒有管理營業時間的權限;現在先不顯示每一天的設定,避免你把空白當成真的沒設定"
+              reason="可能是網路斷了，或你沒有管理營業時間的權限;現在先不顯示每一天的設定，避免你把空白當成真的沒設定"
               onRetry={() => void refetchRows()}
             />
           ) : (

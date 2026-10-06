@@ -58,14 +58,14 @@ test("產業轉移精靈完整流程(§4.4):建立新商家 → 選會員 → �
   });
 
   // 步驟一:建立新商家(直接沿用既有的新增分店表單,選一個跟來源商家不同的產業:到府派工)。
-  await expect(page.getByText("步驟一:建立新商家", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟一：建立新商家", { exact: true })).toBeVisible();
   await page.locator("#merchant-name").fill(fixture.newMerchantName);
   await page.locator("#merchant-industry").click();
   await page.getByRole("option", { name: "到府派工" }).click();
   await page.getByRole("button", { name: "建立新商家並繼續" }).click();
 
   // 步驟二:選擇要搬遷的會員。
-  await expect(page.getByText("步驟二:選擇要搬遷的會員", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟二：選擇要搬遷的會員", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   const memberRow = page.locator("label", { hasText: fixture.memberName });
@@ -74,12 +74,12 @@ test("產業轉移精靈完整流程(§4.4):建立新商家 → 選會員 → �
   await page.getByRole("button", { name: /下一步\(已選 1 位\)/ }).click();
 
   // 步驟三:確認搬遷。
-  await expect(page.getByText("步驟三:確認搬遷", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟三：確認搬遷", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "確認搬遷" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認搬遷" }).click();
 
   // 步驟四:結果 + 後續提醒。
-  await expect(page.getByText("步驟四:結果 + 後續提醒", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟四：結果 + 後續提醒", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(

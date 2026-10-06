@@ -82,11 +82,11 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
   await mapColumn(page, "name", "姓名");
   await mapColumn(page, "phone", "電話");
   await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "下一步" }).click();
   await page.getByRole("button", { name: "確認匯入" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -98,10 +98,10 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
 
   const card = page.locator(".rounded-xl.border", { hasText: "會員匯入" }).first();
   await expect(card).toBeVisible();
-  await expect(card).toContainText("總筆數:3");
-  await expect(card).toContainText("成功:2");
-  await expect(card).toContainText("失敗:1");
-  await expect(card).toContainText("略過:0");
+  await expect(card).toContainText("總筆數：3");
+  await expect(card).toContainText("成功：2");
+  await expect(card).toContainText("失敗：1");
+  await expect(card).toContainText("略過：0");
   await expect(card.getByText("已完成")).toBeVisible();
 
   // 展開失敗明細。
@@ -111,10 +111,10 @@ test("匯入紀錄頁(§4.2):列出批次、展開失敗明細、一鍵復原並
   // 一鍵復原。
   await card.getByRole("button", { name: "復原" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認復原" }).click();
-  await expect(page.getByText(/復原完成:成功復原 2 筆，跳過 0 筆/)).toBeVisible({
+  await expect(page.getByText(/復原完成：成功復原 2 筆，跳過 0 筆/)).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(card).toContainText("復原結果:成功 2 筆，跳過 0 筆");
+  await expect(card).toContainText("復原結果：成功 2 筆，跳過 0 筆");
   await expect(card.getByText("已復原")).toBeVisible();
   await expect(card.getByRole("button", { name: "復原" })).toHaveCount(0);
 
@@ -163,11 +163,11 @@ test("匯入紀錄頁(§4.2)情境②:匯入後手動編輯其中一位會員,�
   await mapColumn(page, "name", "姓名");
   await mapColumn(page, "phone", "電話");
   await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "下一步" }).click();
   await page.getByRole("button", { name: "確認匯入" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -206,19 +206,19 @@ test("匯入紀錄頁(§4.2)情境②:匯入後手動編輯其中一位會員,�
   });
   const card = page
     .locator(".rounded-xl.border", { hasText: "會員匯入" })
-    .filter({ hasText: "總筆數:2" })
+    .filter({ hasText: "總筆數：2" })
     .first();
   await expect(card).toBeVisible();
-  await expect(card).toContainText("成功:2");
+  await expect(card).toContainText("成功：2");
   await expect(card.getByText("已完成")).toBeVisible();
 
   // 一鍵復原:預期 1 筆成功復原(乾淨的那位)、1 筆跳過(被編輯過的那位)。
   await card.getByRole("button", { name: "復原" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認復原" }).click();
-  await expect(page.getByText(/復原完成:成功復原 1 筆，跳過 1 筆/)).toBeVisible({
+  await expect(page.getByText(/復原完成：成功復原 1 筆，跳過 1 筆/)).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(card).toContainText("復原結果:成功 1 筆，跳過 1 筆");
+  await expect(card).toContainText("復原結果：成功 1 筆，跳過 1 筆");
   await expect(card).toContainText("這位會員匯入後已被編輯過，無法自動復原，請手動確認處理");
   await expect(card.getByText("已復原")).toBeVisible();
   await expect(card.getByRole("button", { name: "復原" })).toHaveCount(0);

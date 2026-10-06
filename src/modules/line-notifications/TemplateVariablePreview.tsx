@@ -83,7 +83,7 @@ export function TemplateVariablePreview({
         </p>
         {variables.length === 0 ? (
           <p className="text-[13px] leading-relaxed text-info-strong">
-            這個事件目前沒有可用變數,文案裡打什麼就會原封不動送出去。
+            這個事件目前沒有可用變數，文案裡打什麼就會原封不動送出去。
           </p>
         ) : (
           <table className="w-full table-fixed border-collapse text-left">

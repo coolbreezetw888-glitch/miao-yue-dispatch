@@ -168,7 +168,7 @@ function PolicyPreviewDialog({
           政策內容可以很長(點數規則 + 退換貨 + 個資聲明),一定要能捲。 */}
       <FullPageLayerContent
         title="會員政策(客戶端預覽)"
-        subtitle="這是模擬客戶未來在客戶端看到的排版樣子,不是真的串接客戶端頁面(客戶端尚未開發)。"
+        subtitle="這是模擬客戶未來在客戶端看到的排版樣子，不是真的串接客戶端頁面(客戶端尚未開發)。"
       >
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <p className="break-words text-sm font-semibold text-foreground">
@@ -246,14 +246,14 @@ function TierFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯會員等級" : "新增會員等級"}</CardDialogTitle>
           <CardDialogDescription>
-            純分類標籤用途,不跟紅利點數倍率或其他權益掛勾。
+            純分類標籤用途，不跟紅利點數倍率或其他權益掛勾。
           </CardDialogDescription>
         </CardDialogHeader>
         <form onSubmit={handleSubmit} id={TIER_FORM_ID} className="flex flex-col gap-3.5">
           <FormField label="等級名稱" htmlFor="tier-name" required>
             <FieldInput
               id="tier-name"
-              placeholder="例如:一般會員、VIP 會員"
+              placeholder="例如：一般會員、VIP 會員"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -261,8 +261,8 @@ function TierFormDialog({
           <FormField
             label="顯示順序"
             htmlFor="tier-sort-order"
-            help="數字小的排前面,例如一般會員 0、VIP 1。留空或填不是數字的東西會當成 0。"
-            helpLabel="說明:顯示順序的數字怎麼填"
+            help="數字小的排前面，例如一般會員 0、VIP 1。留空或填不是數字的東西會當成 0。"
+            helpLabel="說明：顯示順序的數字怎麼填"
           >
             <FieldInput
               id="tier-sort-order"
@@ -367,7 +367,7 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
         <div className="min-w-0">
           <CardTitle>會員等級</CardTitle>
           <CardDescription>
-            商家自訂等級名稱(例如一般/VIP/超級VIP),純分類標籤用途,不跟紅利點數倍率或其他權益掛勾。
+            商家自訂等級名稱(例如一般/VIP/超級VIP)，純分類標籤用途，不跟紅利點數倍率或其他權益掛勾。
           </CardDescription>
         </div>
         <div className="shrink-0 [&>*]:w-full sm:[&>*]:w-auto">{createTrigger}</div>
@@ -378,13 +378,13 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
         ) : isError ? (
           <ErrorState
             title="讀不到會員等級"
-            reason="可能是網路斷了;現在先不顯示等級清單,避免你把空白當成「等級都不見了」而重新建一份"
+            reason="可能是網路斷了;現在先不顯示等級清單，避免你把空白當成「等級都不見了」而重新建一份"
             onRetry={() => void refetchTiers()}
           />
         ) : !tiers || tiers.length === 0 ? (
           <EmptyState
             title="還沒有任何會員等級"
-            description="按上方的「新增等級」建立第一個。建立之後,會員卡片上會顯示等級標籤,LINE 再行銷通知也可以依等級整批挑人。"
+            description="按上方的「新增等級」建立第一個。建立之後，會員卡片上會顯示等級標籤，LINE 再行銷通知也可以依等級整批挑人。"
           />
         ) : (
           <ul className="flex flex-col gap-2.5">
@@ -503,7 +503,7 @@ function MemberSettingsPageInner() {
         <CardHeader>
           <CardTitle>會員政策</CardTitle>
           <CardDescription>
-            啟用後,這段內容之後會顯示給客戶端(模組 13 之後串接)看到,例如點數使用規則、隱私聲明等。
+            啟用後，這段內容之後會顯示給客戶端(模組 13 之後串接)看到，例如點數使用規則、隱私聲明等。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -512,7 +512,7 @@ function MemberSettingsPageInner() {
           ) : isSettingsError ? (
             <ErrorState
               title="讀不到會員政策設定"
-              reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值當成自己的設定存回去"
+              reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
               onRetry={() => void refetchSettings()}
             />
           ) : (
@@ -521,7 +521,7 @@ function MemberSettingsPageInner() {
               <SwitchRow
                 id="policy-enabled"
                 title="啟用會員政策"
-                description="關閉時,即使填了內容,客戶端也不會顯示。"
+                description="關閉時，即使填了內容，客戶端也不會顯示。"
                 checked={policyEnabled}
                 onCheckedChange={setPolicyEnabled}
               />
@@ -530,7 +530,7 @@ function MemberSettingsPageInner() {
                 <AutoHeightTextarea
                   value={policyContent}
                   onChange={setPolicyContent}
-                  placeholder="例如:會員點數不可折抵現金、退換貨規則、個資使用聲明⋯"
+                  placeholder="例如：會員點數不可折抵現金、退換貨規則、個資使用聲明⋯"
                 />
               </FormField>
 

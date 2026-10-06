@@ -77,7 +77,7 @@ describe("parseAmountInput 拒絕的寫法(Number() 會放行、原生 number �
   it("不是數字的訊息是白話的,不含技術名詞", () => {
     const result = parseAmountInput("1e3");
     expect(result.ok).toBe(false);
-    expect((result as { error: string }).error).toBe("請輸入數字金額,只能填數字和小數點");
+    expect((result as { error: string }).error).toBe("請輸入數字金額，只能填數字和小數點");
   });
 });
 
@@ -90,7 +90,7 @@ describe('integerOnly(原本 step="1" 的欄位:每天扣固定金額、月薪)'
     expect(parseAmountInput("30000.5", { integerOnly: true })).toEqual({
       ok: false,
       value: null,
-      error: "這個欄位只能填整數,不能有小數點",
+      error: "這個欄位只能填整數，不能有小數點",
     });
   });
 
@@ -134,7 +134,7 @@ describe("noun(訊息裡的名詞)", () => {
     expect((parseAmountInput("") as { error: string }).error).toBe("請輸入金額");
     expect((parseAmountInput("-1") as { error: string }).error).toBe("金額不能是負數");
     expect((parseAmountInput("1e3") as { error: string }).error).toBe(
-      "請輸入數字金額,只能填數字和小數點",
+      "請輸入數字金額，只能填數字和小數點",
     );
   });
 
@@ -143,7 +143,7 @@ describe("noun(訊息裡的名詞)", () => {
     expect((parseAmountInput("", opts) as { error: string }).error).toBe("請輸入點數");
     expect((parseAmountInput("-1", opts) as { error: string }).error).toBe("點數不能是負數");
     expect((parseAmountInput("1e3", opts) as { error: string }).error).toBe(
-      "請輸入數字點數,只能填數字和小數點",
+      "請輸入數字點數，只能填數字和小數點",
     );
   });
 
@@ -155,7 +155,7 @@ describe("noun(訊息裡的名詞)", () => {
   it("整數規則 / min / max 的訊息本來就沒有名詞,不受影響", () => {
     expect(
       (parseAmountInput("1.5", { integerOnly: true, noun: "點數" }) as { error: string }).error,
-    ).toBe("這個欄位只能填整數,不能有小數點");
+    ).toBe("這個欄位只能填整數，不能有小數點");
     expect((parseAmountInput("101", { max: 100, noun: "點數" }) as { error: string }).error).toBe(
       "不能大於 100",
     );

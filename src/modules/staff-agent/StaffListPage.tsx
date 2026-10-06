@@ -270,7 +270,7 @@ function AvailabilityWindowsEditor({
     <div className="flex flex-col gap-2">
       <FormSectionTitle>可預約時段</FormSectionTitle>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        這位服務人員自己願意接單的時段,不必等於商家整體營業時間。
+        這位服務人員自己願意接單的時段，不必等於商家整體營業時間。
       </p>
       {/* skill 二:「現在的狀態跟使用者以為的不一樣」用 `!` 常駐——開了無時段限制,底下的設定會被忽略;
           或是完全沒設定時段,這個人其實還約不到。 */}
@@ -538,8 +538,8 @@ function StaffFormDialog({
               skill 二:這是「現在的狀態跟使用者以為的不一樣」(存了不等於能登入)→ `!` 常駐。 */}
           <AlertNote>
             {isEdit
-              ? "這裡只會更新基本資料,不會影響登入帳號——登入帳號的開通/權限,請到人員清單使用「邀請登入」或「服務人員權限」。"
-              : "這裡先建立基本資料,登入帳號要在儲存完成後,回到人員清單裡按「邀請登入」才會真的開通。"}
+              ? "這裡只會更新基本資料，不會影響登入帳號——登入帳號的開通/權限，請到人員清單使用「邀請登入」或「服務人員權限」。"
+              : "這裡先建立基本資料，登入帳號要在儲存完成後，回到人員清單裡按「邀請登入」才會真的開通。"}
           </AlertNote>
 
           <div className="flex flex-col gap-4">
@@ -565,8 +565,8 @@ function StaffFormDialog({
                 label="電話"
                 htmlFor="staff-phone"
                 required
-                helpLabel="說明:電話要怎麼填"
-                help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+                helpLabel="說明：電話要怎麼填"
+                help="請輸入台灣手機號碼，09 開頭共 10 碼數字，例如 0912345678。"
               >
                 <FieldInput
                   id="staff-phone"
@@ -614,7 +614,7 @@ function StaffFormDialog({
                 值直接來自常數白名單。 */}
             <FormField
               label="計酬類型"
-              helpLabel="說明:計酬類型會影響什麼"
+              helpLabel="說明：計酬類型會影響什麼"
               help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能);抽成制則是用「可預約時段」調整接單時間。"
             >
               <ChoiceChipGroup
@@ -638,10 +638,10 @@ function StaffFormDialog({
             {activeServiceItemsLoading ? (
               <LoadingSkeleton variant="lines" rows={2} />
             ) : !merchantHasAnyServiceItems ? (
-              <FormPlaceholder>目前尚無服務項目可選,請先到「服務項目」設定</FormPlaceholder>
+              <FormPlaceholder>目前尚無服務項目可選，請先到「服務項目」設定</FormPlaceholder>
             ) : !staff ? (
               <FormPlaceholder>
-                請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可勾選服務項目。
+                請先儲存這位服務人員的基本資料，儲存後重新點選「編輯」即可勾選服務項目。
               </FormPlaceholder>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -697,7 +697,7 @@ function StaffFormDialog({
             <div className="flex flex-col gap-2">
               <FormSectionTitle>可預約時段</FormSectionTitle>
               <FormPlaceholder>
-                請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可設定可預約時段。
+                請先儲存這位服務人員的基本資料，儲存後重新點選「編輯」即可設定可預約時段。
               </FormPlaceholder>
             </div>
           )}
@@ -728,7 +728,7 @@ function StaffFormDialog({
                       </>
                     }
                     htmlFor={`staff-${field.key}`}
-                    helpLabel={`說明:${field.label}怎麼填`}
+                    helpLabel={`說明：${field.label}怎麼填`}
                     help={field.description}
                   >
                     {/* min/max:刻意跟資料庫端的 CHECK 約束對齊(常數都在 types.ts,兩邊共用同一份)。
@@ -859,11 +859,11 @@ function InviteStaffLoginDialog({
       onInvited();
       if (result.alreadyHadAccount) {
         toast.success("已直接開通登入", {
-          description: "這個 email 已經有秒約帳號,已直接開通登入,對方下次登入就能看到這間店。",
+          description: "這個 email 已經有秒約帳號，已直接開通登入，對方下次登入就能看到這間店。",
         });
       } else {
         toast.success("邀請信已寄出", {
-          description: "請提醒對方檢查信箱(含垃圾郵件夾),點連結設定密碼後即可登入。",
+          description: "請提醒對方檢查信箱(含垃圾郵件夾)，點連結設定密碼後即可登入。",
         });
       }
     } catch (err) {
@@ -879,8 +879,8 @@ function InviteStaffLoginDialog({
         <CardDialogHeader>
           <CardDialogTitle className="break-words">邀請「{staff?.name}」開通登入</CardDialogTitle>
           <CardDialogDescription>
-            對方會收到一封邀請信,點連結設定密碼後即可用手機登入;如果這個 email
-            已經有秒約帳號,會直接開通登入。
+            對方會收到一封邀請信，點連結設定密碼後即可用手機登入;如果這個 email
+            已經有秒約帳號，會直接開通登入。
           </CardDialogDescription>
         </CardDialogHeader>
         <form id={INVITE_FORM_ID} onSubmit={handleInvite}>
@@ -1055,7 +1055,7 @@ function StaffListInner() {
       <Card>
         <CardHeader>
           <CardTitle>服務人員名單</CardTitle>
-          <CardDescription>包含已上架、未上架與已移除的服務人員,可用下方分類篩選</CardDescription>
+          <CardDescription>包含已上架、未上架與已移除的服務人員，可用下方分類篩選</CardDescription>
           {staffList && staffList.length > 0 ? (
             <Tabs
               value={listFilter}
@@ -1088,13 +1088,13 @@ function StaffListInner() {
             // 服務人員」加一顆「新增第一位」,不只是讓人以為名單不見了,還會誘導他重複建立。
             <ErrorState
               title="讀不到服務人員名單"
-              reason="可能是網路斷了,或你沒有查看服務人員的權限;現在先不顯示名單,避免你把空白當成「人員不見了」而重複新增"
+              reason="可能是網路斷了，或你沒有查看服務人員的權限;現在先不顯示名單，避免你把空白當成「人員不見了」而重複新增"
               onRetry={() => void refetchStaffList()}
             />
           ) : !staffList || staffList.length === 0 ? (
             <EmptyState
               title="還沒有任何服務人員"
-              description="新增服務人員後,就能為他們排預約、設定可預約時段與服務項目。"
+              description="新增服務人員後，就能為他們排預約、設定可預約時段與服務項目。"
               action={
                 <Button
                   type="button"
@@ -1300,7 +1300,7 @@ function StaffListInner() {
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>確定要移除這位服務人員嗎?</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這是軟刪除,資料不會不見,之後隨時可以重新上架恢復。
+              這是軟刪除，資料不會不見，之後隨時可以重新上架恢復。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>
@@ -1331,8 +1331,8 @@ function StaffListInner() {
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
               這個動作無法復原!只有在這位服務人員完全沒有任何歷史訂單/請假/
-              抽成紀錄時,系統才會真的允許刪除;如果有歷史紀錄牽連,系統會擋下
-              並告訴你原因,這個人會維持「已移除」狀態。
+              抽成紀錄時，系統才會真的允許刪除;如果有歷史紀錄牽連，系統會擋下
+              並告訴你原因，這個人會維持「已移除」狀態。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>

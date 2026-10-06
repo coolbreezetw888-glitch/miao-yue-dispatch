@@ -18,40 +18,40 @@
 const EXACT_MESSAGE_MAP: Record<string, string> = {
   // --- 登入 ---
   "invalid login credentials": "Email 或密碼不正確",
-  "email not confirmed": "這個 Email 還沒完成驗證,請到信箱點擊驗證連結",
-  "user not found": "找不到這個帳號,請確認 Email 是否正確,或先建立帳號",
+  "email not confirmed": "這個 Email 還沒完成驗證，請到信箱點擊驗證連結",
+  "user not found": "找不到這個帳號，請確認 Email 是否正確，或先建立帳號",
   "invalid email or password": "Email 或密碼不正確",
 
   // --- 註冊 ---
-  "user already registered": "這個 Email 已經註冊過了,請直接登入或使用忘記密碼",
+  "user already registered": "這個 Email 已經註冊過了，請直接登入或使用忘記密碼",
   "a user with this email address has already been registered":
-    "這個 Email 已經註冊過了,請直接登入或使用忘記密碼",
+    "這個 Email 已經註冊過了，請直接登入或使用忘記密碼",
   "signup requires a valid password": "請輸入密碼",
-  "signups not allowed for this instance": "目前沒有開放自行註冊,請聯絡系統管理員",
-  "email address is invalid": "Email 格式不正確,請檢查有沒有打錯",
-  "unable to validate email address: invalid format": "Email 格式不正確,請檢查有沒有打錯",
+  "signups not allowed for this instance": "目前沒有開放自行註冊，請聯絡系統管理員",
+  "email address is invalid": "Email 格式不正確，請檢查有沒有打錯",
+  "unable to validate email address: invalid format": "Email 格式不正確，請檢查有沒有打錯",
 
   // --- 頻率限制 ---
-  "email rate limit exceeded": "嘗試太頻繁,請稍後再試",
-  "over email send rate limit": "驗證信寄送太頻繁,請稍後再試",
-  "over request rate limit": "嘗試太頻繁,請稍後再試",
-  "too many requests": "嘗試太頻繁,請稍後再試",
+  "email rate limit exceeded": "嘗試太頻繁，請稍後再試",
+  "over email send rate limit": "驗證信寄送太頻繁，請稍後再試",
+  "over request rate limit": "嘗試太頻繁，請稍後再試",
+  "too many requests": "嘗試太頻繁，請稍後再試",
 
   // --- 密碼 / 重設密碼 ---
   "new password should be different from the old password":
-    "新密碼不能跟舊密碼一樣,請換一組新的密碼",
+    "新密碼不能跟舊密碼一樣，請換一組新的密碼",
   "password should be at least 6 characters": "密碼至少要 6 個字元",
-  "password is too short": "密碼太短了,請至少輸入 6 個字元",
+  "password is too short": "密碼太短了，請至少輸入 6 個字元",
 
   // --- 連結 / 憑證失效 ---
-  "email link is invalid or has expired": "這個連結已經失效或過期,請重新操作一次取得新的連結",
-  "token has expired or is invalid": "這個連結已經失效或過期,請重新操作一次取得新的連結",
-  "auth session missing": "登入狀態已經失效,請重新登入一次",
-  "invalid refresh token: refresh token not found": "登入狀態已經失效,請重新登入一次",
+  "email link is invalid or has expired": "這個連結已經失效或過期，請重新操作一次取得新的連結",
+  "token has expired or is invalid": "這個連結已經失效或過期，請重新操作一次取得新的連結",
+  "auth session missing": "登入狀態已經失效，請重新登入一次",
+  "invalid refresh token: refresh token not found": "登入狀態已經失效，請重新登入一次",
 
   // --- 伺服器端 ---
   "database error saving new user":
-    "建立帳號時伺服器發生錯誤,請稍後再試一次,持續發生請聯絡系統管理員",
+    "建立帳號時伺服器發生錯誤，請稍後再試一次，持續發生請聯絡系統管理員",
 };
 
 /** 帶變數、無法精準比對的訊息,用規則處理。順序有意義:由上往下第一個命中的就採用。 */
@@ -59,7 +59,7 @@ const PATTERN_RULES: { pattern: RegExp; toMessage: (match: RegExpMatchArray) => 
   {
     // 例:"For security purposes, you can only request this after 46 seconds."
     pattern: /you can only request this after (\d+) seconds?/i,
-    toMessage: (match) => `操作太頻繁,請等 ${match[1]} 秒後再試一次`,
+    toMessage: (match) => `操作太頻繁，請等 ${match[1]} 秒後再試一次`,
   },
   {
     // 例:"Password should be at least 8 characters."(長度要求由 Supabase 專案設定決定)
@@ -69,7 +69,7 @@ const PATTERN_RULES: { pattern: RegExp; toMessage: (match: RegExpMatchArray) => 
   {
     // 例:"Email address \"foo@bar\" is invalid"
     pattern: /email address .* is invalid/i,
-    toMessage: () => "Email 格式不正確,請檢查有沒有打錯",
+    toMessage: () => "Email 格式不正確，請檢查有沒有打錯",
   },
 ];
 
@@ -88,7 +88,7 @@ function normalize(message: string): string {
  * 可以追查沒預期到的錯誤,而且之後看到使用者回報某句沒被翻譯的英文,就知道該往這張表補一條。
  */
 export function translateAuthErrorMessage(message: string | null | undefined): string {
-  if (!message) return "發生未知錯誤,請稍後再試";
+  if (!message) return "發生未知錯誤，請稍後再試";
 
   const normalized = normalize(message);
   const exact = EXACT_MESSAGE_MAP[normalized];

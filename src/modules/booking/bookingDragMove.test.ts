@@ -120,14 +120,17 @@ describe("resolveMoveMode(對照表 §二,跟 pgTAP calendar_drag_01 同一張�
     const diag = resolveMoveMode(
       mainDrag({ targetStaffId: B, timeChanged: true, targetStaffName: "小美" }),
     );
-    expect(same).toEqual({ kind: "forbidden", reason: "小美已經是助手,請先用編輯改掉" });
+    expect(same).toEqual({ kind: "forbidden", reason: "小美已經是助手，請先用編輯改掉" });
     expect(diag).toEqual(same);
   });
 
   it("列 6(Q2 衍生邊界 1):assistant 拖回自己那一欄,不論時間 → 無操作 + 輕提示", () => {
     const same = resolveMoveMode(assistantDrag({ targetStaffId: B, timeChanged: false }));
     const moved = resolveMoveMode(assistantDrag({ targetStaffId: B, timeChanged: true }));
-    expect(same).toEqual({ kind: "noop", hint: "助手沒有自己的時間,要改時間請拖主服務人員的色塊" });
+    expect(same).toEqual({
+      kind: "noop",
+      hint: "助手沒有自己的時間，要改時間請拖主服務人員的色塊",
+    });
     // 時間維度完全忽略:助手同欄改時間跟放回原位是同一個結果(pgTAP #12)。
     expect(moved).toEqual(same);
   });
@@ -190,7 +193,7 @@ describe("formatMoveHint(對照表 §二「前端提示」欄)", () => {
         { kind: "move", mode: "reassign_main", timeChanged: true, staffChanged: true },
         ctx,
       ),
-    ).toBe("轉派給 王大明,並改時間 → 14:30");
+    ).toBe("轉派給 王大明，並改時間 → 14:30");
   });
 
   it("列 7 reassign_assistant → 「助手改為 王大明」(不提時間)", () => {

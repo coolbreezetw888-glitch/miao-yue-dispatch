@@ -246,7 +246,7 @@ export function describeScheduleCell(
 ): ScheduleCellDescription {
   // 優先權 1:請假。
   if (day.on_leave) {
-    return { tone: "leave", label: `休假:${day.on_leave.leave_type_name}` };
+    return { tone: "leave", label: `休假：${day.on_leave.leave_type_name}` };
   }
 
   const openOverrideRanges = collectRanges(day.overrides.filter((o) => o.is_available));

@@ -63,7 +63,7 @@ describe("describeScheduleCell(規格書 §4.4 第 2 點顯示優先權)", () =>
       overrides: [{ start_time: "09:00:00", end_time: "10:00:00", is_available: false }],
       on_leave: { leave_record_id: "r1", leave_type_name: "特休" },
     };
-    expect(describeScheduleCell(day, false)).toEqual({ tone: "leave", label: "休假:特休" });
+    expect(describeScheduleCell(day, false)).toEqual({ tone: "leave", label: "休假：特休" });
   });
 
   it("優先權 2:原本有時段、但整天被單日例外關閉(只有關閉、沒有開啟的例外)顯示「臨時關閉」", () => {

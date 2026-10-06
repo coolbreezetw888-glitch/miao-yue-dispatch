@@ -20,7 +20,7 @@ export default function NewMerchantPage() {
 
   async function handleSubmit(values: MerchantIntakeFormValues) {
     if (!currentMerchant) {
-      throw new Error("目前沒有可以參考的集團,請先完成開店流程");
+      throw new Error("目前沒有可以參考的集團，請先完成開店流程");
     }
 
     await createMerchantInGroup({
@@ -68,7 +68,7 @@ export default function NewMerchantPage() {
         <div className="rounded-2xl border border-border bg-card p-8 shadow-sm">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">新增分店</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            這間新分店會加進目前的集團,你會自動成為這間新分店的管理員。
+            這間新分店會加進目前的集團，你會自動成為這間新分店的管理員。
           </p>
           <div className="mt-8">
             <MerchantIntakeForm

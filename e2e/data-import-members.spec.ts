@@ -74,7 +74,7 @@ test("會員匯入精靈完整流程(§3.3/§4.1):含缺必填欄位的資料列
 
   // 步驟一:選擇匯入類型。
   await page.getByRole("button", { name: "會員資料" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   // 步驟二:上傳 CSV(1 筆完整、1 筆缺必填欄位) + 欄位對應。
   //
@@ -100,7 +100,7 @@ test("會員匯入精靈完整流程(§3.3/§4.1):含缺必填欄位的資料列
   await page.getByRole("button", { name: "下一步" }).click();
 
   // 步驟四:預覽——核心 bug 修正驗證:缺必填欄位那一列必須顯示「會失敗」，不能顯示「看起來會成功」。
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   const rows = page.locator("table tbody tr");
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(0)).toContainText("看起來會成功");
@@ -110,12 +110,12 @@ test("會員匯入精靈完整流程(§3.3/§4.1):含缺必填欄位的資料列
 
   // 步驟五:確認匯入。
   await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("步驟五:確認匯入", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟五：確認匯入", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "確認匯入" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
 
   // 步驟六:結果報告——驗證預覽判斷跟實際匯入結果一致:1 成功 + 1 失敗，且失敗原因跟預覽相同。
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(readStatCard(page, "總筆數")).resolves.toBe("2");
@@ -137,7 +137,7 @@ test("會員資料匯入模板下載(§10.4):欄位跟解析邏輯一致,填入�
     timeout: LOAD_TIMEOUT,
   });
   await page.getByRole("button", { name: "會員資料" }).click();
-  await expect(page.getByText("步驟二:上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: LOAD_TIMEOUT }),
@@ -172,7 +172,7 @@ test("會員資料匯入模板下載(§10.4):欄位跟解析邏輯一致,填入�
   await mapColumn(page, "phone", "電話");
 
   await page.getByRole("button", { name: "下一步" }).click();
-  await expect(page.getByText("步驟四:預覽", { exact: true })).toBeVisible();
+  await expect(page.getByText("步驟四：預覽", { exact: true })).toBeVisible();
   await expect(page.locator("table tbody tr")).toHaveCount(1);
   await expect(page.locator("table tbody tr").first()).toContainText("看起來會成功");
 
@@ -180,7 +180,7 @@ test("會員資料匯入模板下載(§10.4):欄位跟解析邏輯一致,填入�
   await page.getByRole("button", { name: "確認匯入" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確認匯入" }).click();
 
-  await expect(page.getByText("步驟六:結果報告", { exact: true })).toBeVisible({
+  await expect(page.getByText("步驟六：結果報告", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(readStatCard(page, "成功")).resolves.toBe("1");

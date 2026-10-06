@@ -60,7 +60,7 @@ export function RequireStaffPayrollAccess({ children }: { children: ReactNode })
     return (
       <div className="mx-auto max-w-3xl px-5 py-12">
         <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground">
-          尚未開放此功能,請洽商家管理員開通「抽成/薪資報表檢視」權限。
+          尚未開放此功能，請洽商家管理員開通「抽成/薪資報表檢視」權限。
         </p>
       </div>
     );

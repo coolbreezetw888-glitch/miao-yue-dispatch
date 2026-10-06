@@ -150,7 +150,7 @@ function CategoryManager({
     <Card>
       <CardHeader>
         <CardTitle>服務分類</CardTitle>
-        <CardDescription>數量無上限,自行新增管理。</CardDescription>
+        <CardDescription>數量無上限，自行新增管理。</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <form onSubmit={handleAdd} className="flex gap-2">
@@ -168,7 +168,7 @@ function CategoryManager({
 
         {categories.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            目前還沒有任何分類,可先新增或直接建立未分類的服務項目。
+            目前還沒有任何分類，可先新增或直接建立未分類的服務項目。
           </p>
         ) : (
           <ul className="flex flex-col gap-2.5">
@@ -259,7 +259,7 @@ function CategoryManager({
                 確定要刪除「{deletingCategory?.name}」這個分類嗎?
               </CardAlertDialogTitle>
               <CardAlertDialogDescription>
-                刪除後,底下的服務項目會變回未分類,不會被刪除。
+                刪除後，底下的服務項目會變回未分類，不會被刪除。
               </CardAlertDialogDescription>
             </CardAlertDialogHeader>
             <CardAlertDialogFooter>
@@ -442,8 +442,8 @@ function ServiceItemFormDialog({
               htmlFor="item-price"
               required
               error={priceError}
-              helpLabel="說明:金額要怎麼填"
-              help="只能填數字和小數點,例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法,也不能填文字。"
+              helpLabel="說明：金額要怎麼填"
+              help="只能填數字和小數點，例如 1200 或 1200.5。不接受 1e3、0x10 這種寫法，也不能填文字。"
             >
               {/* skill 二之七:金額靠右、左側放 $、tabular-nums。驗證走 parseAmountInput
                   (handleSubmit),錯誤顯示在下面一行、一改內容就消失。 */}
@@ -461,8 +461,8 @@ function ServiceItemFormDialog({
               label="工時(分鐘)"
               htmlFor="item-duration"
               required
-              helpLabel="說明:工時要怎麼填"
-              help="可以填 0,表示這個項目不額外佔用行事曆時段。"
+              helpLabel="說明：工時要怎麼填"
+              help="可以填 0，表示這個項目不額外佔用行事曆時段。"
             >
               <FieldInput
                 id="item-duration"
@@ -614,7 +614,7 @@ function ServiceItemsPageInner() {
           ) : !items || items.length === 0 ? (
             <EmptyState
               title="還沒有任何服務項目"
-              description="建立服務項目後,排預約時就能直接挑選,系統會自動帶入金額與工時。"
+              description="建立服務項目後，排預約時就能直接挑選，系統會自動帶入金額與工時。"
               action={
                 <Button
                   type="button"

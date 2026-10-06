@@ -398,7 +398,7 @@ export interface SendTestPushResult {
 export class PushTestRateLimitedError extends Error {
   readonly isRateLimited = true;
   constructor() {
-    super("測試通知發太多次了,請等一分鐘再試");
+    super("測試通知發太多次了，請等一分鐘再試");
     this.name = "PushTestRateLimitedError";
   }
 }

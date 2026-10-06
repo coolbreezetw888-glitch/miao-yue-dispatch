@@ -75,13 +75,13 @@ test("排班一覽(§4.4):整天請假顯示灰底+假別名稱,取消後恢復�
 
   // 請假中的服務人員,今天這一格要顯示「休假:{假別名稱}」且是灰底(bg-muted,見
   // SchedulingOverviewPage.tsx 的 CELL_TONE_CLASSES.leave)。
-  const leaveCell = page.getByRole("link", { name: `休假:${LEAVE_TYPE_NAME}`, exact: true });
+  const leaveCell = page.getByRole("link", { name: `休假：${LEAVE_TYPE_NAME}`, exact: true });
   await expect(leaveCell).toBeVisible();
   await expect(leaveCell).toHaveClass(/bg-muted\b/);
 
   // 正常服務人員的所有格子都不應該出現「休假」字樣(不受影響)。
   const staffNormalRow = page.locator("tr", { hasText: fixture.staffNormalName });
-  await expect(staffNormalRow.getByText("休假:", { exact: false })).toHaveCount(0);
+  await expect(staffNormalRow.getByText("休假：", { exact: false })).toHaveCount(0);
 
   // 取消請假後(直接呼叫跟前端相同的 cancel_staff_leave RPC,見 fixture 檔頭說明),重新整理
   // 應該恢復正常顯示——因為兩位服務人員都設了 unlimited_backend_edit=true(#977 第 3 批起排班一覽的
@@ -92,7 +92,7 @@ test("排班一覽(§4.4):整天請假顯示灰底+假別名稱,取消後恢復�
   await expect(page.getByText(fixture.staffOnLeaveName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   await expect(
-    page.getByRole("link", { name: `休假:${LEAVE_TYPE_NAME}`, exact: true }),
+    page.getByRole("link", { name: `休假：${LEAVE_TYPE_NAME}`, exact: true }),
   ).toHaveCount(0);
   const staffOnLeaveRow = page.locator("tr", { hasText: fixture.staffOnLeaveName });
   await expect(staffOnLeaveRow.getByText("不受時段限制", { exact: false }).first()).toBeVisible();
@@ -116,9 +116,9 @@ test("行事曆(§4.5):請假當天整欄灰底不可建單,非請假日期/其�
   const normalColumn = page.getByTestId(`staff-column-${fixture.staffNormalId}`);
 
   // 請假服務人員:欄位標題顯示「休假:{假別名稱}」,且有一個涵蓋全高、標示不可預約的灰底遮罩。
-  await expect(leaveColumn.getByText(`休假:${LEAVE_TYPE_NAME}`, { exact: false })).toBeVisible();
+  await expect(leaveColumn.getByText(`休假：${LEAVE_TYPE_NAME}`, { exact: false })).toBeVisible();
   await expect(
-    leaveColumn.getByLabel(`休假:${LEAVE_TYPE_NAME},無法預約`, { exact: true }),
+    leaveColumn.getByLabel(`休假：${LEAVE_TYPE_NAME}，無法預約`, { exact: true }),
   ).toBeVisible();
   // 不可點擊建單:請假時整欄不會渲染任何時段格子/下拉選單(見 CalendarPage.tsx `s.on_leave ?
   // null : slots.map(...)`),用「沒有任何 button 元素」佐證這一欄底下沒有可互動的建單入口。
@@ -141,7 +141,7 @@ test("行事曆(§4.5):請假當天整欄灰底不可建單,非請假日期/其�
     timeout: LOAD_TIMEOUT,
   });
   await expect(
-    leaveColumn.getByLabel(`休假:${LEAVE_TYPE_NAME},無法預約`, { exact: true }),
+    leaveColumn.getByLabel(`休假：${LEAVE_TYPE_NAME}，無法預約`, { exact: true }),
   ).toHaveCount(0);
   await expect(leaveColumn.getByText("休假", { exact: false })).toHaveCount(0);
 });

@@ -139,7 +139,7 @@ function LeaveTypeFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯假別" : "新增假別"}</CardDialogTitle>
           <CardDialogDescription>
-            商家自己命名的請假分類,登記請假時可選用。想叫什麼名字、新增幾筆都可以。
+            商家自己命名的請假分類，登記請假時可選用。想叫什麼名字、新增幾筆都可以。
           </CardDialogDescription>
         </CardDialogHeader>
 
@@ -157,7 +157,7 @@ function LeaveTypeFormDialog({
             <FieldTextarea
               id="leave-type-description"
               rows={3}
-              placeholder="例如:這個假別適用的情境說明"
+              placeholder="例如：這個假別適用的情境說明"
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
@@ -305,14 +305,14 @@ function LeaveTypesPageInner() {
             // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「還沒有任何假別」,商家會以為假別被刪掉了。
             <ErrorState
               title="讀不到假別清單"
-              reason="可能是網路斷了,或你沒有管理假別的權限"
+              reason="可能是網路斷了，或你沒有管理假別的權限"
               onRetry={() => void refetch()}
             />
           ) : !leaveTypes || leaveTypes.length === 0 ? (
             // 下一步(頁首的「新增假別」)就在同一個畫面上 ⇒ 不放第二顆主要按鈕,改用一句話指路。
             <EmptyState
               title="還沒有任何假別"
-              description="建立假別後,在「請假紀錄」幫月薪制服務人員登記請假時就能選用。請用右上角的「新增假別」建立第一個。"
+              description="建立假別後，在「請假紀錄」幫月薪制服務人員登記請假時就能選用。請用右上角的「新增假別」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

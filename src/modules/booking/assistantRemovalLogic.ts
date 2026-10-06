@@ -14,7 +14,7 @@ export const ASSISTANT_REMOVED_ADD_LABEL = "再加助手";
 /** 規格書一-2 主腦定稿文案。 */
 export function buildAssistantRemovedMessage(info: AssistantRemovedInfo): string {
   const names = info.assistantNames.length > 0 ? info.assistantNames.join("、") : "協助人員";
-  return `${names} 已從這張訂單移除,主服務人員 ${info.primaryName} 的訂單維持不變。要再加一位協助人員嗎?`;
+  return `${names} 已從這張訂單移除，主服務人員 ${info.primaryName} 的訂單維持不變。要再加一位協助人員嗎?`;
 }
 
 /**

@@ -97,7 +97,7 @@ export function EditMyStaffProfileDialog({
     // 主表單送出更早撞到資料庫約束。
     const phoneError = getPhoneValidationError();
     if (phoneError) {
-      toast.error(phoneError, { description: "頭像已上傳,請先修正電話欄位再儲存其他資料" });
+      toast.error(phoneError, { description: "頭像已上傳，請先修正電話欄位再儲存其他資料" });
       return;
     }
     await updateMyStaffProfile({
@@ -173,8 +173,8 @@ export function EditMyStaffProfileDialog({
             label="電話"
             htmlFor="my-staff-phone"
             required
-            helpLabel="說明:電話要怎麼填"
-            help="請輸入台灣手機號碼,09 開頭共 10 碼數字,例如 0912345678。"
+            helpLabel="說明：電話要怎麼填"
+            help="請輸入台灣手機號碼，09 開頭共 10 碼數字，例如 0912345678。"
           >
             <FieldInput
               id="my-staff-phone"

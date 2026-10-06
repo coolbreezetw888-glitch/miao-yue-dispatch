@@ -196,7 +196,7 @@ export function formatMoveSuccessMessage(
     return `${customerName} 預約的助手已改為 ${nameOf(result.next.assistant_staff_id)}`;
   const staff = nameOf(result.next.staff_id);
   return result.time_changed
-    ? `已把 ${customerName} 的預約轉派給 ${staff},並改到 ${time}`
+    ? `已把 ${customerName} 的預約轉派給 ${staff}，並改到 ${time}`
     : `已把 ${customerName} 的預約轉派給 ${staff}`;
 }
 
@@ -330,12 +330,12 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
             timeChanged: target.startMin !== bStartMin,
             targetStaffName,
           })
-        : { kind: "forbidden", reason: "找不到這筆預約的主服務人員,請重新整理" };
+        : { kind: "forbidden", reason: "找不到這筆預約的主服務人員，請重新整理" };
 
       let hint = formatMoveHint(resolution, { targetStaffName, startTime: target.startTime });
       // §四 [1]:整天休假的欄位在拖拉中顯示為不可放置(後端才是真正擋下的那一層,這裡只是提示)。
       if (resolution.kind === "move" && onLeaveStaffIds.has(target.staffId)) {
-        hint = `⚠️ ${targetStaffName} 這天休假,放開會被擋下`;
+        hint = `⚠️ ${targetStaffName} 這天休假，放開會被擋下`;
       }
 
       const column = geometry.rects.find((c) => c.staffId === target.staffId) ?? geometry.rects[0]!;
@@ -718,7 +718,7 @@ export function PastDropConfirmDialog({
           <CardAlertDialogTitle>要移到已經過去的時間嗎?</CardAlertDialogTitle>
           <CardAlertDialogDescription>
             你正在把 {request?.customerName ?? ""} 的預約移到已經過去的 {request?.time ?? ""}
-            ,確定嗎?
+            ，確定嗎?
           </CardAlertDialogDescription>
         </CardAlertDialogHeader>
         <CardAlertDialogFooter>

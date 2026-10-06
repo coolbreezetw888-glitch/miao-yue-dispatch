@@ -440,14 +440,14 @@ function OrdersPageInner() {
         // 「沒有符合篩選條件的訂單」吃掉,商家以為訂單不見了。照 A 批三頁已經做對的寫法。
         <ErrorState
           title="讀不到訂單清單"
-          reason="可能是網路斷了,或你沒有查看訂單的權限;現在先不顯示清單,避免你把空白當成「訂單不見了」"
+          reason="可能是網路斷了，或你沒有查看訂單的權限;現在先不顯示清單，避免你把空白當成「訂單不見了」"
           onRetry={() => void refetchBookings()}
         />
       ) : dateGroups.length === 0 ? (
         // 下一步(調整篩選)就在同一個畫面上、一眼看得到,用一句話指路即可(PageScaffold EmptyState 的唯一例外)。
         <EmptyState
           title="沒有符合篩選條件的訂單"
-          description="可以換一個狀態分頁籤、清掉關鍵字,或放寬上方的日期範圍與服務人員條件。"
+          description="可以換一個狀態分頁籤、清掉關鍵字，或放寬上方的日期範圍與服務人員條件。"
         />
       ) : (
         <div className="space-y-6">
@@ -713,7 +713,7 @@ function OrdersTabAccessGate({ children }: { children: ReactNode }) {
         {/* 下一步不在這個畫面上(要找管理員開權限),但也不是點一顆按鈕能解決的事,所以用說明指路。 */}
         <EmptyState
           title="尚未開放「訂單管理」"
-          description="請洽商家管理員開通「訂單管理」權限,開通後這裡會列出所有訂單。"
+          description="請洽商家管理員開通「訂單管理」權限，開通後這裡會列出所有訂單。"
         />
       </div>
     );

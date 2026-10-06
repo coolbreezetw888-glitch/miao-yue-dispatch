@@ -27,16 +27,16 @@ import {
  *    「資料庫 CHECK 允許值」的鏡像 —— 那個角色由 label 表獨自承擔。
  */
 export const PUSH_LOG_ACTION_HINTS: Record<string, string> = {
-  event_disabled: "到「推播通知設定」把這個事件的開關打開,之後的通知才會發出去。",
+  event_disabled: "到「推播通知設定」把這個事件的開關打開，之後的通知才會發出去。",
   no_recipient:
-    "商家開關是開的,但店裡沒有人把這個事件打開。請要收到通知的人到首頁的「手機推播通知」卡片,把這個事件打開。",
-  personal_disabled: "請這位服務人員到自己首頁的「手機推播通知」卡片,把這個事件打開。",
-  no_subscription: "請這個人用手機登入秒約,在首頁的「手機推播通知」卡片按「開啟通知」。",
-  no_target: "建立或修改這筆訂單時指派服務人員,系統才知道要通知誰。",
+    "商家開關是開的，但店裡沒有人把這個事件打開。請要收到通知的人到首頁的「手機推播通知」卡片，把這個事件打開。",
+  personal_disabled: "請這位服務人員到自己首頁的「手機推播通知」卡片，把這個事件打開。",
+  no_subscription: "請這個人用手機登入秒約，在首頁的「手機推播通知」卡片按「開啟通知」。",
+  no_target: "建立或修改這筆訂單時指派服務人員，系統才知道要通知誰。",
 };
 
 /** 資料庫寫進來一個 label 表沒有的原因時,畫面上顯示的後綴(讓人一眼看出是系統缺文案,不是他的錯)。 */
-export const UNKNOWN_SKIP_REASON_SUFFIX = "(系統還沒有這個原因的說明,請回報給我們)";
+export const UNKNOWN_SKIP_REASON_SUFFIX = "(系統還沒有這個原因的說明，請回報給我們)";
 
 /**
  * 跳過原因的白話說明。查不到的話**不吞掉**:回傳原始代碼 + 明確的後綴,讓「資料庫多了新原因、
@@ -124,15 +124,15 @@ export function describeRecipientOutcome(row: PushNotificationLogRow): string {
       return `已送到 ${row.device_count} 台裝置`;
     case "partially_sent": {
       const base = `${row.device_count} 台裝置中只有 ${row.success_count} 台送達`;
-      return row.error_detail ? `${base}。錯誤內容:${row.error_detail}` : base;
+      return row.error_detail ? `${base}。錯誤內容：${row.error_detail}` : base;
     }
     case "failed": {
       const base =
         row.device_count > 0 ? `${row.device_count} 台裝置都沒有送達` : "沒有任何裝置送達";
-      return row.error_detail ? `${base}。錯誤內容:${row.error_detail}` : base;
+      return row.error_detail ? `${base}。錯誤內容：${row.error_detail}` : base;
     }
     default:
-      return `未知狀態:${row.status}`;
+      return `未知狀態：${row.status}`;
   }
 }
 
@@ -307,5 +307,5 @@ export function groupPushLogRows(
 export function formatSameUserNote(note: SameUserNote): string {
   const who = note.name ?? "同一個人";
   const roles = note.targetTypes.map((t) => PUSH_TARGET_TYPE_LABELS[t]).join("和");
-  return `${who}同時是${roles},所以這裡有 ${note.targetTypes.length} 列;他的手機只會收到一次。`;
+  return `${who}同時是${roles}，所以這裡有 ${note.targetTypes.length} 列;他的手機只會收到一次。`;
 }

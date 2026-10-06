@@ -243,8 +243,8 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
           <FormField
             label="電話"
             htmlFor="edit-member-phone"
-            help="電話是選填,留空也可以。它只是用來在建單時查出這位客戶,不是會員的唯一身分。要填的話手機或市話都可以。"
-            helpLabel="說明:會員電話要不要填、有什麼用"
+            help="電話是選填，留空也可以。它只是用來在建單時查出這位客戶，不是會員的唯一身分。要填的話手機或市話都可以。"
+            helpLabel="說明：會員電話要不要填、有什麼用"
           >
             <FieldInput
               id="edit-member-phone"
@@ -266,8 +266,8 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
           <FormField
             label="生日"
             htmlFor="edit-member-birthday"
-            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
-            helpLabel="說明:填生日會發生什麼事"
+            help="填了生日，系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話，7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
+            helpLabel="說明：填生日會發生什麼事"
           >
             <FieldDate
               id="edit-member-birthday"
@@ -296,7 +296,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
           <FormField label="推薦人">
             {/* 🟡 這是「為什麼這一格不能改」⇒ 常駐說明,不收進 `?`(skill 二,第一類)。 */}
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-              推薦人只能在建立會員時設定,之後無法變更。
+              推薦人只能在建立會員時設定，之後無法變更。
             </p>
           </FormField>
           <FormField label="備註" htmlFor="edit-member-notes">
@@ -356,7 +356,7 @@ function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: (
         <CardDialogHeader>
           <CardDialogTitle>列入黑名單</CardDialogTitle>
           <CardDialogDescription>
-            純警告用途,不會阻擋這位客戶之後的建單。這個狀態不會顯示給客戶端看見。
+            純警告用途，不會阻擋這位客戶之後的建單。這個狀態不會顯示給客戶端看見。
           </CardDialogDescription>
         </CardDialogHeader>
         <form onSubmit={handleSubmit} id={BLACKLIST_FORM_ID}>
@@ -364,8 +364,8 @@ function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: (
             label="原因"
             htmlFor="blacklist-reason"
             required
-            help="之後有人在建單時選到這位客戶,系統會把這個原因一起顯示出來提醒他,所以寫得越具體越有用(例:多次預約未到)。"
-            helpLabel="說明:黑名單原因會顯示在哪裡"
+            help="之後有人在建單時選到這位客戶，系統會把這個原因一起顯示出來提醒他，所以寫得越具體越有用(例：多次預約未到)。"
+            helpLabel="說明：黑名單原因會顯示在哪裡"
           >
             <FieldTextarea
               id="blacklist-reason"
@@ -458,7 +458,7 @@ function MemberDetailInner() {
       setCopyLabel("已複製");
       setTimeout(() => setCopyLabel("複製"), 1500);
     } catch {
-      toast.error("複製失敗,請手動抄寫推薦碼");
+      toast.error("複製失敗，請手動抄寫推薦碼");
     }
   }
 
@@ -611,15 +611,15 @@ function MemberDetailInner() {
             {identityStatus === "unverified" ? (
               member.identity_first_verified_at ? (
                 <AlertNote>
-                  這位客戶之前完成過身分驗證,但目前<strong>已經解除</strong>,所以現在
+                  這位客戶之前完成過身分驗證，但目前<strong>已經解除</strong>，所以現在
                   <strong>收不到任何通知</strong>
-                  。會員資料、點數與紀錄都還在,點數照樣會累積。要讓他重新收到通知,請用下面的「LINE
+                  。會員資料、點數與紀錄都還在，點數照樣會累積。要讓他重新收到通知，請用下面的「LINE
                   綁定」再產生一次綁定碼給他。
                 </AlertNote>
               ) : (
                 <AlertNote>
-                  這位客戶還沒有完成身分驗證,所以<strong>收不到任何通知</strong>
-                  。點數照樣會累積。要讓他收到通知,請用下面的「LINE 綁定」產生綁定碼給他。
+                  這位客戶還沒有完成身分驗證，所以<strong>收不到任何通知</strong>
+                  。點數照樣會累積。要讓他收到通知，請用下面的「LINE 綁定」產生綁定碼給他。
                 </AlertNote>
               )
             ) : null}
@@ -629,7 +629,7 @@ function MemberDetailInner() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-[13px] text-muted-foreground">電話驗證狀態</p>
-                <p className="text-xs text-muted-foreground">此為人工標記,非簡訊驗證</p>
+                <p className="text-xs text-muted-foreground">此為人工標記，非簡訊驗證</p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {member.phone_verified ? (
@@ -655,7 +655,7 @@ function MemberDetailInner() {
                 <p className="text-[13px] text-muted-foreground">黑名單狀態</p>
                 {member.is_blacklisted && member.blacklist_reason ? (
                   <p className="break-words text-xs text-muted-foreground">
-                    原因:{member.blacklist_reason}
+                    原因：{member.blacklist_reason}
                   </p>
                 ) : null}
               </div>
@@ -722,7 +722,7 @@ function MemberDetailInner() {
             // 📌 這是「這位會員目前的事實」,不是待辦 ⇒ 不放跳走的下一步按鈕(見檔頭說明)。
             <EmptyState
               title="這位會員目前沒有連結任何訂單"
-              description="在行事曆建單時,輸入這位會員的電話並選到他,那張單就會出現在這裡。"
+              description="在行事曆建單時，輸入這位會員的電話並選到他，那張單就會出現在這裡。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">
@@ -761,7 +761,7 @@ function MemberDetailInner() {
             // 📌 同上:這是事實不是待辦,不放跳走的下一步按鈕。
             <EmptyState
               title="這位會員目前還沒有推薦過任何人"
-              description="把他的推薦碼給新客戶,新客戶建立會員時填上,就會出現在這裡並自動核發推薦獎勵。"
+              description="把他的推薦碼給新客戶，新客戶建立會員時填上，就會出現在這裡並自動核發推薦獎勵。"
             />
           ) : (
             // 🔴 這裡是 ListCard(skill 二之五「一張卡片 = 一筆資料」),**不是** DetailLinkRow。

@@ -119,7 +119,7 @@ test("E1 從協助卡移除 → 擋流程提示關不掉 → 維持現狀:主服
   const prompt = await removeFromAssistantBlock(page, r1.id);
   await expect(prompt).toContainText("已移除協助人員");
   await expect(prompt).toContainText(
-    `${fixture.staffNames[1]} 已從這張訂單移除,主服務人員 ${fixture.staffNames[0]} 的訂單維持不變。要再加一位協助人員嗎?`,
+    `${fixture.staffNames[1]} 已從這張訂單移除，主服務人員 ${fixture.staffNames[0]} 的訂單維持不變。要再加一位協助人員嗎?`,
   );
   await page.screenshot({ path: `${SHOT_DIR}/req873-E1-prompt-1280.png` });
 

@@ -226,7 +226,7 @@ describe("建單/編輯表單:不讓服務人員看到這則內部備註(#853 / 
     getBookingMock.mockResolvedValue(editingDetail(false));
     renderForm(BOOKING_ID);
     await waitFor(() => expect(hideNotesSwitch()).toBeInTheDocument());
-    expect(screen.getByText(/只影響這一筆,不影響其他訂單/)).toBeInTheDocument();
+    expect(screen.getByText(/只影響這一筆，不影響其他訂單/)).toBeInTheDocument();
   });
 
   it("#859:內部備註欄位的標籤只寫「客戶看不到」,不再寫死「服務人員看得到」", async () => {
@@ -234,7 +234,7 @@ describe("建單/編輯表單:不讓服務人員看到這則內部備註(#853 / 
     renderForm(BOOKING_ID);
     await waitFor(() => expect(hideNotesSwitch()).toBeInTheDocument());
     // 旁邊就有一個可以改變這件事的開關,再寫死「服務人員看得到」會是同一畫面兩句話互相矛盾。
-    expect(screen.queryByText(/客戶看不到,服務人員看得到/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/客戶看不到，服務人員看得到/)).not.toBeInTheDocument();
   });
 
   it("#857:編輯一筆「已經勾起來」的訂單,開啟表單時開關就是開著的", async () => {

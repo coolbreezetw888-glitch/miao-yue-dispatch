@@ -346,7 +346,7 @@ test("事件開關(§7.4/裁決 Q7):服務人員開啟通知後出現 4 個開�
   await expandPushEventSection(page);
 
   // 還沒開通任何裝置時,只給一句說明,不顯示開關清單。
-  await expect(page.getByText("先開啟通知,才能選擇要收哪幾種。")).toBeVisible({
+  await expect(page.getByText("先開啟通知，才能選擇要收哪幾種。")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -477,7 +477,7 @@ test("測試通知(§6.3 核心):送出後先顯示「正在確認」,收到 ser
 
   // 分支一:waiting —— 只陳述「已送出、正在確認」,不承諾任何事。
   const status = page.getByTestId("push-test-status");
-  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+  await expect(status).toHaveText("已送出測試通知，正在確認你的裝置是否收到⋯", {
     timeout: LOAD_TIMEOUT,
   });
 
@@ -495,6 +495,8 @@ test("測試通知(§6.3 核心):送出後先顯示「正在確認」,收到 ser
     "已確認生效",
     "通知功能正常",
     "設定完成,你會收到通知",
+    // #975 起畫面文字改用全形逗號,同一句的全形寫法也要擋。
+    "設定完成，你會收到通知",
     "已成功開啟並生效",
   ]) {
     expect(sectionText).not.toContain(forbidden);
@@ -512,7 +514,7 @@ test("測試通知(§6.3):無關的 service worker 訊息不會讓畫面誤報�
   await subscribeThisDevice(page);
 
   const status = page.getByTestId("push-test-status");
-  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+  await expect(status).toHaveText("已送出測試通知，正在確認你的裝置是否收到⋯", {
     timeout: LOAD_TIMEOUT,
   });
 
@@ -520,7 +522,7 @@ test("測試通知(§6.3):無關的 service worker 訊息不會讓畫面誤報�
   await dispatchServiceWorkerMessage(page, { type: "push-received" });
   await dispatchServiceWorkerMessage(page, { type: "something-else" });
 
-  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯");
+  await expect(status).toHaveText("已送出測試通知，正在確認你的裝置是否收到⋯");
   await expect(status).not.toContainText("已確認");
 });
 
@@ -540,12 +542,12 @@ test("測試通知(§6.5 核心):15 秒內沒有任何回報 → 顯示「沒有
   await subscribeThisDevice(page);
 
   const status = page.getByTestId("push-test-status");
-  await expect(status).toHaveText("已送出測試通知,正在確認你的裝置是否收到⋯", {
+  await expect(status).toHaveText("已送出測試通知，正在確認你的裝置是否收到⋯", {
     timeout: LOAD_TIMEOUT,
   });
 
   // 分支三:no_ack。⚠️ 這裡要等 §6.3 第 4 點的 15 秒逾時,所以 timeout 放寬到 30 秒。
-  await expect(status).toContainText("通知已送出,但系統沒有收到你裝置的回報", {
+  await expect(status).toContainText("通知已送出，但系統沒有收到你裝置的回報", {
     timeout: 30_000,
   });
   await expect(status).toContainText("如果你的手機剛剛有跳出通知就沒問題");
@@ -567,7 +569,7 @@ test("測試通知(§7.5):這個人一台裝置都沒開通時,顯示「沒有�
   await subscribeThisDevice(page);
 
   await expect(page.getByTestId("push-test-status")).toHaveText(
-    "你還沒有在任何裝置上開啟通知,所以沒有東西可以測試",
+    "你還沒有在任何裝置上開啟通知，所以沒有東西可以測試",
     { timeout: LOAD_TIMEOUT },
   );
 });
@@ -581,12 +583,12 @@ test("測試通知(§6.6):「再發一次測試通知」被頻率限制擋下時
 
   // 開啟通知時自動打的那一次就已經被擋下了。
   const status = page.getByTestId("push-test-status");
-  await expect(status).toHaveText("測試通知發太多次了,請等一分鐘再試", { timeout: LOAD_TIMEOUT });
+  await expect(status).toHaveText("測試通知發太多次了，請等一分鐘再試", { timeout: LOAD_TIMEOUT });
 
   // §7.5 第 4 點:測試失敗不可以讓「開啟通知」這件事看起來失敗 —— 卡片仍然是已開通狀態。
   await expect(page.getByText("這台裝置已開啟通知")).toBeVisible();
 
   // 常駐的「再發一次測試通知」按鈕存在,而且再按一次仍然是同一句話。
   await page.getByRole("button", { name: "再發一次測試通知" }).click();
-  await expect(status).toHaveText("測試通知發太多次了,請等一分鐘再試", { timeout: LOAD_TIMEOUT });
+  await expect(status).toHaveText("測試通知發太多次了，請等一分鐘再試", { timeout: LOAD_TIMEOUT });
 });

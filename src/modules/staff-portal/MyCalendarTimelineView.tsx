@@ -116,7 +116,7 @@ export function MyCalendarTimelineView({
             color: calendarStateBlockStyle(effectiveCalendarStateStyles, "full_day_leave").color,
           }}
         >
-          休假:{onLeave.leave_type_name}
+          休假：{onLeave.leave_type_name}
         </p>
       ) : null}
       <div

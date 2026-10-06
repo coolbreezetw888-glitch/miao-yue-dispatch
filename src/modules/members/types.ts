@@ -89,8 +89,8 @@ export const REWARD_CONDITION_MODE_LABELS: Record<RewardConditionMode, string> =
   none: "不限制",
   phone_verified: "只看電話已驗證",
   line_bound: "只看 LINE 已綁定",
-  either: "電話已驗證或 LINE 已綁定,任一即可",
-  both: "電話已驗證且 LINE 已綁定,兩者都要符合",
+  either: "電話已驗證或 LINE 已綁定，任一即可",
+  both: "電話已驗證且 LINE 已綁定，兩者都要符合",
 };
 
 /** 紅利系統重構 §1.5:分類帳 transaction_type 從 5 種擴成 10 種(CHECK 在批次 1)。 */
@@ -227,8 +227,8 @@ export const BIRTHDAY_LINE_STATUS_LABELS: Record<BirthdayLineStatus, string> = {
   failed: "發送失敗",
   skipped_not_bound: "未綁定略過",
   skipped_not_connected: "商家未連線略過",
-  skipped_member_removed: "會員已下架,未發送",
-  skipped_merchant_disabled: "商家已停用,未發送",
+  skipped_member_removed: "會員已下架，未發送",
+  skipped_merchant_disabled: "商家已停用，未發送",
 };
 
 /** get_birthday_bonus_grants 回傳的一筆生日發送紀錄。 */

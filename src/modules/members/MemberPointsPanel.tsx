@@ -147,8 +147,8 @@ function RedeemPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
             htmlFor="redeem-points"
             required
             error={pointsError}
-            help="這裡只登記點數的異動紀錄,不會自動反映在任何訂單金額上 —— 折抵多少錢要自己在那張訂單裡改。只能填大於 0 的整數。"
-            helpLabel="說明:登記兌換會不會影響訂單金額"
+            help="這裡只登記點數的異動紀錄，不會自動反映在任何訂單金額上 —— 折抵多少錢要自己在那張訂單裡改。只能填大於 0 的整數。"
+            helpLabel="說明：登記兌換會不會影響訂單金額"
           >
             {/* 🔴 2026-09-30:錯誤改成顯示在欄位下面(skill 二之七),不是只丟 toast;
                 一改內容就消失。inputMode 維持 numeric(這一格不需要負號)。 */}
@@ -264,7 +264,7 @@ function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
           <CardDialogTitle>手動調整點數</CardDialogTitle>
           <CardDialogDescription>
             目前餘額 <span className="font-semibold tabular-nums">{member.points_balance}</span>{" "}
-            點,不能調整成負數。
+            點，不能調整成負數。
           </CardDialogDescription>
         </CardDialogHeader>
         <form onSubmit={handleSubmit} id={ADJUST_FORM_ID} className="flex flex-col gap-3.5">
@@ -273,8 +273,8 @@ function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
             htmlFor="adjust-delta"
             required
             error={deltaError}
-            help="填正數是幫他加點(例:5),填負數是扣點(例:-5)。只能填不為 0 的整數,而且扣完之後的餘額不能變成負數。"
-            helpLabel="說明:調整點數怎麼填正負"
+            help="填正數是幫他加點(例：5)，填負數是扣點(例：-5)。只能填不為 0 的整數，而且扣完之後的餘額不能變成負數。"
+            helpLabel="說明：調整點數怎麼填正負"
           >
             {/* ⚠️ 這一格要能輸入負號,所以刻意不給 inputMode="numeric"
                 (iOS 的數字鍵盤沒有負號,給了商家就打不出 -5)。**2026-09-30 再次確認保留現狀**,
@@ -365,13 +365,13 @@ export function MemberPointsPanel({ member }: { member: MemberDetail }) {
         {isHistoryError ? (
           <ErrorState
             title="讀不到點數異動紀錄"
-            reason="可能是網路斷了;現在先不顯示紀錄,避免你把空白當成「這位會員沒有任何點數異動」"
+            reason="可能是網路斷了;現在先不顯示紀錄，避免你把空白當成「這位會員沒有任何點數異動」"
             onRetry={() => void refetchHistory()}
           />
         ) : !pointHistory || pointHistory.length === 0 ? (
           <EmptyState
             title="目前沒有任何點數異動紀錄"
-            description="訂單完成核發點數、生日獎勵、推薦獎勵,以及上面的登記兌換 / 手動調整,都會逐筆記在這裡。"
+            description="訂單完成核發點數、生日獎勵、推薦獎勵，以及上面的登記兌換 / 手動調整，都會逐筆記在這裡。"
           />
         ) : (
           <ul className="flex flex-col gap-1.5">

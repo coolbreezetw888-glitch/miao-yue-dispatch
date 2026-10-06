@@ -120,8 +120,8 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>稅金設定</CardTitle>
         <CardDescription>
-          建單表單開啟稅金開關時,預設帶入這裡的模式跟數字(客服可以針對個別訂單再調整數字,但不能
-          改變模式)。模式要改成別種,只能在這裡改。
+          建單表單開啟稅金開關時，預設帶入這裡的模式跟數字(客服可以針對個別訂單再調整數字，但不能
+          改變模式)。模式要改成別種，只能在這裡改。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -132,7 +132,7 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
           // 使用者以為那是自己存過的設定,一按儲存就把真實設定覆寫掉。出錯就不給表單。
           <ErrorState
             title="讀不到稅金設定"
-            reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的預設值當成自己的設定存回去"
+            reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的預設值當成自己的設定存回去"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -155,11 +155,11 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
               htmlFor="merchant-tax-value"
               required
               error={parsedTax.ok ? null : parsedTax.error}
-              helpLabel="說明:稅金數字怎麼填"
+              helpLabel="說明：稅金數字怎麼填"
               help={
                 taxMode === "percentage"
-                  ? "填 0~100 的數字,例如 5 代表 5%。"
-                  : "填固定金額(元),每筆開啟稅金的訂單都會加上這個數字。"
+                  ? "填 0~100 的數字，例如 5 代表 5%。"
+                  : "填固定金額(元)，每筆開啟稅金的訂單都會加上這個數字。"
               }
             >
               <div className="flex items-center gap-2">
@@ -203,10 +203,10 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
             {/* 🔴 2026-09-30:填錯時擋住儲存,不能只顯示紅字。按鈕變灰就要說明原因(skill 二之三)。 */}
             {parsedTax.ok ? null : (
               <AlertNote>
-                上面的稅金數字填錯了(標紅那一格),修好之後才能儲存。
+                上面的稅金數字填錯了(標紅那一格)，修好之後才能儲存。
                 {taxMode === "percentage"
-                  ? "百分比模式只能填 0~100 的數字,例如 5。"
-                  : "固定金額模式只能填 0 以上的數字,例如 30。"}
+                  ? "百分比模式只能填 0~100 的數字，例如 5。"
+                  : "固定金額模式只能填 0 以上的數字，例如 30。"}
               </AlertNote>
             )}
             {/* 這一頁唯一的主要動作是頁首的「新增付款方式」,所以這顆儲存用次要樣式(skill 二之三:
@@ -311,7 +311,7 @@ function PaymentMethodFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯付款方式" : "新增付款方式"}</CardDialogTitle>
           <CardDialogDescription>
-            商家自己命名的付款方式項目,建單時可選用。想叫什麼名字、新增幾筆都可以。
+            商家自己命名的付款方式項目，建單時可選用。想叫什麼名字、新增幾筆都可以。
           </CardDialogDescription>
         </CardDialogHeader>
 
@@ -329,7 +329,7 @@ function PaymentMethodFormDialog({
             <FieldTextarea
               id="payment-method-description"
               rows={3}
-              placeholder="例如:收款銀行帳號,或這個項目代表的情境說明"
+              placeholder="例如：收款銀行帳號，或這個項目代表的情境說明"
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
@@ -409,7 +409,7 @@ function PaymentMethodsPageInner() {
         backTo="/app/manage"
         helpMode
         title="付款方式管理"
-        description={`「${merchant!.name}」自訂的付款方式清單,建單時可選用。這裡只是標記客戶用什麼方式付款,不會真的串接金流,不會自動收款或對帳。`}
+        description={`「${merchant!.name}」自訂的付款方式清單，建單時可選用。這裡只是標記客戶用什麼方式付款，不會真的串接金流，不會自動收款或對帳。`}
         action={
           <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
             新增付款方式
@@ -429,14 +429,14 @@ function PaymentMethodsPageInner() {
             // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「還沒有任何付款方式」。skill 二之八 出錯。
             <ErrorState
               title="讀不到付款方式"
-              reason="可能是網路斷了,或你沒有管理付款方式的權限"
+              reason="可能是網路斷了，或你沒有管理付款方式的權限"
               onRetry={() => void refetch()}
             />
           ) : !methods || methods.length === 0 ? (
             // 下一步(頁首的「新增付款方式」)就在同一個畫面上 ⇒ 不放第二顆主要按鈕,改用一句話指路。
             <EmptyState
               title="還沒有任何付款方式"
-              description="建立付款方式後,建單時就能標記客戶是怎麼付款的,方便之後對帳。請用右上角的「新增付款方式」建立第一個。"
+              description="建立付款方式後，建單時就能標記客戶是怎麼付款的，方便之後對帳。請用右上角的「新增付款方式」建立第一個。"
             />
           ) : (
             <ul className="flex flex-col gap-2.5">

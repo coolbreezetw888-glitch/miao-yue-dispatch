@@ -116,12 +116,12 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
       const result = await generateOwnStaffLineBindingCode(merchantId);
       setIssuedCode({ code: result.code, expiresAt: result.expiresAt });
       setNow(Date.now());
-      toast.success("已產生綁定碼,請在 10 分鐘內完成綁定");
+      toast.success("已產生綁定碼，請在 10 分鐘內完成綁定");
     } catch (err) {
       toast.error("產生綁定碼失敗", {
         description: toFriendlyLineBindingErrorMessage(
           err,
-          "目前沒辦法產生綁定碼,請稍後再試一次。持續失敗請聯絡商家管理員。",
+          "目前沒辦法產生綁定碼，請稍後再試一次。持續失敗請聯絡商家管理員。",
         ),
       });
     } finally {
@@ -140,7 +140,7 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
       toast.error("解除綁定失敗", {
         description: toFriendlyLineBindingErrorMessage(
           err,
-          "目前沒辦法解除綁定,請稍後再試一次。持續失敗請聯絡商家管理員。",
+          "目前沒辦法解除綁定，請稍後再試一次。持續失敗請聯絡商家管理員。",
         ),
       });
     } finally {
@@ -153,7 +153,7 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
       <CardHeader>
         <CardTitle>我的 LINE 綁定</CardTitle>
         <CardDescription>
-          綁定後,商家開啟通知時,你可以直接在自己的 LINE 收到新訂單、班表變動等通知。
+          綁定後，商家開啟通知時，你可以直接在自己的 LINE 收到新訂單、班表變動等通知。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
@@ -171,8 +171,8 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
         {viewState === "bound" ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              你的 LINE 已經綁定完成,不需要再做任何設定。如果換了 LINE 帳號、或不想再收到通知,
-              可以自己解除綁定;之後想再收通知,重新產生一次綁定碼就好。
+              你的 LINE 已經綁定完成，不需要再做任何設定。如果換了 LINE 帳號、或不想再收到通知，
+              可以自己解除綁定;之後想再收通知，重新產生一次綁定碼就好。
             </p>
             {/* 🔴 可逆動作(解除後重新產生綁定碼就能再綁)⇒ 不標紅,用 ② 次要。 */}
             <Button
@@ -193,14 +193,14 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
         {viewState === "merchant_not_connected" ? (
           <AlertNote>
             <strong>這間商家還沒完成 LINE 串接。</strong>
-            要先由商家管理員把商家的 LINE 官方帳號接上系統,你才能綁定自己的 LINE 收通知。
-            請聯絡商家管理員,接好之後再回到這裡就會出現「產生綁定碼」按鈕。
+            要先由商家管理員把商家的 LINE 官方帳號接上系統，你才能綁定自己的 LINE 收通知。
+            請聯絡商家管理員，接好之後再回到這裡就會出現「產生綁定碼」按鈕。
           </AlertNote>
         ) : null}
 
         {viewState === "no_access" ? (
           <AlertNote>
-            目前查不到這間商家的 LINE 設定狀態,暫時沒辦法綁定。請重新整理頁面再試一次,
+            目前查不到這間商家的 LINE 設定狀態，暫時沒辦法綁定。請重新整理頁面再試一次，
             持續發生請聯絡商家管理員。
           </AlertNote>
         ) : null}
@@ -208,11 +208,11 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
         {viewState === "unbound" ? (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3.5 py-3">
-              <p className="text-xs font-medium text-foreground">綁定方式(全部自己就能完成):</p>
+              <p className="text-xs font-medium text-foreground">綁定方式(全部自己就能完成)：</p>
               <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
                 <li>在 LINE 加商家官方帳號為好友(下面有連結)。</li>
-                <li>按「產生綁定碼」,會出現一組 6 碼數字,10 分鐘內有效。</li>
-                <li>把那 6 碼數字當成一則訊息傳給官方帳號,就完成綁定了。</li>
+                <li>按「產生綁定碼」，會出現一組 6 碼數字，10 分鐘內有效。</li>
+                <li>把那 6 碼數字當成一則訊息傳給官方帳號，就完成綁定了。</li>
               </ol>
               {addFriendUrl ? (
                 <a
@@ -221,10 +221,12 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
                   rel="noreferrer"
                   className="block min-w-0 break-all text-xs text-brand hover:underline"
                 >
-                  點此加好友{botInfo?.displayName ? `:${botInfo.displayName}` : ""}
+                  點此加好友{botInfo?.displayName ? `：${botInfo.displayName}` : ""}
                 </a>
               ) : (
-                <AlertNote>商家還沒設定官方帳號的加好友連結,請向商家管理員索取官方帳號。</AlertNote>
+                <AlertNote>
+                  商家還沒設定官方帳號的加好友連結，請向商家管理員索取官方帳號。
+                </AlertNote>
               )}
             </div>
 
@@ -243,7 +245,7 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
             {issuedCode && !codeExpired ? (
               <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3.5 py-3">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  請把這組數字當作一則訊息傳給官方帳號,完成綁定
+                  請把這組數字當作一則訊息傳給官方帳號，完成綁定
                 </p>
                 <p className="text-2xl font-bold tracking-widest tabular-nums text-foreground">
                   {issuedCode.code}
@@ -261,11 +263,11 @@ export function MyStaffLineBindingCard({ staff }: { staff: MerchantStaff }) {
                   className="self-start"
                   onClick={() => void refetchMyStaffRecord()}
                 >
-                  我已經傳送完成,重新檢查
+                  我已經傳送完成，重新檢查
                 </Button>
               </div>
             ) : issuedCode && codeExpired ? (
-              <AlertNote>這組綁定碼已經過期,請按「產生綁定碼」重新產生一組。</AlertNote>
+              <AlertNote>這組綁定碼已經過期，請按「產生綁定碼」重新產生一組。</AlertNote>
             ) : null}
           </div>
         ) : null}

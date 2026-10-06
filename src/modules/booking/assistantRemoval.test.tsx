@@ -142,7 +142,7 @@ afterEach(() => cleanup());
 describe("文案與判斷(純邏輯)", () => {
   it("提示文案照主腦定稿", () => {
     expect(buildAssistantRemovedMessage(INFO)).toBe(
-      "協助人員乙 已從這張訂單移除,主服務人員 主服務人員甲 的訂單維持不變。要再加一位協助人員嗎?",
+      "協助人員乙 已從這張訂單移除，主服務人員 主服務人員甲 的訂單維持不變。要再加一位協助人員嗎?",
     );
   });
 
@@ -303,7 +303,7 @@ describe("預約詳情:從「(協助)」色塊打開", () => {
     expect(await screen.findByRole("button", { name: "移除協助人員" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "取消預約" })).toBeNull();
     expect(screen.getByTestId("opened-as-assistant-note")).toHaveTextContent(
-      "要取消整張訂單,請點主服務人員 主服務人員甲 的卡片",
+      "要取消整張訂單，請點主服務人員 主服務人員甲 的卡片",
     );
   });
 

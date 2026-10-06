@@ -107,7 +107,7 @@ describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
     ).toEqual({
       // #977 第 4 批:標題改用全形括號(畫面文字全形標點規則),文字不變。
       title: "已送出訂單（待確認）",
-      lines: ["已自動建立會員:王小明", "訂單金額 $1,200"],
+      lines: ["已自動建立會員：王小明", "訂單金額 $1,200"],
     });
   });
 
@@ -118,7 +118,7 @@ describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
       member_id: "m-2",
       member_name_snapshot: "李小華(會員原本的名字)",
     });
-    expect(content.lines).toEqual(["已連結既有會員:李小華(會員原本的名字)", "訂單金額 $1,200"]);
+    expect(content.lines).toEqual(["已連結既有會員：李小華(會員原本的名字)", "訂單金額 $1,200"]);
   });
 
   it("沒有會員(理論上新流程不會發生)⇒ 只有金額那一行,不捏造會員行", () => {
@@ -175,7 +175,7 @@ describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => 
 
   it("points_planned = 0 ⇒ 不出現第 3 行", () => {
     expect(buildBookingCreatedToast(base).lines).toEqual([
-      "已連結既有會員:王小明",
+      "已連結既有會員：王小明",
       "訂單金額 $1,000",
     ]);
   });
@@ -183,7 +183,7 @@ describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => 
   it("points_planned > 0 ⇒ 第 3 行,而且一定帶「(訂單完成後入帳)」", () => {
     const lines = buildBookingCreatedToast({ ...base, points_planned: 12 }).lines;
     expect(lines).toEqual([
-      "已連結既有會員:王小明",
+      "已連結既有會員：王小明",
       "訂單金額 $1,000",
       "紅利點數 12 點(訂單完成後入帳)",
     ]);
@@ -197,10 +197,10 @@ describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => 
       points_redeem_amount_snapshot: 5,
     }).lines;
     expect(lines).toEqual([
-      "已連結既有會員:王小明",
+      "已連結既有會員：王小明",
       "訂單金額 $1,000",
       "紅利點數 50 點(訂單完成後入帳)",
-      "紅利折抵 55 點(−$5),實付 $995",
+      "紅利折抵 55 點(−$5)，實付 $995",
     ]);
   });
 
@@ -211,9 +211,9 @@ describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => 
       points_redeem_amount_snapshot: 10,
     }).lines;
     expect(lines).toEqual([
-      "已連結既有會員:王小明",
+      "已連結既有會員：王小明",
       "訂單金額 $1,000",
-      "紅利折抵 100 點(−$10),實付 $990",
+      "紅利折抵 100 點(−$10)，實付 $990",
     ]);
   });
 

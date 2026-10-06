@@ -61,7 +61,7 @@ export default function EmailChangeConfirmedPage() {
     return (
       <AuthShell title="連結已失效" subtitle="這個連結可能已經使用過或過期了">
         <p className="text-sm text-muted-foreground">
-          請重新登入後,在個人資料卡片重新發起一次「更改登入信箱」。
+          請重新登入後，在個人資料卡片重新發起一次「更改登入信箱」。
         </p>
         <Button className="mt-6 w-full" variant="outline" onClick={() => navigate("/signin")}>
           前往登入頁
@@ -72,13 +72,13 @@ export default function EmailChangeConfirmedPage() {
 
   if (state.kind === "partially-confirmed") {
     return (
-      <AuthShell title="已確認其中一封信" subtitle="還差一步,信箱才會真的更新">
+      <AuthShell title="已確認其中一封信" subtitle="還差一步，信箱才會真的更新">
         <p className="text-sm text-muted-foreground">
-          這個信箱啟用了雙重確認,新舊信箱都要各自點一次驗證連結。請到「{state.pendingEmail}
-          」這個信箱收信,點擊裡面的連結完成另一半確認,登入信箱才會真正生效。
+          這個信箱啟用了雙重確認，新舊信箱都要各自點一次驗證連結。請到「{state.pendingEmail}
+          」這個信箱收信，點擊裡面的連結完成另一半確認，登入信箱才會真正生效。
         </p>
         <Button className="mt-6 w-full" onClick={() => navigate("/app", { replace: true })}>
-          我知道了,前往後台
+          我知道了，前往後台
         </Button>
       </AuthShell>
     );

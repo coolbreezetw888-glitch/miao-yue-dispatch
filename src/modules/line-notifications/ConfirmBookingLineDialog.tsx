@@ -58,20 +58,20 @@ export function ConfirmBookingLineDialog({
         <CardAlertDialogHeader>
           <CardAlertDialogTitle>要透過 LINE 通知這次確認嗎?</CardAlertDialogTitle>
           <CardAlertDialogDescription>
-            將會通知:{targetSummary || "(無)"}
+            將會通知：{targetSummary || "(無)"}
           </CardAlertDialogDescription>
         </CardAlertDialogHeader>
         {/* 🟡 常駐提醒(skill 二、`!` 第三類:現在的狀態跟使用者以為的不一樣)。 */}
         <AlertNote>
-          不論選「是」或「否」,<strong>這筆訂單都會照常確認</strong>
-          。這裡只決定要不要額外發送這一次的 LINE 通知,不會更改長期的通知設定。
+          不論選「是」或「否」，<strong>這筆訂單都會照常確認</strong>
+          。這裡只決定要不要額外發送這一次的 LINE 通知，不會更改長期的通知設定。
         </AlertNote>
         <CardAlertDialogFooter>
           <CardAlertDialogCancel disabled={busy} onClick={() => onChoice(false)}>
-            否,只確認不通知
+            否，只確認不通知
           </CardAlertDialogCancel>
           <CardAlertDialogAction disabled={busy} onClick={() => onChoice(true)}>
-            是,確認並通知
+            是，確認並通知
           </CardAlertDialogAction>
         </CardAlertDialogFooter>
       </CardAlertDialogContent>

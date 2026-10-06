@@ -248,11 +248,11 @@ export function NotificationBell({
           </ul>
         ) : listQuery.isError ? (
           <p className="px-4 py-6 text-sm text-muted-foreground" data-testid="notification-error">
-            通知載入失敗,請稍後再試。
+            通知載入失敗，請稍後再試。
           </p>
         ) : merged.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground" data-testid="notification-empty">
-            目前沒有通知。手機推播的內容會同步留在這裡,滑掉了也找得回來。
+            目前沒有通知。手機推播的內容會同步留在這裡，滑掉了也找得回來。
           </p>
         ) : (
           <ul className="divide-y divide-border">

@@ -643,7 +643,7 @@ test("§3.8 / §5.3 / §5.4:上個月完成的單取消 ⇒ 紅色跨月警告;�
   );
   await expect(layer.getByRole("switch")).toHaveAttribute("aria-checked", "false");
 
-  const confirm = layer.getByRole("button", { name: "我了解影響,確定取消" });
+  const confirm = layer.getByRole("button", { name: "我了解影響，確定取消" });
   await expect(confirm).toBeDisabled();
   await reasonBox(layer).fill("e2e:上個月的單作廢");
   await confirm.click();
@@ -720,7 +720,7 @@ test("Q11 A:還原時有差額 ⇒ 小卡窗 Enter 關;再完成點數補到應�
 
   // 已確認的單:顯示收回與差額。
   const reverted = await openDetail(page, name);
-  await expect(reverted).toContainText("已收回 4 點,差額 6 點未收回", { timeout: LOAD_TIMEOUT });
+  await expect(reverted).toContainText("已收回 4 點，差額 6 點未收回", { timeout: LOAD_TIMEOUT });
 
   // 再完成:補 10 −(10 − 4)= 4 點,有效入帳 = 10。
   await reverted.getByRole("button", { name: "標記完成" }).click();
@@ -838,7 +838,7 @@ test("#965:差額小卡窗一插入畫面就按 Esc ⇒ 仍然走「知道了」
 
   // 差額資訊沒有遺失:重開詳情看得到「已收回 4 點,差額 6 點未收回」。
   const reopened = await openDetail(page, name);
-  await expect(reopened).toContainText("已收回 4 點,差額 6 點未收回", { timeout: LOAD_TIMEOUT });
+  await expect(reopened).toContainText("已收回 4 點，差額 6 點未收回", { timeout: LOAD_TIMEOUT });
 });
 
 test("#965:差額小卡窗正常出現(焦點已在「知道了」)後再按 Esc ⇒ 同樣收尾", async ({ page }) => {
@@ -1019,7 +1019,7 @@ test("§5.6:320px 寬,預約詳情與兩個確認子畫面(含跨月長文案)�
   await expect(layer.getByTestId("reversal-cross-month")).toBeVisible();
   await assertNoHorizontalOverflow(page, "320px 還原完成確認子畫面(跨月)");
   // 底部兩顆按鈕都完整在畫面內。
-  for (const label of ["返回", "我了解影響,確定還原"]) {
+  for (const label of ["返回", "我了解影響，確定還原"]) {
     const box = await layer.getByRole("button", { name: label, exact: true }).boundingBox();
     expect(box && box.x >= 0 && box.x + box.width <= 321, `${label} 在 320px 內`).toBe(true);
   }

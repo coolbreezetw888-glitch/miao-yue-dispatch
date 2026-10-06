@@ -81,7 +81,7 @@ export default function AgentInviteCompletePage() {
       // 邀請連結剛載入頁面時快取住的舊值(那個當下 status 還是 invited,查回來合法地是 0 間商家)。
       await refetchAccessibleMerchants();
 
-      toast.success("密碼設定完成,歡迎加入!");
+      toast.success("密碼設定完成，歡迎加入!");
       navigate("/app", { replace: true });
     } catch (err) {
       toast.error("設定失敗", { description: getErrorMessage(err) });
@@ -100,7 +100,7 @@ export default function AgentInviteCompletePage() {
     return (
       <AuthShell title="邀請連結已失效" subtitle="這個連結可能已經使用過或過期了">
         <p className="text-sm text-muted-foreground">
-          請聯絡邀請你的商家管理員,請對方重新寄送一次邀請信。
+          請聯絡邀請你的商家管理員，請對方重新寄送一次邀請信。
         </p>
         <Button className="mt-6 w-full" variant="outline" onClick={() => navigate("/signin")}>
           前往登入頁

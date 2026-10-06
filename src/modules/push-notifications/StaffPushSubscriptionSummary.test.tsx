@@ -78,7 +78,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    const badge = screen.getByText("已開通 2 台,會收到通知");
+    const badge = screen.getByText("已開通 2 台，會收到通知");
     expect(badgeToneOf(badge)).toBe("success");
     expect(screen.queryByText(/他還沒在任何手機/)).not.toBeInTheDocument();
     expect(screen.queryByText(/全部關掉/)).not.toBeInTheDocument();
@@ -90,10 +90,10 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    expect(screen.getByText("已開通 2 台,但他關閉了全部通知")).toBeInTheDocument();
+    expect(screen.getByText("已開通 2 台，但他關閉了全部通知")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "他的手機可以收通知,但他自己把四種事件全部關掉了——所以這間店的訂單不會通知他。",
+        "他的手機可以收通知，但他自己把四種事件全部關掉了——所以這間店的訂單不會通知他。",
       ),
     ).toBeInTheDocument();
     // 舊文案「已開通 2 台裝置」絕對不能再出現 —— 那正是 Q6 要修掉的誤導。
@@ -106,7 +106,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    const willReceiveTone = badgeToneOf(screen.getByText("已開通 2 台,會收到通知"));
+    const willReceiveTone = badgeToneOf(screen.getByText("已開通 2 台，會收到通知"));
     cleanup();
 
     useStaffPushStatusMock.mockReturnValue({
@@ -114,7 +114,7 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
       isLoading: false,
     });
     renderSummary();
-    const allDisabledTone = badgeToneOf(screen.getByText("已開通 2 台,但他關閉了全部通知"));
+    const allDisabledTone = badgeToneOf(screen.getByText("已開通 2 台，但他關閉了全部通知"));
 
     expect(willReceiveTone).toBe("success");
     expect(allDisabledTone).toBe("warning");
@@ -130,6 +130,6 @@ describe("StaffPushSubscriptionSummary 的三種互斥狀態(§3.3)", () => {
     renderSummary();
     expect(screen.queryByText("尚未開通")).not.toBeInTheDocument();
     expect(screen.queryByText(/會收到通知$/)).not.toBeInTheDocument();
-    expect(screen.getByText("已開通 1 台,但他關閉了全部通知")).toBeInTheDocument();
+    expect(screen.getByText("已開通 1 台，但他關閉了全部通知")).toBeInTheDocument();
   });
 });

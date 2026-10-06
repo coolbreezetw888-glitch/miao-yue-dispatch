@@ -231,7 +231,7 @@ export function MemberPointsSettingsTabs({
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>這個分頁還有改動沒有儲存</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              直接切換的話,這個分頁剛剛改的內容會被丟掉(資料庫裡原本的設定不受影響)。要先按「儲存設定」嗎?
+              直接切換的話，這個分頁剛剛改的內容會被丟掉(資料庫裡原本的設定不受影響)。要先按「儲存設定」嗎?
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>
@@ -278,7 +278,7 @@ function CalcTab({ merchantId, onDirtyChange, onSaved, settings }: TabBodyProps)
         <CardContent className="pt-6">
           <ErrorState
             title="讀不到紅利計算的設定"
-            reason="可能是網路斷了;現在先不顯示欄位,避免你把畫面上的空白公式當成目前的設定存回去"
+            reason="可能是網路斷了;現在先不顯示欄位，避免你把畫面上的空白公式當成目前的設定存回去"
             onRetry={() => {
               void formulasQuery.refetch();
               void itemsQuery.refetch();
@@ -367,15 +367,15 @@ function CalcTabForm({
   if (duplicate) {
     blockedReason = `${duplicateFormulaMessage(duplicate)}。請改選別的服務項目或刪掉其中一條。`;
   } else if (advanced && !formulasOk) {
-    blockedReason = "上面有公式的欄位填錯了(標紅的那幾格),修好之後才能儲存。";
+    blockedReason = "上面有公式的欄位填錯了(標紅的那幾格)，修好之後才能儲存。";
   } else if (!advanced && !basicCheck.ok) {
-    blockedReason = "上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。";
+    blockedReason = "上面有欄位填錯了(標紅的那幾格)，修好之後才能儲存。";
   } else if (advanced && !basicCheck.ok) {
     blockedReason =
-      "「基本設定」裡有欄位填錯了(進階設定開著時那一區是收起來的)。請先關掉「進階設定」修好,再打開儲存。";
+      "「基本設定」裡有欄位填錯了(進階設定開著時那一區是收起來的)。請先關掉「進階設定」修好，再打開儲存。";
   } else if (!advanced && !formulasOk) {
     blockedReason =
-      "「進階設定」的公式裡有欄位填錯了(現在是收起來的)。請先打開「進階設定」修好,再關掉儲存。";
+      "「進階設定」的公式裡有欄位填錯了(現在是收起來的)。請先打開「進階設定」修好，再關掉儲存。";
   }
 
   const exampleBase = 1000;
@@ -463,14 +463,14 @@ function CalcTabForm({
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
           <h2 className="text-base font-semibold text-foreground">紅利計算</h2>
           {/* §4.2 第 5 點 (d):分頁最上方的 `?`,完整例子逐字採用(使用者第 2 題定案文案)。 */}
-          <HelpToggle label="說明:「全部服務項目」跟個別項目的公式怎麼一起算">
+          <HelpToggle label="說明：「全部服務項目」跟個別項目的公式怎麼一起算">
             <p>
-              每張訂單派幾點,有兩種算法二選一:「基本設定」整張訂單一個規則;「進階設定」每個服務項目各自設公式。
+              每張訂單派幾點，有兩種算法二選一：「基本設定」整張訂單一個規則;「進階設定」每個服務項目各自設公式。
             </p>
             <p className="mt-2">
-              例:設定『全部服務項目 → 每 1 件 1 點』+『冷氣安裝 → 每 1 件 5 點』。客人買了 1
-              台冷氣安裝 + 1 次清洗 ⇒ 冷氣安裝吃自己那條給 5 點,清洗沒有自己的公式所以吃『全部』給 1
-              點,合計 6 點。
+              例：設定『全部服務項目 → 每 1 件 1 點』+『冷氣安裝 → 每 1 件 5 點』。客人買了 1
+              台冷氣安裝 + 1 次清洗 ⇒ 冷氣安裝吃自己那條給 5 點，清洗沒有自己的公式所以吃『全部』給
+              1 點，合計 6 點。
             </p>
           </HelpToggle>
         </div>
@@ -478,7 +478,7 @@ function CalcTabForm({
         <SwitchRow
           id="earn-mode-advanced"
           title="進階設定"
-          description="開啟後改成「每個服務項目各自的公式」;基本設定的欄位會先收起來,值會保留,關掉就回來。"
+          description="開啟後改成「每個服務項目各自的公式」;基本設定的欄位會先收起來，值會保留，關掉就回來。"
           checked={advanced}
           onCheckedChange={setAdvanced}
         />
@@ -512,8 +512,8 @@ function CalcTabForm({
                     ? TIERED_NEEDS_MIN_AMOUNT_MESSAGE
                     : null
               }
-              help="比對的是客人打完折、含稅之後要付的金額,但還沒用紅利點數折抵之前的數字(用點數折抵不會反過來害自己拿不到點數)。填 0 代表每筆訂單都給。"
-              helpLabel="說明:消費金額比的是哪一個金額"
+              help="比對的是客人打完折、含稅之後要付的金額，但還沒用紅利點數折抵之前的數字(用點數折抵不會反過來害自己拿不到點數)。填 0 代表每筆訂單都給。"
+              helpLabel="說明：消費金額比的是哪一個金額"
             >
               <FieldAmountInput
                 id="basic-min-amount"
@@ -525,16 +525,16 @@ function CalcTabForm({
             <SwitchRow
               id="basic-tiered"
               title="每滿額累計贈點"
-              description="開啟:每滿額就再贈一次;關閉:單筆達門檻只贈一次"
+              description="開啟：每滿額就再贈一次;關閉：單筆達門檻只贈一次"
               checked={basic.tieredEnabled}
               onCheckedChange={(v) => setBasic((b) => ({ ...b, tieredEnabled: v }))}
             />
             {examplePoints !== null ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                範例試算:一筆 {formatNtd(exampleBase)} 的訂單可獲得{" "}
+                範例試算：一筆 {formatNtd(exampleBase)} 的訂單可獲得{" "}
                 <strong className="tabular-nums">{examplePoints}</strong> 點
                 {basicCheck.pointsPerOrder.ok && basicCheck.pointsPerOrder.value === 0
-                  ? "(每筆訂單獲得是 0,代表還沒設定,不會派點)"
+                  ? "(每筆訂單獲得是 0，代表還沒設定，不會派點)"
                   : "(實際點數在建單當下依訂單金額計算)"}
                 。
               </p>
@@ -545,7 +545,7 @@ function CalcTabForm({
             {drafts.length === 0 ? (
               <EmptyState
                 title="還沒有任何公式"
-                description="進階設定開著但沒有公式時,每筆訂單都是 0 點。新增一條公式,指定哪個服務項目每個數量給幾點。"
+                description="進階設定開著但沒有公式時，每筆訂單都是 0 點。新增一條公式，指定哪個服務項目每個數量給幾點。"
                 action={
                   <Button type="button" variant="neutral" size="touch" onClick={addFormula}>
                     <Plus aria-hidden="true" />
@@ -649,7 +649,7 @@ function FormulaCard({
             <CardAlertDialogHeader>
               <CardAlertDialogTitle>確定要刪除「{displayName}」嗎?</CardAlertDialogTitle>
               <CardAlertDialogDescription>
-                按「儲存設定」之後才會真的刪除;刪除後,之後新建的訂單就不會再用這條公式派點(已經建好的訂單點數不受影響)。
+                按「儲存設定」之後才會真的刪除;刪除後，之後新建的訂單就不會再用這條公式派點(已經建好的訂單點數不受影響)。
               </CardAlertDialogDescription>
             </CardAlertDialogHeader>
             <CardAlertDialogFooter>
@@ -665,7 +665,7 @@ function FormulaCard({
       <SwitchRow
         id={`${idPrefix}-enabled`}
         title="啟用這條公式"
-        description="關掉是暫停使用,不會刪除。"
+        description="關掉是暫停使用，不會刪除。"
         checked={draft.enabled}
         onCheckedChange={(v) => onChange({ enabled: v })}
       />
@@ -695,14 +695,14 @@ function FormulaCard({
       {isAllItems ? (
         <AlertNote>
           這條套用在<strong>還沒有自己公式</strong>
-          的服務項目。已經單獨設過公式的項目,吃它自己那條,不會兩邊都拿。
+          的服務項目。已經單獨設過公式的項目，吃它自己那條，不會兩邊都拿。
         </AlertNote>
       ) : null}
 
       {item?.status === "removed" ? (
         <AlertNote>
           這個服務項目<strong>已下架</strong>
-          :新訂單選不到它,所以這條公式只會在編輯下架前建立的舊訂單時用到。不需要的話可以把這條公式關掉。
+          ：新訂單選不到它，所以這條公式只會在編輯下架前建立的舊訂單時用到。不需要的話可以把這條公式關掉。
         </AlertNote>
       ) : null}
 
@@ -711,8 +711,8 @@ function FormulaCard({
           label="單項金額門檻"
           htmlFor={`${idPrefix}-min`}
           error={check.minUnitPrice.ok ? null : check.minUnitPrice.error}
-          help="比的是建單當下這個項目實際的單價(大於等於才給點),不是價目表上的現價。填 0 代表不設門檻。"
-          helpLabel="說明:單項金額門檻比的是哪個價錢"
+          help="比的是建單當下這個項目實際的單價(大於等於才給點)，不是價目表上的現價。填 0 代表不設門檻。"
+          helpLabel="說明：單項金額門檻比的是哪個價錢"
         >
           <FieldAmountInput
             id={`${idPrefix}-min`}
@@ -751,8 +751,8 @@ function FormulaCard({
       {/* §4.2 第 5 點 (b)(逐字)+ 主腦補的那一行(放在 (b) 後面)。 */}
       {hasAllItemsFormula && shouldShowOwnFormulaNote(draft, drafts) ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          這個項目有自己的公式,不吃『全部服務項目』那條。
-          把這條公式關掉後,這個項目會改吃『全部服務項目』那條。
+          這個項目有自己的公式，不吃『全部服務項目』那條。
+          把這條公式關掉後，這個項目會改吃『全部服務項目』那條。
         </p>
       ) : null}
     </div>
@@ -795,7 +795,7 @@ function UsageTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyProps
   const blockedReason = check.pairMismatch
     ? REDEEM_PAIR_MESSAGE
     : !check.ok
-      ? "上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。"
+      ? "上面有欄位填錯了(標紅的那幾格)，修好之後才能儲存。"
       : null;
 
   async function handleSave() {
@@ -840,15 +840,15 @@ function UsageTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyProps
               點數兌換比例(點數 : 金額)
             </span>
             {/* §2.10 第 6 點的三行說明(使用者原文),看過一次就懂 ⇒ 收進 `?`(skill 二點名的例子)。 */}
-            <HelpToggle label="說明:點數兌換比例怎麼設定">
-              <p>點數兌換比例設定:前面是點數,後面是金額</p>
-              <p>單次最大使用比例:會員單次最多能使用的點數比例</p>
-              <p>範例:100:10 代表 100 點 = 10 元,50% 代表最多能用訂單 50% 的點數</p>
+            <HelpToggle label="說明：點數兌換比例怎麼設定">
+              <p>點數兌換比例設定：前面是點數，後面是金額</p>
+              <p>單次最大使用比例：會員單次最多能使用的點數比例</p>
+              <p>範例：100:10 代表 100 點 = 10 元，50% 代表最多能用訂單 50% 的點數</p>
             </HelpToggle>
           </div>
           <div className="flex items-center gap-2">
             <FieldInput
-              aria-label="兌換比例:點數"
+              aria-label="兌換比例：點數"
               type="text"
               inputMode="numeric"
               className="tabular-nums sm:w-32"
@@ -857,7 +857,7 @@ function UsageTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyProps
             />
             <span className="shrink-0 text-sm text-muted-foreground">點 :</span>
             <FieldAmountInput
-              aria-label="兌換比例:金額"
+              aria-label="兌換比例：金額"
               className="sm:w-32"
               value={draft.amountUnit}
               onChange={(e) => setDraft((d) => ({ ...d, amountUnit: e.target.value }))}
@@ -891,13 +891,13 @@ function UsageTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyProps
           >
             {example ? (
               <>
-                以目前設定,一筆 {formatNtd(1000)} 的訂單最多可用{" "}
+                以目前設定，一筆 {formatNtd(1000)} 的訂單最多可用{" "}
                 <strong className="tabular-nums">{example.maxPoints}</strong> 點折抵{" "}
                 <strong className="tabular-nums">{formatNtd(example.maxAmount)}</strong>
                 (會員點數夠的話)。
               </>
             ) : (
-              "目前不開放折抵:兌換比例或單次最大使用比例是 0(或一筆 NT$1,000 的訂單連 1 元都折不到)。"
+              "目前不開放折抵：兌換比例或單次最大使用比例是 0(或一筆 NT$1,000 的訂單連 1 元都折不到)。"
             )}
           </p>
         ) : null}
@@ -933,7 +933,7 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
   const subsequentCheck = parsePointsField(draft.subsequentPoints);
   // 開關 1 關著時兩個數字欄位是隱藏的 ⇒ 不驗也不送(資料庫維持原值,打開時還在)。
   const numbersOk = !draft.inviterReward || (firstCheck.ok && subsequentCheck.ok);
-  const blockedReason = numbersOk ? null : "上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。";
+  const blockedReason = numbersOk ? null : "上面有欄位填錯了(標紅的那幾格)，修好之後才能儲存。";
 
   async function handleSave() {
     if (!numbersOk) return;
@@ -965,14 +965,14 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
         {/* §4.4 第 1 點:三個開關的白話說明集中放在最上面一個說明區塊(截圖第 8 點)。 */}
         <HelpPanel>
           <p>
-            <strong>推薦者邀請是否累積紅利:</strong>
-            當推薦的會員透過連結加入並消費時,推薦者可以獲得紅利點數。關閉則無法獲得。
+            <strong>推薦者邀請是否累積紅利：</strong>
+            當推薦的會員透過連結加入並消費時，推薦者可以獲得紅利點數。關閉則無法獲得。
           </p>
           <p className="mt-1.5">
-            <strong>推薦者消費是否累積紅利:</strong>控制推薦者自己消費時是否能累積紅利點數。
+            <strong>推薦者消費是否累積紅利：</strong>控制推薦者自己消費時是否能累積紅利點數。
           </p>
           <p className="mt-1.5">
-            <strong>被推薦者消費是否累積紅利:</strong>控制被推薦者自己消費時是否能累積紅利點數。
+            <strong>被推薦者消費是否累積紅利：</strong>控制被推薦者自己消費時是否能累積紅利點數。
           </p>
         </HelpPanel>
 
@@ -989,8 +989,8 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
               label="首次推薦獎勵獲得"
               htmlFor="referral-first-points"
               error={firstCheck.ok ? null : firstCheck.error}
-              help="被推薦的會員完成第一筆訂單時,推薦者拿到的點數。"
-              helpLabel="說明:首次推薦獎勵什麼時候發"
+              help="被推薦的會員完成第一筆訂單時，推薦者拿到的點數。"
+              helpLabel="說明：首次推薦獎勵什麼時候發"
             >
               <div className="flex items-center gap-2">
                 <FieldInput
@@ -1009,7 +1009,7 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
               htmlFor="referral-subsequent-points"
               error={subsequentCheck.ok ? null : subsequentCheck.error}
               help="「達標」= 被推薦的會員之後每完成一筆「本身有派到點」的訂單(沒達到派點門檻、派 0 點的訂單不算)。"
-              helpLabel="說明:後續每次達標是什麼意思"
+              helpLabel="說明：後續每次達標是什麼意思"
             >
               <div className="flex items-center gap-2">
                 <FieldInput
@@ -1041,8 +1041,8 @@ function ReferralTab({ merchantId, settings, onDirtyChange, onSaved }: TabBodyPr
         {!draft.inviterEarning || !draft.inviteeEarning ? (
           // 第 14、15 題:關掉只擋「累積」,不擋折抵 / 兌換;同時是推薦者與被推薦者的人,任一關閉就不累積。
           <AlertNote>
-            關閉後,這類會員之後的訂單<strong>不會再累積紅利點數</strong>
-            (既有的點數照樣可以折抵或兌換);同時是推薦者也是被推薦者的會員,兩個開關任一個關閉就不累積。
+            關閉後，這類會員之後的訂單<strong>不會再累積紅利點數</strong>
+            (既有的點數照樣可以折抵或兌換);同時是推薦者也是被推薦者的會員，兩個開關任一個關閉就不累積。
           </AlertNote>
         ) : null}
 
@@ -1076,9 +1076,9 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
   const messageLength = countMessageChars(draft.message);
   const messageTooLong = messageLength > BIRTHDAY_LINE_MESSAGE_MAX;
   const blockedReason = messageTooLong
-    ? `LINE 文字訊息最多 ${BIRTHDAY_LINE_MESSAGE_MAX} 個字,目前 ${messageLength} 個字,請刪短一點再儲存。`
+    ? `LINE 文字訊息最多 ${BIRTHDAY_LINE_MESSAGE_MAX} 個字，目前 ${messageLength} 個字，請刪短一點再儲存。`
     : !pointsCheck.ok
-      ? "上面有欄位填錯了(標紅的那幾格),修好之後才能儲存。"
+      ? "上面有欄位填錯了(標紅的那幾格)，修好之後才能儲存。"
       : null;
   const sampleValues = birthdaySampleValues({
     merchantName,
@@ -1110,8 +1110,8 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
             <h2 className="text-base font-semibold text-foreground">生日獎勵</h2>
             {/* 第 11、12 題:補發窗口是「看過一次就懂」的規則說明 ⇒ `?`。 */}
-            <HelpToggle label="說明:錯過當天的生日會不會補發">
-              如果當天系統維護或您當天才開啟這個功能,生日在最近 7
+            <HelpToggle label="說明：錯過當天的生日會不會補發">
+              如果當天系統維護或您當天才開啟這個功能，生日在最近 7
               天內、今年還沒收到的會員會自動補發;超過 7 天就不補。
             </HelpToggle>
           </div>
@@ -1119,7 +1119,7 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
           <SwitchRow
             id="birthday-bonus-enabled"
             title="是否啟用生日贈點"
-            description="依台北時區比對生日月、日;每位會員每年只發放一次;每天 00:05 自動發放點數,09:10 發送 LINE 訊息"
+            description="依台北時區比對生日月、日;每位會員每年只發放一次;每天 00:05 自動發放點數，09:10 發送 LINE 訊息"
             checked={draft.enabled}
             onCheckedChange={(v) => setDraft((d) => ({ ...d, enabled: v }))}
           />
@@ -1142,7 +1142,9 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
             </div>
           </FormField>
           {draft.enabled && pointsCheck.ok && pointsCheck.value === 0 ? (
-            <AlertNote>生日贈送點數是 0:開關雖然開著,系統不會發任何點數、也不會發 LINE。</AlertNote>
+            <AlertNote>
+              生日贈送點數是 0：開關雖然開著，系統不會發任何點數、也不會發 LINE。
+            </AlertNote>
           ) : null}
 
           <FormField
@@ -1166,11 +1168,11 @@ function BirthdayTab({ merchantId, merchantName, settings, onDirtyChange, onSave
           />
           <p className="text-xs leading-relaxed text-muted-foreground">
             <strong className="text-foreground">未綁定 LINE 的會員仍會收到點數</strong>
-            ,只是不會收到這則訊息。
+            ，只是不會收到這則訊息。
           </p>
           {lineInfo.data && !lineInfo.data.isConnected ? (
             // skill 二 第三類:現在的狀態跟使用者以為的不一樣(以為會發 LINE,其實不會)⇒ 常駐 `!`。
-            <AlertNote>目前尚未完成 LINE 串接,訊息不會發送,點數仍會照發。</AlertNote>
+            <AlertNote>目前尚未完成 LINE 串接，訊息不會發送，點數仍會照發。</AlertNote>
           ) : null}
 
           <SaveBar saving={saving} blockedReason={blockedReason} onSave={() => void handleSave()} />
@@ -1223,7 +1225,7 @@ function BirthdayGrantsCard({ merchantId }: { merchantId: string }) {
         ) : !grants.data || grants.data.length === 0 ? (
           <EmptyState
             title="目前尚無生日紅利紀錄"
-            description="會員資料填了生日,系統會在生日當天(台北時間 00:05)自動發放,紀錄就會出現在這裡。"
+            description="會員資料填了生日，系統會在生日當天(台北時間 00:05)自動發放，紀錄就會出現在這裡。"
             action={
               <Button asChild variant="neutral" size="touch">
                 <Link to="/app/members">去會員管理填生日</Link>
@@ -1255,7 +1257,7 @@ function BirthdayGrantsCard({ merchantId }: { merchantId: string }) {
                 </div>
                 {grant.lineError ? (
                   <p className="break-words text-xs leading-relaxed text-destructive-strong">
-                    失敗原因:{grant.lineError}
+                    失敗原因：{grant.lineError}
                   </p>
                 ) : null}
               </li>

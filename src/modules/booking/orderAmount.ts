@@ -61,7 +61,7 @@ export function calculateBookingAmountPreview(
         discountAmount: 0,
         taxAmount: 0,
         finalAmount: 0,
-        error: "已開啟自訂總金額,請輸入金額",
+        error: "已開啟自訂總金額，請輸入金額",
       };
     }
     subtotalAmount = customTotalAmount;
@@ -124,7 +124,7 @@ export function calculateBookingAmountPreview(
       discountAmount,
       taxAmount,
       finalAmount,
-      error: "計算出來的最終金額不能是負數,請確認折扣/稅金設定",
+      error: "計算出來的最終金額不能是負數，請確認折扣/稅金設定",
     };
   }
 

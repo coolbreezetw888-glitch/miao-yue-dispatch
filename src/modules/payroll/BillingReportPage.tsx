@@ -157,7 +157,7 @@ function BillingReportPageInner() {
       <PageHeader
         backTo="/app/manage"
         title="店家報表"
-        description={`「${merchant!.name}」的營收與成本彙整。預設依月份查詢(月薪要有完整月份才算得出來),需要任意天數的區間時可切到「自訂區間」,最長查詢一年範圍。`}
+        description={`「${merchant!.name}」的營收與成本彙整。預設依月份查詢(月薪要有完整月份才算得出來)，需要任意天數的區間時可切到「自訂區間」，最長查詢一年範圍。`}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -191,7 +191,7 @@ function BillingReportPageInner() {
         // skill 二之八 出錯:什麼壞了 / 可能原因 / 下一步(+「你的資料沒有遺失」由元件固定加上)。
         <ErrorState
           title="讀不到店家報表"
-          reason="可能是網路斷了,或你沒有查看店家報表的權限"
+          reason="可能是網路斷了，或你沒有查看店家報表的權限"
           onRetry={() => void refetch()}
         />
       ) : summary ? (
@@ -248,9 +248,9 @@ function BillingReportPageInner() {
               skill 二:「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐。 */}
           {shouldShowSalaryUnavailableNotice(salaryApplicable) ? (
             <AlertNote>
-              月薪是以「一整個月」為單位計算的,目前選的期間不是完整的月份(月初到月底),所以月薪
+              月薪是以「一整個月」為單位計算的，目前選的期間不是完整的月份(月初到月底)，所以月薪
               基本額、月薪扣款、月薪實發與商家總淨利這幾個數字沒辦法算。營收、料錢、抽成、訂單筆數
-              不受影響,照常顯示。想看月薪與商家總淨利,請改點上面的「本月」「上個月」或「指定月份」。
+              不受影響，照常顯示。想看月薪與商家總淨利，請改點上面的「本月」「上個月」或「指定月份」。
             </AlertNote>
           ) : null}
 
@@ -259,7 +259,7 @@ function BillingReportPageInner() {
               查詢都出現(避免嚇到使用者)。 */}
           {summary.salary_estimation_applied ? (
             <AlertNote>
-              查詢區間內有部分月份早於系統開始記錄薪資歷史的時間,這些月份的金額是用最早的已知薪資回推估算,僅供參考。
+              查詢區間內有部分月份早於系統開始記錄薪資歷史的時間，這些月份的金額是用最早的已知薪資回推估算，僅供參考。
             </AlertNote>
           ) : null}
 
@@ -270,7 +270,7 @@ function BillingReportPageInner() {
             <CardHeader>
               <CardTitle>{BILLING_SUMMARY_LABELS.taxAmount}</CardTitle>
               <CardDescription>
-                這段期間完成訂單的稅金加總,已經從「商家總淨利」的計算中排除。
+                這段期間完成訂單的稅金加總，已經從「商家總淨利」的計算中排除。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -285,7 +285,7 @@ function BillingReportPageInner() {
               <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
               <CardDescription>
                 總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。只是
-                概估,不含房租/水電等其他營運成本,不是完整的財務損益表。
+                概估，不含房租/水電等其他營運成本，不是完整的財務損益表。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -307,15 +307,15 @@ function BillingReportPageInner() {
               {/* 2026-09-24 使用者裁決:這行原本寫「目前在職(active)的服務人員」,在資料庫把判斷
                   基準改成「那個時間點誰在職」之後就不再正確了,一起更新。 */}
               <CardDescription>
-                查詢期間內在職的服務人員,依姓名排序。期間內在職、現在已離職的人也會列出來(標示
-                「已離職」),這樣明細加總才跟上方的統計卡對得起來。
+                查詢期間內在職的服務人員，依姓名排序。期間內在職、現在已離職的人也會列出來(標示
+                「已離職」)，這樣明細加總才跟上方的統計卡對得起來。
               </CardDescription>
             </CardHeader>
             <CardContent>
               {summary.per_staff_breakdown.length === 0 ? (
                 <EmptyState
                   title="這段期間沒有在職的服務人員"
-                  description="換一個查詢期間,或先到服務人員管理新增服務人員。"
+                  description="換一個查詢期間，或先到服務人員管理新增服務人員。"
                   action={
                     <Button asChild variant="neutral" size="touch">
                       <Link to="/app/staff">前往服務人員管理</Link>
@@ -398,7 +398,7 @@ function SummaryCard({
         {help ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <CardDescription>{label}</CardDescription>
-            <HelpToggle label={`說明:${label}是什麼`}>{help}</HelpToggle>
+            <HelpToggle label={`說明：${label}是什麼`}>{help}</HelpToggle>
           </div>
         ) : (
           <CardDescription>{label}</CardDescription>

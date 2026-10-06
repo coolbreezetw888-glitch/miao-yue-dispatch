@@ -183,7 +183,7 @@ describe("NotificationBell", () => {
     openPanel();
     expect(screen.getByTestId("notification-panel")).toBeInTheDocument();
     expect(screen.getByTestId("notification-empty")).toHaveTextContent(
-      "目前沒有通知。手機推播的內容會同步留在這裡,滑掉了也找得回來。",
+      "目前沒有通知。手機推播的內容會同步留在這裡，滑掉了也找得回來。",
     );
   });
 

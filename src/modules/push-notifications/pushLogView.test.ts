@@ -131,12 +131,12 @@ describe("單一收件人那一列的白話結果", () => {
           error_detail: "410 Gone",
         }),
       ),
-    ).toBe("3 台裝置中只有 1 台送達。錯誤內容:410 Gone");
+    ).toBe("3 台裝置中只有 1 台送達。錯誤內容：410 Gone");
     expect(
       describeRecipientOutcome(
         makeRow({ status: "failed", device_count: 1, success_count: 0, error_detail: "500" }),
       ),
-    ).toBe("1 台裝置都沒有送達。錯誤內容:500");
+    ).toBe("1 台裝置都沒有送達。錯誤內容：500");
   });
 
   it("名冊查得到 → 帶姓名與 userId;查不到 → 只剩角色", () => {
@@ -200,7 +200,7 @@ describe("群組:一件事一組,同一個人兩個身份不會像是重複發�
     expect(groups[0]!.recipients.map((r) => r.targetType)).toEqual(["agent", "staff"]);
     expect(groups[0]!.sameUserNotes).toHaveLength(1);
     expect(formatSameUserNote(groups[0]!.sameUserNotes[0]!)).toBe(
-      "阿金同時是客服和服務人員,所以這裡有 2 列;他的手機只會收到一次。",
+      "阿金同時是客服和服務人員，所以這裡有 2 列;他的手機只會收到一次。",
     );
     // 代表時間 = 最新那一列
     expect(groups[0]!.attempted_at).toBe("2026-09-27T16:27:05.000Z");

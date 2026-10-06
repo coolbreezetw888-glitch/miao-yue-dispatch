@@ -71,7 +71,7 @@ describe("statusChangeLogText:轉換文字對照", () => {
 
 describe("statusChangeLogNoteText:原因那一行", () => {
   it("有原因 → 「原因:…」(去頭尾空白)", () => {
-    expect(statusChangeLogNoteText(log({ note: "  誤按完成  " }))).toBe("原因:誤按完成");
+    expect(statusChangeLogNoteText(log({ note: "  誤按完成  " }))).toBe("原因：誤按完成");
   });
 
   it("沒有原因 / 純空白 → null(畫面不顯示那一行)", () => {
@@ -106,12 +106,12 @@ describe("StatusChangeLogsView:畫面", () => {
     const [cancelRow, revertRow, completeRow] = items as [HTMLElement, HTMLElement, HTMLElement];
 
     expect(within(cancelRow).getByText(/取消已完成訂單/)).toBeInTheDocument();
-    expect(within(cancelRow).getByText("原因:客戶退單,款項系統外處理")).toBeInTheDocument();
+    expect(within(cancelRow).getByText("原因：客戶退單,款項系統外處理")).toBeInTheDocument();
 
     expect(within(revertRow).getByText(/還原完成/)).toBeInTheDocument();
-    expect(within(revertRow).getByText("原因:誤按完成")).toBeInTheDocument();
+    expect(within(revertRow).getByText("原因：誤按完成")).toBeInTheDocument();
 
-    expect(within(completeRow).queryByText(/原因:/)).toBeNull();
+    expect(within(completeRow).queryByText(/原因：/)).toBeNull();
   });
 });
 

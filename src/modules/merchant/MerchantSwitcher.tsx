@@ -181,7 +181,7 @@ export function MerchantSwitcher({
             variant="outline"
             size="sm"
             className="w-8 shrink-0 px-0"
-            aria-label={`切換商家(目前:${currentMerchantName})`}
+            aria-label={`切換商家(目前：${currentMerchantName})`}
             title={currentMerchantName}
           >
             <MerchantLogo logoUrl={currentMerchant?.logo_url ?? null} name={currentMerchantName} />

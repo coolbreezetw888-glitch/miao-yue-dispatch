@@ -60,7 +60,7 @@ export function ChangeLoginEmailDialog({
       if (error) throw error;
 
       toast.success("驗證信已寄出到新信箱", {
-        description: "請點連結完成確認,目前登入信箱在你確認前不會改變。",
+        description: "請點連結完成確認，目前登入信箱在你確認前不會改變。",
       });
       setOpen(false);
       resetForm();
@@ -85,7 +85,7 @@ export function ChangeLoginEmailDialog({
         <DialogHeader>
           <DialogTitle>更改登入信箱</DialogTitle>
           <DialogDescription>
-            送出後系統會寄一封驗證信到新信箱,你需要點連結確認後,登入信箱才會真的改變。
+            送出後系統會寄一封驗證信到新信箱，你需要點連結確認後，登入信箱才會真的改變。
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

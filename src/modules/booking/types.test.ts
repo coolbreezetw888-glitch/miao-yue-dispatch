@@ -19,12 +19,12 @@ import {
 
 describe("getTaxModeHelperText", () => {
   it("比例模式顯示稅率百分比說明文字", () => {
-    expect(getTaxModeHelperText("percentage")).toBe("依商家設定稅率百分比,數字可個別調整。");
+    expect(getTaxModeHelperText("percentage")).toBe("依商家設定稅率百分比，數字可個別調整。");
   });
 
   it("固定金額模式顯示稅額說明文字,不提百分比", () => {
     const text = getTaxModeHelperText("fixed");
-    expect(text).toBe("依商家設定稅額,金額可個別調整。");
+    expect(text).toBe("依商家設定稅額，金額可個別調整。");
     expect(text).not.toContain("%");
     expect(text).not.toContain("百分比");
   });

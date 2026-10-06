@@ -133,7 +133,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>商家層級設定</CardTitle>
         <CardDescription>
-          抽成計算基準,套用到所有抽成制服務人員;每個人實際抽成多少,到下方「抽成制服務人員」
+          抽成計算基準，套用到所有抽成制服務人員;每個人實際抽成多少，到下方「抽成制服務人員」
           逐一設定。
         </CardDescription>
       </CardHeader>
@@ -145,7 +145,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
           // 自己存過的設定,一按儲存就覆寫掉真實設定。出錯就不給表單。
           <ErrorState
             title="讀不到商家層級的抽成設定"
-            reason="可能是網路斷了;現在先不顯示欄位,避免你把預設值當成自己的設定存回去"
+            reason="可能是網路斷了;現在先不顯示欄位，避免你把預設值當成自己的設定存回去"
             onRetry={() => void refetch()}
           />
         ) : (
@@ -166,7 +166,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
                       <span className="flex flex-col items-start gap-0.5 text-left">
                         <span>{COMMISSION_BASIS_TYPE_LABELS.gross}</span>
                         <span className="text-xs font-normal leading-snug text-muted-foreground">
-                          以訂單金額(已扣折扣、排除稅金)全額當作抽成基準,不扣除料錢成本。
+                          以訂單金額(已扣折扣、排除稅金)全額當作抽成基準，不扣除料錢成本。
                         </span>
                       </span>
                     ),
@@ -177,7 +177,7 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
                       <span className="flex flex-col items-start gap-0.5 text-left">
                         <span>{COMMISSION_BASIS_TYPE_LABELS.net_of_material_cost}</span>
                         <span className="text-xs font-normal leading-snug text-muted-foreground">
-                          再扣除這筆訂單登記的料錢成本後,剩下的金額才當作抽成基準。到府派工這類會用到
+                          再扣除這筆訂單登記的料錢成本後，剩下的金額才當作抽成基準。到府派工這類會用到
                           料錢成本的商家可以考慮這個選項。
                         </span>
                       </span>
@@ -192,11 +192,11 @@ function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string }) {
                 skill 二:「規則怎麼算」屬於看過一次就懂的說明 ⇒ 收進 `?`,常駐只留一句結論。 */}
             <FormField
               label="【月薪制】月折算天數"
-              helpLabel="說明:月折算天數怎麼算"
-              help="假別扣款的「扣一天全薪」「扣一天薪水的某個百分比」兩種模式會用到這個數字,每個月會依那個月的實際天數自動換算,不是固定的一個數字。"
+              helpLabel="說明：月折算天數怎麼算"
+              help="假別扣款的「扣一天全薪」「扣一天薪水的某個百分比」兩種模式會用到這個數字，每個月會依那個月的實際天數自動換算，不是固定的一個數字。"
             >
               <p className="text-sm text-muted-foreground">
-                系統依當月實際天數自動計算(28~31 天),不需要另外設定。
+                系統依當月實際天數自動計算(28~31 天)，不需要另外設定。
               </p>
             </FormField>
 
@@ -268,7 +268,7 @@ function ServiceCommissionRow({
       return;
     }
     if (nextMode === "percentage" && numeric > 100) {
-      toast.error("百分比模式下,數字必須介於 0~100 之間");
+      toast.error("百分比模式下，數字必須介於 0~100 之間");
       return;
     }
     setSaving(true);
@@ -336,10 +336,10 @@ function ServiceCommissionRow({
             </div>
             {!hasRate ? (
               // skill 二:「現在的狀態跟使用者以為的不一樣」(開關開了,但抽成其實是 0)⇒ `!` 常駐。
-              <AlertNote>尚未設定抽成,這個項目目前抽成 0 元。</AlertNote>
+              <AlertNote>尚未設定抽成，這個項目目前抽成 0 元。</AlertNote>
             ) : (
               <p className="text-xs tabular-nums text-muted-foreground">
-                試算:1 件約 {previewAmount} 元
+                試算：1 件約 {previewAmount} 元
               </p>
             )}
           </div>
@@ -419,12 +419,12 @@ function StaffServiceCommissionDialog({
       return;
     }
     if (batchMode === "percentage" && numericValue > 100) {
-      toast.error("百分比模式下,數字必須介於 0~100 之間");
+      toast.error("百分比模式下，數字必須介於 0~100 之間");
       return;
     }
     const targetIds = Array.from(selectedIds);
     if (targetIds.length === 0) {
-      toast.error("這位服務人員目前沒有任何可接服務項目,請先開啟下方的可接服務開關");
+      toast.error("這位服務人員目前沒有任何可接服務項目，請先開啟下方的可接服務開關");
       return;
     }
     setBatchApplying(true);
@@ -453,7 +453,7 @@ function StaffServiceCommissionDialog({
       <FullPageLayerContent
         size="wide"
         title={`${staff.name} 的抽成設定`}
-        subtitle="逐一設定「可接服務」開關與每個服務項目的抽成,或先用批量套用一個統一的比例/金額,再個別調整。每一格改完會立刻存檔。"
+        subtitle="逐一設定「可接服務」開關與每個服務項目的抽成，或先用批量套用一個統一的比例/金額，再個別調整。每一格改完會立刻存檔。"
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -505,9 +505,9 @@ function StaffServiceCommissionDialog({
               </Button>
             </div>
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
-              範例:一筆原價 1000 元、1 件的服務,套用這個設定可以拿到{" "}
+              範例：一筆原價 1000 元、1 件的服務，套用這個設定可以拿到{" "}
               <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考;只會套用到目前開關=開的
-              項目,關掉的項目不受影響)。
+              項目，關掉的項目不受影響)。
             </p>
           </section>
 
@@ -519,13 +519,13 @@ function StaffServiceCommissionDialog({
               // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「沒有上架中的服務項目」。
               <ErrorState
                 title="讀不到服務項目"
-                reason="可能是網路斷了,或你沒有查看服務項目的權限"
+                reason="可能是網路斷了，或你沒有查看服務項目的權限"
                 onRetry={() => void refetchItems()}
               />
             ) : !activeServiceItems || activeServiceItems.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的服務項目"
-                description="先到「服務項目」新增並上架服務項目,回來這裡才有東西可以設定抽成。"
+                description="先到「服務項目」新增並上架服務項目，回來這裡才有東西可以設定抽成。"
                 action={
                   <Button asChild variant="neutral" size="touch">
                     <Link to="/app/service-items">前往服務項目</Link>
@@ -605,7 +605,7 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>抽成制服務人員</CardTitle>
         <CardDescription>
-          逐一設定每位服務人員每個服務項目的抽成,沒有設定的項目視為 0 元
+          逐一設定每位服務人員每個服務項目的抽成，沒有設定的項目視為 0 元
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -615,13 +615,13 @@ function PieceRateStaffSection({ merchantId }: { merchantId: string }) {
           // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有抽成制的服務人員」。skill 二之八 出錯。
           <ErrorState
             title="讀不到服務人員名單"
-            reason="可能是網路斷了,或你沒有查看服務人員的權限"
+            reason="可能是網路斷了，或你沒有查看服務人員的權限"
             onRetry={() => void refetchStaffList()}
           />
         ) : pieceRateStaff.length === 0 ? (
           <EmptyState
             title="目前沒有抽成制的服務人員"
-            description="服務人員的計酬類型在服務人員管理裡設定,設成抽成制之後會列在這裡。"
+            description="服務人員的計酬類型在服務人員管理裡設定，設成抽成制之後會列在這裡。"
             action={
               <Button asChild variant="neutral" size="touch">
                 <Link to="/app/staff">前往服務人員管理</Link>
@@ -702,7 +702,7 @@ function StaffCommissionRateRow({
         meta={
           total === 0
             ? "尚未設定任何可接服務項目"
-            : `已設定 ${configured} 項服務的抽成,${unconfigured} 項尚未設定`
+            : `已設定 ${configured} 項服務的抽成，${unconfigured} 項尚未設定`
         }
         primaryAction={
           <Button type="button" variant="neutral" size="card" onClick={() => setEditOpen(true)}>
@@ -798,7 +798,7 @@ function StaffSalarySettingsDialog({
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
         title={`${staff.name} 的薪資設定`}
-        subtitle="月薪金額 + 月休天數(僅供參考,不影響扣款計算)。"
+        subtitle="月薪金額 + 月休天數(僅供參考，不影響扣款計算)。"
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -827,8 +827,8 @@ function StaffSalarySettingsDialog({
               htmlFor="base-salary"
               required
               error={baseSalaryError}
-              helpLabel="說明:月薪金額要怎麼填"
-              help="只能填整數(不含小數點),例如 30000。"
+              helpLabel="說明：月薪金額要怎麼填"
+              help="只能填整數(不含小數點)，例如 30000。"
             >
               <FieldAmountInput
                 id="base-salary"
@@ -840,10 +840,10 @@ function StaffSalarySettingsDialog({
               />
             </FormField>
             <FormField
-              label="月休天數(參考,選填)"
+              label="月休天數(參考，選填)"
               htmlFor="quota-days"
-              helpLabel="說明:月休天數會用在哪裡"
-              help="只是顯示在服務人員報表旁邊當作參考,不會牽動請假扣款計算(假別扣款請到「月薪人員假別設定」頁面個別調整)。"
+              helpLabel="說明：月休天數會用在哪裡"
+              help="只是顯示在服務人員報表旁邊當作參考，不會牽動請假扣款計算(假別扣款請到「月薪人員假別設定」頁面個別調整)。"
             >
               <FieldInput
                 id="quota-days"
@@ -859,9 +859,9 @@ function StaffSalarySettingsDialog({
 
             {!Number.isNaN(numericBaseSalary) ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
-                試算:以本月 {payDaysPerMonth} 天換算,一天薪水約{" "}
+                試算：以本月 {payDaysPerMonth} 天換算，一天薪水約{" "}
                 <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」;
-                天數由系統依請假當月自動換算,不用另外設定(詳見上方「【月薪制】月折算天數」)。
+                天數由系統依請假當月自動換算，不用另外設定(詳見上方「【月薪制】月折算天數」)。
               </p>
             ) : null}
           </form>
@@ -906,13 +906,13 @@ function MonthlySalaryStaffSection({
           // 🔴 2026-09-30 QA:原本查詢失敗會偽裝成「目前沒有月薪制的服務人員」。
           <ErrorState
             title="讀不到服務人員名單"
-            reason="可能是網路斷了,或你沒有查看服務人員的權限"
+            reason="可能是網路斷了，或你沒有查看服務人員的權限"
             onRetry={() => void refetchStaffList()}
           />
         ) : monthlySalaryStaff.length === 0 ? (
           <EmptyState
             title="目前沒有月薪制的服務人員"
-            description="服務人員的計酬類型在服務人員管理裡設定,設成月薪制之後會列在這裡。"
+            description="服務人員的計酬類型在服務人員管理裡設定，設成月薪制之後會列在這裡。"
             action={
               <Button asChild variant="neutral" size="touch">
                 <Link to="/app/staff">前往服務人員管理</Link>
@@ -957,7 +957,7 @@ function MonthlySalaryStaffRow({
             月薪 {settings ? Number(settings.monthly_base_salary) : 0} 元
             {settings?.monthly_leave_quota_days !== undefined &&
             settings?.monthly_leave_quota_days !== null
-              ? `,月休 ${settings.monthly_leave_quota_days} 天(參考)`
+              ? `，月休 ${settings.monthly_leave_quota_days} 天(參考)`
               : ""}
           </>
         }

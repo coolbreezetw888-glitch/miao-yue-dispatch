@@ -125,14 +125,14 @@ function LineLogsPageInner() {
           ) : isError ? (
             <ErrorState
               title="讀不到發送記錄"
-              reason="可能是網路斷了;現在先不顯示記錄,避免你把空白當成「通知從來沒發過」"
+              reason="可能是網路斷了;現在先不顯示記錄，避免你把空白當成「通知從來沒發過」"
               onRetry={() => void refetchLogs()}
             />
           ) : !logs || logs.length === 0 ? (
             <EmptyState
               icon={<MessageSquare className="h-6 w-6" aria-hidden="true" />}
               title={eventFilter === "all" ? "還沒有任何發送記錄" : "這個事件還沒有發送記錄"}
-              description="每次系統嘗試發 LINE 通知都會記在這裡,包含成功、失敗與被跳過的原因,查問題時從這裡看最快。"
+              description="每次系統嘗試發 LINE 通知都會記在這裡，包含成功、失敗與被跳過的原因，查問題時從這裡看最快。"
               action={
                 <Button asChild variant="primary" size="touch">
                   <Link to="/app/line-events">去看 LINE 通知設定</Link>

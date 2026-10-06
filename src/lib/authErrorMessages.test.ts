@@ -12,13 +12,13 @@ describe("translateAuthErrorMessage:登入相關", () => {
 
   it("Email not confirmed", () => {
     expect(translateAuthErrorMessage("Email not confirmed")).toBe(
-      "這個 Email 還沒完成驗證,請到信箱點擊驗證連結",
+      "這個 Email 還沒完成驗證，請到信箱點擊驗證連結",
     );
   });
 
   it("User not found", () => {
     expect(translateAuthErrorMessage("User not found")).toBe(
-      "找不到這個帳號,請確認 Email 是否正確,或先建立帳號",
+      "找不到這個帳號，請確認 Email 是否正確，或先建立帳號",
     );
   });
 });
@@ -26,32 +26,32 @@ describe("translateAuthErrorMessage:登入相關", () => {
 describe("translateAuthErrorMessage:註冊相關", () => {
   it("User already registered", () => {
     expect(translateAuthErrorMessage("User already registered")).toBe(
-      "這個 Email 已經註冊過了,請直接登入或使用忘記密碼",
+      "這個 Email 已經註冊過了，請直接登入或使用忘記密碼",
     );
   });
 
   it("A user with this email address has already been registered(同一件事的另一種寫法)", () => {
     expect(
       translateAuthErrorMessage("A user with this email address has already been registered"),
-    ).toBe("這個 Email 已經註冊過了,請直接登入或使用忘記密碼");
+    ).toBe("這個 Email 已經註冊過了，請直接登入或使用忘記密碼");
   });
 
   it("Unable to validate email address: invalid format", () => {
     expect(translateAuthErrorMessage("Unable to validate email address: invalid format")).toBe(
-      "Email 格式不正確,請檢查有沒有打錯",
+      "Email 格式不正確，請檢查有沒有打錯",
     );
   });
 
   it("Signups not allowed for this instance", () => {
     expect(translateAuthErrorMessage("Signups not allowed for this instance")).toBe(
-      "目前沒有開放自行註冊,請聯絡系統管理員",
+      "目前沒有開放自行註冊，請聯絡系統管理員",
     );
   });
 });
 
 describe("translateAuthErrorMessage:頻率限制", () => {
   it("Email rate limit exceeded", () => {
-    expect(translateAuthErrorMessage("Email rate limit exceeded")).toBe("嘗試太頻繁,請稍後再試");
+    expect(translateAuthErrorMessage("Email rate limit exceeded")).toBe("嘗試太頻繁，請稍後再試");
   });
 
   it("帶秒數的 For security purposes 訊息,把秒數帶進中文句子", () => {
@@ -59,13 +59,13 @@ describe("translateAuthErrorMessage:頻率限制", () => {
       translateAuthErrorMessage(
         "For security purposes, you can only request this after 46 seconds.",
       ),
-    ).toBe("操作太頻繁,請等 46 秒後再試一次");
+    ).toBe("操作太頻繁，請等 46 秒後再試一次");
   });
 
   it("秒數是 1 秒時(英文是單數 second)也要命中", () => {
     expect(
       translateAuthErrorMessage("For security purposes, you can only request this after 1 second."),
-    ).toBe("操作太頻繁,請等 1 秒後再試一次");
+    ).toBe("操作太頻繁，請等 1 秒後再試一次");
   });
 });
 
@@ -84,7 +84,7 @@ describe("translateAuthErrorMessage:密碼與連結失效", () => {
 
   it("Email link is invalid or has expired", () => {
     expect(translateAuthErrorMessage("Email link is invalid or has expired")).toBe(
-      "這個連結已經失效或過期,請重新操作一次取得新的連結",
+      "這個連結已經失效或過期，請重新操作一次取得新的連結",
     );
   });
 });
@@ -100,7 +100,7 @@ describe("translateAuthErrorMessage:正規化(大小寫/空白/結尾句點的�
 
   it("前後有多餘空白一樣命中", () => {
     expect(translateAuthErrorMessage("  User already registered  ")).toBe(
-      "這個 Email 已經註冊過了,請直接登入或使用忘記密碼",
+      "這個 Email 已經註冊過了，請直接登入或使用忘記密碼",
     );
   });
 });
@@ -112,8 +112,8 @@ describe("translateAuthErrorMessage:查不到的訊息不能被吞掉", () => {
   });
 
   it("空字串 / null / undefined 才回傳通用文字(這時候原本就沒有任何線索可以保留)", () => {
-    expect(translateAuthErrorMessage("")).toBe("發生未知錯誤,請稍後再試");
-    expect(translateAuthErrorMessage(null)).toBe("發生未知錯誤,請稍後再試");
-    expect(translateAuthErrorMessage(undefined)).toBe("發生未知錯誤,請稍後再試");
+    expect(translateAuthErrorMessage("")).toBe("發生未知錯誤，請稍後再試");
+    expect(translateAuthErrorMessage(null)).toBe("發生未知錯誤，請稍後再試");
+    expect(translateAuthErrorMessage(undefined)).toBe("發生未知錯誤，請稍後再試");
   });
 });

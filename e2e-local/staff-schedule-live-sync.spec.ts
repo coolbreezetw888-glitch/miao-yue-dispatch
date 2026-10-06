@@ -582,7 +582,7 @@ test("E11 關掉 A 的行事曆檢視 ⇒ 再改單 A 收不到訊號;重新整�
     const joinsBefore = joinSentCount(viewA.rt, viewA.topic);
     await viewA.page.reload();
     await expect(
-      viewA.page.getByText("尚未開放此功能,請洽商家管理員開通「行事曆檢視」權限。"),
+      viewA.page.getByText("尚未開放此功能，請洽商家管理員開通「行事曆檢視」權限。"),
     ).toBeVisible({ timeout: LOAD_TIMEOUT });
     await viewA.page.waitForTimeout(QUIET_MS);
     expect(joinSentCount(viewA.rt, viewA.topic) - joinsBefore, "沒有權限就不訂閱").toBe(0);

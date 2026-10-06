@@ -28,7 +28,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <AuthShell title="開始使用秒約" subtitle="填寫第一間店的基本資料,馬上開始使用派工預約系統。">
+    <AuthShell title="開始使用秒約" subtitle="填寫第一間店的基本資料，馬上開始使用派工預約系統。">
       <MerchantIntakeForm
         submitLabel="建立第一間店"
         submittingLabel="建立中⋯"

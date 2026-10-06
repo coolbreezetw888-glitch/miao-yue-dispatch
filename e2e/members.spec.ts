@@ -207,7 +207,7 @@ test("建單表單電話比對連結既有會員(§10.2)+ 訂單詳情頁會員�
   // 點選後:電話補成完整號碼、姓名帶入,面板切到「將連結既有客戶:<姓名>」(不是按鈕,也沒有清除連結)。
   await expect(page.locator("#booking-customer-phone")).toHaveValue(EXISTING_MEMBER_PHONE);
   await expect(page.locator("#booking-customer-name")).toHaveValue(fixture.existingMemberName);
-  await expect(page.getByText("將連結既有客戶:")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("將連結既有客戶：")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.getByRole("button", { name: "清除連結" })).toHaveCount(0);
 
   // §4.5:訂單詳情頁——fixture 已完成的訂單連結到 existingMember,管理員應該看到可點擊連結。

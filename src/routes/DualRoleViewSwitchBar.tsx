@@ -36,12 +36,12 @@ export function DualRoleViewSwitchBar({ isStaffView, onToggle }: DualRoleViewSwi
           {isStaffView ? (
             <>
               你目前在<span className="font-semibold">服務人員端</span>
-              ,看到的是你自己的個人資料、行事曆與薪資。
+              ，看到的是你自己的個人資料、行事曆與薪資。
             </>
           ) : (
             <>
               你目前在<span className="font-semibold">商家端</span>
-              。你同時也是這間商家的服務人員,可以切換過去看自己的班表與薪資。
+              。你同時也是這間商家的服務人員，可以切換過去看自己的班表與薪資。
             </>
           )}
         </p>

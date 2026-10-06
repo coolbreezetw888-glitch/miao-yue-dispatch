@@ -49,7 +49,7 @@ export const LINE_LOG_SKIP_REASON_LABELS: Record<string, string> = {
   // SPECS-INDEX #962:服務人員已離職/停用(status = removed)就不寄訂單 LINE。
   staff_inactive: "服務人員已離職或停用",
   // SPECS-INDEX #876/#962:管理員關掉這位服務人員的「行事曆檢視」,就不寄會帶出客戶資料的訂單 LINE。
-  staff_calendar_view_off: "服務人員未開放「行事曆檢視」,不寄訂單通知",
+  staff_calendar_view_off: "服務人員未開放「行事曆檢視」，不寄訂單通知",
 };
 
 export const LINE_LOG_EVENT_TYPE_LABELS: Record<string, string> = {

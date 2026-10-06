@@ -160,8 +160,8 @@ test("§4.2:進階公式新增兩條、已設定的項目變灰、刪除、切�
 test("§4.3:點數使用儲存後重新整理值仍在,範例即時顯示", async ({ page }) => {
   await openPointsPage(page);
   await page.getByRole("tab", { name: "點數使用" }).click();
-  await page.getByLabel("兌換比例:點數").fill("100");
-  await page.getByLabel("兌換比例:金額").fill("10");
+  await page.getByLabel("兌換比例：點數").fill("100");
+  await page.getByLabel("兌換比例：金額").fill("10");
   await page.getByLabel("單次最大使用比例").fill("50");
   await expect(page.getByTestId("redeem-example")).toContainText("5000");
   await page.getByRole("button", { name: "儲存設定" }).click();

@@ -21,5 +21,5 @@ export function statusChangeLogText(log: BookingStatusChangeLog): string {
 /** #844 §4.6:有原因時回「原因:…」,沒有原因回 null(畫面就不顯示那一行)。 */
 export function statusChangeLogNoteText(log: BookingStatusChangeLog): string | null {
   const note = log.note?.trim();
-  return note ? `原因:${note}` : null;
+  return note ? `原因：${note}` : null;
 }
