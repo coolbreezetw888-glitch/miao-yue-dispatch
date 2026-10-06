@@ -68,9 +68,13 @@ test("產業轉移精靈完整流程(§4.4):建立新商家 → 選會員 → �
   await expect(page.getByText("步驟二：選擇要搬遷的會員", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  const memberRow = page.locator("label", { hasText: fixture.memberName });
+  // #849(ui-v1-full skill 二之七):會員清單從「label + 打勾方框」改成可點的多選方塊(ChoiceChip,
+  // <button aria-pressed>)。點那一位的方塊,並確認它真的變成「已選」(aria-pressed=true)。
+  const memberRow = page.getByRole("button", { name: fixture.memberName });
   await expect(memberRow).toBeVisible();
-  await memberRow.getByRole("checkbox").click();
+  await expect(memberRow).toHaveAttribute("aria-pressed", "false");
+  await memberRow.click();
+  await expect(memberRow).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: /下一步\(已選 1 位\)/ }).click();
 
   // 步驟三:確認搬遷。

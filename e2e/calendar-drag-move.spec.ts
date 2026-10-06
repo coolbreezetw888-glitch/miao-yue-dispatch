@@ -255,7 +255,7 @@ async function openDayGrid(page: Page): Promise<void> {
   await primeCurrentMerchant(page);
   await page.goto(`/app/calendar?date=${fixture.dateKey}`);
   // SPECS-INDEX #640:預設是月檢視,拖拉功能在週檢視的服務人員分欄格線上。
-  await page.getByRole("button", { name: "週檢視" }).click();
+  await page.getByRole("radio", { name: "週檢視" }).click();
   await expect(grid(page)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(staffGrid(page, fixture.staffAId)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(staffGrid(page, fixture.staffCId)).toBeVisible();

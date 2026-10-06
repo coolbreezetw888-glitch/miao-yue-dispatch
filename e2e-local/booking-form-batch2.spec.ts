@@ -524,11 +524,27 @@ async function touchScrollToTime(page: Page, cdp: CDPSession, time: string): Pro
     await touchEnd(cdp);
     await page.waitForTimeout(400);
   }
+  // 第 6 批(#849)M5 偶發不穩的根因:原本只等「清單自己的 scrollTop」停住。M4(667 高)只有清單會捲,
+  // 這樣就夠;M5(375×560 矮視窗)清單捲到底後手勢會接著捲**外面的白框**(白框本身也是捲動容器),
+  // 白框還在慣性滑動時清單的 scrollTop 早就不動了 ⇒ 這裡判定「停穩」、馬上 tap ⇒ 瀏覽器把這一下
+  // 當成「停下滑動」而不是點擊(見本函式上方註解)⇒ 偶發選不到 23:00。
+  // 改成等「目標按鈕在畫面上的位置」停住:不管是清單、白框還是整頁在捲,只要還在動,位置就會變,
+  // 一個條件涵蓋所有捲動容器(連續兩次相隔 250ms 量到同一個位置才算停穩)。
+  const targetY = async () =>
+    (
+      await page
+        .getByTestId("booking-time-options-list")
+        .locator(`[data-time="${time}"]`)
+        .boundingBox()
+    )?.y ?? Number.NaN;
   await expect
     .poll(async () => {
-      const a = await listScrollTop(page);
-      await page.waitForTimeout(200);
-      return (await listScrollTop(page)) === a;
+      const a = await targetY();
+      await page.waitForTimeout(250);
+      const b = await targetY();
+      await page.waitForTimeout(250);
+      const c = await targetY();
+      return Number.isFinite(a) && a === b && b === c;
     })
     .toBe(true);
   expect(await listScrollTop(page), "手指往上滑要真的讓清單往下捲").toBeGreaterThan(before);

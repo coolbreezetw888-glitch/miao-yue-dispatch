@@ -115,6 +115,29 @@ export async function assertNoElementOverflow(page: Page, label: string): Promis
       }
       if (hasScrollableAncestor) return;
       if (el.scrollWidth > el.clientWidth + 1) {
+        // 第 6 批(#849):「隱形的點擊區偽元素」不是內容溢出。
+        // 欄位旁的 `?`(HelpHint.tsx 的 HelpToggle)視覺 18px,用 `before:absolute before:-inset-[7px]
+        // before:content-['']` 撐出 32px 點擊區——這個**空白、透明、絕對定位**的 ::before 會被算進按鈕的
+        // scrollWidth(實測 25 > 18),但畫面上什麼都看不到,也不會蓋住任何文字。
+        // 那 7px 也會一路往上算進它所在那一行的父容器(例如「更換 LOGO ?」那一列)的 scrollWidth。
+        // 只在「自己或某個子孫有這種 absolute + 空 content 的 ::before/::after」**而且**元素的真實內容
+        // (用 Range 量文字與子元素實際的框)完全落在元素框內時才跳過 —— 真的有文字或子元素超出框外,
+        // 一樣會被抓到(那個子元素自己也會因為 scrollWidth > clientWidth 被單獨列出來)。
+        const hasEmptyAbsolutePseudo = (node: Element) =>
+          (["::before", "::after"] as const).some((pseudo) => {
+            const ps = window.getComputedStyle(node, pseudo);
+            return ps.position === "absolute" && (ps.content === '""' || ps.content === "''");
+          });
+        if (
+          hasEmptyAbsolutePseudo(el) ||
+          Array.from(el.querySelectorAll("*")).some(hasEmptyAbsolutePseudo)
+        ) {
+          const box = el.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const contentRect = range.getBoundingClientRect();
+          if (contentRect.left >= box.left - 1 && contentRect.right <= box.right + 1) return;
+        }
         found.push({
           tag,
           classes: el.className ? String(el.className).slice(0, 100) : "",

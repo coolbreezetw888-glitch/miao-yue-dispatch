@@ -115,6 +115,36 @@ function joinOkCount(log: RealtimeLog, topic: string): number {
   ).length;
 }
 
+/**
+ * 第 6 批(#849)E1 不穩的根因修正:目前「還掛著」的訂閱數 = 加入成功的 join 裡,**沒有**被同一個
+ * join_ref 的 phx_leave 退掉的那幾個。
+ *
+ * 為什麼不能直接數「加入成功」次數:本機 e2e 跑的是開發伺服器,main.tsx 包了 React StrictMode ——
+ * 開發模式下 effect 會「執行 → 立刻清除 → 再執行」一次(實測:effect run → 3ms 後 cleanup → 再 run),
+ * 所以頻道會 join → leave → join,收到兩次「加入成功」,但同一時間只有一條掛著(正式版沒有 StrictMode,
+ * 只會 join 一次)。行事曆頁一掛上時如果「行事曆檢視權限」「本人 staff 列」已經在快取裡(推測是第 4 批
+ * 頁首鈴鐺待確認數先查好了這兩個查詢 —— 2026-10-06 實測 4/4 次都在第一次 effect 就拿到 topic),就會走到
+ * join → leave → join;之前 topic 多半要等查詢回來,第一次 effect 還沒有 topic,所以只是偶發。
+ * 這條要守的是「不會留兩條訂閱」,改數「還掛著的」才是在驗這件事。
+ */
+function activeJoinCount(log: RealtimeLog, topic: string): number {
+  const wire = wireTopic(topic);
+  const leftJoinRefs = new Set(
+    log.sent
+      .filter((f) => f.topic === wire && f.event === "phx_leave" && f.joinRef !== null)
+      .map((f) => f.joinRef),
+  );
+  return log.received.filter(
+    (f) =>
+      f.topic === wire &&
+      f.event === "phx_reply" &&
+      f.ref !== null &&
+      f.ref === f.joinRef &&
+      (f.payload as { status?: string } | null)?.status === "ok" &&
+      !leftJoinRefs.has(f.joinRef),
+  ).length;
+}
+
 function joinSentCount(log: RealtimeLog, topic: string): number {
   return log.sent.filter((f) => f.topic === wireTopic(topic) && f.event === "phx_join").length;
 }
@@ -311,8 +341,15 @@ test("E1 進入行事曆就訂到自己的私有頻道(SUBSCRIBED;順便驗 #898
   await waitJoinOk(viewA.rt, viewA.topic, 1);
   await waitJoinOk(viewB.rt, viewB.topic, 1);
 
-  // 同一個頻道只訂一次(Strict Mode 下也不會留兩條)—— 這裡看「加入成功」次數,不含別人的頻道。
-  expect(joinOkCount(viewA.rt, viewA.topic)).toBe(1);
+  // 同一個頻道只訂一次(Strict Mode 下也不會留兩條)—— 看「還掛著的」訂閱數(加入成功、而且沒被退訂),
+  // 不含別人的頻道。為什麼不再數「加入成功」次數,見 activeJoinCount 的說明(#849 E1 不穩根因)。
+  expect(activeJoinCount(viewA.rt, viewA.topic), "A 同一時間只掛著一條自己的頻道").toBe(1);
+  expect(activeJoinCount(viewB.rt, viewB.topic), "B 同一時間只掛著一條自己的頻道").toBe(1);
+  // 多出來的加入成功(StrictMode 的 join → leave → join)一定要有對應的退訂,否則就是漏退訂。
+  expect(
+    joinOkCount(viewA.rt, viewA.topic) - activeJoinCount(viewA.rt, viewA.topic),
+    "StrictMode 最多多一輪 join → leave(多出來的都已經退訂;超過一輪代表訂閱被反覆重建)",
+  ).toBeLessThanOrEqual(1);
 
   const join = viewA.rt.sent.find(
     (f) => f.topic === wireTopic(viewA.topic) && f.event === "phx_join",

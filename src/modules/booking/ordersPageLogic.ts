@@ -198,6 +198,30 @@ export function writeStoredOrdersPageSize(
   }
 }
 
+/**
+ * 第 6 批(#849)競態修正:「登入身份確定」那一刻,每頁筆數要怎麼處理。
+ *
+ * 原本的寫法是身份一確定就一律 `setPageSize(readStoredOrdersPageSize(userId))`。身份是非同步取得的,
+ * 如果使用者(或 e2e)在身份還沒確定前就先改了每頁筆數,那次選擇**會被悄悄蓋回 50**(而且因為當時
+ * userId 還是 null,選擇也沒被記住)—— 預設 e2e「訂單管理頁每頁 500 筆」在本機跑出過一次:
+ * selectOption("500") 之後下拉又變回 "50"。
+ *
+ * 規則:
+ * - 第一次拿到身份(prev 是 null)而且使用者已經自己選過 ⇒ **保留使用者的選擇**,並補寫進這個帳號的設定;
+ * - 其他情況(還沒選過、或是換成另一個帳號)⇒ 照舊讀那個帳號自己存的值。
+ */
+export function resolvePageSizeOnUserChange(input: {
+  previousUserId: string | null;
+  nextUserId: string | null;
+  chosenBeforeIdentity: OrdersPageSize | null;
+}): { pageSize: OrdersPageSize; persistChosen: boolean } {
+  const { previousUserId, nextUserId, chosenBeforeIdentity } = input;
+  if (previousUserId === null && nextUserId !== null && chosenBeforeIdentity !== null) {
+    return { pageSize: chosenBeforeIdentity, persistChosen: true };
+  }
+  return { pageSize: readStoredOrdersPageSize(nextUserId), persistChosen: false };
+}
+
 export interface OrdersPageSlice<T> {
   /** 這一頁要渲染的訂單(由舊到新,跟後端既有排序方向一致)。 */
   bookings: T[];

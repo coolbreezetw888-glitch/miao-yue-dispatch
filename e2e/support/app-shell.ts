@@ -33,3 +33,21 @@ export async function primeCurrentMerchant(page: Page, timeout = DEFAULT_TIMEOUT
   await page.goto("/app/manage");
   await expect(page.getByTestId("manage-page")).toBeVisible({ timeout });
 }
+
+/**
+ * 第 6 批(#849):服務人員 session 版的「先把目前操作中商家寫進 localStorage」。
+ *
+ * 服務人員的落點是 /app(個人資料首頁),原本各 spec 的 beforeEach 只寫 `page.goto("/app")` 就直接往下
+ * 深連結 —— **沒有等首頁真的渲染完**。goto 在頁面 load 事件就返回,但商家清單是之後才非同步載入、
+ * fallback effect 才把「目前操作中商家」寫進 localStorage;馬上再 goto 受保護頁面(/app/my-availability
+ * 等)就會撞到上面那個 race,被守衛導回 /app(本機實跑出現過:休假設定頁 20 秒內等不到標題,畫面停在
+ * 個人資料首頁)。這裡等「編輯個人資料」按鈕出現 —— 它要等商家與本人的服務人員資料都載入完才會渲染,
+ * 出現時 localStorage 一定已經寫好。
+ */
+export async function primeStaffCurrentMerchant(
+  page: Page,
+  timeout = DEFAULT_TIMEOUT,
+): Promise<void> {
+  await page.goto("/app");
+  await expect(page.getByRole("button", { name: "編輯個人資料" })).toBeVisible({ timeout });
+}

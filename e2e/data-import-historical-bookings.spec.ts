@@ -61,8 +61,8 @@ test("歷史訂單匯入精靈(§3.3/§4.1):數值對應——既有服務人員
     timeout: LOAD_TIMEOUT,
   });
 
-  // 步驟一。
-  await page.getByRole("button", { name: "歷史訂單" }).click();
+  // 步驟一。#849:商家切換鈕的名稱改成「切換商家(目前：<商家名>)」,fixture 商家名含「歷史訂單」⇒ 要 exact。
+  await page.getByRole("button", { name: "歷史訂單", exact: true }).click();
   await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   // 步驟二:上傳 CSV + 欄位對應。
@@ -178,7 +178,7 @@ test("歷史訂單匯入精靈(§632):建立新服務人員——沒填電話/�
   await expect(page.getByRole("heading", { name: "資料匯入" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await page.getByRole("button", { name: "歷史訂單" }).click();
+  await page.getByRole("button", { name: "歷史訂單", exact: true }).click();
   await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const staffTextValue = `E2E邊界測試服務人員${fixture.runId}`;
@@ -231,7 +231,7 @@ test("歷史訂單匯入模板下載(§10.4):欄位跟解析邏輯一致，填�
   await expect(page.getByRole("heading", { name: "資料匯入" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await page.getByRole("button", { name: "歷史訂單" }).click();
+  await page.getByRole("button", { name: "歷史訂單", exact: true }).click();
   await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
   const [download] = await Promise.all([

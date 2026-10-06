@@ -26,10 +26,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, devices } from "@playwright/test";
 
 import {
-  assertLocalSupabaseUrl,
   installLoopbackOnlyFetchGuard,
-  LOCAL_ENV_KEYS,
-  parseSupabaseStatusEnv,
+  loadLocalSupabaseTargetIntoEnv,
 } from "./e2e-local/support/local-target";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
@@ -38,33 +36,14 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 const LOCAL_PORT = Number(process.env["E2E_LOCAL_PORT"] ?? 5194);
 
 // config 會在主程序與每個 worker 各載入一次;主程序取到的值透過環境變數傳給 worker,worker 不再呼叫 CLI。
-if (!process.env[LOCAL_ENV_KEYS.url]) {
-  let statusOutput: string;
-  try {
-    statusOutput = execSync("npx supabase status -o env", {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-  } catch (err) {
-    throw new Error(
-      `[本機 e2e] 讀不到本機 Supabase 狀態(請先 \`npx supabase start\`):${(err as Error).message}`,
-    );
-  }
-  const status = parseSupabaseStatusEnv(statusOutput);
-  const publishableKey = status["PUBLISHABLE_KEY"] || status["ANON_KEY"];
-  const serviceRoleKey = status["SERVICE_ROLE_KEY"] || status["SECRET_KEY"];
-  assertLocalSupabaseUrl(status["API_URL"]);
-  if (!publishableKey || !serviceRoleKey) {
-    throw new Error("[本機 e2e] `supabase status` 沒有回傳本機金鑰 ⇒ 中止。");
-  }
-  process.env[LOCAL_ENV_KEYS.url] = status["API_URL"];
-  process.env[LOCAL_ENV_KEYS.publishableKey] = publishableKey;
-  process.env[LOCAL_ENV_KEYS.serviceRoleKey] = serviceRoleKey;
-}
-
-const localUrl = assertLocalSupabaseUrl(process.env[LOCAL_ENV_KEYS.url]).origin;
-const localPublishableKey = process.env[LOCAL_ENV_KEYS.publishableKey] as string;
+// (第 6 批 #849:這段收進 local-target.ts 的 loadLocalSupabaseTargetIntoEnv,預設 config 的本機模式共用。)
+const { url: localUrl, publishableKey: localPublishableKey } = loadLocalSupabaseTargetIntoEnv(() =>
+  execSync("npx supabase status -o env", {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }),
+);
 
 // ④ 既有 fixture(e2e/support/env-file.ts 先看 process.env)也改讀本機值。
 process.env["VITE_SUPABASE_URL"] = localUrl;

@@ -1,11 +1,13 @@
 // 「只連本機」e2e 模式的守門函式(local-target.ts)單元測試。
 // 這幾條是整個本機模式的安全前提:任何一條被改壞,本機模式就可能悄悄連到雲端專案。
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  assertLocalBaseUrl,
   assertLocalSupabaseUrl,
   installLoopbackOnlyFetchGuard,
   isLoopbackHost,
+  loadLocalSupabaseTargetIntoEnv,
   localAuthStorageKey,
   nonLoopbackWebSocketUrls,
   parseSupabaseStatusEnv,
@@ -99,5 +101,83 @@ describe("nonLoopbackWebSocketUrls(#874:WebSocket 也只准連本機)", () => {
       "not a url",
     ];
     expect(nonLoopbackWebSocketUrls(bad)).toEqual(bad);
+  });
+});
+
+// =========================================================================
+// 第 6 批(#849):預設 e2e 的本機模式也共用這兩支。
+// =========================================================================
+describe("assertLocalBaseUrl(前端網址也只准本機)", () => {
+  it("本機前端放行", () => {
+    expect(assertLocalBaseUrl("http://localhost:5195").port).toBe("5195");
+    expect(assertLocalBaseUrl("http://127.0.0.1:5195/").hostname).toBe("127.0.0.1");
+  });
+
+  it("正式站、雲端、其他主機、非 http 協定、空值一律中止", () => {
+    expect(() => assertLocalBaseUrl("https://miaoyue.example.com")).toThrow(/不是 127\.0\.0\.1/);
+    expect(() => assertLocalBaseUrl("https://abc.supabase.co")).toThrow(/supabase\.co/);
+    expect(() => assertLocalBaseUrl("ftp://localhost:5195")).toThrow(/協定/);
+    expect(() => assertLocalBaseUrl("http://localhost.evil.test:5195")).toThrow();
+    expect(() => assertLocalBaseUrl("")).toThrow();
+    expect(() => assertLocalBaseUrl(undefined)).toThrow();
+    expect(() => assertLocalBaseUrl("not a url")).toThrow(/格式/);
+  });
+});
+
+describe("loadLocalSupabaseTargetIntoEnv(取本機網址與金鑰,不是本機就中止)", () => {
+  const KEYS = [
+    "E2E_LOCAL_SUPABASE_URL",
+    "E2E_LOCAL_SUPABASE_PUBLISHABLE_KEY",
+    "E2E_LOCAL_SUPABASE_SERVICE_ROLE_KEY",
+  ];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it("CLI 回本機網址 ⇒ 放進環境變數並回傳 origin", () => {
+    const result = loadLocalSupabaseTargetIntoEnv(
+      () => 'API_URL="http://127.0.0.1:55321"\nPUBLISHABLE_KEY="pk"\nSERVICE_ROLE_KEY="sk"\n',
+    );
+    expect(result).toEqual({ url: "http://127.0.0.1:55321", publishableKey: "pk" });
+    expect(process.env["E2E_LOCAL_SUPABASE_URL"]).toBe("http://127.0.0.1:55321");
+  });
+
+  it("🔴 故障注入:CLI 回雲端網址 ⇒ throw,環境變數不會被寫入", () => {
+    expect(() =>
+      loadLocalSupabaseTargetIntoEnv(
+        () =>
+          'API_URL="https://abcdefgh.supabase.co"\nPUBLISHABLE_KEY="pk"\nSERVICE_ROLE_KEY="sk"\n',
+      ),
+    ).toThrow(/supabase\.co/);
+    expect(process.env["E2E_LOCAL_SUPABASE_URL"]).toBeUndefined();
+  });
+
+  it("🔴 故障注入:外面先設好的 E2E_LOCAL_SUPABASE_URL 不是本機 ⇒ 一樣 throw(不會因為「已經有值」就跳過檢查)", () => {
+    process.env["E2E_LOCAL_SUPABASE_URL"] = "https://abcdefgh.supabase.co";
+    process.env["E2E_LOCAL_SUPABASE_PUBLISHABLE_KEY"] = "pk";
+    const cli = vi.fn(() => "");
+    expect(() => loadLocalSupabaseTargetIntoEnv(cli)).toThrow(/supabase\.co/);
+    expect(cli).not.toHaveBeenCalled();
+  });
+
+  it("CLI 失敗(本機 Supabase 沒開)或沒回金鑰 ⇒ throw", () => {
+    expect(() =>
+      loadLocalSupabaseTargetIntoEnv(() => {
+        throw new Error("docker not running");
+      }),
+    ).toThrow(/supabase start/);
+    expect(() =>
+      loadLocalSupabaseTargetIntoEnv(() => 'API_URL="http://127.0.0.1:55321"\n'),
+    ).toThrow(/金鑰/);
   });
 });

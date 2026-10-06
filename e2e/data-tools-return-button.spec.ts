@@ -10,6 +10,7 @@
 // 重用既有的 data-import-members fixture(只需要一個商家管理員 session,不需要額外建立資料),
 // 比照 data-import-members.spec.ts 的既有慣例。
 
+// #849(ui-v1-full PageHeader):返回連結改成「‹ 返回功能」,箭頭是 aria-hidden 的圖示 ⇒ 可及名稱是「返回功能」。
 import { expect, test } from "@playwright/test";
 
 import {
@@ -62,7 +63,7 @@ test("資料匯入精靈(§10.1):「← 返回功能」導向 /app/manage,且跟
   await page.getByRole("button", { name: "會員資料" }).click();
   await expect(page.getByText("步驟二：上傳 CSV + 欄位對應", { exact: true })).toBeVisible();
 
-  const returnLink = page.getByRole("link", { name: "← 返回功能" });
+  const returnLink = page.getByRole("link", { name: "返回功能", exact: true });
   const previousStepButton = page.getByRole("button", { name: "上一步" });
   await expect(returnLink).toBeVisible();
   await expect(previousStepButton).toBeVisible();
@@ -73,7 +74,7 @@ test("資料匯入精靈(§10.1):「← 返回功能」導向 /app/manage,且跟
   await expect(page).toHaveURL(/\/app\/data-import$/);
 
   // 「← 返回功能」才會離開整個匯入流程,導回 /app/manage。
-  await page.getByRole("link", { name: "← 返回功能" }).click();
+  await page.getByRole("link", { name: "返回功能", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/manage$/);
 });
 
@@ -82,7 +83,7 @@ test("報表匯出中心(§10.1):「← 返回功能」導向 /app/manage", asyn
   await expect(page.getByRole("heading", { name: "報表匯出中心" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await page.getByRole("link", { name: "← 返回功能" }).click();
+  await page.getByRole("link", { name: "返回功能", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/manage$/);
 });
 
@@ -93,6 +94,6 @@ test("產業轉移精靈(§10.1):「← 返回功能」導向 /app/manage(直接
   await expect(page.getByRole("heading", { name: "產業轉移" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await page.getByRole("link", { name: "← 返回功能" }).click();
+  await page.getByRole("link", { name: "返回功能", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/manage$/);
 });

@@ -270,7 +270,8 @@ test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對
   ];
   for (const eventType of cardEventTypes) {
     const card = page.getByTestId(`push-event-card-${eventType}`);
-    await expect(card.getByText("可用變數:", { exact: false })).toBeVisible({
+    // #849(ui-v1-full 二之七):「可用變數:…」一行字改成三欄說明表,表頭是「可用變數」(沒有冒號)。
+    await expect(card.getByText("可用變數", { exact: true })).toBeVisible({
       timeout: LOAD_TIMEOUT,
     });
   }
@@ -287,7 +288,9 @@ test("推播通知設定頁(§13.1,SPECS-INDEX #586):四張卡片都看得到對
   // 驗證意圖完全不變(而且更精準):把斷言限定在「可用變數」那一行說明文字上,確認它列出
   // change_summary、而且沒有混入 service_names——文案輸入框裡剛好也有這串字不該影響判斷。
   const updatedCard = page.getByTestId("push-event-card-booking_updated");
-  const updatedVariableHint = updatedCard.getByText("可用變數:", { exact: false });
+  // #849:變數說明改成表格(變數 / 中文意思 / 範例值),卡片裡唯一的 <table> 就是它(文案輸入框不在表格裡)。
+  const updatedVariableHint = updatedCard.getByRole("table");
+  await expect(updatedVariableHint).toHaveCount(1);
   await expect(updatedVariableHint).toContainText("{{change_summary}}");
   await expect(updatedVariableHint).not.toContainText("{{service_names}}");
 
@@ -582,13 +585,19 @@ test("測試通知(§6.6):「再發一次測試通知」被頻率限制擋下時
   await subscribeThisDevice(page);
 
   // 開啟通知時自動打的那一次就已經被擋下了。
+  // #849(ui-v1-full skill 二):警告那一態改成常駐 `!` 提示框(AlertNote,role="note"),框裡多了一個
+  // 「!」圖示,整個元素的文字變成「!測試通知…」⇒ 改成「狀態框是警告框 + 框裡的訊息逐字等於這句」。
   const status = page.getByTestId("push-test-status");
-  await expect(status).toHaveText("測試通知發太多次了，請等一分鐘再試", { timeout: LOAD_TIMEOUT });
+  const rateLimitedMessage = status.getByText("測試通知發太多次了，請等一分鐘再試", {
+    exact: true,
+  });
+  await expect(rateLimitedMessage).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(status).toHaveAttribute("role", "note");
 
   // §7.5 第 4 點:測試失敗不可以讓「開啟通知」這件事看起來失敗 —— 卡片仍然是已開通狀態。
   await expect(page.getByText("這台裝置已開啟通知")).toBeVisible();
 
   // 常駐的「再發一次測試通知」按鈕存在,而且再按一次仍然是同一句話。
   await page.getByRole("button", { name: "再發一次測試通知" }).click();
-  await expect(status).toHaveText("測試通知發太多次了，請等一分鐘再試", { timeout: LOAD_TIMEOUT });
+  await expect(rateLimitedMessage).toBeVisible({ timeout: LOAD_TIMEOUT });
 });

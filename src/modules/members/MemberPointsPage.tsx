@@ -253,7 +253,11 @@ function MemberPointsPageInner() {
 
       {/* 規則那一半整組需要 member_points 權限;沒有權限時整張卡片不渲染(專案既有慣例:條件式不渲染,
           不是灰掉 —— 灰掉的欄位會讓客服以為「這個值就是目前設定」)。 */}
-      {canManagePointsRules && isSettingsError ? (
+      {/* 🔴 第 6 批(#849,QA D-2 收尾):「沒在載入、卻也沒有 settings」同樣當成讀不到 ——
+          原本只看 isError,查詢還沒拿到資料(例如被停用、或回傳空值)時,下拉選單會以預設值「不限制」
+          可以操作,開關顯示成關閉;雖然儲存會被 saveSettingsPatch 擋下(跳錯誤,不會假成功),
+          但畫面先讓人以為那是目前設定。改成:沒有真正的設定就不顯示任何可編輯欄位。 */}
+      {canManagePointsRules && (isSettingsError || (!settingsLoading && !settings)) ? (
         <Card>
           <CardContent className="pt-6">
             <ErrorState

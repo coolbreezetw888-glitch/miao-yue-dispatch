@@ -29,6 +29,7 @@ import {
   type NotificationBellFixture,
 } from "./support/notification-bell-fixture";
 import { primeCurrentMerchant } from "./support/app-shell";
+import { isLocalE2eTarget, LOCAL_SKIP_PREFIX } from "./support/e2e-target";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -37,6 +38,17 @@ const EXPECTED_ADMIN_DESTINATION = "/app/orders";
 const EXPECTED_ADMIN_DESTINATION_TITLE = "訂單管理";
 
 test.describe.configure({ mode: "serial", timeout: 90_000 });
+
+// 第 6 批(#849):本機模式整支跳過。站內通知只能走產品自己的路徑由 push-notify-dispatch 寫入
+// (見 fixture 檔頭:user_notifications 對使用者沒有 INSERT 權限),而這支 Edge Function 一開頭就檢查
+// VAPID_SUBJECT / VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY——這三個只設定在正式 Supabase 專案的 secrets,
+// 本機 edge runtime 沒有,會回 500「伺服器設定不完整」(2026-10-06 本機實測)。
+// 要在本機跑,得另外產生一組測試用 VAPID 金鑰放進 supabase/functions/.env 再重啟本機 Supabase;
+// 這批沒有做(會動到大家共用的本機環境),留給主腦決定。
+test.skip(
+  isLocalE2eTarget(),
+  `${LOCAL_SKIP_PREFIX}要靠 push-notify-dispatch 產生站內通知,本機 edge runtime 沒有 VAPID 金鑰(只在正式專案)。`,
+);
 
 let fixture: NotificationBellFixture;
 let setupFailed = false;

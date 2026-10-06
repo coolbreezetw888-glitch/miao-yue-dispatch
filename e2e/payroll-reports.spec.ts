@@ -83,14 +83,17 @@ test("店家帳務報表(§4.3):完成訂單的抽成 + 請假扣款正確反映
   );
 
   // 服務人員明細表格:兩位測試服務人員都應該出現,分別顯示抽成金額/月薪淨額。
-  await expect(page.getByRole("cell", { name: fixture.pieceRateStaffName })).toBeVisible();
-  await expect(page.getByRole("cell", { name: fixture.monthlySalaryStaffName })).toBeVisible();
+  // #849(ui-v1-full skill 一):服務人員明細從多欄表格改成 ListCard 清單(<ul><li>),
+  // 金額格式「200 元(抽成)」「N 元(淨額)」沒變 ⇒ 改成以清單列(listitem)定位,斷言內容不變。
+  const staffRow = (name: string) => page.getByRole("listitem").filter({ hasText: name });
+  await expect(staffRow(fixture.pieceRateStaffName)).toHaveCount(1);
+  await expect(staffRow(fixture.monthlySalaryStaffName)).toHaveCount(1);
 
-  const pieceRateRow = page.locator("tr", { hasText: fixture.pieceRateStaffName });
+  const pieceRateRow = staffRow(fixture.pieceRateStaffName);
   await expect(pieceRateRow.getByText(`${EXPECTED_COMMISSION_AMOUNT} 元(抽成)`)).toBeVisible();
 
   const expectedNetPay = MONTHLY_BASE_SALARY - EXPECTED_LEAVE_DEDUCTION;
-  const monthlyRow = page.locator("tr", { hasText: fixture.monthlySalaryStaffName });
+  const monthlyRow = staffRow(fixture.monthlySalaryStaffName);
   await expect(monthlyRow.getByText(`${expectedNetPay} 元(淨額)`)).toBeVisible();
 });
 
@@ -115,7 +118,9 @@ test("服務人員報表(§4.4):切換不同計酬類型的服務人員,版面�
   // 這支測試之前一直排在失敗的第一支測試後面沒被執行到(serial 模式),所以沒人發現它過時。
   // 驗證意圖不變:按件計酬視角看得到 20% 這個抽成比例,而不是把抽成金額誤當成比例。
   await page.getByRole("button", { name: "展開" }).first().click();
-  await expect(page.locator("table")).toContainText("20%");
+  // #849(ui-v1-full skill 一):訂單明細從表格改成 ListCard 清單,展開後的逐項明細是
+  // 「服務項目 × 數量(20%) $金額」⇒ 改成在清單裡找這一行(比原本「整張表格含 20%」更精準)。
+  await expect(page.getByRole("listitem").getByText(/E2E測試服務項目 × 1\(20%\)/)).toBeVisible();
   await expect(page.getByText("月薪基本額")).toHaveCount(0);
 
   // 切換成月薪制服務人員:版面應該換成「月薪基本額/總扣款/實發淨額」+「假別扣款明細」,
@@ -126,7 +131,8 @@ test("服務人員報表(§4.4):切換不同計酬類型的服務人員,版面�
   await expect(page.getByText("月薪基本額")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.getByText("假別扣款明細")).toBeVisible();
   await expect(page.getByText("訂單明細")).toHaveCount(0);
-  await expect(page.getByRole("cell", { name: "事假" })).toBeVisible();
+  // #849:假別扣款明細從表格改成清單,一行是「事假(1 天) 96.77 元」⇒ 找「事假(1 天)」這段(比原本只找「事假」多驗了天數)。
+  await expect(page.getByText(/事假\(1 天\)/)).toBeVisible();
 
   const expectedNetPay = MONTHLY_BASE_SALARY - EXPECTED_LEAVE_DEDUCTION;
   await expect(page.getByText(`${expectedNetPay} 元`).first()).toBeVisible();
@@ -168,12 +174,15 @@ test("#787(核心守門員):商家帳務報表 ↔ 服務人員報表,同一個�
   // 🔴 不先證明表格非空,下面「找得到某一列」「那一列顯示某個金額」的斷言在空表格上會變成
   //    「0 個節點」,某些寫法(toHaveCount(0) 型)會直接假通過。BillingReportPage 全頁只有
   //    這一張 <Table>(實查),所以 `table tbody tr` 就是人員明細列。
-  const staffRows = page.locator("table tbody tr");
+  // #849:人員明細改成 ListCard 清單,每一列是 <main> 裡帶「查看明細」連結的 <li>。
+  const staffRows = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("link", { name: "查看明細" }) });
   await expect(staffRows.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   expect(await staffRows.count()).toBeGreaterThan(0);
 
   // 前提 2:找得到按件計酬那位服務人員的那一列。
-  const pieceRateRow = page.locator("tr", { hasText: fixture.pieceRateStaffName });
+  const pieceRateRow = staffRows.filter({ hasText: fixture.pieceRateStaffName });
   await expect(pieceRateRow).toHaveCount(1);
 
   // 行為 1:商家帳務報表上,這一列顯示的抽成金額(這一側的基準是 bcr.computed_at)。
@@ -185,7 +194,8 @@ test("#787(核心守門員):商家帳務報表 ↔ 服務人員報表,同一個�
   //         這樣連帶驗到 staffId / year / month 三個參數有正確傳遞。
   //         使用者最可能親眼撞見 #767 的就是這條路徑:
   //         「帳務報表說這位師傅本月抽成 200 元」→ 點下去 →「這個月沒有已完成的訂單」。
-  await pieceRateRow.getByRole("link", { name: "查看明細 →" }).click();
+  // #849:連結文字從「查看明細 →」改成「查看明細」(ListCard 的主要動作)。
+  await pieceRateRow.getByRole("link", { name: "查看明細", exact: true }).click();
   await expect(page).toHaveURL(
     new RegExp(
       `/app/staff-report\\?staffId=${fixture.pieceRateStaffId}&year=${COMPLETION_YEAR}&month=${COMPLETION_MONTH}$`,
@@ -198,7 +208,8 @@ test("#787(核心守門員):商家帳務報表 ↔ 服務人員報表,同一個�
   // 前提 3:服務人員報表的訂單明細表格真的有列(同樣防「空清單假通過」)。
   //         這一條就是 #767 那個 bug 的第一個落點:舊基準下這裡會是
   //         「這個月沒有已完成的訂單。」,整張表格連 tbody 都不存在。
-  const detailRows = page.locator("table tbody tr");
+  // #849:訂單明細從表格改成 ListCard 清單(每一筆是一個帶「完成日期」的 <li>)。
+  const detailRows = page.getByRole("listitem").filter({ hasText: "完成日期" });
   await expect(detailRows.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   expect(await detailRows.count()).toBeGreaterThan(0);
 
@@ -213,5 +224,6 @@ test("#787(核心守門員):商家帳務報表 ↔ 服務人員報表,同一個�
 
   // 附帶(#781):明細表格的日期欄位標題是「完成日期」,不是「日期」——讓讀報表的人自己就看得懂
   // 這份報表的認列口徑,這也是 #782 決定「不加說明橫幅」的替代做法。
-  await expect(page.getByRole("columnheader", { name: "完成日期" })).toBeVisible();
+  // #849:不再有表頭;每一筆明細卡片的次要資訊寫「完成日期 YYYY/M/D」⇒ 驗第一筆明細裡有這個前綴加日期。
+  await expect(detailRows.first().getByText(/^完成日期 \d{4}\/\d{1,2}\/\d{1,2}$/)).toBeVisible();
 });

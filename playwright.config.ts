@@ -9,9 +9,22 @@
 //   3. 這份測試仍然會打「真正的」Supabase Auth 伺服器(.env 裡設定的正式專案 wjtbmmnakcriuaqoknsq)
 //      ——只是驗證一組格式正確、但簽章無效的假 token 會被伺服器判定為 401,屬於唯讀的憑證驗證行為,
 //      不會寫入/修改任何一筆真實資料。
-import { defineConfig, devices } from "@playwright/test";
+import { execSync } from "node:child_process";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export default defineConfig({
+import { defineConfig, devices, type PlaywrightTestConfig } from "@playwright/test";
+
+import { E2E_TARGET_ENV, parseE2eTarget } from "./e2e/support/e2e-target";
+import {
+  assertLocalBaseUrl,
+  installLoopbackOnlyFetchGuard,
+  loadLocalSupabaseTargetIntoEnv,
+} from "./e2e-local/support/local-target";
+
+// 👇 預設設定(沒設 E2E_TARGET 時使用)。**這一整段跟第 6 批之前一字不差**,只是從 `export default`
+//    改成先存進變數,讓檔案最下面依 E2E_TARGET 決定要匯出哪一份。
+const defaultConfig = defineConfig({
   testDir: "./e2e",
   // 🔴 SPECS-INDEX #714:**一定要明寫 testMatch,不要用預設值。**
   // Playwright 的預設 testMatch 是 `**/*.@(spec|test).?(c|m)[jt]s?(x)`——**連 `*.test.ts` 也收**。
@@ -46,3 +59,95 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });
+
+// ============================================================================================
+// 👇 第 6 批(SPECS-INDEX #849):預設 e2e 的「本機模式」。只有設了 `E2E_TARGET=local` 才會走這段。
+//
+//   執行:  E2E_TARGET=local npx playwright test            (bash)
+//           $env:E2E_TARGET="local"; npx playwright test     (PowerShell)
+//   前提:  `npx supabase start` 已經在跑(本機 Docker 的 Supabase)。
+//
+// 為什麼需要:上面的預設設定會讓 fixture **寫正式庫**,所以這套測試平常不能跑。本機模式讓同一批 spec
+// 改對著本機 Supabase + 本機前端跑,寫入全部落在本機 Docker,正式庫一個字都不碰。
+//
+// 防呆(任何一道不過 ⇒ config 載入當下 throw,一條測試都不跑;不是只印警告):
+//   ① Supabase 網址與金鑰一律取自 `npx supabase status -o env`(不讀 `.env`);網址主機不是
+//      127.0.0.1 / localhost / ::1、或整串含 supabase.co ⇒ 中止(local-target.ts 的 assertLocalSupabaseUrl)。
+//   ② 前端 baseURL 主機不是本機 ⇒ 中止(assertLocalBaseUrl)。
+//   ③ E2E_TARGET 是 "local" 以外的值 ⇒ 中止(e2e-target.ts;防打錯字被當成「沒設」而連到正式庫)。
+//   ④ `.env` 在本機模式完全不讀(env-file.ts):fixture 的 VITE_SUPABASE_* 由這裡放進 process.env,
+//      正式超級管理員帳密(E2E_PLATFORM_ADMIN_*)從 process.env 移除 ⇒ 需要它的測試自動 skip。
+//   ⑤ Node 端 fixture 的全域 fetch 只准打本機(installLoopbackOnlyFetchGuard)。
+//   ⑥ 瀏覽器端 Chromium 的 DNS 規則:localhost / 127.0.0.1 以外的網域一律解析失敗(含 *.supabase.co)。
+//   ⑦ 開發伺服器用另一個連接埠(預設 5195)、`reuseExistingServer: false`(不可能撿到連正式庫的 5183)。
+// ============================================================================================
+function buildLocalConfig(): PlaywrightTestConfig {
+  const projectRoot = dirname(fileURLToPath(import.meta.url));
+  // 5183 = 預設 e2e、5194 = e2e-local;被占用時 strictPort 直接失敗,可用 E2E_DEFAULT_LOCAL_PORT 換。
+  const port = Number(process.env["E2E_DEFAULT_LOCAL_PORT"] ?? 5195);
+  const baseURL = assertLocalBaseUrl(`http://localhost:${port}`).origin;
+
+  const { url: localUrl, publishableKey: localPublishableKey } = loadLocalSupabaseTargetIntoEnv(
+    () =>
+      execSync("npx supabase status -o env", {
+        cwd: projectRoot,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+  );
+
+  // ④ fixture(env-file.ts 先看 process.env)改讀本機值;正式超級管理員帳密不可以出現在本機模式。
+  process.env["VITE_SUPABASE_URL"] = localUrl;
+  process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] = localPublishableKey;
+  delete process.env["E2E_PLATFORM_ADMIN_EMAIL"];
+  delete process.env["E2E_PLATFORM_ADMIN_PASSWORD"];
+
+  // ⑤ Node 端只准打本機。
+  installLoopbackOnlyFetchGuard();
+
+  return defineConfig({
+    // 收錄範圍跟預設設定完全相同(同一批 spec、同一個條數守門 reporter)。
+    testDir: "./e2e",
+    testMatch: "**/*.spec.ts",
+    fullyParallel: true,
+    // 本機只有一台開發伺服器、一個 Docker 資料庫;預設 1 個 worker 讓結果好判讀,可用 E2E_LOCAL_WORKERS 調。
+    workers: Number(process.env["E2E_LOCAL_WORKERS"] ?? 1),
+    forbidOnly: true,
+    retries: 0,
+    reporter: [["list"], ["./e2e/support/test-count-gate-reporter.ts"]],
+    // 逾時跟預設設定相同,不因為本機模式放寬。
+    timeout: 30_000,
+    outputDir: "test-results/e2e-on-local",
+    use: {
+      baseURL,
+      trace: "retain-on-failure",
+    },
+    webServer: {
+      command: `npm run dev -- --port ${port} --strictPort`,
+      url: baseURL,
+      // ⑦ 不撿既有伺服器:撿到的可能是連正式庫的那一台。
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        VITE_SUPABASE_URL: localUrl,
+        VITE_SUPABASE_PUBLISHABLE_KEY: localPublishableKey,
+      },
+    },
+    projects: [
+      {
+        name: "chromium",
+        use: {
+          ...devices["Desktop Chrome"],
+          launchOptions: {
+            // ⑥ 瀏覽器端:localhost / 127.0.0.1 以外的網域一律解析失敗。
+            args: ["--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1"],
+          },
+        },
+      },
+    ],
+  });
+}
+
+export default parseE2eTarget(process.env[E2E_TARGET_ENV]) === "local"
+  ? buildLocalConfig()
+  : defaultConfig;

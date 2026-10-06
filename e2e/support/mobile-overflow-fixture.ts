@@ -42,12 +42,18 @@ const FIXTURE_PURPOSE = "mobile-overflow 這個 e2e 測試";
 // ---------------------------------------------------------------------------
 // #636/#637(SPECS-INDEX):merchant_staff.phone 這次改成 NOT NULL + CHECK(^09\d{8}$)
 // (#595/#596,見 supabase/migrations/20260922140000_req595_596_staff_agent_phone_not_null_check.sql),
-// 這個 40 碼組合字串不再是合法值,寫入 merchant_staff.phone 會直接被 CHECK 擋下。這裡繼續保留
-// 常數本身(仍然可以合法用在 bookings.customer_phone——該欄位沒有格式 CHECK),但主要服務人員
+// 這個 40 碼組合字串不再是合法值,寫入 merchant_staff.phone 會直接被 CHECK 擋下(#822 之後連
+// bookings.customer_phone 也會被 create_booking 擋,見下方 LONG_VALID_CUSTOMER_PHONE),主要服務人員
 // 的「電話欄位測溢出」情境改用下面的 LONG_STAFF_INTRO(merchant_staff.intro,純文字、無格式
 // 限制),測的是同一個編輯對話框裡的另一個自由文字欄位,不影響原本要驗證「畫面會不會溢出」的
 // 情境本身。
-export const LONG_PHONE_COMBO = "0912345678" + "0987654321" + "0223456789" + "0955667788";
+/** 第 6 批(#849):#822 之後 create_booking 會用 private.is_valid_taiwan_phone 擋客戶電話,原本的 40 碼
+ * 組合字串 LONG_PHONE_COMBO(已刪除)**已經寫不進去**(fixture 一跑就 raise「客戶電話格式不正確」)。改用系統**允許的最長**寫法:
+ * 市話 10 碼 + `#` + 6 碼分機,共 17 個不含空白的字元(規則見 supabase/migrations/
+ * 20260927010000_normalize_phone_extension.sql 與 src/lib/validation.ts)。
+ * 這一行要撐開版面的主力本來就是超長姓名與含長網址的地址(都沒變);電話改成「真實資料可能出現的最長值」,
+ * 比 40 碼更貼近現實,不是放寬檢查。 */
+export const LONG_VALID_CUSTOMER_PHONE = "0223456789#123456";
 export const LONG_ADDRESS =
   "台北市信義區松仁路100號附近(地圖連結:" +
   "https://maps.example.test/loc/averylongunbrokenpathsegmentfortestingoverflowonly1234567890" +
@@ -304,7 +310,7 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
     ],
     p_start_at: startAt,
     p_customer_name: LONG_CUSTOMER_NAME,
-    p_customer_phone: LONG_PHONE_COMBO,
+    p_customer_phone: LONG_VALID_CUSTOMER_PHONE,
     p_notes: LONG_NOTES,
     p_assistant_staff_ids: [(staffAssistant as { id: string }).id],
     p_material_cost_item_ids: [(materialItem as { id: string }).id],

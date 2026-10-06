@@ -166,6 +166,40 @@ describe("§4.1 分頁顯示條件", () => {
     expect(screen.queryByRole("tab")).toBeNull();
     expect(screen.getByText("讀不到紅利點數的設定")).toBeInTheDocument();
   });
+
+  // 第 6 批(#849,QA D-2「假成功」收尾):讀不到設定時**不可以有任何可編輯的欄位**,
+  // 否則商家會把預設值當成自己的設定、按了以為存好了。
+  it("讀不到設定 ⇒ 開關、資格條件下拉、儲存鈕全部不出現;重新載入按鈕在", () => {
+    state.settingsError = true;
+    renderPage();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /儲存/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /重新載入|再試一次|重試/ })).toBeInTheDocument();
+    expect(state.toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it("沒有在載入、也沒有錯誤,但就是沒拿到設定 ⇒ 一樣當成讀不到,不顯示可編輯表單", () => {
+    state.settings = undefined;
+    renderPage();
+    expect(screen.getByText("讀不到紅利點數的設定")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("負向對照:讀得到設定時開關與下拉都在(上面兩條不是因為畫面整個沒渲染才過)", () => {
+    renderPage();
+    expect(screen.getByRole("switch", { name: "啟用紅利點數功能" })).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox").length).toBeGreaterThan(0);
+  });
+
+  it("切換開關時儲存失敗 ⇒ 只跳錯誤,不跳「已停用/已啟用」", async () => {
+    state.saveMock.mockReset().mockRejectedValue(new Error("網路斷了"));
+    renderPage();
+    await userEvent.click(screen.getByRole("switch", { name: "啟用紅利點數功能" }));
+    await waitFor(() => expect(state.toastMock.error).toHaveBeenCalled());
+    expect(state.toastMock.success).not.toHaveBeenCalled();
+  });
 });
 
 describe("§4.2 紅利計算", () => {

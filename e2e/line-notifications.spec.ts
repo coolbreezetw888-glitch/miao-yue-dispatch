@@ -45,6 +45,7 @@ import {
   type LineNotificationsFixture,
 } from "./support/line-notifications-fixture";
 import { primeCurrentMerchant } from "./support/app-shell";
+import { isLocalE2eTarget, LOCAL_SKIP_PREFIX } from "./support/e2e-target";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -83,15 +84,24 @@ test.beforeEach(async ({ page }) => {
 test("LINE 串接設定頁(§4.1):貼假憑證測試連線真的失敗,正確顯示錯誤訊息且不顯示解除串接按鈕", async ({
   page,
 }) => {
+  // 第 6 批(#849):這條**刻意不 mock**,要讓 line-test-connection 真的去打 LINE 官方 API
+  // (GET https://api.line.me/v2/bot/info)拿到 401。本機模式下本機 edge runtime 一樣會對外打 LINE
+  // ——那就不是「只連本機」了,而且結果取決於當下外網;本機模式只驗不出網的部分(下一條 mock 版涵蓋畫面)。
+  test.skip(
+    isLocalE2eTarget(),
+    `${LOCAL_SKIP_PREFIX}這條要真的呼叫 LINE 官方 API(外部服務),本機模式不對外連線。`,
+  );
   await page.goto("/app/line-settings");
   await expect(page.getByRole("heading", { name: "LINE 串接設定" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByText("尚未串接")).toBeVisible();
 
-  await page.getByLabel("Channel ID *").fill(`e2e-fake-channel-id-${fixture.runId}`);
-  await page.getByLabel("Channel Secret *").fill(`e2e-fake-channel-secret-${fixture.runId}`);
-  await page.getByLabel("Channel Access Token *").fill(`e2e-fake-access-token-${fixture.runId}`);
+  await page.getByLabel(/^Channel ID\s*\*?$/).fill(`e2e-fake-channel-id-${fixture.runId}`);
+  await page.getByLabel(/^Channel Secret\s*\*?$/).fill(`e2e-fake-channel-secret-${fixture.runId}`);
+  await page
+    .getByLabel(/^Channel Access Token\s*\*?$/)
+    .fill(`e2e-fake-access-token-${fixture.runId}`);
   await page.getByRole("button", { name: "儲存並測試連線" }).click();
 
   // 這裡刻意不 mock——讓已經部署上線的 line-test-connection Edge Function 真的打一次
@@ -99,9 +109,14 @@ test("LINE 串接設定頁(§4.1):貼假憑證測試連線真的失敗,正確顯
   // token,確認系統正確顯示驗證失敗」的間接驗證方式。訊息同時會出現在表單下方的紅字、狀態卡片
   // 的「最後測試時間」那一行、以及一則 toast,這裡只鎖定表單下方那個紅字段落,避免 strict mode
   // 因為同一段文字出現在多處而衝突。
-  await expect(page.locator("p.text-destructive")).toHaveText(/連線失敗|無效或已過期/, {
-    timeout: LOAD_TIMEOUT,
-  });
+  // #849(ui-v1-full):失敗訊息從一行紅字(p.text-destructive)改成常駐 `!` 提示框(AlertNote,role="note"),
+  // 一樣只鎖定表單裡那一個(toast 不在 <form> 裡)。
+  await expect(
+    page
+      .locator("form")
+      .getByRole("note")
+      .filter({ hasText: /連線失敗|無效或已過期/ }),
+  ).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.getByText("尚未串接")).toBeVisible();
   await expect(page.getByRole("button", { name: "解除串接" })).toHaveCount(0);
 });
@@ -122,16 +137,20 @@ test("LINE 串接設定頁(§4.1):mock 測試連線成功時正確顯示成功�
     timeout: LOAD_TIMEOUT,
   });
 
-  await page.getByLabel("Channel ID *").fill(`e2e-fake-channel-id-mock-${fixture.runId}`);
-  await page.getByLabel("Channel Secret *").fill(`e2e-fake-channel-secret-mock-${fixture.runId}`);
+  await page.getByLabel(/^Channel ID\s*\*?$/).fill(`e2e-fake-channel-id-mock-${fixture.runId}`);
   await page
-    .getByLabel("Channel Access Token *")
+    .getByLabel(/^Channel Secret\s*\*?$/)
+    .fill(`e2e-fake-channel-secret-mock-${fixture.runId}`);
+  await page
+    .getByLabel(/^Channel Access Token\s*\*?$/)
     .fill(`e2e-fake-access-token-mock-${fixture.runId}`);
   await page.getByRole("button", { name: "儲存並測試連線" }).click();
 
   // 「連線成功」同時會出現在表單下方的訊息段落跟一則 toast,這裡只鎖定表單下方那一段
   // (class 帶 text-cta,對應成功訊息的樣式),避免 strict mode 因為同一段文字出現在多處而衝突。
-  await expect(page.locator("p.text-cta").filter({ hasText: "連線成功" })).toBeVisible({
+  // #849:成功訊息的樣式從 text-cta 改成 text-success-strong;改成「表單裡、文字完全等於 連線成功」定位,
+  // 不綁顏色 class(toast 不在 <form> 裡,不會撞 strict mode)。
+  await expect(page.locator("form").getByText("連線成功", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 });
@@ -211,9 +230,10 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):商家未串接 LINE 時直接�
   await expect(page.getByText("要透過 LINE 通知這次確認嗎?")).toHaveCount(0, {
     timeout: 3_000,
   });
-  // 「已確認」這個文字同時也是 OrdersPage 上方狀態分頁籤的名稱,這裡改用 Badge 的樣式
-  // class(bg-primary,對應 accepted 狀態)精準定位這一列的狀態徽章,不用純文字比對整個頁面。
-  await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
+  // 「已確認」這個文字同時也是 OrdersPage 上方狀態分頁籤的名稱,所以一定要縮到這一張訂單卡片裡。
+  // #849:狀態膠囊改成實心 + 商家自訂顏色(inline style,#832),不再有 bg-primary class ⇒
+  // 改成「這張卡片裡、文字完全等於 已確認」(卡片其他文字都不會恰好等於這三個字)。
+  await expect(bookingRow.getByText("已確認", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -264,7 +284,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時彈窗�
   ).toBeVisible();
 
   await page.getByRole("button", { name: "否，只確認不通知" }).click();
-  await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
+  await expect(bookingRow.getByText("已確認", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -310,7 +330,7 @@ test("確認訂單通知彈窗(規則 2.5/§4.8):mock 有通知目標時,選「�
   });
 
   await page.getByRole("button", { name: "是，確認並通知" }).click();
-  await expect(bookingRow.locator(".bg-primary", { hasText: "已確認" })).toBeVisible({
+  await expect(bookingRow.getByText("已確認", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -353,7 +373,8 @@ test("行銷通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對應
   await expect(page.getByRole("heading", { name: "再行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("目前沒有任何會員完成 LINE 綁定。")).toBeVisible({
+  // #849(ui-v1-full 二之八):空狀態改 EmptyState,標題是「還沒有任何會員完成 LINE 綁定」。
+  await expect(page.getByText("還沒有任何會員完成 LINE 綁定", { exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByRole("button", { name: "發送" })).toBeDisabled();
@@ -368,13 +389,16 @@ test("行銷通知頁(§10.1,SPECS-INDEX #584):可用變數說明 + 即時預覽
   });
 
   // §10.1 要求複用 §4.2/§385 既有的「可用變數說明 + 即時預覽」UI 模式。
-  await expect(page.getByText("可用變數:", { exact: false })).toBeVisible();
-  await expect(page.getByText("{{member_name}}", { exact: false })).toBeVisible();
+  // #849(ui-v1-full 二之七):「可用變數:…」一行字改成三欄說明表(變數 / 中文意思 / 範例值),
+  // 表頭是「可用變數」(沒有冒號)。變數本身在表格的 <code> 裡。
+  await expect(page.getByText("可用變數", { exact: true })).toBeVisible();
+  await expect(page.getByText("{{member_name}}", { exact: true })).toBeVisible();
 
   const textarea = page.locator("textarea");
   await textarea.fill("{{member_name}} 您好,本月有優惠活動");
 
-  await expect(page.getByText("即時預覽(套用範例假資料)")).toBeVisible();
+  // #849:預覽框標題從「即時預覽(套用範例假資料)」改成「會員實際會收到」。
+  await expect(page.getByText("會員實際會收到", { exact: true })).toBeVisible();
   await expect(page.getByText("王小姐 您好,本月有優惠活動")).toBeVisible();
 });
 
@@ -417,17 +441,15 @@ const TIER_TEST_MEMBERS = [
 ];
 
 async function mockTierAndMemberQueries(page: import("@playwright/test").Page) {
-  await page.route(/\/rest\/v1\/members\?/, async (route) => {
-    const url = new URL(route.request().url());
-    if (url.searchParams.get("line_bound") === "eq.true") {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify(TIER_TEST_MEMBERS),
-      });
-      return;
-    }
-    await route.continue();
+  // #849(#976 第 3 批):可發送名單改由 list_line_marketable_members RPC 提供(回傳欄位跟改前直接讀
+  // members 表的 id / name / phone / tier_id / is_blacklisted 一致),原本攔截的 `members?line_bound=eq.true`
+  // 查詢已經不存在 ⇒ 改攔這支 RPC,注入同一份假資料。
+  await page.route(/\/rest\/v1\/rpc\/list_line_marketable_members/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(TIER_TEST_MEMBERS),
+    });
   });
   await page.route(/\/rest\/v1\/merchant_member_tiers\?/, async (route) => {
     await route.fulfill({
@@ -453,7 +475,11 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):依會員分類批量選擇正確
   await expect(tierList.getByText("VIP會員")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(tierList.getByText("3 位已綁定 LINE 的會員")).toBeVisible();
 
-  await tierList.getByRole("checkbox").first().click();
+  // #849(ui-v1-full 二之七):打勾方框改成可點的多選方塊(ChoiceChip,<button aria-pressed>)。
+  const vipTierChip = tierList.getByRole("button", { name: /^VIP會員/ });
+  await expect(vipTierChip).toHaveAttribute("aria-pressed", "false");
+  await vipTierChip.click();
+  await expect(vipTierChip).toHaveAttribute("aria-pressed", "true");
 
   // 目前選取(尚未扣除排除清單/黑名單)應該是這個等級的 3 位全部整批選入。
   await expect(page.getByText("目前選取 3 位會員", { exact: false })).toBeVisible();
@@ -464,13 +490,14 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):依會員分類批量選擇正確
   // 有清楚標示「將自動從送出名單排除」。
   await page.getByRole("tab", { name: "單獨選擇" }).click();
   const individualList = page.getByTestId("line-marketing-individual-list");
-  const vip1Row = individualList.locator("li", { hasText: "VIP會員一" });
-  await expect(vip1Row.getByRole("checkbox")).toBeChecked();
-  const blacklistRow = individualList.locator("li", { hasText: "VIP黑名單會員" });
-  await expect(blacklistRow.getByRole("checkbox")).toBeChecked();
-  await expect(blacklistRow.getByText("將自動從送出名單排除", { exact: false })).toBeVisible();
-  const generalRow = individualList.locator("li", { hasText: "一般會員一" });
-  await expect(generalRow.getByRole("checkbox")).not.toBeChecked();
+  // #849:「已勾選」改成多選方塊的 aria-pressed;黑名單標籤文字改成「黑名單・會自動從送出名單排除」。
+  const vip1Chip = individualList.getByRole("button", { name: /VIP會員一/ });
+  await expect(vip1Chip).toHaveAttribute("aria-pressed", "true");
+  const blacklistChip = individualList.getByRole("button", { name: /VIP黑名單會員/ });
+  await expect(blacklistChip).toHaveAttribute("aria-pressed", "true");
+  await expect(blacklistChip.getByText("會自動從送出名單排除", { exact: false })).toBeVisible();
+  const generalChip = individualList.getByRole("button", { name: /一般會員一/ });
+  await expect(generalChip).toHaveAttribute("aria-pressed", "false");
 });
 
 test("行銷通知頁(§10.2,SPECS-INDEX #612):黑名單客戶預設自動排除且不出現在手動排除清單裡,手動排除清單正確把選中的會員從最終送出名單移除", async ({
@@ -492,11 +519,12 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):黑名單客戶預設自動排除
 
   // 單獨選擇 VIP會員一 + 一般會員一,尚未排除時實際會送出 2 位。
   const individualList = page.getByTestId("line-marketing-individual-list");
-  await individualList.locator("li", { hasText: "VIP會員一" }).getByRole("checkbox").click();
-  await individualList.locator("li", { hasText: "一般會員一" }).getByRole("checkbox").click();
+  // #849:打勾方框改成多選方塊(ChoiceChip)。
+  await individualList.getByRole("button", { name: /VIP會員一/ }).click();
+  await individualList.getByRole("button", { name: /一般會員一/ }).click();
   await expect(page.getByText("實際會送出 2 位會員", { exact: false })).toBeVisible();
 
   // 在手動排除清單裡勾選 VIP會員一,最終送出名單應該只剩一般會員一(1 位)。
-  await manualExcludeList.locator("li", { hasText: "VIP會員一" }).getByRole("checkbox").click();
+  await manualExcludeList.getByRole("button", { name: /VIP會員一/ }).click();
   await expect(page.getByText("實際會送出 1 位會員", { exact: false })).toBeVisible();
 });

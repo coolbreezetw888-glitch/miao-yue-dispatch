@@ -11,6 +11,7 @@ import {
   formatCardDateTime,
   formatGroupDateHeading,
   getOrdersPageSizeStorageKey,
+  resolvePageSizeOnUserChange,
   groupBookingsByDateField,
   isOrdersPageSize,
   ORDER_STATUS_TABS,
@@ -430,5 +431,51 @@ describe("每頁筆數選項與 localStorage 記憶(依帳號分開)", () => {
       getItem.mockRestore();
       setItem.mockRestore();
     }
+  });
+});
+
+// 第 6 批(#849):身份還沒確定前就改了每頁筆數,身份確定時不可以被蓋回 50(預設 e2e 本機實跑抓到的競態)。
+describe("resolvePageSizeOnUserChange(身份確定時每頁筆數怎麼處理)", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("🔴 身份確定前使用者已選 500 ⇒ 保留 500,並補寫進這個帳號的設定", () => {
+    expect(
+      resolvePageSizeOnUserChange({
+        previousUserId: null,
+        nextUserId: "user-a",
+        chosenBeforeIdentity: 500,
+      }),
+    ).toEqual({ pageSize: 500, persistChosen: true });
+  });
+
+  it("負向對照:沒選過 ⇒ 讀這個帳號自己存的值(沒存過就是 50)", () => {
+    expect(
+      resolvePageSizeOnUserChange({
+        previousUserId: null,
+        nextUserId: "user-a",
+        chosenBeforeIdentity: null,
+      }),
+    ).toEqual({ pageSize: DEFAULT_ORDERS_PAGE_SIZE, persistChosen: false });
+    window.localStorage.setItem(getOrdersPageSizeStorageKey("user-a"), "100");
+    expect(
+      resolvePageSizeOnUserChange({
+        previousUserId: null,
+        nextUserId: "user-a",
+        chosenBeforeIdentity: null,
+      }),
+    ).toEqual({ pageSize: 100, persistChosen: false });
+  });
+
+  it("換成另一個帳號 ⇒ 讀那個帳號自己的值,不把上一個人的選擇帶過去", () => {
+    window.localStorage.setItem(getOrdersPageSizeStorageKey("user-b"), "200");
+    expect(
+      resolvePageSizeOnUserChange({
+        previousUserId: "user-a",
+        nextUserId: "user-b",
+        chosenBeforeIdentity: 500,
+      }),
+    ).toEqual({ pageSize: 200, persistChosen: false });
   });
 });

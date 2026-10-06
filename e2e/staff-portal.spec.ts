@@ -16,6 +16,7 @@ import {
   teardownStaffPortalFixture,
   type StaffPortalFixture,
 } from "./support/staff-portal-fixture";
+import { primeCurrentMerchant, primeStaffCurrentMerchant } from "./support/app-shell";
 
 const LOAD_TIMEOUT = 20_000;
 
@@ -45,7 +46,8 @@ test.beforeEach(async ({ page }) => {
   // 已知既有問題(跟這次修正主題無關,e2e/mobile-overflow.spec.ts / payroll-reports.spec.ts 開頭
   // 已記錄):全新瀏覽器 session 第一次深連結到受保護頁面時,有機會在 currentMerchantId 還沒被
   // context.tsx 的 fallback effect 寫進 localStorage 前就被誤判。先訪問一次 /app。
-  await page.goto("/app");
+  // 第 6 批(#849):只 goto 不等渲染完不夠(goto 一返回就深連結還是會撞到),改用 primeStaffCurrentMerchant。
+  await primeStaffCurrentMerchant(page);
 });
 
 test("4.1:服務人員登入後首頁顯示自己的個人資料卡片,看不到管理員版本的卡片", async ({ page }) => {
@@ -129,14 +131,26 @@ test("4.4:休假設定頁新增每週固定時段,自己看得到,也正確反�
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   await injectAdminSession(adminPage, fixture);
+  // 第 6 批(#849)不穩根因:新的瀏覽器 context 直接深連結受保護頁面,有機會在「目前操作中商家」寫進
+  // localStorage 之前就被守衛導回(見 e2e/support/app-shell.ts 的說明;本機實跑出過一次「服務人員管理頁
+  // 20 秒內看不到 fixture 服務人員」)。比照其他 spec 的 beforeEach,先走一次 primeCurrentMerchant。
+  await primeCurrentMerchant(adminPage);
   await adminPage.goto("/app/staff");
   await expect(adminPage.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   // 4.7:登入狀態徽章應顯示「已開通登入」,且提供「服務人員權限」入口,不再顯示「邀請登入」。
+  // #849(ui-v1-full ListCard,StaffListPage.tsx 卡片標籤註解):「已開通登入」不再是一顆標籤,改由卡片下方
+  // 「登入信箱:<信箱>」那一行表達(只有已開通的人才會顯示這行);「服務人員權限」「邀請登入」收進 ⋯ 選單。
+  // 斷言意圖不變:①看得出已開通 ②有權限設定入口 ③沒有邀請登入。
   const staffRow = adminPage.locator("li", { hasText: fixture.staffName });
-  await expect(staffRow.getByText("已開通登入")).toBeVisible();
-  await expect(staffRow.getByRole("link", { name: "服務人員權限" })).toBeVisible();
-  await expect(staffRow.getByRole("button", { name: "邀請登入" })).toHaveCount(0);
+  await expect(staffRow.getByText(/^登入信箱：\S+@\S+$/)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(staffRow.getByText("尚未開通登入", { exact: true })).toHaveCount(0);
+  await staffRow.getByRole("button", { name: "更多動作", exact: true }).click();
+  const rowMenu = adminPage.getByRole("menu");
+  await expect(rowMenu.getByRole("menuitem", { name: "服務人員權限" })).toBeVisible();
+  await expect(rowMenu.getByRole("menuitem", { name: "邀請登入" })).toHaveCount(0);
+  await adminPage.keyboard.press("Escape");
+  await expect(rowMenu).toHaveCount(0);
 
   // 打開編輯表單,確認可預約時段清單裡看得到服務人員自己剛新增的那組時段。
   await staffRow.getByRole("button", { name: "編輯" }).click();
@@ -149,21 +163,28 @@ test("4.7:服務人員權限頁正確列出四項自助功能開關,且可以切
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   await injectAdminSession(adminPage, fixture);
+  // 第 6 批(#849)不穩根因:新的瀏覽器 context 直接深連結受保護頁面,有機會在「目前操作中商家」寫進
+  // localStorage 之前就被守衛導回(見 e2e/support/app-shell.ts 的說明;本機實跑出過一次「服務人員管理頁
+  // 20 秒內看不到 fixture 服務人員」)。比照其他 spec 的 beforeEach,先走一次 primeCurrentMerchant。
+  await primeCurrentMerchant(adminPage);
   await adminPage.goto("/app/staff");
   await expect(adminPage.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   const staffRow = adminPage.locator("li", { hasText: fixture.staffName });
-  await staffRow.getByRole("link", { name: "服務人員權限" }).click();
+  // #849:「服務人員權限」收進每列右側的 ⋯(更多動作)選單,點開後是一個連結型的 menuitem。
+  await staffRow.getByRole("button", { name: "更多動作", exact: true }).click();
+  await adminPage.getByRole("menu").getByRole("menuitem", { name: "服務人員權限" }).click();
 
   await expect(
     adminPage.getByRole("heading", { name: `${fixture.staffName} 的權限設定` }),
   ).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(adminPage.getByText("行事曆檢視")).toBeVisible();
-  await expect(adminPage.getByText("可預約時段/休假自助調整")).toBeVisible();
-  await expect(adminPage.getByText("抽成/薪資報表檢視")).toBeVisible();
-  await expect(adminPage.getByText("個人資料編輯")).toBeVisible();
+  // #849:頁面說明文字裡也提到「行事曆檢視」(#976 第 3 批補的客戶個資提醒)⇒ 四個開關名稱一律逐字比對。
+  await expect(adminPage.getByText("行事曆檢視", { exact: true })).toBeVisible();
+  await expect(adminPage.getByText("可預約時段/休假自助調整", { exact: true })).toBeVisible();
+  await expect(adminPage.getByText("抽成/薪資報表檢視", { exact: true })).toBeVisible();
+  await expect(adminPage.getByText("個人資料編輯", { exact: true })).toBeVisible();
 
   await adminContext.close();
 });

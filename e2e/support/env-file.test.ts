@@ -167,3 +167,30 @@ describe("readRequiredEnvValue —— 讀不到就丟錯", () => {
     );
   });
 });
+
+// 第 6 批(#849):預設 e2e 的本機模式(E2E_TARGET=local)**完全不讀 `.env`**——`.env` 裡是正式庫網址
+// 與正式超級管理員帳密。本機模式需要的值一律由 playwright.config.ts 事先放進 process.env。
+describe("本機模式(E2E_TARGET=local)不讀 .env", () => {
+  afterEach(() => {
+    delete process.env["E2E_TARGET"];
+  });
+
+  it("process.env 沒有 ⇒ 回 undefined,而且根本沒去讀 .env 檔", () => {
+    process.env["E2E_TARGET"] = "local";
+    givenEnvFile(`${KEY}=from-prod-dotenv\n`);
+    expect(readOptionalEnvValue(KEY)).toBeUndefined();
+    expect(mockedReadFileSync).not.toHaveBeenCalled();
+    expect(() => readRequiredEnvValue(KEY)).toThrowError(/找不到/);
+  });
+
+  it("process.env 有值(config 放進去的本機值)⇒ 照常回傳", () => {
+    process.env["E2E_TARGET"] = "local";
+    process.env[KEY] = "from-local-config";
+    expect(readOptionalEnvValue(KEY)).toBe("from-local-config");
+  });
+
+  it("負向對照:沒開本機模式時,同一份 .env 讀得到(上面那條不是因為 mock 壞掉才回 undefined)", () => {
+    givenEnvFile(`${KEY}=from-prod-dotenv\n`);
+    expect(readOptionalEnvValue(KEY)).toBe("from-prod-dotenv");
+  });
+});

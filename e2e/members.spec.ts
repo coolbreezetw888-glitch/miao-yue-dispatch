@@ -74,7 +74,7 @@ test("會員管理列表頁(§4.1):建立會員、下架後預設篩選看不到
   const newMemberName = `E2E新建會員${fixture.runId}`;
   await page.getByRole("button", { name: "新增會員" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByLabel("姓名 *").fill(newMemberName);
+  await page.getByLabel(/^姓名\s*\*?$/).fill(newMemberName);
   await page.getByLabel(/^電話/).fill("0955888100");
   await page.getByRole("dialog").getByRole("button", { name: "建立" }).click();
 
@@ -82,18 +82,22 @@ test("會員管理列表頁(§4.1):建立會員、下架後預設篩選看不到
 
   // 下架這位新建會員,預設篩選(上架中)應該看不到。
   const newMemberRow = page.locator("li", { hasText: newMemberName });
-  await newMemberRow.getByRole("button", { name: "下架" }).click();
+  // #849(ui-v1-full ListCard):「下架」收進每列右側的「⋯」(更多動作)選單。
+  // 會員卡片整張可點(role="button",名稱會包含卡片裡所有文字)⇒ 卡片內的按鈕一律加 exact。
+  await newMemberRow.getByRole("button", { name: "更多動作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "下架" }).click();
   await page.getByRole("button", { name: "確定下架" }).click();
 
   await expect(page.getByText(newMemberName)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 
   // 切換到「已下架」篩選,應該看得到,並可以重新上架恢復。
-  await page.getByRole("button", { name: "已下架", exact: true }).click();
+  // #849:狀態篩選從按鈕改成底線式分頁籤(UnderlineTabsTrigger,名稱後面帶數量,例如「已下架 1」)。
+  await page.getByRole("tab", { name: /^已下架\s*\d+$/ }).click();
   await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
   const removedRow = page.locator("li", { hasText: newMemberName });
-  await removedRow.getByRole("button", { name: "恢復" }).click();
+  await removedRow.getByRole("button", { name: "恢復", exact: true }).click();
 
-  await page.getByRole("button", { name: "上架中", exact: true }).click();
+  await page.getByRole("tab", { name: /^上架中\s*\d+$/ }).click();
   await expect(page.getByText(newMemberName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
@@ -120,8 +124,8 @@ test("會員詳情頁(§4.2/#830):點數卡片含登記兌換與手動調整入�
   // 登記兌換一次,餘額與異動歷史要即時更新(這段原本在紅利點數管理頁的測試裡,跟著功能一起搬過來)。
   await page.getByRole("button", { name: "登記兌換" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByLabel("兌換點數 *").fill("10");
-  await page.getByLabel("用途說明 *").fill("e2e 測試兌換一次免費加值服務");
+  await page.getByLabel(/^兌換點數\s*\*?$/).fill("10");
+  await page.getByLabel(/^用途說明\s*\*?$/).fill("e2e 測試兌換一次免費加值服務");
   await page.getByRole("dialog").getByRole("button", { name: "確認兌換" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 
@@ -131,7 +135,8 @@ test("會員詳情頁(§4.2/#830):點數卡片含登記兌換與手動調整入�
   await expect(page.getByText("e2e 測試兌換一次免費加值服務")).toBeVisible();
 
   // 相關訂單:fixture 已連結並完成的那筆訂單應該出現,顯示已核發的點數。
-  await expect(page.getByText(`已核發 ${expectedEarnedPoints} 點`)).toBeVisible();
+  // #849(紅利系統重構 §4.8 / #844):相關訂單的標籤從「已核發 N 點」改成「已入帳 N 點」(看淨額)。
+  await expect(page.getByText(`已入帳 ${expectedEarnedPoints} 點`, { exact: true })).toBeVisible();
 
   // 推薦名單:fixture 的被推薦會員應該出現。
   await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
@@ -239,7 +244,9 @@ test("建單表單:客戶電話亂打會被擋下、不會送出;改成市話+�
 
   // 先把排在電話「前面」的必填項填齊(服務人員、服務項目、客戶姓名;日期時間開啟時已預設帶入),
   // 否則 handleSubmit 會先被更前面的檢查擋住,根本走不到電話那一條。
-  await dialog.getByText("服務人員 *", { exact: true }).locator("..").getByRole("combobox").click();
+  // #849(ui-v1-full FormField):標題文字與「*」拆成不同節點,原本「找文字再往上一層」的定位失效;
+  // 改用服務人員下拉自己的 id(e2e-local 的建單測試也是這樣定位)。
+  await dialog.locator("#booking-staff").click();
   await page.getByRole("option", { name: `${STAFF_NAME_PREFIX}${fixture.runId}` }).click();
   // SPECS-INDEX #979(2026-10-06):服務項目改從「選擇項目」整頁勾選後按「確認」(只改操作步驟)。
   await dialog.locator("#booking-service-items").click();
@@ -248,6 +255,14 @@ test("建單表單:客戶電話亂打會被擋下、不會送出;改成市話+�
   await expect(serviceItemCheckbox).toBeVisible({ timeout: LOAD_TIMEOUT });
   await serviceItemCheckbox.click();
   await picker.getByRole("button", { name: /^確認/ }).click();
+  // #849(第 2 批「時間清單只列可約」):選好服務人員與項目之後,預約時間不一定會自動帶入
+  // (預設時段可能已經過了或不可約,按鈕顯示「請選擇日期時間」),handleSubmit 會先卡在時間那一關。
+  // 打開時間清單點第一個可約時間,讓送出真的走到電話那一條檢查。
+  await dialog.locator("#booking-datetime").click();
+  const timeOptions = page.getByTestId("booking-time-options");
+  await expect(timeOptions.getByRole("button").first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await timeOptions.getByRole("button").first().click();
+  await expect(dialog.locator("#booking-datetime")).not.toContainText("請選擇日期時間");
   await dialog.locator("#booking-customer-name").fill("E2E電話格式測試客戶");
 
   // 亂打 3 碼(正式庫實查到的髒資料型態)→ 被擋下,對話框還在。
@@ -276,7 +291,7 @@ test("新增會員表單:電話填了但格式不對會被擋下;留空或合法
   await page.getByRole("button", { name: "新增會員" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await page.getByLabel("姓名 *").fill(newMemberName);
+  await page.getByLabel(/^姓名\s*\*?$/).fill(newMemberName);
 
   // 亂打 → 擋下,對話框還在、清單裡沒有這位會員。
   await page.getByLabel(/^電話/).fill("abc");

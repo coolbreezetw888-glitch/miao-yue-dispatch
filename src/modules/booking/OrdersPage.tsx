@@ -93,7 +93,7 @@ import {
   isOrdersPageSize,
   ORDER_STATUS_TABS,
   ORDERS_PAGE_SIZE_OPTIONS,
-  readStoredOrdersPageSize,
+  resolvePageSizeOnUserChange,
   sliceBookingsForPage,
   sumBookingRevenue,
   tabToStatusFilter,
@@ -178,10 +178,22 @@ function OrdersPageInner() {
   // 第一次 render 時還不知道是誰,所以初始值一律是 DEFAULT_ORDERS_PAGE_SIZE(50,「所有人一開始
   // 的預設值」),等身份確定之後再讀那個帳號自己的設定套上去。
   const [pageSize, setPageSize] = useState<OrdersPageSize>(DEFAULT_ORDERS_PAGE_SIZE);
+  // 第 6 批(#849)競態修正:身份還沒確定前使用者就先改了每頁筆數 ⇒ 記在這裡,身份確定時不要蓋掉它
+  // (規則與理由見 ordersPageLogic.ts 的 resolvePageSizeOnUserChange)。
+  const pageSizeChosenBeforeIdentityRef = useRef<OrdersPageSize | null>(null);
+  const previousUserIdRef = useRef<string | null>(null);
   useEffect(() => {
-    // 依賴只有 userId:身份確定(或換成了另一個帳號)時才重讀一次,使用者在頁面上自己調整過的
-    // 選擇不會被這個 effect 蓋掉。userId 還是 null 時讀回來就是預設值 50,等同不動。
-    setPageSize(readStoredOrdersPageSize(userId));
+    // 依賴只有 userId:身份確定(或換成了另一個帳號)時才重讀一次。userId 還是 null 時讀回來就是
+    // 預設值 50,等同不動。
+    const decision = resolvePageSizeOnUserChange({
+      previousUserId: previousUserIdRef.current,
+      nextUserId: userId,
+      chosenBeforeIdentity: pageSizeChosenBeforeIdentityRef.current,
+    });
+    previousUserIdRef.current = userId;
+    pageSizeChosenBeforeIdentityRef.current = null;
+    setPageSize(decision.pageSize);
+    if (decision.persistChosen) writeStoredOrdersPageSize(userId, decision.pageSize);
   }, [userId]);
   const [page, setPage] = useState(1);
   // 換頁後把畫面捲回列表頂端——不然使用者按了底部的「下一頁」,畫面還停在原本的捲動位置,
@@ -307,6 +319,8 @@ function OrdersPageInner() {
     // 依帳號存。身份還沒確認完(userId 還是 null)時這支會直接跳過不寫,只是這次選擇不會被記住,
     // 畫面行為完全不受影響。
     writeStoredOrdersPageSize(userId, nextPageSize);
+    // 身份還沒確定(寫不進去)⇒ 先記住,身份確定時由上面的 effect 保留並補寫。
+    if (userId === null) pageSizeChosenBeforeIdentityRef.current = nextPageSize;
   }
 
   function openEditForm(bookingId: string) {

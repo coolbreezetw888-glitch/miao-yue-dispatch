@@ -101,6 +101,29 @@ async function gotoAgents(page: Page): Promise<void> {
   await expect(fixtureRow(page)).toHaveCount(1);
 }
 
+/** #849(ui-v1-full 列表卡片):「移除 / 權限設定 / 真正刪除」收進每列右側的「⋯」(aria-label「更多動作」),
+ * 點開後是 Radix DropdownMenu 的 menuitem。打開那一列的 ⋯ 選單,回傳選單 locator。 */
+async function openRowMenu(page: Page, row: ReturnType<typeof fixtureRow>) {
+  await row.getByRole("button", { name: "更多動作" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** #849:分頁籤數量改成 UnderlineTabsTrigger 的 count(「已移除 1」,沒有括號)。用正規式比對
+ * 「文字 + 可有可無的空白 + 數字」,數字仍然要完全相同(不放寬計數斷言)。 */
+function filterTab(page: Page, label: string, count?: number) {
+  return page.getByRole("tab", {
+    name: count === undefined ? label : new RegExp(`^${label}\\s*${count}$`),
+  });
+}
+
+/** #849:編輯對話框的電話欄位旁多了一顆「?」(aria-label「說明：電話要怎麼填」),getByLabel("電話")
+ * 會同時命中它 ⇒ 改用「文字輸入框 + 名稱完全等於 電話」定位。 */
+function phoneInput(dialog: ReturnType<Page["getByRole"]>) {
+  return dialog.getByRole("textbox", { name: "電話", exact: true });
+}
+
 /** 點該列的「編輯」,回傳打開的對話框 locator。 */
 async function openEditDialog(page: Page) {
   await fixtureRow(page).getByRole("button", { name: "編輯" }).click();
@@ -128,7 +151,7 @@ test("T2 「編輯」打開的對話框帶入現值,而且沒有「聯絡 Email�
   await expect(dialog.getByLabel("姓名")).toHaveValue(fixture.agentName);
   await expect(dialog.getByLabel("暱稱")).toHaveValue("");
   await expect(dialog.getByLabel("職位")).toHaveValue("");
-  await expect(dialog.getByLabel("電話")).toHaveValue(fixturePhone());
+  await expect(phoneInput(dialog)).toHaveValue(fixturePhone());
 
   // 行為斷言 ②(守住 #792 / #793 的決定):對話框裡找不到「聯絡 Email」與「上架」。
   // contact_email 欄位 2026-09-24 已連同資料庫欄位一起廢除;客服沒有 is_listed。
@@ -159,7 +182,7 @@ test("T4 電話填 0912(格式錯)→ 儲存 → 看到白話錯誤,而且對話
   await gotoAgents(page);
   const dialog = await openEditDialog(page);
 
-  await dialog.getByLabel("電話").fill("0912");
+  await phoneInput(dialog).fill("0912");
   await dialog.getByRole("button", { name: "儲存" }).click();
 
   // ⚠️ 規格書 #795 第 5 條寫「含『09 開頭』字樣」——那是**資料庫函式**的錯誤文案;實際上前端會先用
@@ -169,10 +192,12 @@ test("T4 電話填 0912(格式錯)→ 儲存 → 看到白話錯誤,而且對話
   await expect(page.getByText("請輸入正確的手機號碼格式", { exact: false })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
+  // #849(ui-overlay-patterns 二之七):欄位說明收進「?」,要點開才看得到「09 開頭」那句。
+  await dialog.getByRole("button", { name: "說明：電話要怎麼填" }).click();
   await expect(dialog.getByText("09 開頭", { exact: false })).toBeVisible();
   // 對話框沒有關閉,而且剛才打的值還在(資料沒有被吃掉)。
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByLabel("電話")).toHaveValue("0912");
+  await expect(phoneInput(dialog)).toHaveValue("0912");
   // 清單上的暱稱仍是 T3 的值(這次失敗的送出沒有動到任何資料)。
   await page.keyboard.press("Escape");
   await expect(fixtureRow(page)).toContainText(newNickname());
@@ -186,7 +211,8 @@ test("T5 移除 → 出現「已移除」徽章、「恢復」按鈕出現、「
   await expect(row.getByRole("button", { name: "編輯" })).toBeVisible();
   await expect(row.getByRole("button", { name: "恢復" })).toHaveCount(0);
 
-  await row.getByRole("button", { name: "移除" }).click();
+  // #849:「移除」在 ⋯ 選單裡。
+  await (await openRowMenu(page, row)).getByRole("menuitem", { name: "移除" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm.getByText("確定要移除這位客服嗎?")).toBeVisible();
   await confirm.getByRole("button", { name: "確定移除" }).click();
@@ -195,7 +221,13 @@ test("T5 移除 → 出現「已移除」徽章、「恢復」按鈕出現、「
   await expect(row.getByText("已移除", { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(row.getByRole("button", { name: "恢復" })).toBeVisible();
   await expect(row.getByRole("button", { name: "編輯" })).toHaveCount(0);
-  await expect(row.getByRole("button", { name: "權限設定" })).toHaveCount(0);
+  // #849:「權限設定」原本是列上的按鈕,現在在 ⋯ 選單裡 ⇒ 打開選單驗:已移除的列沒有「權限設定」,
+  // 只剩「真正刪除」(正向對照,證明選單真的打開了、不是對空選單斷言)。
+  const menu = await openRowMenu(page, row);
+  await expect(menu.getByRole("menuitem", { name: "真正刪除" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "權限設定" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
 });
 
 test("T6 #797 分頁籤:全部 / 在職 (n) / 已移除 (n),切換後名單真的被篩選", async ({ page }) => {
@@ -206,9 +238,10 @@ test("T6 #797 分頁籤:全部 / 在職 (n) / 已移除 (n),切換後名單真�
 
   // 三顆分頁籤,計數格式比照服務人員頁:「全部」不帶數字,其餘帶 (n)。
   // 這間 fixture 商家只有這 1 位客服 ⇒ 在職 (0)、已移除 (1)。
-  const allTab = page.getByRole("tab", { name: "全部" });
-  const activeTab = page.getByRole("tab", { name: "在職 (0)" });
-  const removedTab = page.getByRole("tab", { name: "已移除 (1)" });
+  // #849:數量格式從「在職 (0)」改成「在職 0」(UnderlineTabsTrigger 的 count,沒有括號)。
+  const allTab = filterTab(page, "全部");
+  const activeTab = filterTab(page, "在職", 0);
+  const removedTab = filterTab(page, "已移除", 1);
   await expect(allTab).toBeVisible();
   await expect(activeTab).toBeVisible();
   await expect(removedTab).toBeVisible();
@@ -246,7 +279,7 @@ test.describe("手機版 375px 排版", () => {
   test("T7 #797 客服管理頁(含三顆分頁籤)在 375px 手機寬不溢出", async ({ page }) => {
     await gotoAgents(page);
     // 前提:三顆分頁籤真的渲染出來了(不對沒有分頁籤的畫面量溢出,那是假通過)。
-    await expect(page.getByRole("tab", { name: "已移除 (1)" })).toBeVisible();
+    await expect(filterTab(page, "已移除", 1)).toBeVisible();
     await expect(page.getByRole("tab")).toHaveCount(3);
 
     await assertNoHorizontalOverflow(page, "客服管理頁 /app/agents(含 #797 分頁籤)");
@@ -269,8 +302,8 @@ test("T8 點「恢復」→「已移除」徽章消失、「編輯」按鈕回�
   await expect(row.getByRole("button", { name: "編輯" })).toBeVisible();
   await expect(row.getByRole("button", { name: "恢復" })).toHaveCount(0);
   // 分頁籤計數跟著更新。
-  await expect(page.getByRole("tab", { name: "在職 (1)" })).toBeVisible();
-  await expect(page.getByRole("tab", { name: "已移除 (0)" })).toBeVisible();
+  await expect(filterTab(page, "在職", 1)).toBeVisible();
+  await expect(filterTab(page, "已移除", 0)).toBeVisible();
 });
 
 test("T9 #798 真正刪除:只出現在已移除那一列、二次確認講明無法復原、確認後那一列真的消失", async ({
@@ -281,20 +314,22 @@ test("T9 #798 真正刪除:只出現在已移除那一列、二次確認講明�
 
   // 前提 ①:在職狀態下**沒有**「真正刪除」按鈕(必須先軟移除,兩段式防呆)。
   await expect(row.getByRole("button", { name: "編輯" })).toBeVisible();
-  await expect(row.getByRole("button", { name: "真正刪除" })).toHaveCount(0);
+  // #849:「真正刪除」與「移除」都在 ⋯ 選單裡 ⇒ 打開選單驗:在職的列只有「移除」,沒有「真正刪除」。
+  const activeMenu = await openRowMenu(page, row);
+  await expect(activeMenu.getByRole("menuitem", { name: "真正刪除" })).toHaveCount(0);
 
   // 先軟移除。
-  await row.getByRole("button", { name: "移除" }).click();
+  await activeMenu.getByRole("menuitem", { name: "移除" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確定移除" }).click();
   await expect(row.getByText("已移除", { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   // 前提 ②:已移除之後「恢復」跟「真正刪除」並排出現。
   await expect(row.getByRole("button", { name: "恢復" })).toBeVisible();
-  const hardDeleteButton = row.getByRole("button", { name: "真正刪除" });
-  await expect(hardDeleteButton).toBeVisible();
+  const removedMenu = await openRowMenu(page, row);
+  await expect(removedMenu.getByRole("menuitem", { name: "真正刪除" })).toBeVisible();
 
   // 行為 ①:二次確認對話框明確講「無法復原」,而且標題帶這位客服的名字(不是通用文案)。
-  await hardDeleteButton.click();
+  await removedMenu.getByRole("menuitem", { name: "真正刪除" }).click();
   const confirm = page.getByRole("alertdialog");
   await expect(confirm.getByText(`確定要真正刪除「${fixture.agentName}」嗎?`)).toBeVisible();
   await expect(confirm.getByText("無法復原", { exact: false })).toBeVisible();
@@ -304,17 +339,21 @@ test("T9 #798 真正刪除:只出現在已移除那一列、二次確認講明�
   await expect(fixtureRow(page)).toHaveCount(1);
 
   // 行為 ②:再打開,這次確認 → toast → 那一列消失 → 名單回到全空狀態(這間商家只有這一位客服)。
-  await hardDeleteButton.click();
+  await (await openRowMenu(page, row)).getByRole("menuitem", { name: "真正刪除" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "確定真正刪除" }).click();
   await expect(page.getByText("已真正刪除")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(fixtureRow(page)).toHaveCount(0, { timeout: LOAD_TIMEOUT });
-  await expect(page.getByText("目前還沒有任何客服。")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("還沒有任何客服", { exact: true })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
 
   // 行為 ③:重新整理之後也還是不在(不是前端把那一列藏起來而已,資料庫真的沒有了)。
   await page.reload();
   await expect(page.getByRole("heading", { name: "客服管理" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("目前還沒有任何客服。")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByText("還沒有任何客服", { exact: true })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(fixtureRow(page)).toHaveCount(0);
 });

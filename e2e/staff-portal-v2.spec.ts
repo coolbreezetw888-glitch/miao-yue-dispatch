@@ -24,6 +24,7 @@ import {
   teardownStaffPortalV2Fixture,
   type StaffPortalV2Fixture,
 } from "./support/staff-portal-v2-fixture";
+import { primeCurrentMerchant, primeStaffCurrentMerchant } from "./support/app-shell";
 import { getTaipeiNow, toDateKey } from "../src/modules/booking/dateUtils";
 
 const LOAD_TIMEOUT = 20_000;
@@ -68,8 +69,16 @@ test.beforeEach(async ({ page }) => {
   // 已知既有問題(跟這次修正主題無關,e2e/mobile-overflow.spec.ts / staff-portal.spec.ts 開頭
   // 已記錄):全新瀏覽器 session 第一次深連結到受保護頁面時,有機會在 currentMerchantId 還沒被
   // context.tsx 的 fallback effect 寫進 localStorage 前就被誤判。先訪問一次 /app。
-  await page.goto("/app");
+  // 第 6 批(#849):只 goto 不等渲染完不夠(goto 一返回就深連結還是會撞到),改用 primeStaffCurrentMerchant。
+  await primeStaffCurrentMerchant(page);
 });
+
+/** #849:預約詳情改成全頁層(FullPageLayer,role="dialog"),卡片列表與詳情同時掛在 DOM 上、兩邊都渲染
+ * 同一顆狀態標籤與同一個金額 ⇒ 「已完成」「$1,000」一律縮到詳情彈窗裡找(這段要驗的本來就是詳情內容)。
+ * 「關閉」也有兩顆(頁首圖示鈕只在 sm 以上顯示 + 底部文字鈕),用底部那顆(contentinfo)。 */
+function detailDialog(page: import("@playwright/test").Page) {
+  return page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "預約詳情" }) });
+}
 
 test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢視數量一致,詳情內容一致且唯讀", async ({
   page,
@@ -113,13 +122,13 @@ test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢
   await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("已完成")).toBeVisible();
-  await expect(page.getByText("$1,000")).toBeVisible();
+  await expect(detailDialog(page).getByText("已完成", { exact: true })).toBeVisible();
+  await expect(detailDialog(page).getByText("$1,000", { exact: true })).toBeVisible();
   // 唯讀:沒有任何可以修改資料的按鈕。
   for (const forbidden of ["確認", "完成", "取消預約", "編輯", "相關訂單"]) {
     await expect(page.getByRole("button", { name: forbidden })).toHaveCount(0);
   }
-  await page.getByRole("button", { name: "關閉" }).click();
+  await detailDialog(page).getByRole("contentinfo").getByRole("button", { name: "關閉" }).click();
   await expect(page.getByRole("heading", { name: "預約詳情" })).toHaveCount(0);
 
   // 切回卡片列表,點擊同一筆,詳情內容一致。
@@ -128,12 +137,12 @@ test("10.2.4(核心情境,必測):行事曆卡片列表/時間軸格線兩種檢
   await expect(page.getByRole("heading", { name: "預約詳情" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await expect(page.getByText("已完成")).toBeVisible();
-  await expect(page.getByText("$1,000")).toBeVisible();
+  await expect(detailDialog(page).getByText("已完成", { exact: true })).toBeVisible();
+  await expect(detailDialog(page).getByText("$1,000", { exact: true })).toBeVisible();
   for (const forbidden of ["確認", "完成", "取消預約", "編輯", "相關訂單"]) {
     await expect(page.getByRole("button", { name: forbidden })).toHaveCount(0);
   }
-  await page.getByRole("button", { name: "關閉" }).click();
+  await detailDialog(page).getByRole("contentinfo").getByRole("button", { name: "關閉" }).click();
 });
 
 test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整天排休標記/取消,商家管理員視角正確顯示「例外關閉」", async ({
@@ -165,11 +174,11 @@ test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   await injectAdminSession(adminPage, fixture);
-  await adminPage.goto("/app");
+  await primeCurrentMerchant(adminPage); // #849:原本只 goto("/app") 不等渲染完,深連結仍可能撞到守衛 race
   await adminPage.goto(`/app/calendar?date=${fixture.wholeDayOffDateKey}`);
   // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡要測的是週檢視底下的服務人員時間軸,
   // 先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
-  await adminPage.getByRole("button", { name: "週檢視" }).click();
+  await adminPage.getByRole("radio", { name: "週檢視" }).click();
   await expect(adminPage.getByText(fixture.staffName, { exact: false })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
@@ -238,11 +247,11 @@ test("10.3.3:時段排休依營業時間顯示,商家管理員視角看到一致
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   await injectAdminSession(adminPage, fixture);
-  await adminPage.goto("/app");
+  await primeCurrentMerchant(adminPage); // #849:原本只 goto("/app") 不等渲染完,深連結仍可能撞到守衛 race
   await adminPage.goto(`/app/calendar?date=${fixture.slotOffDateKey}`);
   // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡要測的是週檢視底下的服務人員時間軸,
   // 先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
-  await adminPage.getByRole("button", { name: "週檢視" }).click();
+  await adminPage.getByRole("radio", { name: "週檢視" }).click();
   const staffColumn = adminPage.getByTestId(`staff-column-${fixture.staffId}`);
   await expect(staffColumn).toBeVisible({ timeout: LOAD_TIMEOUT });
 
@@ -315,14 +324,16 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
 
   // 明細列的金額跟摘要卡片是同一個數字、同一種格式(稽核問題 4 的回歸保護:兩邊都要是 $500,
   // 不能一邊 $500 一邊 500)。
-  await expect(page.locator("table tbody tr").first()).toContainText(
+  // #849(ui-v1-full skill 一):訂單明細從表格改成 ListCard 清單(每一筆是帶「完成日期」的 <li>)。
+  await expect(page.getByRole("listitem").filter({ hasText: "完成日期" }).first()).toContainText(
     `$${EXPECTED_COMMISSION_AMOUNT.toLocaleString("zh-TW")}`,
   );
 
   // 切到「按月份」顆粒度,改查下個月 → 應該是 0 筆。
   // 刻意先改「訖」再改「起」,中途不會出現「結束日期早於起始日期」這個非法中間狀態
   // (見 dateRangeUtils.validateDateRange)。
-  await page.getByRole("button", { name: "按月份" }).click();
+  // #849:區間單位從兩顆按鈕改成單選方塊(ChoiceChipGroup,role="radio")。
+  await page.getByRole("radio", { name: "按月份" }).click();
   await expect(startInput).toHaveValue(thisMonth);
   await endInput.fill(nextMonth);
   await startInput.fill(nextMonth);
@@ -370,12 +381,14 @@ test("10.4.6(核心情境,必測):薪資報表頁標題/區間篩選/摘要卡�
   const adminContext = await browser.newContext();
   const adminPage = await adminContext.newPage();
   await injectAdminSession(adminPage, fixture);
-  await adminPage.goto("/app");
+  await primeCurrentMerchant(adminPage); // #849:原本只 goto("/app") 不等渲染完,深連結仍可能撞到守衛 race
   await adminPage.goto("/app/staff-report");
   await expect(adminPage.getByRole("heading", { name: "服務人員報表" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
-  await adminPage.getByLabel("服務人員").click();
+  // #849:fixture 商家名稱含「服務人員」(#826 改名),商家切換鈕的 aria-label 也會被 getByLabel("服務人員")
+  // 命中 ⇒ 改成「下拉選單 + 名稱完全等於 服務人員」。
+  await adminPage.getByRole("combobox", { name: "服務人員", exact: true }).click();
   await adminPage.getByRole("option", { name: fixture.staffName }).click();
 
   // 2026-09-24:商家管理員視角的「抽成合計」原本是直接印原始數字 + 「元」(`抽成合計 500 元`),

@@ -29,6 +29,7 @@
 import { devices, expect, test, type Locator, type Page } from "@playwright/test";
 
 import { readOptionalEnvValue } from "./support/env-file";
+import { isLocalE2eTarget, LOCAL_SKIP_PREFIX } from "./support/e2e-target";
 import { injectSessionForCredentials } from "./support/mobile-overflow-fixture";
 import { assertNoHorizontalOverflow } from "./support/overflow-assert";
 
@@ -137,6 +138,12 @@ async function gotoMerchantWithStaff(page: Page): Promise<string> {
 }
 
 test.describe("超級管理員商家詳情強化", () => {
+  // 第 6 批(#849):本機模式明確跳過——超級管理員測試帳號只存在正式庫(帳密在 .env),本機模式完全不讀 .env,
+  // 本機資料庫也沒有對應的 platform_admins 列。寫成獨立一條,讓報表上的理由是「本機模式」而不是「設定讀不到」。
+  test.skip(
+    isLocalE2eTarget(),
+    `${LOCAL_SKIP_PREFIX}超級管理員測試帳號只存在正式庫,本機模式不讀 .env 的正式帳密。`,
+  );
   test.skip(
     !platformAdminEmail || !platformAdminPassword,
     "未設定 E2E_PLATFORM_ADMIN_EMAIL / E2E_PLATFORM_ADMIN_PASSWORD,略過超級管理員後台檢查" +
@@ -348,6 +355,12 @@ test.describe("超級管理員商家詳情強化", () => {
 const IPHONE_SE_3RD_GEN = devices["iPhone SE (3rd gen)"];
 
 test.describe("超級管理員商家詳情強化(手機 375px)", () => {
+  // 第 6 批(#849):本機模式明確跳過——超級管理員測試帳號只存在正式庫(帳密在 .env),本機模式完全不讀 .env,
+  // 本機資料庫也沒有對應的 platform_admins 列。寫成獨立一條,讓報表上的理由是「本機模式」而不是「設定讀不到」。
+  test.skip(
+    isLocalE2eTarget(),
+    `${LOCAL_SKIP_PREFIX}超級管理員測試帳號只存在正式庫,本機模式不讀 .env 的正式帳密。`,
+  );
   test.skip(
     !platformAdminEmail || !platformAdminPassword,
     "未設定 E2E_PLATFORM_ADMIN_EMAIL / E2E_PLATFORM_ADMIN_PASSWORD,略過超級管理員後台檢查。",

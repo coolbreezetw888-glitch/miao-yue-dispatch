@@ -119,12 +119,15 @@ test.describe("#712 /app/leave-types 月薪人員假別設定", () => {
     const items = listItems(page);
     await expect(items).toHaveCount(3, { timeout: LOAD_TIMEOUT });
     // 反向前提:證明我們不是在對空清單做斷言。
-    await expect(page.getByText("目前還沒有任何假別")).toHaveCount(0);
+    await expect(page.getByText("還沒有任何假別", { exact: true })).toHaveCount(0);
 
     // 行為斷言:三筆預設假別(事假/病假/特休)由 create_group_and_merchant 自動種入
     // (migration 20260919150100_scheduling_leave_functions.sql L315-330),名稱要逐字對上。
-    const names = await items.locator("> div > p:nth-child(1)").allTextContents();
-    expect(names.slice().sort()).toEqual(["事假", "特休", "病假"].slice().sort());
+    // #849:假別列改成 ListCard(名稱不再是 `> div > p:nth-child(1)`)⇒ 改成「總共 3 列,而且三個名稱
+    // 各自恰好落在 1 列裡」,跟原本「排序後逐字相等」是同一件事(3 列 × 3 個不同名稱各 1 列 ⇒ 一一對應)。
+    for (const name of ["事假", "病假", "特休"]) {
+      await expect(items.filter({ has: page.getByText(name, { exact: true }) })).toHaveCount(1);
+    }
 
     // 行為斷言:三筆都是「上架中」(新種入的預設假別 status='active')。
     await expect(items.getByText("上架中", { exact: true })).toHaveCount(3);
@@ -141,9 +144,13 @@ test.describe("#712 /app/leave-types 月薪人員假別設定", () => {
     // 「扣款規則」是權限旗標算出來的(LeaveTypesPage.tsx L176
     //  `merchantRole === "admin" || canManageCommissionSettings === true`),fixture 帳號是這間
     //  商家的管理員 ⇒ 必須出現。這條同時釘住了那個判斷沒有壞掉。
-    await expect(row.getByRole("button", { name: "扣款規則" })).toBeVisible();
+    // #849(ui-v1-full ListCard):「編輯」是列上的主要按鈕,「扣款規則」「下架」收進右側「⋯」(更多動作)。
     await expect(row.getByRole("button", { name: "編輯" })).toBeVisible();
-    await expect(row.getByRole("button", { name: "下架" })).toBeVisible();
+    await row.getByRole("button", { name: "更多動作" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: "扣款規則" })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "下架" })).toBeVisible();
+    await page.keyboard.press("Escape");
   });
 
   test("T3 新增一筆假別後真的出現在清單上(寫入路徑真的通)", async ({ page }) => {
@@ -207,7 +214,7 @@ test.describe("#762 /app/leave-records 請假紀錄", () => {
     //    「載入中⋯」的瞬間也會成立)。
     const items = recordItems(page);
     await expect(items).toHaveCount(1, { timeout: LOAD_TIMEOUT });
-    await expect(page.getByText("目前沒有符合篩選條件的請假紀錄")).toHaveCount(0);
+    await expect(page.getByText("沒有符合篩選條件的請假紀錄", { exact: true })).toHaveCount(0);
 
     // 行為斷言:這一列的四項內容都對得上 fixture 真的寫進資料庫的值。
     const row = items.first();
@@ -235,7 +242,7 @@ test.describe("#762 /app/leave-records 請假紀錄", () => {
     const dayAfterKey = dayAfter.toISOString().slice(0, 10);
 
     await page.locator("#leave-filter-from").fill(dayAfterKey);
-    await expect(page.getByText("目前沒有符合篩選條件的請假紀錄。")).toBeVisible({
+    await expect(page.getByText("沒有符合篩選條件的請假紀錄", { exact: true })).toBeVisible({
       timeout: LOAD_TIMEOUT,
     });
     await expect(items).toHaveCount(0);
@@ -329,8 +336,8 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     const monthlyCard = cardByTitle(page, "月薪制服務人員");
     await expect(listItems(pieceCard)).toHaveCount(1, { timeout: LOAD_TIMEOUT });
     await expect(listItems(monthlyCard)).toHaveCount(1, { timeout: LOAD_TIMEOUT });
-    await expect(page.getByText("目前沒有抽成制的服務人員。")).toHaveCount(0);
-    await expect(page.getByText("目前沒有月薪制的服務人員。")).toHaveCount(0);
+    await expect(page.getByText("目前沒有抽成制的服務人員", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("目前沒有月薪制的服務人員", { exact: true })).toHaveCount(0);
 
     // 行為斷言:每位服務人員只出現在自己那張卡片裡(不是整頁 getByText 撈到就算數)。
     // 這條釘住了 PayrollSettingsPage.tsx 依 compensation_type 分流的那兩個 filter。
@@ -346,15 +353,19 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     // 前提斷言:這張卡片載完了(scope 到這張卡再等,不能用整頁的 getByText("載入中⋯")——
     // 這四個字在三個區塊逐字重複出現,沒 scope 必撞 strict mode)。
     const card = cardByTitle(page, "商家層級設定");
-    await expect(card.locator("#basis-gross")).toBeVisible({ timeout: LOAD_TIMEOUT });
+    // #849(ui-v1-full skill 二之七):抽成基準從 RadioGroup(#basis-gross / #basis-net)改成
+    // ChoiceChipGroup(role="radiogroup" + role="radio" + aria-checked),用選項名稱定位。
+    const grossOption = card.getByRole("radio", { name: /^服務金額全額/ });
+    const netOption = card.getByRole("radio", { name: /^扣除料錢成本後淨額/ });
+    await expect(grossOption).toBeVisible({ timeout: LOAD_TIMEOUT });
     await expect(card.getByText("載入中⋯")).toHaveCount(0);
 
     // 行為斷言:fixture 寫的是 commission_basis_type: "gross"(payroll-fixture.ts L220-226)
     // ⇒「服務金額全額」被選中、「扣除料錢成本後淨額」沒被選中。
     // ⚠️ 這條的價值在於它是**由後端資料決定的**,不是畫面寫死的字:如果查詢壞掉、或
     //    useEffect 沒把值灌進 RadioGroup,兩顆都會是未選中,這條就會紅。
-    await expect(card.locator("#basis-gross")).toBeChecked();
-    await expect(card.locator("#basis-net")).not.toBeChecked();
+    await expect(grossOption).toBeChecked();
+    await expect(netOption).not.toBeChecked();
   });
 
   test("T3 月薪制那一列顯示的金額 = fixture 寫進資料庫的金額", async ({ page }) => {
@@ -447,10 +458,11 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     await expect(page.getByRole("heading", { name: "抽成與薪資設定", exact: true })).toBeVisible();
 
     const basisCard = cardByTitle(page, "商家層級設定");
-    await expect(basisCard.getByText("【抽成制】抽成基準", { exact: true })).toBeVisible({
+    // #849:欄位標題改用 FormField,必填欄位的 <label> 文字後面多一個 aria-hidden 的「*」⇒ 用「逐字 + 可有可無的 *」比對。
+    await expect(basisCard.getByText(/^【抽成制】抽成基準\*?$/)).toBeVisible({
       timeout: LOAD_TIMEOUT,
     });
-    await expect(basisCard.getByText("【月薪制】月折算天數", { exact: true })).toBeVisible();
+    await expect(basisCard.getByText(/^【月薪制】月折算天數\*?$/)).toBeVisible();
 
     await expect(cardByTitle(page, "抽成制服務人員")).toHaveCount(1);
     await expect(cardByTitle(page, "月薪制服務人員")).toHaveCount(1);

@@ -39,6 +39,7 @@ import {
   LONG_CUSTOMER_NAME_PREFIX,
   LONG_MATERIAL_NAME,
   LONG_SERVICE_NAME,
+  LONG_STAFF_NAME,
   LONG_STAFF_NAME_PREFIX,
   setupMobileOverflowFixture,
   teardownMobileOverflowFixture,
@@ -47,6 +48,7 @@ import {
 import { primeCurrentMerchant } from "./support/app-shell";
 import { assertNoHorizontalOverflow } from "./support/overflow-assert";
 import { readOptionalEnvValue } from "./support/env-file";
+import { isLocalE2eTarget, LOCAL_SKIP_PREFIX } from "./support/e2e-target";
 
 // **重要,踩過的坑**:光是 `page.setViewportSize({width:375,...})` 不夠——那只是把桌面版
 // Chromium 的視窗改窄,不會套用 `isMobile`/`hasTouch` 這些手機模擬旗標。實測發現,Radix
@@ -167,10 +169,10 @@ test("料錢成本管理頁 /app/material-costs", async ({ page }) => {
 
 test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預約)", async ({ page }) => {
   await page.goto("/app/calendar");
-  await expect(page.getByRole("button", { name: "週檢視" })).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByRole("radio", { name: "週檢視" })).toBeVisible({ timeout: LOAD_TIMEOUT });
   // SPECS-INDEX #640:行事曆預設改成先顯示月檢視,這裡接下來要測的是週檢視底下的服務人員
   // 時間軸格線,所以先手動切回週檢視,不能再假設進頁面時預設就是週檢視。
-  await page.getByRole("button", { name: "週檢視" }).click();
+  await page.getByRole("radio", { name: "週檢視" }).click();
   // 等格線真的渲染出服務人員欄位(營業時間已經整週開放,格線應該出現,不是「尚未設定」訊息)。
   await expect(page.getByText(LONG_STAFF_NAME_PREFIX, { exact: false }).first()).toBeVisible({
     timeout: LOAD_TIMEOUT,
@@ -186,8 +188,10 @@ test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預�
   await expect(page.getByText("預約詳情")).toBeVisible();
   // 等真正的預約內容(getBooking 查詢)載入完成,不能只等對話框標題出現就檢查——標題是
   // 靜態文字,查詢還沒 resolve 前內容區只會顯示「載入中⋯」,太早檢查會誤判成「沒有溢出」。
+  // #849(#872 建單自動建立會員):詳情彈窗裡客戶姓名現在出現兩次(標題 + 會員連結),兩個都是
+  // 載入完成後才會出現的內容 ⇒ 取第一個當「內容已載入」的錨點即可(這裡要的只是等載入,不是驗唯一性)。
   await expect(
-    page.getByRole("dialog").getByText(LONG_CUSTOMER_NAME_PREFIX, { exact: false }),
+    page.getByRole("dialog").getByText(LONG_CUSTOMER_NAME_PREFIX, { exact: false }).first(),
   ).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
@@ -207,15 +211,32 @@ test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預�
   // 用 getByRole("dialog") 範圍限定只比對對話框裡的標題,避免兩個都符合的錯誤。等服務項目
   // 清單(含長名稱那項)真的載入完成再檢查,不是只等對話框標題出現。
   await page.getByRole("button", { name: "新增預約" }).click();
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "新增預約" })).toBeVisible();
-  await expect(page.getByRole("dialog").getByText(LONG_SERVICE_NAME, { exact: false })).toBeVisible(
-    { timeout: LOAD_TIMEOUT },
-  );
-  await assertNoHorizontalOverflow(page, "行事曆(新增預約表單彈窗)");
+  const newBookingDialog = page
+    .getByRole("dialog")
+    .filter({ has: page.getByRole("heading", { name: "新增預約" }) });
+  await expect(newBookingDialog).toBeVisible();
+  // #849(第 2 批「建單整頁選項目」):服務項目不再是表單裡直接列出的勾選清單,改成點「服務項目」欄位
+  // 打開整頁的項目挑選層(data-testid="service-item-picker")。長名稱服務項目要在挑選層裡才看得到,
+  // 選好按「確認」之後再出現在表單的已選摘要裡 ⇒ 兩個畫面各量一次(比改版前多量了挑選層)。
+  await newBookingDialog.locator("#booking-staff").click();
+  await page.getByRole("option", { name: LONG_STAFF_NAME }).click();
+  await newBookingDialog.locator("#booking-service-items").click();
+  const picker = newBookingDialog.getByTestId("service-item-picker");
+  await expect(picker.getByText(LONG_SERVICE_NAME, { exact: false })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await assertNoHorizontalOverflow(page, "行事曆(新增預約:服務項目挑選層)");
+  await picker.getByRole("checkbox", { name: new RegExp(LONG_SERVICE_NAME) }).click();
+  await picker.getByRole("button", { name: /^確認/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(newBookingDialog.getByText(LONG_SERVICE_NAME, { exact: false })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await assertNoHorizontalOverflow(page, "行事曆(新增預約表單彈窗,已選長名稱服務項目)");
   await page.keyboard.press("Escape");
 
   // 月檢視。
-  await page.getByRole("button", { name: "月檢視" }).click();
+  await page.getByRole("radio", { name: "月檢視" }).click();
   await expect(page.getByRole("button", { name: "上一月" })).toBeVisible();
   await assertNoHorizontalOverflow(page, "行事曆(月檢視)");
 });
@@ -254,7 +275,7 @@ test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預�
 //
 // 另外一併涵蓋規格書第三節「測試資料要用會撐開容器的極端值」的部分:訂單卡片會把
 // 「服務人員 ・ 客戶姓名 ・ 客戶電話 ・ 客戶地址」串成一行顯示,fixture 的這筆預約本來就同時帶了
-// 超長客戶姓名(LONG_CUSTOMER_NAME)、40 碼電話組合字串(LONG_PHONE_COMBO)跟含長網址的超長地址
+// 超長客戶姓名(LONG_CUSTOMER_NAME)、系統允許的最長電話(LONG_VALID_CUSTOMER_PHONE,市話+6 碼分機;#849 前是 40 碼組合字串,#822 後已寫不進去)跟含長網址的超長地址
 // (LONG_ADDRESS),而且 fixture 商家是 on_site_dispatch(到府派工),客戶地址欄位在這一頁會真的
 // 顯示出來(見 OrdersPage.tsx showCustomerAddress)——這正是最容易撐爆版面的那一行。
 test("訂單管理頁 /app/orders(分頁控制項 + 長內容訂單卡片)", async ({ page }) => {
@@ -268,21 +289,22 @@ test("訂單管理頁 /app/orders(分頁控制項 + 長內容訂單卡片)", asy
   });
   // 明確斷言「上下各一組分頁器都在畫面上」,理由同上——這是防止這支測試哪天因為分頁器沒渲染
   // 而「安靜地變成永遠會過」的守門條件,不是多餘的重複斷言。用 role=combobox + aria-label 定位
-  // (combobox 是 Radix SelectTrigger 的 role,aria-label 見 OrdersPage.tsx OrdersPager 那顆
-  // SelectTrigger);這一頁另一顆 Select(服務人員篩選)沒有這個名稱,不會被誤抓進來。
+  // (#849 起是原生 <select> 的 combobox role,aria-label 見 OrdersPage.tsx OrdersPager 那顆
+  // FieldNativeSelect);這一頁其他下拉沒有這個名稱,不會被誤抓進來。
   const pageSizeSelects = page.getByRole("combobox", { name: "每頁顯示筆數" });
   await expect(pageSizeSelects).toHaveCount(2);
   await assertNoHorizontalOverflow(page, "訂單管理頁 /app/orders(預設每頁 50 筆,含上下兩組分頁器)");
 
-  // 每頁筆數下拉展開後的選單(Radix SelectContent,portal 到 body 的浮層)也要量一次——
-  // 浮層是這一頁唯一「不在主要文件流裡」的新元件,寬度來源跟底下的觸發按鈕不同。
-  await pageSizeSelects.first().click();
-  await expect(page.getByRole("option", { name: "500" })).toBeVisible();
-  await assertNoHorizontalOverflow(page, "訂單管理頁(每頁筆數下拉展開)");
+  // #849(ui-v1-full skill 二之七):每頁筆數從 Radix Select 改成原生下拉(FieldNativeSelect)。
+  // 原生下拉展開的選單是瀏覽器自己畫的(不在 DOM 裡、也不會撐開頁面),原本「展開後量一次浮層」那一步
+  // 已經沒有東西可以量 ⇒ 拿掉那一步;「切到 500 筆、觸發按鈕文字變三位數後再量一次」保留。
+  // 前提:兩顆都真的是原生 <select>(不是 Radix 換了皮),否則「沒有浮層可量」這個前提不成立。
+  await expect(pageSizeSelects.first()).toHaveJSProperty("tagName", "SELECT");
+  await expect(pageSizeSelects.nth(1)).toHaveJSProperty("tagName", "SELECT");
 
   // 切到最大的每頁筆數(500),觸發按鈕上的文字變成三位數、頁碼也會重算,再量一次。
-  await page.getByRole("option", { name: "500" }).click();
-  await expect(pageSizeSelects.first()).toContainText("500");
+  await pageSizeSelects.first().selectOption("500");
+  await expect(pageSizeSelects.first()).toHaveValue("500");
   await assertNoHorizontalOverflow(page, "訂單管理頁(每頁 500 筆)");
 });
 
@@ -319,6 +341,12 @@ test.describe("超級管理員後台(需要預先設定好的平台管理員測�
   const platformAdminEmail = readOptionalEnvValue("E2E_PLATFORM_ADMIN_EMAIL");
   const platformAdminPassword = readOptionalEnvValue("E2E_PLATFORM_ADMIN_PASSWORD");
 
+  // 第 6 批(#849):本機模式明確跳過——超級管理員測試帳號只存在正式庫(帳密在 .env),本機模式完全不讀 .env,
+  // 本機資料庫也沒有對應的 platform_admins 列。寫成獨立一條,讓報表上的理由是「本機模式」而不是「設定讀不到」。
+  test.skip(
+    isLocalE2eTarget(),
+    `${LOCAL_SKIP_PREFIX}超級管理員測試帳號只存在正式庫,本機模式不讀 .env 的正式帳密。`,
+  );
   test.skip(
     !platformAdminEmail || !platformAdminPassword,
     "未設定 E2E_PLATFORM_ADMIN_EMAIL / E2E_PLATFORM_ADMIN_PASSWORD,略過超級管理員後台檢查" +

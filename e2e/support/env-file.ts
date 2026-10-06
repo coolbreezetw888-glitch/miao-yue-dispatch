@@ -34,6 +34,8 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { isLocalE2eTarget } from "./e2e-target";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** 解析出 `.env` 裡某個 key 的值。找不到、或找到但值是空的,一律回 `undefined`。
@@ -43,6 +45,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 function parseEnvValue(key: string): string | undefined {
   const fromProcess = process.env[key];
   if (fromProcess && fromProcess.length > 0) return fromProcess;
+
+  // 🔴 第 6 批(#849):預設 e2e 的本機模式(E2E_TARGET=local)**完全不讀 `.env`**——`.env` 裡是正式庫的
+  //    網址與正式的超級管理員帳密。本機模式需要的值由 playwright.config.ts 事先放進 process.env;
+  //    沒放的(例如 E2E_PLATFORM_ADMIN_*)一律當成「沒設定」,由呼叫端 skip 或丟錯。
+  if (isLocalE2eTarget()) return undefined;
 
   let content: string;
   try {

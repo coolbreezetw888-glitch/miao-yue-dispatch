@@ -67,11 +67,15 @@ test("報表匯出中心(§4.3):訂單/會員/抽成三種報表類型皆下載�
     page.waitForEvent("download", { timeout: LOAD_TIMEOUT }),
     page.getByRole("button", { name: "匯出 CSV" }).click(),
   ]);
-  await expect(page.getByText("已匯出 1 筆會員")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // #849(行為改變,#872 建單自動建立會員):fixture 那筆訂單的客戶電話(0955444099)跟 fixture 會員
+  // (0955444001)不同,建單時後端會自動替這位客戶建一筆會員 ⇒ 這間商家現在有 2 位會員,
+  // 匯出筆數從 1 變 2,CSV 裡兩位都要在(多驗了自動建立的那一位真的會被匯出)。
+  await expect(page.getByText("已匯出 2 筆會員")).toBeVisible({ timeout: LOAD_TIMEOUT });
   const membersPath = await membersDownload.path();
   expect(membersPath).not.toBeNull();
   const membersCsv = readFileSync(membersPath!, "utf-8");
   expect(membersCsv).toContain(fixture.memberName);
+  expect(membersCsv).toContain(fixture.customerName);
 
   // 抽成報表(預設年月 = 本月,服務人員預設「全部服務人員」,剛好對應 fixture 完成的那筆訂單)。
   await page.getByRole("tab", { name: "抽成" }).click();

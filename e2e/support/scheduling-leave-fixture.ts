@@ -206,8 +206,8 @@ export async function injectSchedulingLeaveFixtureSession(
   );
 }
 
-/** 4.5 測試獨立於 4.4 測試(不依賴 4.4 測試有沒有先跑過、跑到哪個階段)——4.4 測試結束時
- * 已經把 fixture 原本那筆請假紀錄取消掉了,這裡重新替 `staffOnLeaveId` 建立一筆新的(範圍一樣是
+/** 4.5 測試獨立於 4.4 測試(不依賴 4.4 測試有沒有先跑過、跑到哪個階段)——先確保 fixture 原本那筆
+ * 請假紀錄已取消(4.4 有跑就已經取消過,沒跑就在這裡取消),再重新替 `staffOnLeaveId` 建立一筆新的(範圍一樣是
  * 「今天」),並更新 `fixture.leaveRecordId`,供 teardown 收尾時一併確保清成 cancelled。 */
 export async function createStaffLeaveForCalendarTest(
   fixture: SchedulingLeaveFixture,
@@ -218,6 +218,18 @@ export async function createStaffLeaveForCalendarTest(
     refresh_token: fixture.session.refresh_token,
   });
   if (sessionError) throw new Error(`還原測試帳號 session 失敗:${sessionError.message}`);
+
+  // 第 6 批(#849)根因修正:這支原本假設「4.4 測試已經把 setup 建的那筆請假取消掉了」。#976 第 3 批之後
+  // 4.4(排班一覽)在功能隱藏期間會被 test.skip ⇒ setup 那筆「今天」的請假還在,這裡再建一筆同一天的
+  // 就被 create_staff_leave 以「日期區間不能重疊」擋下,整支 4.5 測試在建資料階段就死掉。
+  // 改成:先確保目前那筆是 cancelled(cancel_staff_leave 對已取消的紀錄重複呼叫不會報錯,teardown 也靠
+  // 這個行為),再建新的 ⇒ 不管 4.4 有沒有跑、跑到哪,4.5 都從同一個起點開始。
+  const { error: cancelError } = await client.rpc("cancel_staff_leave", {
+    p_leave_id: fixture.leaveRecordId,
+  });
+  if (cancelError) {
+    throw new Error(`先取消既有的測試請假紀錄失敗(供 4.5 測試使用):${cancelError.message}`);
+  }
 
   const { data: leaveRecord, error } = await client.rpc("create_staff_leave", {
     p_staff_id: fixture.staffOnLeaveId,

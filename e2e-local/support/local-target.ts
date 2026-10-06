@@ -87,6 +87,79 @@ export function parseSupabaseStatusEnv(output: string): Record<string, string> {
   return result;
 }
 
+/**
+ * 第 6 批(#849):把「向 `supabase status -o env` 取本機網址與金鑰 → 檢查一定是本機 → 放進 E2E_LOCAL_*
+ * 環境變數」這段收成一支,讓 playwright.local.config.ts 與預設 playwright.config.ts 的本機模式共用同一套。
+ *
+ * - config 會在主程序與每個 worker 各載入一次:主程序呼叫 CLI,worker 已經有環境變數就不再呼叫。
+ * - 不論是主程序取到的、還是外面先設好的 E2E_LOCAL_SUPABASE_URL,**一律再過一次 assertLocalSupabaseUrl**,
+ *   不是本機就 throw(config 載入失敗 ⇒ 一條測試都不跑)。
+ * - 不讀 `.env`;不印出任何金鑰。
+ *
+ * @param runStatusCli 取得 `supabase status -o env` 輸出的函式(呼叫端用 execSync 實作,單元測試可換掉)。
+ * @returns 本機 Supabase 的 origin 與 publishable key。
+ */
+export function loadLocalSupabaseTargetIntoEnv(runStatusCli: () => string): {
+  url: string;
+  publishableKey: string;
+} {
+  if (!process.env[LOCAL_ENV_KEYS.url]) {
+    let statusOutput: string;
+    try {
+      statusOutput = runStatusCli();
+    } catch (err) {
+      throw new Error(
+        `[本機 e2e] 讀不到本機 Supabase 狀態(請先 \`npx supabase start\`):${(err as Error).message}`,
+      );
+    }
+    const status = parseSupabaseStatusEnv(statusOutput);
+    const publishableKey = status["PUBLISHABLE_KEY"] || status["ANON_KEY"];
+    const serviceRoleKey = status["SERVICE_ROLE_KEY"] || status["SECRET_KEY"];
+    assertLocalSupabaseUrl(status["API_URL"]);
+    if (!publishableKey || !serviceRoleKey) {
+      throw new Error("[本機 e2e] `supabase status` 沒有回傳本機金鑰 ⇒ 中止。");
+    }
+    process.env[LOCAL_ENV_KEYS.url] = status["API_URL"];
+    process.env[LOCAL_ENV_KEYS.publishableKey] = publishableKey;
+    process.env[LOCAL_ENV_KEYS.serviceRoleKey] = serviceRoleKey;
+  }
+  const url = assertLocalSupabaseUrl(process.env[LOCAL_ENV_KEYS.url]).origin;
+  const publishableKey = process.env[LOCAL_ENV_KEYS.publishableKey];
+  if (!publishableKey) {
+    throw new Error("[本機 e2e] 拿不到本機 publishable key ⇒ 中止。");
+  }
+  return { url, publishableKey };
+}
+
+/**
+ * 第 6 批(#849):前端開發伺服器網址(Playwright 的 baseURL)也必須是本機,否則中止。
+ * 規則跟 assertLocalSupabaseUrl 相同(主機只認 127.0.0.1 / localhost / ::1,整串不可含 supabase.co),
+ * 另外協定只接受 http: / https:。
+ */
+export function assertLocalBaseUrl(raw: string | undefined): URL {
+  if (!raw || raw.trim() === "") {
+    throw new Error("[本機 e2e] 前端網址(baseURL)是空的 ⇒ 中止。");
+  }
+  if (/supabase\.co/i.test(raw)) {
+    throw new Error(`[本機 e2e] 前端網址含 supabase.co(${raw})⇒ 中止,一條測試都不跑。`);
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`[本機 e2e] 前端網址格式不正確(${raw})⇒ 中止。`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`[本機 e2e] 前端網址協定不是 http/https(${raw})⇒ 中止。`);
+  }
+  if (!isLoopbackHost(url.hostname)) {
+    throw new Error(
+      `[本機 e2e] 前端網址主機是 ${url.hostname},不是 127.0.0.1 / localhost ⇒ 中止,一條測試都不跑。`,
+    );
+  }
+  return url;
+}
+
 export interface LocalSupabaseTarget {
   url: string;
   publishableKey: string;
