@@ -185,3 +185,16 @@ export function formatRelativeNotificationTime(createdAt: string, now: Date = ne
   if (dayDiff === 1) return `昨天 ${hhmm}`;
   return `${created.getMonth() + 1}/${created.getDate()} ${hhmm}`;
 }
+
+/**
+ * SPECS-INDEX #977 第 4 批:只會出現在鈴鐺、推播設定沒有的事件標籤。刻意不加進 push-notifications 的
+ * PUSH_NOTIFICATION_EVENT_LABELS —— 那份清單同時決定推播設定頁要畫幾張事件卡,加進去會多出一張不能用的卡片。
+ */
+export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
+  booking_confirmed: "服務人員確認接單時",
+};
+
+/** SPECS-INDEX #977 第 4 批:服務人員視角鈴鐺頂端的待確認提醒文字。 */
+export function formatStaffPendingReminder(count: number): string {
+  return `你有 ${count} 筆訂單待確認`;
+}

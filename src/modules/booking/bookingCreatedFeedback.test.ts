@@ -87,7 +87,9 @@ describe("resolveSubmitMemberId(§12.1 + §12.7)", () => {
 describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
   // 紅利系統重構 批次 7:型別多了三個紅利快照欄位。這一組全部帶 0 = 「這筆沒有派點、沒有折抵」,
   // 原本的斷言(只有會員行 + 金額行)維持不變 —— 0 點時本來就不該出現紅利行。
+  // #977 第 4 批:型別多了 status(標題依實際狀態顯示)。這一組帶 pending_confirmation = 改前唯一的情況。
   const base = {
+    status: "pending_confirmation",
     final_amount_snapshot: 1200,
     points_planned: 0,
     points_redeemed: 0,
@@ -103,7 +105,8 @@ describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
         member_name_snapshot: "王小明",
       }),
     ).toEqual({
-      title: "已送出訂單(待確認)",
+      // #977 第 4 批:標題改用全形括號(畫面文字全形標點規則),文字不變。
+      title: "已送出訂單（待確認）",
       lines: ["已自動建立會員:王小明", "訂單金額 $1,200"],
     });
   });
@@ -141,6 +144,18 @@ describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
     expect(JSON.stringify(content)).not.toMatch(/紅利|點數|計算中/);
   });
 
+  it("#977 第 4 批:後端回 accepted(主要服務人員開了「商家後台確認後直接接單」)⇒ 標題是「已確認」", () => {
+    expect(
+      buildBookingCreatedToast({
+        ...base,
+        status: "accepted",
+        member_auto_created: false,
+        member_id: null,
+        member_name_snapshot: null,
+      }),
+    ).toEqual({ title: "已送出訂單（已確認）", lines: ["訂單金額 $1,200"] });
+  });
+
   it("秒數是 6 秒", () => {
     expect(BOOKING_CREATED_TOAST_DURATION_MS).toBe(6000);
   });
@@ -148,6 +163,7 @@ describe("buildBookingCreatedToast(#916;紅利行見下一組)", () => {
 
 describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => {
   const base = {
+    status: "pending_confirmation",
     final_amount_snapshot: 1000,
     member_auto_created: false,
     member_id: "m-1",

@@ -305,7 +305,7 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     expect(payload["memberId"]).toBeNull();
     // 順便確認成功提示框用的是會員姓名那一行(#916)
     await waitFor(() =>
-      expect(toastMock.success).toHaveBeenCalledWith("已送出訂單(待確認)", expect.anything()),
+      expect(toastMock.success).toHaveBeenCalledWith("已送出訂單（待確認）", expect.anything()),
     );
   });
 

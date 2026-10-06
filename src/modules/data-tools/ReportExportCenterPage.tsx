@@ -74,7 +74,7 @@ const REPORT_TABS: Array<{ key: ReportType; label: string }> = [
 /** 訂單狀態篩選的固定白名單(給 guardPhantomEmptyChange 的最嚴格用法用)。 */
 const ORDER_STATUS_OPTIONS = [
   { value: "__all__", label: "全部狀態" },
-  { value: "accepted", label: "已接受" },
+  { value: "accepted", label: "已確認" },
   { value: "completed", label: "已完成" },
   { value: "cancelled", label: "已取消" },
 ] as const;

@@ -43,7 +43,18 @@
 //   「全部標為已讀」按鈕疊在一起,而握把已經是關閉入口。
 // =========================================================================
 
-import { Bell } from "lucide-react";
+// =========================================================================
+// SPECS-INDEX #977 第 4 批(2026-10-06):
+//   ① 新事件 booking_confirmed(服務人員確認接單 ⇒ 商家管理員收到)。推播設定沒有這個事件,所以標籤不在
+//      PUSH_NOTIFICATION_EVENT_LABELS 裡,改由下面 BELL_ONLY_EVENT_LABELS 補;點了照既有規則依身份導頁
+//      (管理員 ⇒ 訂單管理)。
+//   ② 服務人員視角:清單最上方固定一條「你有 N 筆訂單待確認」(staffPendingCount,由 AppLayout 用
+//      useMyPendingConfirmationCount 即時從行事曆資料算出來,**不寫進資料表**),點了打開我的行事曆;
+//      這個數字也算進鈴鐺紅點。「全部標為已讀」只管資料表裡的通知,不受它影響。
+//   鈴鐺維持非即時(掛載 / 切回分頁才重查),不新增 realtime(規格二之 3)。
+// =========================================================================
+
+import { Bell, CalendarClock } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -69,7 +80,10 @@ import {
   useMyUnreadNotificationCount,
 } from "./api";
 import {
+  BELL_ONLY_EVENT_LABELS,
+  NOTIFICATION_TARGET_URLS,
   formatRelativeNotificationTime,
+  formatStaffPendingReminder,
   formatUnreadBadgeText,
   mergeNotificationRows,
   resolveNotificationLink,
@@ -77,7 +91,11 @@ import {
 import type { MergedNotification } from "./types";
 
 function eventLabel(eventType: string): string {
-  return PUSH_NOTIFICATION_EVENT_LABELS[eventType as PushNotificationEventType] ?? eventType;
+  return (
+    PUSH_NOTIFICATION_EVENT_LABELS[eventType as PushNotificationEventType] ??
+    BELL_ONLY_EVENT_LABELS[eventType] ??
+    eventType
+  );
 }
 
 /** §13.7:合併顯示時標出兩個身份,例如「以客服、服務人員身份」。單一身份時不顯示(是雜訊)。 */
@@ -86,7 +104,12 @@ function multiIdentityLabel(item: MergedNotification): string | null {
   return `以${item.targetTypes.map((t) => PUSH_TARGET_TYPE_LABELS[t]).join("、")}身份`;
 }
 
-export function NotificationBell() {
+export function NotificationBell({
+  staffPendingCount = 0,
+}: {
+  /** #977 第 4 批:服務人員視角的待確認訂單數(只算自己是主要服務人員、今天以後)。其他視角傳 0 / 不傳。 */
+  staffPendingCount?: number;
+} = {}) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   // #835:640px 以上走 Popover 氣泡,以下走底部 Sheet(見檔頭說明)。
@@ -99,7 +122,13 @@ export function NotificationBell() {
   const listQuery = useMyNotifications(MY_NOTIFICATIONS_DEFAULT_LIMIT, open);
   const markRead = useMarkNotificationsRead();
 
-  const badgeText = formatUnreadBadgeText(unreadQuery.data);
+  // #977 第 4 批:紅點 = 未讀通知 + 服務人員待確認提醒;「全部標為已讀」只看未讀通知。
+  const pendingReminderCount = staffPendingCount > 0 ? Math.floor(staffPendingCount) : 0;
+  const unreadBadgeText = formatUnreadBadgeText(unreadQuery.data);
+  const badgeText =
+    pendingReminderCount > 0
+      ? formatUnreadBadgeText((unreadQuery.data ?? 0) + pendingReminderCount)
+      : unreadBadgeText;
   const rows = listQuery.data ?? [];
   const merged = mergeNotificationRows(rows);
   // §13.7:商家名稱只有在「這個使用者可存取的商家超過一間」時才顯示,單一商家不需要這行雜訊。
@@ -120,6 +149,12 @@ export function NotificationBell() {
     navigate(resolveNotificationLink({ target_type: item.primaryTargetType }));
 
     // ④ 關閉面板。
+    setOpen(false);
+  }
+
+  // #977 第 4 批:待確認提醒 ⇒ 打開我的行事曆(服務人員視角的 /app/calendar 就是 MyCalendarPage)。
+  function handlePendingReminderClick() {
+    navigate(NOTIFICATION_TARGET_URLS.staff);
     setOpen(false);
   }
 
@@ -167,7 +202,7 @@ export function NotificationBell() {
           variant="ghost"
           size="sm"
           data-testid="notification-mark-all-read"
-          disabled={markRead.isPending || !badgeText}
+          disabled={markRead.isPending || !unreadBadgeText}
           onClick={() => markRead.mutate(null)}
         >
           全部標為已讀
@@ -175,6 +210,20 @@ export function NotificationBell() {
       </div>
 
       <div className="max-h-[60vh] overflow-y-auto">
+        {pendingReminderCount > 0 ? (
+          <button
+            type="button"
+            data-testid="notification-staff-pending-reminder"
+            onClick={handlePendingReminderClick}
+            className="flex w-full items-center gap-2 border-b border-border bg-warn-soft px-4 py-3 text-left text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+          >
+            <CalendarClock className="h-4 w-4 shrink-0 text-warn-strong" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">
+              {formatStaffPendingReminder(pendingReminderCount)}
+            </span>
+            <span className="shrink-0 text-xs font-normal text-muted-foreground">查看行事曆</span>
+          </button>
+        ) : null}
         {listQuery.isLoading ? (
           /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。
              🔴 這裡**不能套頁面骨架**(LoadingSkeleton 的 cards/lines 是給頁面內容用的):

@@ -166,6 +166,17 @@ export async function fetchMyBookingSchedule(
 }
 
 // =========================================================================
+// SPECS-INDEX #977 第 4 批(2026-10-06):主要服務人員確認接單。
+// 後端 public.staff_confirm_booking 自己檢查「本人 + 主要服務人員 + 在職 + 行事曆檢視 + 待確認」,
+// 同交易寫操作紀錄與商家管理員的鈴鐺通知。這裡**不呼叫任何 LINE / 推播 dispatch**(規格一之 4)。
+// 回傳只有 {id, status}(後端刻意不回整列,避免客戶電話地址繞過遮蔽),成功後由呼叫端重查行事曆。
+// =========================================================================
+export async function staffConfirmBooking(bookingId: string): Promise<void> {
+  const { error } = await supabase.rpc("staff_confirm_booking", { p_booking_id: bookingId });
+  if (error) throw error;
+}
+
+// =========================================================================
 // v2 §10.2.1:我的商家某一天的營業時間(供時間軸格線/時段排休分頁共用)。
 // =========================================================================
 export async function fetchMyDayBusinessHours(

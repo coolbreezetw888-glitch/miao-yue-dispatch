@@ -124,7 +124,11 @@ import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 // 使用者決策(2026-09-23):管理員/客服同時也是服務人員時的雙重身份切換——直接查自己的
 // merchant_staff 紀錄(不透過 useCurrentMerchantRole 的角色優先權判斷),判斷「除了目前解析出來
 // 的角色之外,我是不是也能切到服務人員端」。
-import { useActiveMyStaffRecord } from "@/modules/staff-portal/context";
+import {
+  useActiveMyStaffRecord,
+  // SPECS-INDEX #977 第 4 批:服務人員視角的鈴鐺頂端「你有 N 筆訂單待確認」(即時由行事曆資料計算)。
+  useMyPendingConfirmationCount,
+} from "@/modules/staff-portal/context";
 
 import {
   isStaffViewResolved,
@@ -243,6 +247,8 @@ export default function AppLayout() {
     roleLoading,
     staffRecordLoading,
   });
+  // SPECS-INDEX #977 第 4 批:只有服務人員視角才算(其他視角回 0、不查)。一定要在下面的 early return 之前呼叫。
+  const staffPendingCount = useMyPendingConfirmationCount(isStaffView);
 
   // 以下這段登入驗證/導向邏輯,原封不動搬自舊版 src/routes/app.tsx(AppShell),行為完全不變,
   // 只多存一份 userId(user.id)供 1.2 首頁個人資料卡片查詢自己的管理員/客服紀錄使用。
@@ -423,7 +429,7 @@ export default function AppLayout() {
                 外面這層 div 保留,跟左邊那格對稱(都是 shrink-0 的 32px 格子),讓標題自然置中;
                 之後如果真的要再往右側加東西,先回去讀上面關於 320px 寬度預算的說明。 */}
             <div className="flex shrink-0 items-center justify-end">
-              <NotificationBell />
+              <NotificationBell staffPendingCount={staffPendingCount} />
             </div>
           </div>
         </header>

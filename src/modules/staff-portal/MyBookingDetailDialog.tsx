@@ -1,4 +1,14 @@
-// 對應規格書 v2 §10.2.2:服務人員自助行事曆的唯讀預約詳情彈窗。
+// 對應規格書 v2 §10.2.2:服務人員自助行事曆的預約詳情彈窗。
+//
+// 🔴 SPECS-INDEX #977 第 4 批(2026-10-06,推翻下面「唯讀、只有關閉按鈕」的舊決策):
+//   訂單是「待確認」而且自己是**主要服務人員**時,底部多一顆主要按鈕「確認接單」
+//   (判斷在 staffConfirmLogic.canStaffConfirmBooking;協助人員、已確認、已完成、已取消都不顯示)。
+//   按下 → 呼叫 public.staff_confirm_booking(後端自己再檢查一次身分與狀態,前端不是只靠隱藏按鈕擋)
+//   → 成功提示 → 立刻 invalidate 行事曆查詢,詳情與列表一起更新(不只等即時同步)。
+//   不發 LINE、不發推播(後端只寫操作紀錄 + 商家管理員鈴鐺通知)。
+//   順手修:標題列的狀態標籤改用商家自訂顏色(fillColor),跟列表卡片一致。
+//   下面舊註解裡「唯讀 / Footer 只有一個關閉按鈕」的描述,以這一段為準。
+//
 //
 // 不複用商家端 BookingDetailDialog.tsx——那顆內部會呼叫 getBooking(bookingId),讀的是
 // bookings 表本身(受 bookings_select RLS 保護)。v1 判斷 7/一之二節表格已經明講「刻意不修改
@@ -46,21 +56,29 @@ import {
   StatusTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
+import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import {
   BOOKING_STATUS_LABELS,
   bookingStatusTone,
+  DEFAULT_BOOKING_STATUS_COLORS,
+  getBookingStatusColor,
   type BookingStatus,
+  type BookingStatusColorMap,
 } from "@/modules/booking/types";
 import { isoToTaipeiTime } from "@/modules/booking/dateUtils";
 import { formatAmount } from "@/modules/booking/orderAmount";
 
 import type { MyBookingScheduleItem } from "./api";
+import { useStaffConfirmBooking } from "./context";
+import { canStaffConfirmBooking } from "./staffConfirmLogic";
 
 export function MyBookingDetailDialog({
   booking,
   staffName,
   showCustomerAddress,
+  statusColors = DEFAULT_BOOKING_STATUS_COLORS,
   open,
   onOpenChange,
 }: {
@@ -79,6 +97,8 @@ export function MyBookingDetailDialog({
    * (見檔頭說明),判斷邏輯與完整理由寫在 MyCalendarPage.tsx 的 showCustomerAddress 那段。
    */
   showCustomerAddress: boolean;
+  /** #977 第 4 批:商家自訂的訂單狀態色碼(呼叫端已經查好,跟列表卡片同一份)。 */
+  statusColors?: BookingStatusColorMap | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -91,13 +111,17 @@ export function MyBookingDetailDialog({
   const startTime = isoToTaipeiTime(booking.start_at);
   const endTime = isoToTaipeiTime(booking.end_at);
   const status = booking.status as BookingStatus;
+  const showConfirm = canStaffConfirmBooking(booking);
 
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
         title="預約詳情"
         titleExtra={
-          <StatusTag tone={bookingStatusTone(status)}>
+          <StatusTag
+            tone={bookingStatusTone(status)}
+            fillColor={getBookingStatusColor(statusColors, status)}
+          >
             {BOOKING_STATUS_LABELS[status] ?? booking.status}
           </StatusTag>
         }
@@ -108,6 +132,7 @@ export function MyBookingDetailDialog({
                 關閉
               </Button>
             </FullPageLayerClose>
+            {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
           </ActionBar>
         }
       >
@@ -187,5 +212,39 @@ export function MyBookingDetailDialog({
         </div>
       </FullPageLayerContent>
     </FullPageLayer>
+  );
+}
+
+/**
+ * #977 第 4 批:「確認接單」主要按鈕。獨立成一個小元件,讓 mutation(需要 QueryClient)只在按鈕真的出現時才建立
+ * —— 已確認 / 已完成 / 協助人員的詳情不會掛任何寫入用的 hook。
+ * 成功 ⇒ 提示 + useStaffConfirmBooking 內部立刻 invalidate 行事曆查詢(詳情、列表、鈴鐺待確認數一起更新)。
+ * 失敗 ⇒ 顯示後端的中文原因(例如「這筆訂單已經不是待確認狀態，請重新整理」)。
+ */
+function StaffConfirmBookingButton({ bookingId }: { bookingId: string }) {
+  const confirmMutation = useStaffConfirmBooking();
+
+  function handleConfirm() {
+    confirmMutation.mutate(bookingId, {
+      onSuccess: () => {
+        toast.success("已確認接單");
+      },
+      onError: (err) => {
+        toast.error("確認接單失敗", { description: getErrorMessage(err) });
+      },
+    });
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="primary"
+      size="touch"
+      onClick={handleConfirm}
+      disabled={confirmMutation.isPending}
+      data-testid="staff-confirm-booking-button"
+    >
+      確認接單
+    </Button>
   );
 }

@@ -4418,6 +4418,10 @@ export type Database = {
         Returns: undefined
       }
       storage_path_merchant_id: { Args: { p_path: string }; Returns: string }
+      staff_confirm_booking: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
       storage_path_self_staff_id: {
         Args: { p_object_name: string }
         Returns: string

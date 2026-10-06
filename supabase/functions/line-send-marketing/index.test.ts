@@ -5,7 +5,7 @@
 // 權限邊界(#976 第 3 批起:管理員或 line_marketing 客服放行、其他客服擋下)在 index.ts 用
 // am_i_allowed_line_marketing(SECURITY DEFINER,內部是 private.can_send_line_marketing)把關,
 // 判斷本身由 pgTAP req976_02 驗證,實際呼叫這支 Edge Function 的 200 / 403 由
-// e2e-local/line-marketing-permission.spec.ts 在本機驗證;這裡專注驗證 line-send-marketing 自己這一層
+// e2e-local/permission-tightening-batch3.spec.ts 在本機驗證;這裡專注驗證 line-send-marketing 自己這一層
 // 「誰會被跳過/誰會被發送」的分派邏輯。
 
 import { assertEquals } from "jsr:@std/assert@1";

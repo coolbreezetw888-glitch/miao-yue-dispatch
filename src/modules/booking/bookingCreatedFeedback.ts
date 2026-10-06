@@ -69,7 +69,8 @@ export const BOOKING_CREATED_TOAST_DURATION_MS = 6000;
  * #916 建單成功提示框。紅利系統重構 批次 7(§4.11)補上第 3 / 4 行(原本延到紅利改版那批,不留空殼)。
  *
  * | 位置 | 文案 | 條件 |
- * | 標題 | 已送出訂單(待確認) | 一律 |
+ * | 標題 | 已送出訂單（待確認） | status 不是 accepted(預設) |
+ * | 標題 | 已送出訂單（已確認） | status === "accepted"(主要服務人員開了「商家後台確認後直接接單」,#977 第 4 批) |
  * | 第 1 行 | 已自動建立會員:{姓名} | member_auto_created === true |
  * | 第 1 行 | 已連結既有會員:{姓名} | member_auto_created === false 且 member_id 有值 |
  * | 第 2 行 | 訂單金額 {formatAmount(金額)} | 一律(仍是折抵前金額,§2.11) |
@@ -98,6 +99,7 @@ export function buildBookingCreatedToast(
     | "points_planned"
     | "points_redeemed"
     | "points_redeem_amount_snapshot"
+    | "status"
   >,
 ): BookingCreatedToastContent {
   const lines: string[] = [];
@@ -122,5 +124,9 @@ export function buildBookingCreatedToast(
       )}`,
     );
   }
-  return { title: "已送出訂單(待確認)", lines };
+  // #977 第 4 批:標題依後端實際寫入的狀態顯示(全形括號)。
+  return {
+    title: booking.status === "accepted" ? "已送出訂單（已確認）" : "已送出訂單（待確認）",
+    lines,
+  };
 }

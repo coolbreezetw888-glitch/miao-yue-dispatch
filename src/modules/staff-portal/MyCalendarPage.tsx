@@ -1,3 +1,7 @@
+// 🔴 SPECS-INDEX #977 第 4 批(2026-10-06):這一頁不再是純唯讀 —— 主要服務人員可以在預約詳情按「確認接單」
+// (見 MyBookingDetailDialog.tsx 檔頭);月曆日期格的數量改成兩色(待確認 / 已確認,用商家自訂顏色,
+// 已完成不算,0 不顯示,計算在 staffConfirmLogic.countDayStatusBadges)。
+//
 // 對應規格書 4.3:服務人員自助行事曆(疊加在既有 src/modules/booking/CalendarPage.tsx 的
 // role==='staff' 分支底下渲染)。月曆檢視 + 點開某一天看當天的預約明細清單(規則 2.5:含以
 // 助手身份參與的預約;規則 2.6:依 show_member_info 決定要不要顯示會員專屬資訊)。
@@ -15,6 +19,7 @@ import {
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { solidFillStyle } from "@/lib/statusPillStyle";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
@@ -49,6 +54,7 @@ import {
 } from "./context";
 import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
 import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
+import { countDayStatusBadges } from "./staffConfirmLogic";
 import type { MyBookingScheduleItem } from "./api";
 
 // v2 §10.2.4:「卡片列表」/「時間軸格線」兩種檢視,預設卡片列表(維持 v1 既有行為不變,
@@ -310,12 +316,14 @@ export default function MyCalendarPage() {
           ))}
           {monthGrid.map(({ date, inCurrentMonth }) => {
             const dateKey = toDateKey(date);
-            const count = bookingsByDate.get(dateKey)?.length ?? 0;
+            // #977 第 4 批:兩色數量(待確認 / 已確認),只算這兩種狀態,0 的那顆不顯示。
+            const badges = countDayStatusBadges(bookingsByDate.get(dateKey));
             const isSelected = dateKey === selectedDateKey;
             return (
               <button
                 key={dateKey}
                 type="button"
+                data-date-key={dateKey}
                 onClick={() => setSelectedDateKey(dateKey)}
                 className={`flex h-14 flex-col items-center justify-center gap-0.5 rounded-md border text-xs transition-colors ${
                   isSelected
@@ -324,9 +332,36 @@ export default function MyCalendarPage() {
                 } ${inCurrentMonth ? "" : "opacity-40"}`}
               >
                 <span>{date.getDate()}</span>
-                {count > 0 ? (
-                  <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
-                    {count}
+                {badges.pending > 0 || badges.accepted > 0 ? (
+                  // 手機 375 寬一格約 45px(含 1px 邊框)。兩種都是兩位數(例如 12 / 10)時,原本 px-1 + 2px 間距
+                  // 會超出格子邊框 ⇒ 改成左右內距 2px、間距 1px、數字等寬(tabular-nums),兩位數一顆約 16px,
+                  // 兩顆加起來約 33px,留得下邊框與餘裕(e2e-local E4 一位數 / 兩位數各量一次)。
+                  // whitespace-nowrap 防止擠成兩行。
+                  <span className="flex items-center gap-px whitespace-nowrap">
+                    {badges.pending > 0 ? (
+                      <span
+                        data-testid="day-pending-count"
+                        aria-label={`待確認 ${badges.pending} 筆`}
+                        className="min-w-4 rounded-full border px-0.5 text-[10px] leading-4 tabular-nums"
+                        style={solidFillStyle(
+                          getBookingStatusColor(effectiveStatusColors, "pending_confirmation"),
+                        )}
+                      >
+                        {badges.pending}
+                      </span>
+                    ) : null}
+                    {badges.accepted > 0 ? (
+                      <span
+                        data-testid="day-accepted-count"
+                        aria-label={`已確認 ${badges.accepted} 筆`}
+                        className="min-w-4 rounded-full border px-0.5 text-[10px] leading-4 tabular-nums"
+                        style={solidFillStyle(
+                          getBookingStatusColor(effectiveStatusColors, "accepted"),
+                        )}
+                      >
+                        {badges.accepted}
+                      </span>
+                    ) : null}
                   </span>
                 ) : null}
               </button>
@@ -397,6 +432,8 @@ export default function MyCalendarPage() {
         // 還沒載入完時傳 null,那一列就只顯示角色標籤(維持改版前的樣子,不顯示空白名字)。
         staffName={staffRow?.name ?? null}
         showCustomerAddress={showCustomerAddress}
+        // #977 第 4 批:詳情標題列的狀態標籤改用商家自訂顏色(跟列表卡片同一份)。
+        statusColors={effectiveStatusColors}
         open={detailBookingId !== null}
         onOpenChange={(open) => {
           if (!open) setDetailBookingId(null);

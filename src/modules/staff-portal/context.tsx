@@ -4,7 +4,7 @@
 // merchant_staff_permissions 這張表。
 
 import { useEffect } from "react";
-import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import {
   type AddStaffAvailabilityWindowInput,
 } from "@/modules/booking/api";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { addDays, getTaipeiNow, toDateKey } from "@/modules/booking/dateUtils";
 import type {
   BookingStatusColorMap,
   CalendarStateStyleMap,
@@ -35,6 +36,7 @@ import {
   fetchMyCalendarStateStyles,
   fetchMyDayBusinessHours,
   fetchMyDayScheduleState,
+  staffConfirmBooking,
   type MyBookingScheduleItem,
   type MyDayBusinessHours,
   type MyDayScheduleState,
@@ -51,6 +53,7 @@ import {
   STAFF_SCHEDULE_EVENT,
   type StaffScheduleChannelState,
 } from "./staffScheduleChannel";
+import { countMyPendingConfirmations, PENDING_REMINDER_RANGE_DAYS } from "./staffConfirmLogic";
 import type { StaffPermissionSectionKey } from "./types";
 
 /** 5.6 對外介面:唯讀,回傳目前登入者在指定商家的 merchant_staff 那一列(受模組 3 規格書 3.3
@@ -146,6 +149,46 @@ export function useMyBookingSchedule(
       fetchMyBookingSchedule(staffId as string, startDate as string, endDate as string),
     enabled: Boolean(staffId) && Boolean(startDate) && Boolean(endDate),
   });
+}
+
+// =========================================================================
+// SPECS-INDEX #977 第 4 批(2026-10-06):服務人員接單確認。
+// =========================================================================
+
+/**
+ * 預約詳情「確認接單」按鈕用的 mutation。成功後**立刻** invalidate 行事曆查詢(列表、時間軸、詳情、鈴鐺待確認數
+ * 都讀 my-booking-schedule),不只等即時同步(規格三之 1)。
+ */
+export function useStaffConfirmBooking() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bookingId: string) => staffConfirmBooking(bookingId),
+    onSuccess: () => {
+      invalidateStaffSchedule(queryClient);
+    },
+  });
+}
+
+/**
+ * 鈴鐺「你有 N 筆訂單待確認」(規格三之 4,主腦裁決 ③):即時由行事曆資料計算,不寫進資料表。
+ * 只在「服務人員視角」(AppLayout 的 isStaffView)而且有「行事曆檢視」權限時才查;其他情況回 0。
+ * 查詢範圍是今天(台北)起 PENDING_REMINDER_RANGE_DAYS 天(get_my_booking_schedule 的上限)。
+ * 共用 my-booking-schedule 這個 queryKey 前綴 ⇒ 確認接單 / 即時同步 invalidate 時這個數字也會跟著更新。
+ */
+export function useMyPendingConfirmationCount(enabled: boolean): number {
+  const { merchant } = useCurrentMerchant();
+  const merchantId = merchant?.id ?? null;
+  const { data: hasCalendarAccess } = useMyStaffPermission("staff_calendar_view");
+  const today = getTaipeiNow();
+  const todayKey = toDateKey(today);
+  const endKey = toDateKey(addDays(today, PENDING_REMINDER_RANGE_DAYS));
+  const { data } = useMyBookingSchedule(
+    enabled && hasCalendarAccess === true ? merchantId : null,
+    todayKey,
+    endKey,
+  );
+  if (!enabled || hasCalendarAccess !== true) return 0;
+  return countMyPendingConfirmations(data, todayKey);
 }
 
 // =========================================================================

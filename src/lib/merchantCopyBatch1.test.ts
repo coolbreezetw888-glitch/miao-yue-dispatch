@@ -277,7 +277,8 @@ describe("#977 服務人員權限功能開關", () => {
       ["no_time_slot_limit", "客戶預約無時段限制", true],
       ["auto_accept_booking", "客戶預約自動接受", true],
       ["unlimited_backend_edit", "商家後台編輯無時段限制", false],
-      ["direct_accept_after_merchant_confirm", "商家後台確認後直接接單", true],
+      // #977 第 4 批(2026-10-06):這個開關已生效,拿掉「即將推出」。
+      ["direct_accept_after_merchant_confirm", "商家後台確認後直接接單", false],
       ["show_member_info", "服務人員是否顯示會員資料", false],
       ["google_calendar_sync_enabled", "服務人員Google日曆同步", true],
       ["can_create_edit_orders", "服務人員新增編輯訂單", true],
