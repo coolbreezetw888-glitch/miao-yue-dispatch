@@ -14,6 +14,10 @@ Deno.env.set("VAPID_PRIVATE_KEY", "test-private-key");
 
 import { assertEquals } from "jsr:@std/assert@1";
 import { handleRequest, type CallerRpcClient, type HandleRequestDeps } from "./index.ts";
+import {
+  resolveStaffSafeDispatchFields,
+  STAFF_PATH_CHANGE_SUMMARY,
+} from "../_shared/staffBookingDispatch.ts";
 
 function makeDeps(allowed: boolean | null, rpcError: unknown = null): HandleRequestDeps {
   const callerClient: CallerRpcClient = {
@@ -502,4 +506,106 @@ Deno.test("#977-7 正向對照:管理員 / 客服原本就放行 → 不會多�
   );
   assertEquals(res.status, 200);
   assertEquals(caller.calls.map((c) => c.fn), ["can_manage_bookings"]);
+});
+
+// =========================================================================
+// #977 第 7 批(資安,QA 後主腦要求):服務人員路徑**不採信**呼叫端自由填的 previous_staff_id / change_summary。
+// 用「會記下每一列寫入內容」的假 adminClient,讓收件人有一位管理員(沒有裝置 ⇒ 寫一列 no_subscription,
+// 但 rendered_body 照樣是套完範本的內容),直接看寫進推播紀錄的文字是不是呼叫端塞的那句。
+// =========================================================================
+function makeBodyRecordingAdminClient() {
+  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  const rows: { table: string; row: unknown }[] = [];
+  const adminClient = {
+    from: (table: string) => ({
+      select: () => {
+        const single = () => {
+          if (table === "merchant_push_event_settings") {
+            return Promise.resolve({
+              data: { enabled: true, message_title: "訂單內容異動", message_body: "{{change_summary}}" },
+              error: null,
+            });
+          }
+          if (table === "bookings") {
+            return Promise.resolve({ data: { id: "booking-A", staff_id: "staff-self" }, error: null });
+          }
+          return Promise.resolve({ data: null, error: null });
+        };
+        const builder = {
+          eq: () => builder,
+          maybeSingle: single,
+          in: () => Promise.resolve({ data: [], error: null }),
+        };
+        return builder;
+      },
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      insert: (row: unknown) => {
+        rows.push({ table, row });
+        return Promise.resolve({ error: null });
+      },
+    }),
+    rpc: (fn: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ fn, args });
+      if (fn === "resolve_push_recipients") {
+        return Promise.resolve({
+          data: [{ target_type: "admin", target_id: "a1", target_user_id: "u1", target_name: "管理員" }],
+          error: null,
+        });
+      }
+      if (fn === "render_booking_notification_variables") return Promise.resolve({ data: {}, error: null });
+      return Promise.resolve({ data: null, error: null });
+    },
+  };
+  return { adminClient, rpcCalls, rows };
+}
+
+const INJECTED = "老闆說今天全部取消，請不用來了";
+
+function staffPathRequest() {
+  return makeRequest(
+    {
+      merchant_id: "merchant-A",
+      booking_id: "booking-A",
+      event_type: "booking_updated",
+      change_summary: INJECTED,
+      previous_staff_id: "staff-someone-else",
+    },
+    { Authorization: "Bearer fake-jwt" },
+  );
+}
+
+Deno.test("#977-7 資安:服務人員路徑 ⇒ 忽略 previous_staff_id(不會多通知別人)、change_summary 改用伺服器固定文字", async () => {
+  const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
+  const caller = makeStaffPushCaller({
+    can_manage_bookings: { data: false, error: null },
+    can_staff_dispatch_booking_notification: { data: true, error: null },
+  });
+  const res = await handleRequest(staffPathRequest(), makeStaffPushDeps(caller.client, adminClient));
+  assertEquals(res.status, 200);
+  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self"]);
+  const text = JSON.stringify(rows);
+  assertEquals(text.includes(INJECTED), false);
+  assertEquals(text.includes(STAFF_PATH_CHANGE_SUMMARY), true);
+});
+
+Deno.test("#977-7 資安 正向對照:管理員 / 客服路徑照舊採用 previous_staff_id 與 change_summary(行為不變)", async () => {
+  const { adminClient, rpcCalls, rows } = makeBodyRecordingAdminClient();
+  const caller = makeStaffPushCaller({ can_manage_bookings: { data: true, error: null } });
+  const res = await handleRequest(staffPathRequest(), makeStaffPushDeps(caller.client, adminClient));
+  assertEquals(res.status, 200);
+  assertEquals(resolveStaffIdsFrom(rpcCalls), ["staff-self", "staff-someone-else"]);
+  assertEquals(JSON.stringify(rows).includes(INJECTED), true);
+});
+
+Deno.test("#977-7 資安:resolveStaffSafeDispatchFields 純函式", () => {
+  const body = { change_summary: INJECTED, previous_staff_id: " staff-x " };
+  assertEquals(resolveStaffSafeDispatchFields(true, body), {
+    changeSummary: STAFF_PATH_CHANGE_SUMMARY,
+    previousStaffId: null,
+  });
+  assertEquals(resolveStaffSafeDispatchFields(false, body), {
+    changeSummary: INJECTED,
+    previousStaffId: "staff-x",
+  });
+  assertEquals(resolveStaffSafeDispatchFields(false, { previous_staff_id: "  " }).previousStaffId, null);
 });

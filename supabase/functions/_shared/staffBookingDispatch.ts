@@ -31,3 +31,26 @@ export async function checkStaffBookingDispatch(
   }
   return data === true;
 }
+
+/**
+ * #977 第 7 批(資安):服務人員路徑放行時,通知內容不採信呼叫端自由填的欄位。
+ *   ・previousStaffId:一律 null(服務人員不能換主要服務人員,staff_ 包裝 RPC 也不允許)
+ *   ・changeSummary:一律伺服器端固定文字,不用 body.change_summary
+ * 管理員 / 客服路徑(viaStaffPath = false):照舊採用 body 的值(空字串視同沒帶)。
+ * LINE(line-notify-dispatch)沒有任何自由文字欄位(內容全由伺服器依訂單組裝),不需要這一段。
+ */
+export const STAFF_PATH_CHANGE_SUMMARY = "您的預約內容已更新，請至系統查看最新內容";
+
+export function resolveStaffSafeDispatchFields(
+  viaStaffPath: boolean,
+  body: { change_summary?: string | undefined; previous_staff_id?: string | undefined },
+): { changeSummary: string | undefined; previousStaffId: string | null } {
+  if (viaStaffPath) {
+    return { changeSummary: STAFF_PATH_CHANGE_SUMMARY, previousStaffId: null };
+  }
+  const previousStaffId = body.previous_staff_id?.trim();
+  return {
+    changeSummary: body.change_summary,
+    previousStaffId: previousStaffId ? previousStaffId : null,
+  };
+}

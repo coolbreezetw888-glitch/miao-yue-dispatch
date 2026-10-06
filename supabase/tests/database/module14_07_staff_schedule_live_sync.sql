@@ -232,8 +232,16 @@ select ok(
   'P1 前置:realtime.messages 今天的分區存在(不存在 = 本機 Realtime 容器沒在跑,先 supabase start;否則下面全部會是 0 則)'
 );
 
+-- #977 第 7 批(2026-10-07,QA 回報):原本這條數 sig_total()(整張表所有 staff:%:schedule 的列),
+-- 本機共用容器裡其他測試 / e2e 殘留的訊號列會讓它變成 2、3… ⇒ 跟這支測試無關的紅燈。
+-- 改成只數「這一次 probe 自己寫的那一列」(固定的 probe topic + event + payload),斷言意義不變:
+-- 以 postgres 身分直接呼叫 realtime.send,真的會寫一列進 realtime.messages。
 select realtime.send(jsonb_build_object('probe', 1), 'probe', 'staff:00000000-0000-4000-8000-000000000000:schedule', true);
-select is(pg_temp.sig_total(), 1,
+select is(
+  (select count(*)::int from realtime.messages
+   where topic = 'staff:00000000-0000-4000-8000-000000000000:schedule'
+     and event = 'probe' and payload ->> 'probe' = '1'),
+  1,
   'P2 前置(正向對照):以 postgres 身分直接呼叫 realtime.send 會真的寫一列進 realtime.messages');
 select pg_temp.reset_sig();
 delete from sig_log;

@@ -28,7 +28,10 @@ import {
   NOTIFY_SUBJECT_NOT_FOUND_MESSAGE,
   type NotifySubjectOwnershipLookup,
 } from "../_shared/notifySubjectOwnership.ts";
-import { checkStaffBookingDispatch } from "../_shared/staffBookingDispatch.ts";
+import {
+  checkStaffBookingDispatch,
+  resolveStaffSafeDispatchFields,
+} from "../_shared/staffBookingDispatch.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(不在模組頂層算成常數)——ES module 的 import
 // 陳述式會被提升到檔案最前面執行,如果這裡在模組頂層就讀一次 Deno.env.get 存成常數,Deno 測試
@@ -154,6 +157,8 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     console.error("[push-notify-dispatch] can_manage_bookings 呼叫失敗", authCheckError);
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
+  // #977 第 7 批:這次是不是走「服務人員本人」那條放行路(決定下面要不要採信呼叫端自由填的欄位)。
+  let viaStaffPath = false;
   if (!allowed) {
     // SPECS-INDEX #977 第 7 批(2026-10-07):服務人員本人(開了「新增編輯訂單」)自己建單 / 改單 / 取消 / 拖拉後,
     // 用他自己的身分呼叫這支 ⇒ 上面那道 can_manage_bookings 一定不過。這裡**再**問一次
@@ -166,6 +171,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     if (!staffAllowed) {
       return jsonResponse({ error: "沒有權限對這個商家/訂單發送通知" }, 403);
     }
+    viaStaffPath = true;
   }
 
   const adminClient = resolvedDeps.createAdminClient();
@@ -192,14 +198,18 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     privateKey: config.vapidPrivateKey,
   });
 
-  const previousStaffId = body.previous_staff_id?.trim();
+  // 🔴 #977 第 7 批(資安):服務人員路徑**不採信**呼叫端自由填的欄位 ——
+  //   ・previous_staff_id 一律忽略:服務人員不能換主要服務人員,帶了只會讓別人收到「已從你的行程移除」的假通知。
+  //   ・change_summary 一律改用伺服器端固定文字(STAFF_PATH_CHANGE_SUMMARY),不能讓服務人員自訂推播內容送給別人。
+  //   管理員 / 客服路徑完全照舊。
+  const staffSafe = resolveStaffSafeDispatchFields(viaStaffPath, body);
   const result = await dispatchPushForBooking(pushDeps, {
     merchantId,
     bookingId,
     eventType,
-    changeSummary: body.change_summary,
+    changeSummary: staffSafe.changeSummary,
     // #823:空字串視同沒帶,不要讓 "" 走進去被當成一個 staff id 去查。
-    previousStaffId: previousStaffId ? previousStaffId : null,
+    previousStaffId: staffSafe.previousStaffId,
   });
 
   return jsonResponse({ ...result }, 200);
