@@ -384,7 +384,7 @@ function MemberTiersCard({ merchantId }: { merchantId: string }) {
         ) : !tiers || tiers.length === 0 ? (
           <EmptyState
             title="還沒有任何會員等級"
-            description="按上方的「新增等級」建立第一個。建立之後,會員卡片上會顯示等級標籤,LINE 行銷通知也可以依等級整批挑人。"
+            description="按上方的「新增等級」建立第一個。建立之後,會員卡片上會顯示等級標籤,LINE 再行銷通知也可以依等級整批挑人。"
           />
         ) : (
           <ul className="flex flex-col gap-2.5">
@@ -492,8 +492,9 @@ function MemberSettingsPageInner() {
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="會員系統設定"
-        description={`「${merchant!.name}」的會員政策與會員等級。紅利點數相關設定(啟用開關、核發獎勵資格條件、紅利計算、點數使用、推薦系統、生日獎勵)請到「功能」選單的「紅利點數管理」獨立頁面調整。`}
+        description={`「${merchant!.name}」的會員政策與會員等級設定。`}
       />
 
       {/* #618 §10.6 第 3 點:「基本政策」改名「會員政策」,啟用開關 + 政策內容欄位(自動調整高度)

@@ -426,8 +426,9 @@ describe("resolveAppHeaderTitle(頁首顯示目前功能頁名稱)", () => {
     expect(resolveAppHeaderTitle({ pathname: "/app/members", isStaffView: false })).toBe(
       "會員管理",
     );
+    // #974(2026-10-06):「紅利點數管理」改名「紅利點數」。
     expect(resolveAppHeaderTitle({ pathname: "/app/member-points", isStaffView: false })).toBe(
-      "紅利點數管理",
+      "紅利點數",
     );
     // 兩層的資料匯入:/app/data-import/history 不可以被 /app/data-import 吃掉。
     expect(resolveAppHeaderTitle({ pathname: "/app/data-import", isStaffView: false })).toBe(

@@ -272,12 +272,13 @@ function LeaveTypesPageInner() {
              頁首跟內文就會對不起來。 */}
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="月薪人員假別設定"
         description={
           <>
-            「{merchant!.name}」自訂的請假分類清單,登記月薪制服務人員請假時可選用。這一頁只負責
-            「有哪些假別可以選」,實際的請假登記不在這裡——要幫某位月薪制服務人員登記或取消請假,
-            請到「請假紀錄」那一頁操作,而且只有客服或商家管理員可以登記,服務人員本人沒有辦法自己登記。
+            {`「${merchant!.name}」自訂的請假分類清單，登記月薪制服務人員請假時可選用；假別的扣款規則也在這一頁設定。` +
+              "這一頁只負責「有哪些假別可以選」，實際的請假登記不在這裡。如果要幫某位月薪制服務人員登記或取消請假，" +
+              "請到「請假紀錄」那一頁操作；只有商家管理員，或有「月薪人員假別設定」權限的客服可以登記，服務人員本人沒有辦法自己登記。"}
             {/* 頁內導向照 MemberDetailPage.tsx「查看完整點數紀錄 →」那條既有慣例
                 (react-router <Link> + text-brand hover:underline + 箭頭結尾),不另創寫法。 */}
             <Link to="/app/leave-records" className="mt-1.5 block text-brand hover:underline">

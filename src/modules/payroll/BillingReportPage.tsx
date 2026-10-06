@@ -146,7 +146,7 @@ function BillingReportPageInner() {
       monthlySalaryCsvCell(salaryApplicable, row),
     ]);
     downloadCsv(
-      `帳務報表_${startDate}_${endDate}.csv`,
+      `店家報表_${startDate}_${endDate}.csv`,
       // 總計區塊(自帶結尾的空白分隔列)→ 明細標題列 → 明細資料列。明細那一段完全沒動。
       buildCsvContentFromRows([...summarySection, headers, ...rows]),
     );
@@ -190,8 +190,8 @@ function BillingReportPageInner() {
       ) : error ? (
         // skill 二之八 出錯:什麼壞了 / 可能原因 / 下一步(+「你的資料沒有遺失」由元件固定加上)。
         <ErrorState
-          title="讀不到帳務報表"
-          reason="可能是網路斷了,或你沒有查看帳務報表的權限"
+          title="讀不到店家報表"
+          reason="可能是網路斷了,或你沒有查看店家報表的權限"
           onRetry={() => void refetch()}
         />
       ) : summary ? (

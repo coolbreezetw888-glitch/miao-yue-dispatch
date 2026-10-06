@@ -315,7 +315,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
           <FormField
             label="生日"
             htmlFor="member-birthday"
-            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數管理 > 生日獎勵」開啟才會發。"
+            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
             helpLabel="說明:填生日會發生什麼事"
           >
             <FieldDate
@@ -441,8 +441,9 @@ function MembersListInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="會員管理"
-        description={`「${merchant!.name}」的會員名錄與紅利點數`}
+        description={`「${merchant!.name}」的會員名單、會員資料，以及會員的點數餘額查詢與兌換登記。`}
         action={<NewMemberDialog merchantId={merchantId} onSaved={refetch} />}
       />
 
@@ -548,7 +549,7 @@ function MembersListInner() {
               // (違反 skill 二之三),而且是同一個動作的兩個實例。改在文案裡指路。
               description={
                 allMembers.length === 0
-                  ? "按右上角的「新增會員」建立第一位。建立之後,建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 行銷通知。"
+                  ? "按右上角的「新增會員」建立第一位。建立之後,建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 再行銷通知。"
                   : "換一個篩選條件或清空搜尋關鍵字再看看。"
               }
             />

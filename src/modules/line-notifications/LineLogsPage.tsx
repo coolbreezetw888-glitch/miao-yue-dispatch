@@ -93,6 +93,7 @@ function LineLogsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="LINE 發送記錄"
         description="每一次嘗試發送 LINE 通知的完整記錄(成功/失敗/跳過)。"
       />

@@ -339,8 +339,9 @@ function ImportWizardPageInner() {
           整個匯入流程。比照既有頁面(例如付款方式管理)的統一寫法與文案。 */}
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="資料匯入"
-        description="上傳 CSV，把舊系統的資料匯入到秒約——這是一個通用欄位對應工具，不是一鍵搬家，商家需要自己先把舊系統資料匯出成 CSV。"
+        description="上傳 CSV，把舊系統的資料匯入——這是通用的欄位對應工具，不是一鍵搬家，商家需要先自己把舊系統資料匯出成 CSV。匯入後可以查看匯入紀錄，也可以一鍵復原。"
         action={
           // 去另一個頁面,不是這一頁的主要動作 ⇒ ② 次要(skill 二之三)。
           <Button asChild variant="neutral" size="touch">

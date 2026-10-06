@@ -180,8 +180,9 @@ function LineMarketingPageInner() {
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
-        title="行銷通知"
-        description="手動挑選已綁定 LINE 的會員名單,發送一次性的自訂文字訊息(不是自動化排程)。"
+        helpMode
+        title="再行銷通知"
+        description="挑選已綁定 LINE 的會員名單，發送一次性的自訂文字訊息（不是自動化排程）。"
       />
 
       <Card>

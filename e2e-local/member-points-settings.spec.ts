@@ -67,7 +67,7 @@ test.afterEach(async () => {
 
 async function openPointsPage(page: Page) {
   await page.goto("/app/member-points");
-  await expect(page.getByRole("heading", { name: "紅利點數管理" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "紅利點數", exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByText("啟用紅利點數功能", { exact: true })).toBeVisible({

@@ -325,8 +325,9 @@ function MaterialCostsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="料錢成本管理"
-        description={`「${merchant!.name}」自訂的料錢成本品項清單,建單時可選用。這是成本記錄,不是訂單金額計算。`}
+        description={`「${merchant!.name}」自訂的料錢成本品項清單與功能開關，建單時可選用。`}
         action={
           <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
             新增品項

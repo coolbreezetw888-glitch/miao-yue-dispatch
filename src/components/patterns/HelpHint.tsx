@@ -19,6 +19,7 @@
 
 import * as React from "react";
 
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 interface HelpToggleProps {
@@ -54,6 +55,70 @@ export function HelpToggle({ label, className, children }: HelpToggleProps) {
         </HelpPanel>
       ) : null}
     </>
+  );
+}
+
+/**
+ * 🔵 HelpPopover(`?` 的小說明框版本)—— SPECS-INDEX #973(2026-10-06)。
+ *
+ * 跟 HelpToggle 的差別:HelpToggle 是「欄位下方展開一塊藍底區塊」,會把下面的內容往下推;
+ * 這個是「點 `?` 跳出一個浮在畫面上的小說明框」,不推動版面。目前只用在 PageHeader 的
+ * helpMode(功能頁卡片點進去的那些頁,H1 文字後面的 `?`)。
+ *
+ * 行為(使用者 2026-10-02 裁決 H-1):點 / 觸碰 `?` 打開;點框外任一處、按 Esc、或再點一次 `?` 關閉。
+ * 底層用 Radix Popover(全站已在用),上面三種關法它都內建,而且會自己避開螢幕邊緣
+ * (collisionPadding 16px = skill 三「手機左右留 16px 白邊」)。
+ * 寬度 `min(20rem, 100vw − 32px)`:手機 320px 也不會超出畫面、不會造成橫向捲動;文字可換行。
+ * 顏色沿用 HelpPanel 的 info 藍,跟欄位旁的 `?` 是同一套視覺語言。
+ */
+interface HelpPopoverProps {
+  /** `?` 的 aria-label。 */
+  label?: string | undefined;
+  className?: string | undefined;
+  children: React.ReactNode;
+}
+
+export function HelpPopover({ label = "說明", className, children }: HelpPopoverProps) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {/* 點擊區 32px(手機好按)、看得到的圓鈕 18px。
+            跟 HelpToggle 不同,這裡**不用** `before:-inset-[7px]` 撐點擊區 —— 那個絕對定位的偽元素會讓按鈕的
+            scrollWidth(25)> clientWidth(18),被 e2e 的 320px 溢出檢查(overflow-assert.ts)判成「內容比版位寬」。
+            改成外層真的是 32px、上下用負 margin 抵掉多出來的高度(不影響標題行高);左右刻意不用負 margin ——
+            標題很長折行時 `?` 會貼著容器右緣,負 margin 會讓它凸出容器 7px,反而造成溢出。 */}
+        <button
+          type="button"
+          aria-label={label}
+          data-testid="page-help-trigger"
+          className={cn(
+            "group/help -my-[7px] inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            className,
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "inline-flex size-[18px] items-center justify-center rounded-full text-xs font-bold leading-none transition-colors",
+              open
+                ? "bg-info text-info-soft"
+                : "bg-info-soft text-info-strong group-hover/help:bg-info/20",
+            )}
+          >
+            ?
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        collisionPadding={16}
+        data-testid="page-help-popover"
+        className="w-[min(20rem,calc(100vw-2rem))] whitespace-normal break-words rounded-md border-info/30 bg-info-soft px-3.5 py-3 text-[13px] leading-relaxed text-info-strong shadow-md [&_strong]:font-bold"
+      >
+        {children}
+      </PopoverContent>
+    </Popover>
   );
 }
 

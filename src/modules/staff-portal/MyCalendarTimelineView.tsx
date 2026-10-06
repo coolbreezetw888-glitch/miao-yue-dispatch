@@ -29,7 +29,7 @@
 // 設計上直接改成接受 staffId,由呼叫端(已經透過 useActiveMyStaffRecord 拿到 staffId)傳入,
 // 減少一層不必要的間接轉換。已在回報中向主腦說明這個偏離。
 
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 
 import { LoadingSkeleton } from "@/components/patterns";
 import { cn } from "@/lib/utils";
@@ -190,10 +190,17 @@ export function MyCalendarTimelineView({
               // (背景 16% 透明 + 實色文字/邊框),兩端的色塊從此一致。
               // 動態顏色沒辦法寫成 Tailwind class(build 時就固定了),所以是 inline style。
               className="absolute left-16 right-1 z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
+              // 🔴 SPECS-INDEX #981(2026-10-06):服務人員端「時間軸格線」檢視的預約色塊也照 #970 一律白底
+              // (規格書:服務人員端行事曆含各種檢視)。做法:沿用 bookingBlockStyle 的文字色 / 邊框色,
+              // 只把背景換成卡片底色(var(--card),深色模式自動跟著主題),再補一條 4px 左側狀態色條,
+              // 狀態仍一眼看得出來。⚠️ 刻意只在這個檔案就地覆寫,**不改 bookingBlockStyle 本身** ——
+              // 那支函式商家端 CalendarPage.tsx 也在用,商家端行事曆的色塊不在這次範圍內。
               style={{
                 top,
                 height,
-                ...bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
+                ...staffPortalWhiteBlockStyle(
+                  bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
+                ),
               }}
             >
               <p className="truncate font-medium">
@@ -206,4 +213,20 @@ export function MyCalendarTimelineView({
       </div>
     </div>
   );
+}
+
+/** #981:把商家端共用的色塊樣式(淡色底 + 實色字 + 半透明框)轉成服務人員端的白底版本。
+ * 背景 = 卡片底色;左側 4px 用狀態的實色(= bookingBlockStyle 的文字色),其他三邊維持原本的半透明框。 */
+function staffPortalWhiteBlockStyle(base: {
+  backgroundColor: string;
+  color: string;
+  borderColor: string;
+}): CSSProperties {
+  return {
+    color: base.color,
+    borderColor: base.borderColor,
+    borderLeftColor: base.color,
+    borderLeftWidth: 4,
+    backgroundColor: "var(--card)",
+  };
 }

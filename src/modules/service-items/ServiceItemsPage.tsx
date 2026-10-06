@@ -584,8 +584,9 @@ function ServiceItemsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
-        title="服務項目管理"
-        description={`「${merchant!.name}」的服務分類與服務項目`}
+        helpMode
+        title="服務項目"
+        description={`「${merchant!.name}」的服務分類與服務項目。`}
         action={createButton}
       />
 

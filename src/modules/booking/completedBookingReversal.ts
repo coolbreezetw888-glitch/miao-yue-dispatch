@@ -45,7 +45,7 @@ export const REVERSAL_EXPLANATION_SEGMENTS: Record<CompletedBookingReversalActio
     cancel: [
       { text: "這張單會變成「已取消」," },
       { text: "無法再復原", strong: true },
-      { text: "。系統會自動更新服務人員抽成與帳務報表。" },
+      { text: "。系統會自動更新服務人員抽成與店家報表。" },
       { text: "但實際退款要另外處理", strong: true },
       { text: "——系統沒有退款功能,請自行與客人結清。" },
     ],
@@ -140,7 +140,7 @@ export function crossMonthWarningSegments(
     { text: month, strong: true },
     { text: " 完成的,已經是 " },
     { text: `${preview.months_ago} 個月前`, strong: true },
-    { text: "。那個月的薪資與帳務報表" },
+    { text: "。那個月的薪資與店家報表" },
     { text: "可能已經結算發放", strong: true },
     { text: "。" },
     { text: `${verb}之後,` },
@@ -257,7 +257,7 @@ export function buildCompletedBookingReversalView(
   rows.push({
     key: "report-month",
     label: "影響報表月份",
-    value: `${formatReportMonth(preview.report_month)}(服務人員報表、帳務報表)`,
+    value: `${formatReportMonth(preview.report_month)}(服務人員報表、店家報表)`,
   });
   rows.push({
     key: "completed-at",

@@ -278,8 +278,9 @@ function ReportExportCenterPageInner() {
           「← 返回功能」行為一致。這個頁面不是多步驟精靈，沒有「上一步」按鈕需要區分。 */}
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="報表匯出中心"
-        description="這裡是彙整入口，模組本身(帳務報表、會員管理)頁面上原有的匯出按鈕依然可以使用，兩者資料來源相同。"
+        description="這裡是彙整入口，店家報表、服務人員報表頁面上原有的匯出按鈕依然可以使用，兩者資料來源相同。"
       />
 
       {/* 內容分頁列(每個分頁是一塊不同的內容、有自己的篩選欄位)⇒ variant="pages"。 */}

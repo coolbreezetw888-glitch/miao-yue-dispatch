@@ -387,8 +387,9 @@ function LeaveRecordsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="請假紀錄"
-        description={`「${merchant!.name}」月薪制服務人員的請假登記`}
+        description={`「${merchant!.name}」月薪制服務人員的請假登記。`}
         action={
           <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
             登記請假

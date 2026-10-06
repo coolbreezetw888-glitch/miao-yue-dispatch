@@ -54,7 +54,7 @@ export const LINE_LOG_SKIP_REASON_LABELS: Record<string, string> = {
 
 export const LINE_LOG_EVENT_TYPE_LABELS: Record<string, string> = {
   ...LINE_NOTIFICATION_EVENT_LABELS,
-  marketing_manual: "行銷通知",
+  marketing_manual: "再行銷通知",
 };
 
 export const LINE_TARGET_TYPE_LABELS: Record<string, string> = {

@@ -40,6 +40,7 @@ import {
   PageHeader,
   StatusTag,
 } from "@/components/patterns";
+import { OfficialLineAtLink } from "@/components/OfficialLineAtLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -187,8 +188,14 @@ function LineSettingsPageInner() {
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="LINE 串接設定"
-        description="串接你自己申請的 LINE 官方帳號,之後訂單/請假等通知才能真正送出。"
+        description={
+          <>
+            串接 LINE 官方帳號，之後訂單、請假等通知才能真正送出。※若不會設定，可聯繫我們的
+            <OfficialLineAtLink /> 協助設定，將酌收設定費 $3000。
+          </>
+        }
       />
 
       <Card>

@@ -107,7 +107,11 @@ function BookingListItem({
               ? "inactive"
               : "default"
         }
-        className="border-l-4 hover:border-[color:var(--booking-card-hover-border)]"
+        // 🔴 SPECS-INDEX #981(2026-10-06):照 #970(訂單管理卡片白底,OrdersPage.tsx OrderCard)同一個做法 ——
+        // 所有狀態一律白底:只覆寫背景(bg-card;cn 是 tailwind-merge,後寫的 bg-* 會蓋掉 ListCard state
+        // 帶的 bg-warn-soft / bg-muted/50)。state 仍照舊傳,所以待確認的黃框、已取消的淡色標題、左側狀態
+        // 色條、狀態膠囊都不變。深色模式 bg-card 自動跟著主題(同 #970)。
+        className="border-l-4 bg-card hover:border-[color:var(--booking-card-hover-border)]"
         style={
           {
             ...bookingCardAccentBorderStyle(statusColors, status),

@@ -201,8 +201,9 @@ function PushEventSettingsPageInner() {
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="推播通知設定"
-        description="設定服務人員的手機/瀏覽器推播通知要不要開啟、文案內容。通知對象固定是這筆訂單指定的服務人員本人,不會通知管理員/客服/會員。服務人員需要自己在個人頁面開啟通知(這裡只控制要不要發送)。"
+        description="設定每一類事件要不要發推播，以及文案內容。商家管理員、客服、服務人員都要在自己的手機或瀏覽器開啟通知才收得到。"
       />
 
       {isLoading ? (

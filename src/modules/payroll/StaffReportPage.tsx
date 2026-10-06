@@ -485,8 +485,9 @@ function StaffReportPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="服務人員報表"
-        description={`「${merchant!.name}」個別服務人員的抽成/薪資報表`}
+        description={`「${merchant!.name}」個別服務人員的抽成／薪資報表。`}
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">

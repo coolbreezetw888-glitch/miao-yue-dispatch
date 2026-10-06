@@ -245,6 +245,7 @@ function PushLogsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="推播發送記錄"
         description="每一次嘗試發送手機推播的記錄。沒發成功的會直接寫出原因,以及可以怎麼處理。"
       />

@@ -599,7 +599,7 @@ export default function ManagePage() {
     {
       key: "service-items",
       to: "/app/service-items",
-      label: "服務項目管理",
+      label: "服務項目",
       description: "管理服務分類與服務項目、金額、工時",
       icon: ClipboardList,
       visible: showServiceItemsCard,
@@ -688,7 +688,7 @@ export default function ManagePage() {
     {
       key: "member-points",
       to: "/app/member-points",
-      label: "紅利點數管理",
+      label: "紅利點數",
       // 2026-09-24:描述補上 #639/#642 搬進這頁的「點數設定」,以及這次搬進來的「核發獎勵資格
       // 條件」——原本的描述只講點數餘額/兌換/異動歷史,使用者從這張卡片看不出設定也在裡面。
       // SPECS-INDEX #830(2026-09-29):「會員點數餘額總覽」與兌換/調整/異動歷史整組搬到「會員管理 >
@@ -736,7 +736,7 @@ export default function ManagePage() {
     {
       key: "line-marketing",
       to: "/app/line-marketing",
-      label: "行銷通知",
+      label: "再行銷通知",
       description: "手動挑選已綁定會員名單,發送一次性自訂訊息",
       icon: Megaphone,
       visible: isAdmin,

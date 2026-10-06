@@ -65,6 +65,7 @@ function SchedulingOverviewPageInner() {
     <main className="mx-auto max-w-5xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="排班一覽"
         description={`「${merchant!.name}」跨服務人員的每週時段/單日例外/請假彙整總覽`}
       />

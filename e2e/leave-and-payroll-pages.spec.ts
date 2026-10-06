@@ -178,6 +178,8 @@ test.describe("#712 /app/leave-types 月薪人員假別設定", () => {
     await expect(
       page.getByRole("heading", { name: "月薪人員假別設定", exact: true }),
     ).toBeVisible();
+    // #973(2026-10-06):頁面說明(含這條跨頁連結)收進 H1 後面的「?」,點開才看得到。
+    await page.getByRole("button", { name: "說明", exact: true }).click();
     await expect(page.getByText("前往「請假紀錄」登記請假 →")).toBeVisible();
   });
 });

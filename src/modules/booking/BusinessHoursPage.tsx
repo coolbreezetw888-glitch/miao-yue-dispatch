@@ -217,8 +217,9 @@ function BusinessHoursPageInner() {
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="營業時間設定"
-        description={`「${merchant!.name}」的每週營業時間,是預約系統的最外層邊界。`}
+        description={`「${merchant!.name}」的每週營業時間與嚴格工時衝突檢查設定。`}
       />
 
       {/* skill 二:「現在的狀態跟使用者以為的不一樣」(以為能預約其實整個關著)⇒ `!` 常駐,不可收合。

@@ -423,8 +423,9 @@ function AgentListInner() {
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="客服管理"
-        description={`「${merchant!.name}」的客服名單與邀請`}
+        description={`「${merchant!.name}」的客服名單、邀請、權限設定。`}
       />
 
       <Card>

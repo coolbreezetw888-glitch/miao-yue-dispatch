@@ -525,10 +525,10 @@ function StaffServiceCommissionDialog({
             ) : !activeServiceItems || activeServiceItems.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的服務項目"
-                description="先到服務項目管理新增並上架服務項目,回來這裡才有東西可以設定抽成。"
+                description="先到「服務項目」新增並上架服務項目,回來這裡才有東西可以設定抽成。"
                 action={
                   <Button asChild variant="neutral" size="touch">
-                    <Link to="/app/service-items">前往服務項目管理</Link>
+                    <Link to="/app/service-items">前往服務項目</Link>
                   </Button>
                 }
               />
@@ -996,6 +996,7 @@ function PayrollSettingsPageInner() {
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="抽成與薪資設定"
         description={`「${merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪制服務人員薪資設定。`}
       />

@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+import { HelpPopover } from "./HelpHint";
+
 // ---------------------------------------------------------------------------
 // 頁首骨架
 // ---------------------------------------------------------------------------
@@ -31,6 +33,15 @@ interface PageHeaderProps {
   description?: React.ReactNode | undefined;
   /** 這一頁唯一的主要動作(<Button variant="primary" size="touch">)。 */
   action?: React.ReactNode | undefined;
+  /**
+   * SPECS-INDEX #973(2026-10-06):true = 說明不再顯示在 H1 下方,改成 H1 文字後面一顆 `?`,
+   * 點了才跳出小說明框(HelpPopover;點框外 / Esc / 再點一次 `?` 關閉)。
+   * 🔴 只在「功能」頁卡片點進去的那些頁開啟(使用者 2026-10-02 裁決 H-2);底部選單直達的頁面
+   *    (訂單管理、行事曆、店家報表)與子頁面維持原本的常駐說明。
+   * 📌 說明框裡只放「這頁是做什麼的」這類看過一次就懂的內容(skill 二)。
+   *    「為什麼按不了 / 不可逆 / 狀態跟你以為的不一樣」三類一律另外用常駐 AlertNote,不可以塞進這裡。
+   */
+  helpMode?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -40,8 +51,10 @@ export function PageHeader({
   title,
   description,
   action,
+  helpMode = false,
   className,
 }: PageHeaderProps) {
+  const descriptionInPopover = helpMode && Boolean(description);
   return (
     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4", className)}>
       <div className="min-w-0 flex-1">
@@ -54,10 +67,22 @@ export function PageHeader({
             {backLabel}
           </Link>
         ) : null}
-        <h1 className="text-[19px] font-bold leading-tight text-foreground sm:text-[22px]">
-          {title}
-        </h1>
-        {description ? (
+        {descriptionInPopover ? (
+          // H1 後面接一顆 `?`。外層 flex + items-center 讓 `?` 跟標題第一行垂直置中;標題很長要折行時
+          // h1 是 min-w-0 可以縮,`?` 是 shrink-0 永遠留在標題後面,不會被擠掉。
+          // gap-1(4px)+ `?` 按鈕內 7px 的點擊留白 ≈ 標題文字到圓鈕 11px。
+          <div className="flex items-center gap-1">
+            <h1 className="min-w-0 text-[19px] font-bold leading-tight text-foreground sm:text-[22px]">
+              {title}
+            </h1>
+            <HelpPopover>{description}</HelpPopover>
+          </div>
+        ) : (
+          <h1 className="text-[19px] font-bold leading-tight text-foreground sm:text-[22px]">
+            {title}
+          </h1>
+        )}
+        {description && !descriptionInPopover ? (
           // #947:用 <div> 不用 <p>。description 是 ReactNode,呼叫端可能放 StatusTag(底層 Badge 是 <div>),
           // 放在 <p> 裡會變成「<div> 在 <p> 裡」的 HTML 結構錯誤(React 主控台警告)。Tailwind preflight 已把
           // <p> 的預設外距歸零,<div> 跟 <p> 一樣是區塊元素 ⇒ 畫面完全不變。

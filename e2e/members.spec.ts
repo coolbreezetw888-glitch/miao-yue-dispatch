@@ -146,7 +146,8 @@ test("紅利點數管理頁(§10.5/#617/#830):獨立卡片入口、只剩規則�
   await page.goto("/app/manage");
   await expect(page.getByRole("heading", { name: "功能" })).toBeVisible({ timeout: LOAD_TIMEOUT });
   const mainContent = page.locator("main");
-  const pointsCard = page.getByRole("link", { name: /紅利點數管理/ });
+  // #974(2026-10-06):卡片標題「紅利點數管理」改名「紅利點數」。
+  const pointsCard = page.getByRole("link", { name: /^紅利點數/ });
   await expect(pointsCard).toBeVisible();
   await expect(mainContent.getByText("產業轉移")).toHaveCount(0);
   await expect(mainContent.getByText("訂單管理")).toHaveCount(0);
@@ -157,7 +158,7 @@ test("紅利點數管理頁(§10.5/#617/#830):獨立卡片入口、只剩規則�
   await expect(bottomNav.getByRole("link", { name: "訂單管理" })).toBeVisible();
 
   await pointsCard.click();
-  await expect(page.getByRole("heading", { name: "紅利點數管理" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "紅利點數", exact: true })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 

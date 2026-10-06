@@ -23,26 +23,27 @@ function fieldByKey(key: string) {
   return field;
 }
 
-describe("STAFF_BOOLEAN_PERMISSION_FIELDS 的說明文字(#883)", () => {
-  it("#883 ①:「顯示會員資料」要寫出實際包含哪些內容,尤其是紅利點數餘額", () => {
+describe("STAFF_BOOLEAN_PERMISSION_FIELDS 的說明文字(#883 → #977)", () => {
+  // 🔴 SPECS-INDEX #977(2026-10-06,第 1 批):使用者 2026-10-02 裁決 H-13 把這個開關重新定義成
+  // 「關閉時,服務人員只看得到客戶姓名,電話 / 地址都看不到」,名稱改成「服務人員是否顯示會員資料」,
+  // 說明全文照規格書(.project/specs/商家端文案與說明調整-第1批.md 第四節第 5 項)。
+  // 原本 #883 的兩條斷言(說明要寫出「紅利點數餘額」、要寫出「搭配行事曆檢視一起開」)是舊定義的期望值,
+  // 依規格書第六節第 3 點「修正既有測試的期望值,不可刪測試」改成新定義。
+  // ⚠️ 現況程式關閉時仍看得到電話、地址(bug),邏輯修正排在第 3 批;這裡只釘文案。
+  it("#977:「服務人員是否顯示會員資料」名稱與新說明(關閉時只看得到客戶姓名)", () => {
     const field = fieldByKey("show_member_info");
 
-    expect(field.label).toBe("顯示會員資料");
-    // 三個實際欄位(is_member / member_name / member_points_balance)都要用白話講出來。
-    expect(field.description).toContain("是不是會員");
-    expect(field.description).toContain("會員姓名");
-    // 🔴 這是 #883 的重點:點數餘額原本完全沒被提到。
-    expect(field.description).toContain("紅利點數餘額");
+    expect(field.label).toBe("服務人員是否顯示會員資料");
+    expect(field.description).toBe(
+      "關閉時，這位服務人員在自己的預約詳情只看得到客戶姓名，看不到電話、地址等聯絡資料。",
+    );
   });
 
-  it("#883 ①:「顯示會員資料」要寫出「要搭配行事曆檢視一起開」這個前提", () => {
+  it("#977:「服務人員是否顯示會員資料」要講清楚關閉時藏的是電話、地址這類聯絡資料", () => {
     const field = fieldByKey("show_member_info");
 
-    // get_my_booking_schedule 先檢查 has_own_staff_permission(staff_calendar_view),
-    // 再用 show_member_info 決定三個會員欄位 ⇒ 兩個開關都開才看得到。
-    // 少寫這個前提,管理員會以為只開這一項就有效。
-    expect(field.description).toContain("行事曆檢視");
-    expect(field.description).toMatch(/一起開|都開/);
+    expect(field.description).toContain("只看得到客戶姓名");
+    expect(field.description).toMatch(/電話、地址/);
   });
 
   it("每個開關都要有非空的 label 與 description(避免之後新增開關時忘了寫說明)", () => {

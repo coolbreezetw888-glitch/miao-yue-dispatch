@@ -231,12 +231,11 @@ function MemberPointsPageInner() {
     <main className="mx-auto max-w-3xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
-        title="紅利點數管理"
-        description={
-          canManagePointsRules
-            ? `「${merchant!.name}」的紅利點數核發規則:核發獎勵資格條件、啟用開關,以及紅利計算、點數使用、推薦系統、生日獎勵四個分頁。個別會員的點數餘額、手動調整、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
-            : `這頁是「${merchant!.name}」的紅利點數核發規則(核發獎勵資格條件、啟用開關、紅利計算、點數使用、推薦系統、生日獎勵),需要另外的「紅利點數管理」權限才能查看與調整,請找商家管理員。個別會員的點數餘額、登記兌換與異動歷史,請到「會員管理」點進該位會員操作。`
-        }
+        helpMode
+        title="紅利點數"
+        // #974(2026-10-06):說明收進 `?`,一律同一句。沒有「紅利點數」權限的客服看不到規則時,
+        // 下方 EmptyState(「你目前的權限看不到這頁的規則設定」)會常駐說明原因並指路,不靠這段說明。
+        description={`「${merchant!.name}」的紅利點數是否開啟以及規則設定。`}
       />
 
       {settings && settings.points_feature_enabled === false ? (
@@ -248,7 +247,7 @@ function MemberPointsPageInner() {
           重新開啟後會完整還原顯示。
           {canManagePointsRules
             ? "要重新開啟,請到下方「啟用紅利點數功能」切換開關。"
-            : "要重新開啟這個功能需要「紅利點數管理」權限,請找商家管理員處理。"}
+            : "要重新開啟這個功能需要「紅利點數」權限,請找商家管理員處理。"}
         </AlertNote>
       ) : null}
 
@@ -347,7 +346,7 @@ function MemberPointsPageInner() {
           <CardContent className="pt-6">
             <EmptyState
               title="你目前的權限看不到這頁的規則設定"
-              description="個別會員的點數餘額、登記兌換與異動歷史,在「會員管理」點進該位會員就能操作;要調整點數核發規則,請找商家管理員開放「紅利點數管理」權限。"
+              description="個別會員的點數餘額、登記兌換與異動歷史,在「會員管理」點進該位會員就能操作;要調整點數核發規則,請找商家管理員開放「紅利點數」權限。"
               action={
                 <Button asChild variant="primary" size="touch">
                   <Link to="/app/members">去會員管理</Link>

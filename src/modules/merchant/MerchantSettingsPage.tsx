@@ -227,8 +227,9 @@ function MerchantSettingsPageInner() {
     <main className={cn("mx-auto max-w-3xl space-y-6 px-5 py-12", hasUnsavedChanges && "pb-32")}>
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="商家設定"
-        description={`管理「${merchant.name}」的基本資料與外觀`}
+        description={`管理「${merchant.name}」的基本資料與外觀。`}
       />
 
       {/* 下方固定提示列的「儲存變更」按鈕靠這個 id 送出同一份表單(HTML 原生的 form 屬性),

@@ -216,6 +216,7 @@ function LineEventSettingsPageInner() {
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="LINE 通知設定"
         description="設定每一類事件要不要透過 LINE 通知、通知誰、文案內容。"
       />

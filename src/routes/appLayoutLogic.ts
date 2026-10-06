@@ -278,7 +278,7 @@ const APP_HEADER_TITLE_RULES: AppHeaderTitleRule[] = [
   { pattern: "/app/staff", title: "服務人員管理" },
   { pattern: "/app/agents", title: "客服管理" },
   // --- 服務項目(模組 4)---
-  { pattern: "/app/service-items", title: "服務項目管理" },
+  { pattern: "/app/service-items", title: "服務項目" },
   // --- 預約與訂單(模組 5/6)---
   { pattern: "/app/business-hours", title: "營業時間設定" },
   { pattern: "/app/material-costs", title: "料錢成本管理" },
@@ -296,13 +296,13 @@ const APP_HEADER_TITLE_RULES: AppHeaderTitleRule[] = [
   { pattern: "/app/staff-report", title: "服務人員報表" },
   // --- 會員(模組 9/10)---
   { pattern: "/app/members", title: "會員管理" },
-  { pattern: "/app/member-points", title: "紅利點數管理" },
+  { pattern: "/app/member-points", title: "紅利點數" },
   { pattern: "/app/member-settings", title: "會員系統設定" },
   // --- LINE 通知(模組 11)---
   { pattern: "/app/line-settings", title: "LINE 串接設定" },
   { pattern: "/app/line-events", title: "LINE 通知設定" },
   { pattern: "/app/line-logs", title: "LINE 發送記錄" },
-  { pattern: "/app/line-marketing", title: "行銷通知" },
+  { pattern: "/app/line-marketing", title: "再行銷通知" },
   // --- 推播通知(模組 15)---
   { pattern: "/app/push-events", title: "推播通知設定" },
   { pattern: "/app/push-logs", title: "推播發送記錄" },

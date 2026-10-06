@@ -52,6 +52,7 @@ import {
   CardDialogTitle,
   ChoiceChip,
   ChoiceChipGroup,
+  ComingSoonTag,
   EmptyState,
   ErrorState,
   FieldInput,
@@ -272,8 +273,8 @@ function AvailabilityWindowsEditor({
           或是完全沒設定時段,這個人其實還約不到。 */}
       <AlertNote>
         {noTimeSlotLimit
-          ? "目前已開啟「無時段限制」,以下設定會被忽略,只受商家整體營業時間限制。"
-          : "完全沒有設定任何時段時,這位服務人員這次還不可預約,除非開啟「無時段限制」。"}
+          ? "目前已開啟「客戶預約無時段限制」,以下設定會被忽略,只受商家整體營業時間限制。"
+          : "完全沒有設定任何時段時,這位服務人員這次還不可預約,除非開啟「客戶預約無時段限制」。"}
       </AlertNote>
 
       {isLoading ? (
@@ -634,7 +635,7 @@ function StaffFormDialog({
             {activeServiceItemsLoading ? (
               <LoadingSkeleton variant="lines" rows={2} />
             ) : !merchantHasAnyServiceItems ? (
-              <FormPlaceholder>目前尚無服務項目可選,請先到服務項目管理設定</FormPlaceholder>
+              <FormPlaceholder>目前尚無服務項目可選,請先到「服務項目」設定</FormPlaceholder>
             ) : !staff ? (
               <FormPlaceholder>
                 請先儲存這位服務人員的基本資料,儲存後重新點選「編輯」即可勾選服務項目。
@@ -700,8 +701,9 @@ function StaffFormDialog({
 
           <div className="flex flex-col gap-3">
             <FormSectionTitle>權限功能</FormSectionTitle>
-            {/* skill 二:「現在的狀態跟使用者以為的不一樣」(開了不等於生效)→ `!` 常駐,不收進 `?`。 */}
-            <AlertNote>這些開關目前先存值,對應的功能上線後才會實際生效。</AlertNote>
+            {/* SPECS-INDEX #977(2026-10-06):原本這裡有一條常駐 `!`「這些開關目前先存值,對應的功能上線後才
+                會實際生效」—— 對已經生效的兩項(商家後台編輯無時段限制、服務人員是否顯示會員資料)是錯的。
+                改成逐項在名稱旁標「即將推出」(ComingSoonTag),哪些還沒上線一眼看得出來,開關照常可以切換。 */}
             {/* 2026-09-24 使用者裁決:三個「預約天數」欄位收斂成兩個(見 types.ts
                 STAFF_NUMBER_PERMISSION_FIELDS 上方的完整裁決註解)。欄位數從 3 變 2,所以格線
                 也從 sm:grid-cols-3 改成 sm:grid-cols-2,兩欄才不會留下一格空白。 */}
@@ -716,7 +718,12 @@ function StaffFormDialog({
                 return (
                   <FormField
                     key={field.key}
-                    label={field.label}
+                    label={
+                      <>
+                        {field.label}
+                        {field.comingSoon ? <ComingSoonTag /> : null}
+                      </>
+                    }
                     htmlFor={`staff-${field.key}`}
                     helpLabel={`說明:${field.label}怎麼填`}
                     help={field.description}
@@ -769,7 +776,12 @@ function StaffFormDialog({
               {STAFF_BOOLEAN_PERMISSION_FIELDS.map((field) => (
                 <SwitchRow
                   key={field.key}
-                  title={field.label}
+                  title={
+                    <>
+                      {field.label}
+                      {field.comingSoon ? <ComingSoonTag /> : null}
+                    </>
+                  }
                   description={field.description}
                   checked={Boolean(form[toCamel(field.key)])}
                   onCheckedChange={(v) => setField(toCamel(field.key), v)}
@@ -1027,8 +1039,9 @@ function StaffListInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="服務人員管理"
-        description={`「${merchant!.name}」的服務人員名錄`}
+        description={`「${merchant!.name}」的服務人員名錄。`}
         action={
           <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
             新增服務人員

@@ -350,7 +350,7 @@ test("LINE 通知設定頁(§4.2):切換開關並編輯文案後正確儲存,重
 
 test("行銷通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對應的空狀態文字", async ({ page }) => {
   await page.goto("/app/line-marketing");
-  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "再行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByText("目前沒有任何會員完成 LINE 綁定。")).toBeVisible({
@@ -363,7 +363,7 @@ test("行銷通知頁(§4.4):沒有任何會員完成 LINE 綁定時顯示對應
 
 test("行銷通知頁(§10.1,SPECS-INDEX #584):可用變數說明 + 即時預覽正確顯示", async ({ page }) => {
   await page.goto("/app/line-marketing");
-  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "再行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -444,7 +444,7 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):依會員分類批量選擇正確
   await mockTierAndMemberQueries(page);
 
   await page.goto("/app/line-marketing");
-  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "再行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 
@@ -479,7 +479,7 @@ test("行銷通知頁(§10.2,SPECS-INDEX #612):黑名單客戶預設自動排除
   await mockTierAndMemberQueries(page);
 
   await page.goto("/app/line-marketing");
-  await expect(page.getByRole("heading", { name: "行銷通知" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "再行銷通知" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
 

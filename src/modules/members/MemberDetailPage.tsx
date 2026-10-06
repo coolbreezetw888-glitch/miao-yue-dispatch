@@ -266,7 +266,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
           <FormField
             label="生日"
             htmlFor="edit-member-birthday"
-            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數管理 > 生日獎勵」開啟才會發。"
+            help="填了生日,系統會在每年生日當天依台北時間自動發放生日點數(當天錯過的話,7 天內會補發);要商家在「紅利點數 > 生日獎勵」開啟才會發。"
             helpLabel="說明:填生日會發生什麼事"
           >
             <FieldDate

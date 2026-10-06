@@ -407,6 +407,7 @@ function PaymentMethodsPageInner() {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
       <PageHeader
         backTo="/app/manage"
+        helpMode
         title="付款方式管理"
         description={`「${merchant!.name}」自訂的付款方式清單,建單時可選用。這裡只是標記客戶用什麼方式付款,不會真的串接金流,不會自動收款或對帳。`}
         action={
