@@ -1,7 +1,7 @@
 // 第 12 批(#1000、#1001):視窗上方空白條去字 + 電腦版小卡窗加寬。本機 Supabase 專用
 // (e2e-local 設定,loopback guard 生效,不碰正式庫)。規格書:.project/specs/視窗上方條去字與小卡窗加寬-第12批.md
 //
-//   1. 1280 × 800 編輯客服資料:寬 1152(同全頁層)、高度只到按鈕列(下方看得到後面頁面)、垂直置中、
+//   1. 1280 × 800 編輯客服資料:寬 = 頁面內容欄(第 15 批 #1009 起;第 12 批原為 1152)、高度只到按鈕列(下方看得到後面頁面)、垂直置中、
 //      標題下 / 按鈕列上各一條分隔線、兩顆按鈕左右各半;空白條沒字、48px、點了照樣關;填過資料先問放棄
 //   2. 1280 × 800 編輯料錢成本品項:同上
 //   3. 1280 × 520(內容比畫面長):上緣 56、下緣離底 18、中間捲動、標題列與按鈕列不動
@@ -169,11 +169,20 @@ async function openMaterialEdit(page: Page): Promise<Locator> {
   return dialog;
 }
 
-/** 電腦版小卡窗的共用斷言:寬 1152、在「上 56 / 下 18」之間置中、分隔線、按鈕平均分寬、空白條沒字 48px。 */
+/** 電腦版小卡窗的共用斷言:寬度 / 左右邊界 = 頁面內容欄(第 15 批 #1009 起;原本第 12 批是寬 1152)、
+ *  在「上 56 / 下 18」之間置中、分隔線、按鈕平均分寬、空白條沒字 48px。 */
 async function expectWideCard(page: Page, dialog: Locator, viewportH: number) {
   const box = await settledBox(dialog);
-  expect(Math.round(box.width)).toBe(1152);
-  expect(Math.round(box.x)).toBe(64);
+  const col = await page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("[data-app-content-root]")!
+      .firstElementChild as HTMLElement;
+    const r = main.getBoundingClientRect();
+    const cs = getComputedStyle(main);
+    const pl = Number.parseFloat(cs.paddingLeft);
+    return { left: r.left + pl, width: r.width - pl - Number.parseFloat(cs.paddingRight) };
+  });
+  expect(Math.abs(box.width - col.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(box.x - col.left)).toBeLessThanOrEqual(1);
   expect(box.y).toBeGreaterThanOrEqual(56 - 0.5);
   expect(box.y + box.height).toBeLessThanOrEqual(viewportH - 18 + 0.5);
   // 置中於 [56, H-18] 這段(中心 = H/2 + 19)。
@@ -194,14 +203,14 @@ async function expectWideCard(page: Page, dialog: Locator, viewportH: number) {
   const widths: number[] = [];
   for (let i = 0; i < n; i += 1) widths.push((await buttons.nth(i).boundingBox())!.width);
   expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThanOrEqual(1);
-  expect(widths[0]!).toBeGreaterThan(500);
+  expect(widths[0]!).toBeGreaterThan(300);
 
   const strip = page.locator(STRIP).last();
   await expect(strip).toHaveText("");
   const sb = await settledBox(strip);
   expect(Math.round(sb.height)).toBe(48);
   expect(Math.round(sb.y + sb.height)).toBe(Math.round(box.y));
-  expect(Math.round(sb.width)).toBe(1152);
+  expect(Math.abs(sb.width - box.width)).toBeLessThanOrEqual(1);
   return box;
 }
 

@@ -1,8 +1,10 @@
 // §13.5 第 3 個重新查詢的觸發點:service worker 收到推播時主動通知畫面。
 //
-// 背景(§13.5 的查證結果):這個專案**沒有任何 realtime 訂閱、也沒有任何輪詢**
-// (`grep -rn "\.channel(\|postgres_changes" src/` 與 `grep -rn "refetchInterval" src/` 兩個都是
-// 0 命中)。v1 刻意不為了一個延伸功能替整個專案引進 realtime 基礎設施,改用三個現成就有的觸發點:
+// 背景(§13.5 當時的查證結果):當時這個專案**沒有任何 realtime 訂閱、也沒有任何輪詢**。
+// ⚠️ 之後已經不是這樣:服務人員端行事曆訂閱私有頻道 `staff:<id>:schedule`,第 14 批起商家端
+//    行事曆也訂閱 `merchant:<id>:calendar`(都是 Supabase Realtime Broadcast,規則見
+//    .claude/skills/staff-realtime-sync/SKILL.md)。但**鈴鐺通知**仍然沒有 realtime 訂閱、也沒有輪詢,
+//    下面三個觸發點講的是鈴鐺這兩個 query。v1 刻意不為了這個延伸功能另外接 realtime,改用三個現成就有的觸發點:
 //   ① 元件掛載時查一次(react-query 標準行為);
 //   ② 切回這個分頁時自動重查(main.tsx 的 QueryClient 沒有傳 defaultOptions,所以
 //      refetchOnWindowFocus 維持官方預設的 true —— 這一條不用寫任何程式碼就有);

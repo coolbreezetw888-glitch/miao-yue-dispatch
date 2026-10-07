@@ -13,6 +13,7 @@
 //  10. 320 寬:小卡窗沒有橫向捲動
 //  11. 深色模式:空白條沒有字(第 12 批 #1000 起條上不顯示文字;原本驗「字看得到」)
 //  ※ 第 12 批 #1001:小卡窗電腦版改成跟全頁層同寬(1280 ⇒ 1152),7 的寬度斷言跟著改;
+//    第 15 批 #1009 再改成對齊頁面內容欄(付款方式頁 1280 ⇒ 856),完整驗收在 b15-card-dialog-column-align.spec.ts;
 //    完整的第 12 批驗收在 b12-card-dialog-wide.spec.ts。
 //  ・浮出面板(日期時間選擇 Popover;服務人員表單的服務項目下拉見 6)點外面照舊收起,視窗不動
 // 截圖存 test-results/b11-j-shots/(🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
@@ -314,8 +315,9 @@ test("7. 小卡窗(付款方式新增):點遮罩不關、點卡片正上方關;�
   const page = await openAsAdmin(browser, 1280, 800, "/app/payment-methods");
   let dialog = await openNewPaymentMethod(page);
   const box = await settledBox(dialog);
-  // 第 12 批 #1001:電腦版小卡窗跟全頁層同寬(原本 400)。
-  expect(Math.round(box.width)).toBe(1152);
+  // 第 12 批 #1001:電腦版小卡窗跟全頁層同寬(原本 400);第 15 批 #1009 起改成對齊頁面內容欄
+  // (付款方式頁 max-w-4xl 896 − 左右內距 40 = 856)。
+  expect(Math.round(box.width)).toBe(856);
   const strip = await stripBox(page);
   expect(Math.round(strip.height)).toBe(48);
   expect(Math.round(strip.y + strip.height)).toBe(Math.round(box.y));

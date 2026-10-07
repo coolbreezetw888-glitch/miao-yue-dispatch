@@ -446,7 +446,9 @@ export default function AppLayout() {
         <DualRoleViewSwitchBar isStaffView={isStaffView} onToggle={handleToggleStaffView} />
       ) : null}
 
-      <main className="pb-24">
+      {/* data-app-content-root(第 15 批 #1009):電腦版小卡窗從這裡往下找頁面的主要內容欄,左右邊界對齊它
+          (見 src/components/patterns/cardDialogColumnAlign.ts)。不要拿掉,也不要在這層加左右內距。 */}
+      <main className="pb-24" data-app-content-root="">
         <Outlet context={outletContext} />
       </main>
 

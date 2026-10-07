@@ -25,14 +25,24 @@ export const CARD_FOOTER_CLASS =
 /** 小卡窗(CardDialog)電腦版(sm 以上)—— 第 12 批 #1001。確認窗 CardAlertDialog 不用這組,維持 400px。
  *  手機(< 640px)完全沿用上面的 CARD_* 規格(這裡全部是 sm: 前綴,或手機上 display:contents 不產生框)。
  *  電腦:
- *   - 寬度同全頁層:左右各留 16px、最寬 1152px(sm:max-w-6xl,與 FULL_PAGE_PANEL_CLASS 同一個 token)。
+ *   - 寬度:對齊底下頁面的主要內容欄(第 15 批 #1009,見下方 CARD_DIALOG_COLUMN_ALIGN_CLASS);
+ *     量不到時退回同全頁層:左右各留 16px、最寬 1152px(sm:max-w-6xl,與 FULL_PAGE_PANEL_CLASS 同一個 token)。
  *   - 高度跟著內容;最高 = 畫面高 − 56px − 18px。在「上 56px、下 18px」之間的範圍垂直置中
  *     (中心點 = 50% + 19px;2026-10-07 使用者裁決維持置中,不固定在頂端 56px)。
  *     內容很長時上緣剛好 56px(上方空白條照小卡窗規則最多 48px)、下緣 18px。
  *   - 標題列(下方分隔線)與按鈕列(上方分隔線)固定,只有中間內容區捲動。
  *   - 按鈕列按鈕平均分寬(兩顆各半、三顆三等分),跟全頁層一樣。
  *   - 欄位不重排成兩欄(只拉寬)。 */
-export const CARD_DIALOG_CONTENT_CLASS = `${CARD_CONTENT_CLASS} sm:top-[calc(50%+19px)] sm:max-w-6xl sm:max-h-[calc(100dvh-74px)] sm:gap-0 sm:overflow-hidden sm:p-0`;
+/** 第 15 批 #1009:電腦版寬度改成對齊底下頁面的主要內容欄(使用者:「寬度應該要同紅框的寬度」)。
+ *  CardDialog 量到內容欄時才會掛 data-card-col-align,並用 CSS 變數給中心點與寬度
+ *  (左 = 中心點、照舊 -translate-x-1/2 置中,進場動畫不受影響);沒掛 ⇒ 沿用上面的第 12 批規則
+ *  (左右 16px、最寬 1152px)。全部 sm: 前綴,手機不受影響。
+ *  🔴 transition-none:CARD_CONTENT_CLASS 的 duration-200 沒限定屬性(= transition all),不取消的話
+ *     寬度 / left 會跑 200ms 過渡,打開時「先寬後縮」、拉視窗也慢半拍(第 15 批 QA 打回)。只在對齊狀態取消,
+ *     確認窗 CardAlertDialog 共用的 CARD_CONTENT_CLASS 不動;進場淡入 / 縮放是 animation,不受影響。 */
+const CARD_DIALOG_COLUMN_ALIGN_CLASS =
+  "sm:data-[card-col-align]:left-[var(--card-col-center)] sm:data-[card-col-align]:w-[var(--card-col-width)] sm:data-[card-col-align]:max-w-none sm:data-[card-col-align]:transition-none";
+export const CARD_DIALOG_CONTENT_CLASS = `${CARD_CONTENT_CLASS} sm:top-[calc(50%+19px)] sm:max-w-6xl sm:max-h-[calc(100dvh-74px)] sm:gap-0 sm:overflow-hidden sm:p-0 ${CARD_DIALOG_COLUMN_ALIGN_CLASS}`;
 /** 中間內容區:手機 display:contents(子元素照舊直接排在卡片裡,跟改版前一模一樣);電腦自己捲動。 */
 export const CARD_DIALOG_BODY_CLASS =
   "contents sm:flex sm:min-h-0 sm:min-w-0 sm:flex-col sm:gap-4 sm:overflow-y-auto sm:px-5 sm:py-4";

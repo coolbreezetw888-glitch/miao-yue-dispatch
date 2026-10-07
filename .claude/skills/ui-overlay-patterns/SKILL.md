@@ -414,7 +414,7 @@ pseudo-element,input 本體字級不受影響)。
 | 位置 | 置中,上下都有空隙(電腦版小卡窗在「上 56px、下 18px」範圍內垂直置中,2026-10-07 第 12 批使用者裁決:**不貼齊上方**) |
 | 四角 | **16px 圓角** |
 | 左右 | 手機留 **16px 白邊**,不貼邊 |
-| 寬度 | **小卡窗 `CardDialog`**:電腦跟全頁層同寬(左右 16px、最寬 1152px),**只拉寬不重排**(欄位仍單欄);**確認窗 `CardAlertDialog`**:電腦固定 **400px**(第 12 批使用者裁決:確認窗維持小小的) |
+| 寬度 | **小卡窗 `CardDialog`**:電腦**左右邊界對齊底下頁面的主要內容欄**(第 15 批 #1009,使用者:「寬度應該要同紅框的寬度」;疊在全頁層上時對齊全頁層面板外框;量不到內容欄時退回「左右 16px、最寬 1152px」),**只拉寬不重排**(欄位仍單欄);**確認窗 `CardAlertDialog`**:電腦固定 **400px**(第 12 批使用者裁決:確認窗維持小小的) |
 | 按鈕 | 手機左右各半;**小卡窗電腦按鈕平均分寬**(兩顆各半、三顆三等分);確認窗電腦靠右 |
 | 高度 | 隨內容。小卡窗電腦版內容過長時最高到上 56 / 下 18,**只有中間捲動**,標題列與按鈕列固定;🔴 `CardDialogHeader` / `CardDialogFooter` 必須是 `CardDialogContent` 的**直接子元素**(包在 form / Fragment 裡會跟著一起捲)。標題下、按鈕列上各一條分隔線;沒有中間內容時不畫按鈕列上的線 |
 | 元件 | `CardDialogContent` / `CardAlertDialogContent`(底層 Radix `Dialog` / `AlertDialog`) |
@@ -711,3 +711,10 @@ react-remove-scroll 只有「最上層」那把鎖生效,modal Popover 會掛自
 - 上方空白條(全頁層 / 小卡窗 / 確認窗)**不顯示任何字或圖示**,點了照樣 = Esc;`OverlayDismissStrip` 已沒有 `label` 參數;測試找空白條用 `[data-overlay-dismiss-strip]`,不要用文字。
 - 電腦版小卡窗拉寬、按鈕平均分寬、垂直置中;確認窗與手機版完全不變(見上方小卡窗表)。
 - ⚠️ 「三顆按鈕三等分」與「在 56/18 範圍內置中」是主腦/工程師補的細節,使用者已知情,不要可只動 `overlayClasses.ts` 的 `CARD_DIALOG_*`。
+
+### 2026-10-08 第 15 批(#1009)小卡窗對齊頁面內容欄
+- App 殼層 `<main data-app-content-root>`(AppLayout、PlatformAdminShell);`cardDialogColumnAlign.ts` 打開時往下最多 4 層找頁面容器(`mx-auto max-w-* px-*`),量左右邊界,用 `--card-col-center/--card-col-width` + `data-card-col-align` 套用(只 `sm:`)。resize / 內容區尺寸變動 / 動畫結束會重量。
+- 🔴 新頁面一律用標準頁面容器(`mx-auto max-w-* px-5`),否則小卡窗會量不到、退回 1152 寬。不在 AppLayout 底下的獨立路由(登入、onboarding 等)會退回舊規則。
+- 🔴 對齊狀態必須 `transition-none`:`CARD_CONTENT_CLASS` 的 `duration-200` 是 transition all,不取消會「先寬後縮」(QA 抓到,b15 test 6 逐畫面守門)。不要改共用的 `CARD_CONTENT_CLASS`(確認窗也用)。
+- ⚠️ 主腦補的:水平位置也對齊內容欄(不是畫面正中);疊在全頁層上對齊面板外框。要退可只改 `cardDialogColumnAlign.ts`。
+- 全頁層 FullPageLayer 目前仍是統一 1152,在 3xl/4xl 頁面會比內容欄寬 296~424px;要不要比照對齊待使用者裁決。

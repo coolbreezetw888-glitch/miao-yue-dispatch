@@ -51,7 +51,10 @@ export function PlatformAdminShell({ children }: { children: ReactNode }) {
           </Link>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-5 py-10">{children}</main>
+      {/* data-app-content-root:電腦版小卡窗對齊這一欄(第 15 批 #1009,見 cardDialogColumnAlign.ts)。 */}
+      <main className="mx-auto max-w-5xl px-5 py-10" data-app-content-root="">
+        {children}
+      </main>
     </div>
   );
 }

@@ -4,9 +4,11 @@
  * 用在:確認、3 欄以內的短表單(分類原則見 skill 三「📐 分類原則」與「使用者已裁決的個案」)。
  * 規格全部寫死在這個殼裡:置中 / 16px 圓角 / 手機左右留 16px、固定最寬 400px / 高度隨內容 /
  * 按鈕手機左右各半。
- * 電腦(sm 以上,第 12 批 #1001):寬度同全頁層(左右各留 16px、最寬 1152px)、高度跟著內容
+ * 電腦(sm 以上,第 12 批 #1001):高度跟著內容
  * (最高到上 56px / 下 18px,在這個範圍內垂直置中)、標題列與按鈕列固定、只有中間內容區捲動、
  * 標題下與按鈕列上各一條分隔線、按鈕平均分寬;欄位不重排成兩欄。細節見 overlayClasses.ts 的 CARD_DIALOG_*。
+ * 電腦寬度(第 15 批 #1009):左右邊界對齊底下那頁的主要內容欄(底下有全頁層 ⇒ 對齊全頁層面板),
+ * 瀏覽器拉寬拉窄跟著變;量不到內容欄 ⇒ 退回第 12 批規則(左右各留 16px、最寬 1152px)。見 cardDialogColumnAlign.ts。
  * 🔴 CardDialogHeader / CardDialogFooter 要是 CardDialogContent 的**直接子元素**才會被固定在上 / 下
  *    (殼靠元件型別把它們從中間內容區分出來;包在 Fragment / form 裡就會跟著內容一起捲)。**個別頁面不准再自己寫 max-w-* 或 className 調寬度** ——
  * 盤點報告指出「每個彈窗寬度各自手寫」正是目前大小不一的根因,所以 CardDialogContent 刻意不收 className。
@@ -41,6 +43,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { useCardColumnAlign } from "./cardDialogColumnAlign";
 import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import { useOverlayDirtyDismiss } from "./overlayDirtyDismiss";
 import { CARD_STRIP_MAX_HEIGHT } from "./overlayDismissLogic";
@@ -89,6 +92,7 @@ const CardDialogContent = React.forwardRef<
       onEscapeKeyDown,
       onPointerDownOutside,
       onInteractOutside,
+      style,
       ...props
     },
     ref,
@@ -98,14 +102,20 @@ const CardDialogContent = React.forwardRef<
     const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
     // 空白條要量卡片的位置,所以自己也留一份 ref。
     const cardRef = React.useRef<HTMLDivElement | null>(null);
+    // 第 15 批 #1009:對齊底下頁面的內容欄要在卡片真的掛上去之後才量 ⇒ 另外用 state 記住節點。
+    const [cardNode, setCardNode] = React.useState<HTMLDivElement | null>(null);
     const autoFocusRef = autoFocus.ref;
     const setCardRef = React.useCallback(
       (node: HTMLDivElement | null) => {
         cardRef.current = node;
+        setCardNode(node);
         autoFocusRef(node);
       },
       [autoFocusRef],
     );
+    // 電腦版寬度 / 水平位置 = 底下頁面主要內容欄(或底下全頁層面板);量不到 ⇒ null,走第 12 批規則。
+    // 手機不受影響:套用的 class 全部是 sm: 前綴(見 overlayClasses.ts CARD_DIALOG_CONTENT_CLASS)。
+    const columnAlign = useCardColumnAlign(cardNode);
     const dismiss = useOverlayDirtyDismiss({ dirty, onEscapeKeyDown });
     // 第 12 批 #1001:把直接子元素分成「標題列 / 中間內容 / 按鈕列」三段,電腦版只有中間捲動。
     // 手機上中間那段是 display:contents,排版跟改版前一模一樣。
@@ -127,6 +137,16 @@ const CardDialogContent = React.forwardRef<
             event.preventDefault();
           }}
           className={CARD_DIALOG_CONTENT_CLASS}
+          data-card-col-align={columnAlign ? "" : undefined}
+          style={
+            columnAlign
+              ? ({
+                  ...style,
+                  "--card-col-center": `${columnAlign.center}px`,
+                  "--card-col-width": `${columnAlign.width}px`,
+                } as React.CSSProperties)
+              : style
+          }
           {...props}
         >
           {parts.header}
