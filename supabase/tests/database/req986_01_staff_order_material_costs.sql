@@ -60,13 +60,15 @@ select is((select count(*)::int from pg_proc where proname = 'staff_update_booki
 create temp table r986a_fp on commit drop as
   select p.proname::text as proname,
     md5(
-      replace(replace(replace(
+      replace(replace(replace(replace(
         regexp_replace(replace(p.prosrc, E'\r\n', E'\n'),
           '[ ]*?-- \[req986-batch9 begin\].*?-- \[req986-batch9 end\]\n', '', 'g'),
         '  -- 不回傳任何客戶、會員、其他服務人員資料。料錢:#986 第 9 批推翻主腦決定 C,總開關開著才回本店上架品項(名稱、金額)。',
         '  -- 不回傳任何客戶、會員、其他服務人員資料;料錢(主腦決定 C:服務人員模式不顯示)也不回。'),
         '料錢用前端傳的值(#986 第 9 批;null = 不帶)', '料錢一律空陣列(主腦決定 C)'),
-        'p_material_cost_item_ids => coalesce(p_material_cost_item_ids, ''{}''::uuid[]),', 'p_material_cost_item_ids => ''{}''::uuid[],')
+        'p_material_cost_item_ids => coalesce(p_material_cost_item_ids, ''{}''::uuid[]),', 'p_material_cost_item_ids => ''{}''::uuid[],'),
+        -- 第 11 批 F #993:參數改成 jsonb(p_material_cost_items),先換回第 9 批的寫法再比。
+        'p_material_cost_items => coalesce(p_material_cost_items, ''[]''::jsonb),', 'p_material_cost_item_ids => ''{}''::uuid[],')
     ) as reverted
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
@@ -78,7 +80,9 @@ select is((select reverted from r986a_fp where proname = 'staff_get_booking_for_
   '④ staff_get_booking_for_edit 拿掉本批段落後 = 改前指紋');
 select is((select reverted from r986a_fp where proname = 'staff_create_booking'), 'e919014463059cc4e992346f8e22bef8',
   '⑤ staff_create_booking 拿掉本批段落、註解與料錢參數值換回原文後 = 改前指紋');
-select is((select reverted from r986a_fp where proname = 'staff_update_booking'), 'e0e56ecfb266aac0f4ceb1cc411b54ad',
+-- 第 11 批 F #993(migration 20261007140300)把 staff_update_booking 的料錢改成 jsonb(連同數量、單價保留),
+-- 基準改成「F 版本拿掉本批段落後」的指紋;第 9 批改前指紋 e0e56ecfb266aac0f4ceb1cc411b54ad。
+select is((select reverted from r986a_fp where proname = 'staff_update_booking'), '444c74b0bcae2056ae393618ad1a0783',
   '⑥ staff_update_booking 拿掉本批段落後 = 改前指紋');
 
 select is(
@@ -101,7 +105,10 @@ select is(
   '⑧ 4 支都還是 SECURITY DEFINER;兩支讀取仍是 STABLE、兩支寫入仍是 VOLATILE'
 );
 select is(
-  (select string_agg(p.proname || ':' || md5(pg_temp.req987_revert(replace(p.prosrc, E'\r\n', E'\n'))), ' ' order by p.proname)
+  (select string_agg(p.proname || ':' || md5(pg_temp.req987_revert(replace(replace(p.prosrc, E'\r\n', E'\n'),
+     -- 第 11 批 F #993:扣除料錢改成「單價 × 數量」——先換回改前的寫法再比指紋。
+     E'    -- 第 11 批 F #993:amount_snapshot 是「單價」,扣除料錢 = Σ 單價 × 數量。\n    select coalesce(sum(amount_snapshot * quantity), 0)',
+     '    select coalesce(sum(amount_snapshot), 0)'))), ' ' order by p.proname)
    from pg_proc p
    where p.oid in ('private.calculate_booking_staff_commission(uuid, uuid)'::regprocedure,
                    'public.compute_booking_commission(uuid)'::regprocedure,
@@ -185,7 +192,7 @@ returns uuid language sql as $$
     p_customer_phone => '0955986000',
     p_customer_address => '台北市測試路 86 號',
     p_assistant_staff_ids => p_assistants,
-    p_material_cost_item_ids => p_materials,
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end,
     p_payment_method_id => 'f9860000-0000-4000-8000-000000000050'
   );
 $$;
@@ -202,7 +209,7 @@ returns uuid language sql as $$
     p_customer_phone => '0955986011',
     p_customer_address => '新北市自建路 1 號',
     p_payment_method_id => 'f9860000-0000-4000-8000-000000000050',
-    p_material_cost_item_ids => p_materials
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end
   ) ->> 'id')::uuid;
 $$;
 grant execute on function pg_temp.smk(uuid, timestamptz, uuid[]) to authenticated;
@@ -233,7 +240,7 @@ returns jsonb language sql as $$
     p_customer_phone => '0955986000',
     p_customer_address => '台北市測試路 86 號',
     p_payment_method_id => 'f9860000-0000-4000-8000-000000000050',
-    p_material_cost_item_ids => p_materials
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end
   );
 $$;
 grant execute on function pg_temp.sup(uuid, timestamptz, uuid[]) to authenticated;
@@ -249,7 +256,7 @@ returns uuid language sql as $$
     p_customer_name => '林小姐',
     p_customer_phone => '0955986000',
     p_customer_address => '台北市測試路 86 號',
-    p_material_cost_item_ids => p_materials,
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end,
     p_payment_method_id => 'f9860000-0000-4000-8000-000000000050'
   );
 $$;

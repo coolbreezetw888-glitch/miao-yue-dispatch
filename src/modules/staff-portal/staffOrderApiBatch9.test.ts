@@ -1,5 +1,5 @@
 // #986 第 9 批:服務人員包裝 RPC 的前端呼叫端。
-//   ・9-1 / 9-2:staffCreateBooking / staffUpdateBooking 帶 p_material_cost_item_ids(帶陣列才送;沒帶 = 不送這個 key,
+//   ・9-1 / 9-2:staffCreateBooking / staffUpdateBooking 帶料錢參數(第 11 批 F 起是 p_material_cost_items;帶陣列才送;沒帶 = 不送這個 key,
 //     舊行為:建單不帶料錢、改單由後端維持原料錢)
 //   ・9-4:使用者裁決「服務人員改單 / 拖拉不通知客戶」⇒ staffUpdateBooking、staffMoveBooking 成功後**不可**呼叫
 //     dispatchLineNotification(只發商家內部推播);建單、取消、完成照舊發 LINE。
@@ -54,19 +54,30 @@ function rpcArgs(): Record<string, unknown> {
 }
 
 describe("料錢參數(9-1 / 9-2)", () => {
-  it("建單帶料錢陣列 ⇒ p_material_cost_item_ids;沒帶 ⇒ 不送這個 key(舊行為)", async () => {
+  // 第 11 批 F #993:料錢參數改成 p_material_cost_items(品項 + 數量 + 自訂成本單價)。
+  it("建單帶料錢 ⇒ p_material_cost_items(含數量 / 單價);沒帶 ⇒ 不送這個 key(舊行為)", async () => {
     m.rpc.mockResolvedValue({ data: { id: BOOKING_ID, merchant_id: MERCHANT_ID }, error: null });
-    await staffCreateBooking({ staffId: STAFF_ID, ...BASE, materialCostItemIds: [MAT] });
-    expect(rpcArgs()["p_material_cost_item_ids"]).toEqual([MAT]);
+    await staffCreateBooking({
+      staffId: STAFF_ID,
+      ...BASE,
+      materialCostItems: [{ materialCostItemId: MAT, quantity: 3, unitPrice: 12.5 }],
+    });
+    expect(rpcArgs()["p_material_cost_items"]).toEqual([
+      { material_cost_item_id: MAT, quantity: 3, unit_price: 12.5 },
+    ]);
+    expect(Object.prototype.hasOwnProperty.call(rpcArgs(), "p_material_cost_item_ids")).toBe(false);
     m.rpc.mockClear();
     await staffCreateBooking({ staffId: STAFF_ID, ...BASE });
-    expect(Object.prototype.hasOwnProperty.call(rpcArgs(), "p_material_cost_item_ids")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(rpcArgs(), "p_material_cost_items")).toBe(false);
   });
 
-  it("改單帶空陣列 ⇒ 照送 [](= 全部拿掉,不可以被當成沒帶)", async () => {
+  it("改單帶空陣列 ⇒ 照送 [](= 全部拿掉,不可以被當成沒帶);不帶 ⇒ 不送(後端維持數量與單價)", async () => {
     m.rpc.mockResolvedValue({ data: { id: BOOKING_ID, merchant_id: MERCHANT_ID }, error: null });
-    await staffUpdateBooking({ bookingId: BOOKING_ID, ...BASE, materialCostItemIds: [] });
-    expect(rpcArgs()["p_material_cost_item_ids"]).toEqual([]);
+    await staffUpdateBooking({ bookingId: BOOKING_ID, ...BASE, materialCostItems: [] });
+    expect(rpcArgs()["p_material_cost_items"]).toEqual([]);
+    m.rpc.mockClear();
+    await staffUpdateBooking({ bookingId: BOOKING_ID, ...BASE });
+    expect(Object.prototype.hasOwnProperty.call(rpcArgs(), "p_material_cost_items")).toBe(false);
   });
 });
 

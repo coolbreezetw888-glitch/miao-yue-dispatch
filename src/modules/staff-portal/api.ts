@@ -21,7 +21,11 @@ import {
   type DayScheduleForeignBooking,
   type DayScheduleOnLeave,
 } from "@/modules/booking/types";
-import type { BookingServiceItemSelectionInput } from "@/modules/booking/api";
+import {
+  buildMaterialCostItemsJsonb,
+  type BookingServiceItemSelectionInput,
+} from "@/modules/booking/api";
+import type { BookingMaterialCostSelectionInput } from "@/modules/booking/materialCostSelection";
 import type { MoveBookingInput, MoveBookingResult } from "@/modules/booking/bookingDragMove";
 import { isoToTaipeiDateKey, isoToTaipeiTime } from "@/modules/booking/dateUtils";
 import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
@@ -473,7 +477,10 @@ export interface StaffBookingForEdit {
   material_costs?: {
     material_cost_item_id: string;
     name: string;
+    /** 第 11 批 F #993 起語意是「單價」快照。 */
     amount_snapshot: number;
+    /** 第 11 批 F #993:數量;舊版後端沒有 ⇒ undefined(當 1)。 */
+    quantity?: number;
     is_active: boolean;
   }[];
 }
@@ -546,7 +553,8 @@ export async function staffPreviewBookingPoints(params: {
 
 /**
  * 建單 / 改單共用的表單欄位(沒有協助人員、會員、隱藏備註 —— 後端根本沒有這些參數)。
- * #986 第 9 批:多了料錢 materialCostItemIds(使用者裁決「服務人員跟客服一樣可看可改料錢」)。
+ * #986 第 9 批:多了料錢(使用者裁決「服務人員跟客服一樣可看可改料錢」);第 11 批 F #993 改成
+ * materialCostItems(品項 + 數量 + 自訂成本單價)。
  */
 export interface StaffBookingFormFields {
   serviceItems: BookingServiceItemSelectionInput[];
@@ -569,10 +577,11 @@ export interface StaffBookingFormFields {
   customDurationEnabled?: boolean;
   customDurationMinutes?: number | null;
   /**
-   * #986 第 9 批:料錢品項。undefined = 不帶這個參數(建單 = 不帶料錢、改單 = 後端維持現有料錢);
-   * 陣列(含空陣列 = 全部拿掉)= 用這個值。表單送出時一律帶目前勾選的陣列。
+   * #986 第 9 批 / 第 11 批 F #993:料錢 {品項, 數量, 單價}。undefined = 不帶這個參數(建單 = 不帶料錢、
+   * 改單 = 後端維持現有料錢,連同數量與單價);陣列(含空陣列 = 全部拿掉)= 用這個值。
+   * 表單送出時一律帶目前勾選的陣列。
    */
-  materialCostItemIds?: string[];
+  materialCostItems?: BookingMaterialCostSelectionInput[];
 }
 
 function buildStaffFormArgs(input: StaffBookingFormFields) {
@@ -604,8 +613,8 @@ function buildStaffFormArgs(input: StaffBookingFormFields) {
     ...(input.customDurationMinutes !== null && input.customDurationMinutes !== undefined
       ? { p_custom_duration_minutes: input.customDurationMinutes }
       : {}),
-    ...(input.materialCostItemIds !== undefined
-      ? { p_material_cost_item_ids: input.materialCostItemIds }
+    ...(input.materialCostItems !== undefined
+      ? { p_material_cost_items: buildMaterialCostItemsJsonb(input.materialCostItems) }
       : {}),
   };
 }

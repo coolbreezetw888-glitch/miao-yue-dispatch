@@ -99,7 +99,7 @@ select throws_ok(
     'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶一', '0977000001', null, null, '{}',
-    array['b8000000-0000-4000-8000-000000000060']::uuid[]
+    '[{"material_cost_item_id":"b8000000-0000-4000-8000-000000000060","quantity":1}]'::jsonb
   , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf')$$,
   'P0001', null,
   '規格書 2.3:material_cost_enabled 查無資料視為關閉,帶入料錢成本品項時被擋下'
@@ -114,7 +114,7 @@ select throws_ok(
     'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
     '客戶二', '0977000002', null, null, '{}',
-    array['b8000000-0000-4000-8000-000000000060']::uuid[]
+    '[{"material_cost_item_id":"b8000000-0000-4000-8000-000000000060","quantity":1}]'::jsonb
   , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf')$$,
   'P0001', null,
   '規格書 2.3:material_cost_enabled 明確關閉時,帶入料錢成本品項被擋下'
@@ -128,7 +128,7 @@ select id from create_booking(
   'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
   '客戶三', '0977000003', null, null, '{}',
-  array['b8000000-0000-4000-8000-000000000060']::uuid[]
+  '[{"material_cost_item_id":"b8000000-0000-4000-8000-000000000060","quantity":1}]'::jsonb
 , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf') \gset booking_
 
 select is(
@@ -144,7 +144,7 @@ select throws_ok(
       'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 11:00:00+08',
       '客戶四', '0977000004', null, null, '{}',
-      array['%1$s', '%1$s']::uuid[]
+      '[{"material_cost_item_id":"%1$s","quantity":1},{"material_cost_item_id":"%1$s","quantity":1}]'::jsonb
     , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf')$$,
     'b8000000-0000-4000-8000-000000000060'
   ),
@@ -160,7 +160,7 @@ select throws_ok(
     'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 12:00:00+08',
     '客戶五', '0977000005', null, null, '{}',
-    array['b8000000-0000-4000-8000-000000000060']::uuid[]
+    '[{"material_cost_item_id":"b8000000-0000-4000-8000-000000000060","quantity":1}]'::jsonb
   , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf')$$,
   'P0001', null,
   '規格書 2.3:找不到料錢成本品項(已下架)時被擋下'
@@ -189,7 +189,7 @@ select throws_ok(
     'b8000000-0000-4000-8000-000000000020', 'b8000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id','b8000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 13:00:00+08',
     '客戶六', '0977000006', null, null, '{}',
-    array['b8000000-0000-4000-8000-000000000060']::uuid[]
+    '[{"material_cost_item_id":"b8000000-0000-4000-8000-000000000060","quantity":1}]'::jsonb
   , p_payment_method_id => '95d19684-2b7d-52a2-891d-d9df3c541bcf')$$,
   '42501', null,
   '沒有 orders 權限的客服本來就不能建單(跟料錢成本開關無關,先被 can_manage_bookings 擋下)'

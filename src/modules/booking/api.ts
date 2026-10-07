@@ -8,6 +8,7 @@
 // 一律用 `if (error) throw error` 丟出,畫面上用 getErrorMessage() 取訊息。
 
 import { supabase } from "@/integrations/supabase/client";
+import type { BookingMaterialCostSelectionInput } from "./materialCostSelection";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { dispatchLineNotification } from "@/modules/line-notifications/api";
 import { dispatchPushNotification } from "@/modules/push-notifications/api";
@@ -175,6 +176,16 @@ export interface BookingAmountAdjustmentInput {
   customDurationMinutes?: number | null;
 }
 
+/** 第 11 批 F #993:料錢參數 p_material_cost_items 的格式({material_cost_item_id, quantity, unit_price | null})。
+ * 商家端 create / update 與服務人員端 staff_create / staff_update 共用這一支。 */
+export function buildMaterialCostItemsJsonb(items: BookingMaterialCostSelectionInput[]) {
+  return items.map((item) => ({
+    material_cost_item_id: item.materialCostItemId,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+  }));
+}
+
 function buildServiceItemsJsonb(items: BookingServiceItemSelectionInput[]) {
   return items.map((item) => ({
     service_item_id: item.serviceItemId,
@@ -185,7 +196,7 @@ function buildServiceItemsJsonb(items: BookingServiceItemSelectionInput[]) {
 
 /** 建單功能擴充 4.1:create_booking 破壞性簽章變更——serviceItemId 改成 serviceItems(多選,
  * 至少 1 個,模組 6 §4.1/4.2 再擴充成攜帶數量/單價的物件陣列),新增 assistantStaffIds
- * (助手清單,決策記錄 2)、materialCostItemIds(料錢成本品項,決策記錄 4)、金額彈性三開關
+ * (助手清單,決策記錄 2)、materialCostItems(料錢成本品項,決策記錄 4;第 11 批 F 起帶數量 / 單價)、金額彈性三開關
  * (模組 6 §4.4~4.6)。 */
 export interface CreateBookingInput extends BookingAmountAdjustmentInput {
   merchantId: string;
@@ -197,7 +208,8 @@ export interface CreateBookingInput extends BookingAmountAdjustmentInput {
   customerEmail?: string | null;
   notes?: string | null;
   assistantStaffIds?: string[];
-  materialCostItemIds?: string[];
+  /** 第 11 批 F #993:料錢 {品項, 數量, 單價}(原本只有品項 id 陣列)。 */
+  materialCostItems?: BookingMaterialCostSelectionInput[];
   /** 建單表單細節修正第二節:客戶指定的服務地點,只有 industry_type 需要地址的產業
    * (見 INDUSTRY_REQUIRES_CUSTOMER_ADDRESS)才會用到,後端 create_booking 會依商家
    * industry_type 再驗證一次是否必填,不是只靠前端擋。 */
@@ -236,7 +248,7 @@ export async function createBooking(input: CreateBookingInput): Promise<Booking>
     ...(input.customerEmail ? { p_customer_email: input.customerEmail } : {}),
     ...(input.notes ? { p_notes: input.notes } : {}),
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
-    p_material_cost_item_ids: input.materialCostItemIds ?? [],
+    p_material_cost_items: buildMaterialCostItemsJsonb(input.materialCostItems ?? []),
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
     ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
     p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
@@ -305,7 +317,8 @@ export interface UpdateBookingInput extends BookingAmountAdjustmentInput {
   customerEmail?: string | null;
   notes?: string | null;
   assistantStaffIds?: string[];
-  materialCostItemIds?: string[];
+  /** 第 11 批 F #993:料錢 {品項, 數量, 單價}(原本只有品項 id 陣列)。 */
+  materialCostItems?: BookingMaterialCostSelectionInput[];
   /** 建單表單細節修正第二節:同 CreateBookingInput.customerAddress。 */
   customerAddress?: string | null;
   /** 預約詳情資訊擴充與建單備註分類第一節:同 CreateBookingInput.customerNotes。 */
@@ -389,7 +402,7 @@ export async function updateBooking(input: UpdateBookingInput): Promise<Booking>
     ...(input.customerEmail ? { p_customer_email: input.customerEmail } : {}),
     ...(input.notes ? { p_notes: input.notes } : {}),
     p_assistant_staff_ids: input.assistantStaffIds ?? [],
-    p_material_cost_item_ids: input.materialCostItemIds ?? [],
+    p_material_cost_items: buildMaterialCostItemsJsonb(input.materialCostItems ?? []),
     ...(input.customerAddress ? { p_customer_address: input.customerAddress } : {}),
     ...(input.customerNotes ? { p_customer_notes: input.customerNotes } : {}),
     p_custom_total_amount_enabled: input.customTotalAmountEnabled ?? false,
@@ -1100,7 +1113,7 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
       .eq("booking_id", id),
     supabase
       .from("booking_material_costs")
-      .select("material_cost_item_id, amount_snapshot, material_cost_items(name)")
+      .select("material_cost_item_id, quantity, amount_snapshot, material_cost_items(name)")
       .eq("booking_id", id),
   ]);
 
@@ -1145,6 +1158,7 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   type AssistantJoinRow = { staff_id: string; merchant_staff: { name: string } | null };
   type MaterialCostJoinRow = {
     material_cost_item_id: string;
+    quantity: number;
     amount_snapshot: number;
     material_cost_items: { name: string } | null;
   };
@@ -1169,6 +1183,8 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
     materialCosts: ((materialCostsRes.data ?? []) as MaterialCostJoinRow[]).map((row) => ({
       materialCostItemId: row.material_cost_item_id,
       name: row.material_cost_items?.name ?? "(已刪除的品項)",
+      // 第 11 批 F #993:amount_snapshot 是「單價」,小計 = 單價 × 數量。
+      quantity: row.quantity ?? 1,
       amountSnapshot: row.amount_snapshot,
     })),
     // 預約詳情資訊擴充與建單備註分類第三節 3.2:createdByUserId 理論上一定查得到姓名

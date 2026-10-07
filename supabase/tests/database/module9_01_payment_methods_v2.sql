@@ -289,7 +289,7 @@ select pg_temp.test_set_auth('d9000000-0000-4000-8000-000000000001');
 select id from create_booking(
   'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id', 'd9000000-0000-4000-8000-000000000031', 'quantity', 1, 'unit_price', 300)),
-  '2026-09-29 09:00:00+08', '客戶甲', '0955000001', null, null, '{}', '{}', null, null,
+  '2026-09-29 09:00:00+08', '客戶甲', '0955000001', null, null, '{}', '[]', null, null,
   false, null, false, null, null, false, null, null,
   'd9000000-0000-4000-8000-000000000061'
 ) \gset booking_a_
@@ -324,7 +324,7 @@ select throws_ok(
     $$select create_booking(
       'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 10:00:00+08', '客戶乙', '0955000002', null, null, '{}', '{}', null, null,
+      '2026-09-29 10:00:00+08', '客戶乙', '0955000002', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, '%1$s'
     )$$,
     'd9000000-0000-4000-8000-000000000062'  -- 剛剛明確下架的 LINE Pay
@@ -348,7 +348,7 @@ select throws_ok(
     $$select create_booking(
       'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 11:00:00+08', '客戶丙', '0955000003', null, null, '{}', '{}', null, null,
+      '2026-09-29 11:00:00+08', '客戶丙', '0955000003', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, '%1$s'
     )$$,
     'd9000000-0000-4000-8000-000000000063'
@@ -366,7 +366,7 @@ select lives_ok(
     $$select update_booking(
       '%1$s', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 09:00:00+08', '客戶甲(改備註)', '0955000001', null, null, '{}', '{}', null, null,
+      '2026-09-29 09:00:00+08', '客戶甲(改備註)', '0955000001', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, 'd9000000-0000-4000-8000-000000000061'
     )$$,
     :'booking_a_id'
@@ -386,7 +386,7 @@ select throws_ok(
     $$select update_booking(
       '%1$s', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 09:00:00+08', '客戶甲', '0955000001', null, null, '{}', '{}', null, null,
+      '2026-09-29 09:00:00+08', '客戶甲', '0955000001', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, 'd9000000-0000-4000-8000-000000000062'
     )$$,
     :'booking_a_id'
@@ -423,7 +423,7 @@ insert into payment_methods (id, merchant_id, name, description) values
 select id from create_booking(
   'd9000000-0000-4000-8000-000000000021', 'd9000000-0000-4000-8000-000000000041',
   jsonb_build_array(jsonb_build_object('service_item_id', 'd9000000-0000-4000-8000-000000000031', 'quantity', 1, 'unit_price', 300)),
-  '2026-09-29 15:00:00+08', '客戶戊', '0955000005', null, null, '{}', '{}', null, null,
+  '2026-09-29 15:00:00+08', '客戶戊', '0955000005', null, null, '{}', '[]', null, null,
   false, null, false, null, null, false, null, null,
   'd9000000-0000-4000-8000-000000000064'
 ) \gset booking_snap_
@@ -443,7 +443,7 @@ select lives_ok(
     $$select update_booking(
       '%1$s', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 15:00:00+08', '客戶戊(改姓名)', '0955000005', null, null, '{}', '{}', null, null,
+      '2026-09-29 15:00:00+08', '客戶戊(改姓名)', '0955000005', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, 'd9000000-0000-4000-8000-000000000064'
     )$$,
     :'booking_snap_id'
@@ -464,7 +464,7 @@ select lives_ok(
     $$select update_booking(
       '%1$s', 'd9000000-0000-4000-8000-000000000041',
       jsonb_build_array(jsonb_build_object('service_item_id','d9000000-0000-4000-8000-000000000031','quantity',1,'unit_price',300)),
-      '2026-09-29 15:00:00+08', '客戶戊(改姓名)', '0955000005', null, null, '{}', '{}', null, null,
+      '2026-09-29 15:00:00+08', '客戶戊(改姓名)', '0955000005', null, null, '{}', '[]', null, null,
       false, null, false, null, null, false, null, null, 'd9000000-0000-4000-8000-000000000065'
     )$$,
     :'booking_snap_id'

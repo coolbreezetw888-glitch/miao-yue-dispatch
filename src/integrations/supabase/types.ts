@@ -299,6 +299,7 @@ export type Database = {
           created_at: string
           id: string
           material_cost_item_id: string
+          quantity: number
         }
         Insert: {
           amount_snapshot: number
@@ -306,6 +307,7 @@ export type Database = {
           created_at?: string
           id?: string
           material_cost_item_id: string
+          quantity?: number
         }
         Update: {
           amount_snapshot?: number
@@ -313,6 +315,7 @@ export type Database = {
           created_at?: string
           id?: string
           material_cost_item_id?: string
+          quantity?: number
         }
         Relationships: [
           {
@@ -3309,7 +3312,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_hide_notes_from_staff?: boolean
-          p_material_cost_item_ids?: string[]
+          p_material_cost_items?: Json
           p_member_id?: string
           p_merchant_id: string
           p_notes?: string
@@ -4419,7 +4422,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
-          p_material_cost_item_ids?: string[]
+          p_material_cost_items?: Json
           p_notes?: string
           p_payment_method_id?: string
           p_points_override?: number
@@ -4501,7 +4504,7 @@ export type Database = {
           p_discount_enabled?: boolean
           p_discount_mode?: string
           p_discount_value?: number
-          p_material_cost_item_ids?: string[]
+          p_material_cost_items?: Json
           p_notes?: string
           p_payment_method_id?: string
           p_points_override?: number
@@ -4554,7 +4557,7 @@ export type Database = {
           p_discount_mode?: string
           p_discount_value?: number
           p_hide_notes_from_staff?: boolean
-          p_material_cost_item_ids?: string[]
+          p_material_cost_items?: Json
           p_member_id?: string
           p_notes?: string
           p_payment_method_id?: string

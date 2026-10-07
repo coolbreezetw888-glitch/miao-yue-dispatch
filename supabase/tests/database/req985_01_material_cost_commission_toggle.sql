@@ -111,7 +111,7 @@ returns uuid language sql as $$
     p_customer_name => '林小姐',
     p_customer_phone => '0955985000',
     p_customer_address => '台北市測試路 85 號',
-    p_material_cost_item_ids => p_materials,
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end,
     p_payment_method_id => 'f9850000-0000-4000-8000-000000000050'
   );
 $$;
@@ -286,7 +286,7 @@ returns uuid language sql as $$
     p_customer_name => '林小姐(管理員改)',
     p_customer_phone => '0955985000',
     p_customer_address => '台北市測試路 85 號',
-    p_material_cost_item_ids => p_materials,
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end,
     p_payment_method_id => 'f9850000-0000-4000-8000-000000000050'
   );
 $$;
@@ -335,7 +335,7 @@ returns uuid language sql as $$
     p_customer_name => '林小姐(管理員改)',
     p_customer_phone => '0955985000',
     p_customer_address => '台北市測試路 85 號',
-    p_material_cost_item_ids => p_materials,
+    p_material_cost_items => case when p_materials is null then null else (select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', x, 'quantity', 1) order by o), '[]'::jsonb) from unnest(p_materials) with ordinality as u(x, o)) end,
     p_payment_method_id => 'f9850000-0000-4000-8000-000000000050'
   );
 $$;

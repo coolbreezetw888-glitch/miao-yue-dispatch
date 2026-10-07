@@ -313,7 +313,10 @@ export async function setupMobileOverflowFixture(): Promise<MobileOverflowFixtur
     p_customer_phone: LONG_VALID_CUSTOMER_PHONE,
     p_notes: LONG_NOTES,
     p_assistant_staff_ids: [(staffAssistant as { id: string }).id],
-    p_material_cost_item_ids: [(materialItem as { id: string }).id],
+    // 第 11 批 F #993:料錢參數改成 p_material_cost_items({品項, 數量, 單價 | null})。
+    p_material_cost_items: [
+      { material_cost_item_id: (materialItem as { id: string }).id, quantity: 1, unit_price: null },
+    ],
     p_customer_address: LONG_ADDRESS,
     p_payment_method_id: (paymentMethod as { id: string }).id,
   });

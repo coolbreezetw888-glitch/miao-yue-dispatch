@@ -531,8 +531,8 @@ select is(
   'T15d update_booking / preview_booking_points 各只有 1 個版本(簽章不變),helper 1 個版本'
 );
 select ok(
-  has_function_privilege('authenticated', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
-  and not has_function_privilege('anon', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
+  has_function_privilege('authenticated', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
   and has_function_privilege('authenticated', 'public.preview_booking_points(uuid, uuid, uuid, text, jsonb, boolean, numeric, boolean, text, numeric, boolean, text, numeric)', 'execute')
   and not has_function_privilege('anon', 'public.preview_booking_points(uuid, uuid, uuid, text, jsonb, boolean, numeric, boolean, text, numeric, boolean, text, numeric)', 'execute'),
   'T15e update_booking / preview_booking_points 權限不變:authenticated 有、anon 沒有'

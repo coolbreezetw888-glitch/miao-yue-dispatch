@@ -232,7 +232,8 @@ export async function setupMaterialCommissionFixture(): Promise<MaterialCommissi
       p_customer_name: `E2E第8批客戶${n}`,
       p_customer_phone: phone(10 + n),
       p_customer_address: "E2E第8批客戶地址",
-      p_material_cost_item_ids: [materialId],
+      // 第 11 批 F #993:料錢參數改成 p_material_cost_items({品項, 數量, 單價 | null})。
+      p_material_cost_items: [{ material_cost_item_id: materialId, quantity: 1, unit_price: null }],
       p_payment_method_id: paymentMethodId,
     });
     return (must(`建立預約 ${n}`, r.data, r.error) as { id: string }).id;

@@ -272,8 +272,8 @@ select throws_ok(
 );
 reset role;
 select ok(
-  not has_function_privilege('anon', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, uuid[])', 'execute')
-  and has_function_privilege('authenticated', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, uuid[])', 'execute'),
+  not has_function_privilege('anon', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, jsonb)', 'execute')
+  and has_function_privilege('authenticated', 'public.staff_create_booking(uuid, jsonb, timestamptz, text, text, text, text, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, integer, integer, uuid, jsonb)', 'execute'),
   '㉑ anon 沒有 EXECUTE(正向對照:authenticated 有)'
 );
 select pg_temp.test_set_auth('f9777000-0000-4000-8000-000000000004');

@@ -110,7 +110,7 @@ select throws_ok(
     $$select create_booking(
       'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-      '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '   '
+      '客戶一', '0911100001', null, null, '{}'::uuid[], '[]'::jsonb, '   '
     , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14')$$
   ),
   'P0001', NULL,
@@ -121,7 +121,7 @@ select throws_ok(
 select id from create_booking(
   'ba000000-0000-4000-8000-000000000020', 'ba000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-  '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '  台北市中正區忠孝東路一段1號  '
+  '客戶一', '0911100001', null, null, '{}'::uuid[], '[]'::jsonb, '  台北市中正區忠孝東路一段1號  '
 , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14') \gset dispatch_
 
 select is(
@@ -159,7 +159,7 @@ select throws_ok(
     $$select update_booking(
       '%s', 'ba000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-      '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], ''
+      '客戶一', '0911100001', null, null, '{}'::uuid[], '[]'::jsonb, ''
     )$$,
     :'dispatch_id'::text
   ),
@@ -174,7 +174,7 @@ select lives_ok(
     $$select update_booking(
       '%s', 'ba000000-0000-4000-8000-000000000040',
       jsonb_build_array(jsonb_build_object('service_item_id','ba000000-0000-4000-8000-000000000030','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-      '客戶一', '0911100001', null, null, '{}'::uuid[], '{}'::uuid[], '台北市大安區'
+      '客戶一', '0911100001', null, null, '{}'::uuid[], '[]'::jsonb, '台北市大安區'
     , p_payment_method_id => '6472c5f8-c331-5029-bea3-63864679cb14')$$,
     :'dispatch_id'::text
   ),

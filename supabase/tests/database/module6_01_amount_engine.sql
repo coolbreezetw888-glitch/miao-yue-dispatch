@@ -131,7 +131,7 @@ select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 13:00:00+08', '客戶二', '0911000002',
-  null, null, '{}', '{}', null, null,
+  null, null, '{}', '[]', null, null,
   true, 800
 , p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset custom_
 
@@ -151,7 +151,7 @@ select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 14:00:00+08', '客戶三', '0911000003',
-  null, null, '{}', '{}', null, null,
+  null, null, '{}', '[]', null, null,
   false, null, true, 'fixed', 50
 , p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset discount_fixed_
 
@@ -171,7 +171,7 @@ select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 15:00:00+08', '客戶四', '0911000004',
-  null, null, '{}', '{}', null, null,
+  null, null, '{}', '[]', null, null,
   false, null, true, 'percentage', 10
 , p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481') \gset discount_pct_
 
@@ -192,7 +192,7 @@ select throws_ok(
     'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
     jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
     '2026-09-22 16:00:00+08', '客戶五', '0911000005',
-    null, null, '{}', '{}', null, null,
+    null, null, '{}', '[]', null, null,
     false, null, true, 'fixed', 500
   , p_payment_method_id => 'eba9a441-7ee4-5a5a-b757-44d879655481')$$,
   'P0001', null,
@@ -208,7 +208,7 @@ select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 2, 'unit_price', 500)),
   '2026-09-22 17:00:00+08', '客戶六', '0911000006',
-  null, null, '{}', '{}', null, null,
+  null, null, '{}', '[]', null, null,
   false, null, true, 'fixed', 200, true, 'percentage', 5,
   'c1000000-0000-4000-8000-000000000091'
 ) \gset tax_
@@ -248,7 +248,7 @@ select id from create_booking(
   'c1000000-0000-4000-8000-000000000020', 'c1000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id', 'c1000000-0000-4000-8000-000000000030', 'quantity', 1, 'unit_price', 300)),
   '2026-09-22 19:00:00+08', '客戶七', '0911000007',
-  null, null, '{}', '{}', null, null,
+  null, null, '{}', '[]', null, null,
   false, null, false, null, null, false, null, null, 'c1000000-0000-4000-8000-000000000091'
 ) \gset payment_
 

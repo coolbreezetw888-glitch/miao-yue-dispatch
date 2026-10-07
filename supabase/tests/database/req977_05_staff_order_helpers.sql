@@ -220,8 +220,9 @@ select is(
 );
 select is(
   (select reverted_md5 || '|' || attrs || '|' || has_marker::text from r977g_fp
-    where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
-  '0574cf6aae932aa1ecd7a98e1715cae8|v/true/postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres|true',
+    where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
+  -- 第 11 批 F #993(migration 20261007140300)把料錢參數改成 jsonb,基準改成「F 版本拿掉本批段落後」的指紋;第 7 批改前指紋 0574cf6aae932aa1ecd7a98e1715cae8。
+  '2637764402d90bb890ae4a9aa980baf1|v/true/postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres|true',
   '⑦ create_booking:拿掉本批段落後 = 改前指紋(含第 4 批段落);屬性 / ACL 不變'
 );
 

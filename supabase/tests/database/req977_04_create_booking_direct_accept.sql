@@ -68,11 +68,13 @@ create temp table r977e_src on commit drop as
       'v_initial_status', '''pending_confirmation''') as reverted_src,
     pg_get_functiondef(p.oid) as def
   from pg_proc p
-  where p.oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure;
+  where p.oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure;
 
 select is(
   (select md5(reverted_src) from r977e_src),
-  'd8fb4ffb50f0516c8c815aed24c09784',
+  -- 第 11 批 F #993(migration 20261007140300)把料錢參數改成 jsonb(數量 / 自訂成本單價),基準改成「F 版本拿掉本批段落後」的指紋;
+  -- 第 4 批改前指紋 d8fb4ffb50f0516c8c815aed24c09784。
+  'e789100f3d6b0b6be04c450180305805',
   '① 拿掉本批新增段落、v_initial_status 換回 pending_confirmation 後,指紋等於改前(其餘內容逐字相同)'
 );
 
@@ -90,7 +92,7 @@ $$;
 
 select is(
   (select array_to_string(proacl, ' ') || ' / ' || pronargs || ' / ' || prosecdef::text
-   from pg_proc where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
+   from pg_proc where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
   'postgres=X/postgres authenticated=X/postgres service_role=X/postgres / 28 / true',
   '② create_booking 的 ACL、28 個參數、SECURITY DEFINER 都跟改前相同'
 );

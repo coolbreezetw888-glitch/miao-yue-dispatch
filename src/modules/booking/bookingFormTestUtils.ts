@@ -26,6 +26,16 @@ export function pickServiceItems(names: (string | RegExp)[]): void {
   fireEvent.click(within(picker).getByRole("button", { name: /^確認/ }));
 }
 
+/** 第 11 批 F #993:打開「選擇料錢」整頁,勾 / 取消勾選幾個品項,按確認。 */
+export function pickMaterialCosts(names: (string | RegExp)[]): void {
+  fireEvent.click(document.getElementById("booking-material-costs") as HTMLElement);
+  const picker = screen.getByTestId("material-picker");
+  for (const name of names) {
+    fireEvent.click(within(picker).getByRole("checkbox", { name }));
+  }
+  fireEvent.click(within(picker).getByRole("button", { name: /^確認/ }));
+}
+
 /** 付款方式下拉:用鍵盤打開(jsdom 裡最穩定的方式),再點選項。 */
 export async function selectPaymentMethod(name: string): Promise<void> {
   installRadixSelectPolyfills();

@@ -419,7 +419,7 @@ select id from create_booking(
   p_start_at => '2026-11-05 14:00:00+08',
   p_customer_name => '測試客戶E(net模式)',
   p_customer_phone => '0955010005',
-  p_material_cost_item_ids => array['e8000000-0000-4000-8000-000000000032']::uuid[],
+  p_material_cost_items => '[{"material_cost_item_id":"e8000000-0000-4000-8000-000000000032","quantity":1}]'::jsonb,
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 1000
 , p_payment_method_id => 'e9305a84-bc92-5a2e-ae0c-3aaacd6d2a59') \gset net_mode_booking_
@@ -442,7 +442,7 @@ select id from create_booking(
   p_start_at => '2026-11-05 15:00:00+08',
   p_customer_name => '測試客戶F(負數以0計)',
   p_customer_phone => '0955010006',
-  p_material_cost_item_ids => array['e8000000-0000-4000-8000-000000000032']::uuid[],
+  p_material_cost_items => '[{"material_cost_item_id":"e8000000-0000-4000-8000-000000000032","quantity":1}]'::jsonb,
   p_custom_total_amount_enabled => true,
   p_custom_total_amount => 100,
   p_discount_enabled => true,

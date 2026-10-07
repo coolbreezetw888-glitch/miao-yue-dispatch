@@ -102,6 +102,7 @@ import { useBookingStatusChangeLogs } from "./context";
 import { BackToDetailLink, StatusChangeLogsView } from "./StatusChangeLogsView";
 import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
+import { formatMaterialAmount } from "./materialCostSelection";
 import { CancelBookingConfirmButton } from "./CancelBookingConfirmButton";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
@@ -863,9 +864,12 @@ export function BookingDetailDialog({
 
               {booking.materialCosts.length > 0 ? (
                 <DetailSection label="料錢成本">
+                  {/* 第 11 批 F #993:名稱 × 數量、小計 = 單價快照 × 數量(允許小數單價,不四捨五入到整數)。 */}
                   {booking.materialCosts.map((c) => (
-                    <DetailRow key={c.materialCostItemId} label={c.name}>
-                      {formatAmount(c.amountSnapshot)}
+                    <DetailRow key={c.materialCostItemId} label={`${c.name} × ${c.quantity ?? 1}`}>
+                      {formatMaterialAmount(
+                        Math.round(Number(c.amountSnapshot) * (c.quantity ?? 1) * 100) / 100,
+                      )}
                     </DetailRow>
                   ))}
                 </DetailSection>

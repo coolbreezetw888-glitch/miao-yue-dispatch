@@ -16,7 +16,7 @@
 
 import { parseAmountInput } from "@/components/patterns";
 
-import { parseItemQuantity } from "./itemQuantity";
+import { ITEM_QUANTITY_MAX, itemQuantityError, parseItemQuantity } from "./itemQuantity";
 
 /** 草稿裡一個已勾選項目的狀態。數量 / 金額都存字串,方便控制輸入框(跟表單一致)。 */
 export interface PickerDraftEntry {
@@ -40,6 +40,11 @@ export interface PickerItem {
   category_id: string | null;
   /** #986 第 9 批:服務項目描述(沒填 = null / undefined ⇒ 卡片不留空白)。 */
   description?: string | null | undefined;
+  /**
+   * 第 11 批 F #993:已下架、但這張單本來就有的品項(料錢整頁用)。卡片名稱後加灰字「(已下架)」,
+   * 可以保留 / 改數量 / 取消勾選;整頁只會在「這張單本來就有」時列出它,所以不能新加。
+   */
+  inactive?: boolean | undefined;
 }
 
 export interface PickerCategory {
@@ -149,10 +154,10 @@ export function setPickerQuantityText(draft: PickerDraft, id: string, text: stri
   };
 }
 
-/** − / + 按鈕。最少 1(規格 1.2 第 3 點);沒勾選的項目按 + 會順手勾起來。 */
+/** − / + 按鈕。最少 1(規格 1.2 第 3 點)、最多 999(第 11 批 F-1);沒勾選的項目按 + 會順手勾起來。 */
 export function stepPickerQuantity(draft: PickerDraft, id: string, delta: 1 | -1): PickerDraft {
   const current = id in draft.entries ? parseItemQuantity(draft.entries[id]!.quantity) : 0;
-  const next = Math.max(1, current + delta);
+  const next = Math.min(ITEM_QUANTITY_MAX, Math.max(1, Math.floor(current) + delta));
   return setPickerQuantityText(draft, id, String(next));
 }
 
@@ -184,14 +189,47 @@ export function setPickerCustomPrice(draft: PickerDraft, id: string, text: strin
   return { ...draft, entries: { ...draft.entries, [id]: { ...entry, customPrice: text } } };
 }
 
+/**
+ * 第 11 批 F #993:自訂單價的額外限制(料錢整頁用;服務項目不傳 = 維持原本規則)。
+ * `max`:上限(料錢 = 99,999,999.99,跟資料庫 numeric(10,2) 一致);`maxDecimals`:小數最多幾位。
+ */
+export interface PickerCustomPriceRules {
+  max?: number | undefined;
+  maxDecimals?: number | undefined;
+}
+
 /** 自訂金額有開、但輸入框填錯的項目 ⇒ 錯誤訊息(確認鈕要擋住,不能只標紅)。 */
-export function pickerCustomPriceErrors(draft: PickerDraft): Record<string, string> {
+export function pickerCustomPriceErrors(
+  draft: PickerDraft,
+  rules: PickerCustomPriceRules = {},
+): Record<string, string> {
   const errors: Record<string, string> = {};
   for (const id of draft.order) {
     const entry = draft.entries[id];
     if (!entry || !entry.customPriceEnabled) continue;
-    const parsed = parseAmountInput(entry.customPrice);
-    if (!parsed.ok) errors[id] = parsed.error;
+    const parsed = parseAmountInput(entry.customPrice, { max: rules.max });
+    if (!parsed.ok) {
+      errors[id] = parsed.error;
+      continue;
+    }
+    if (rules.maxDecimals !== undefined) {
+      const decimals = entry.customPrice.trim().split(".")[1]?.length ?? 0;
+      if (decimals > rules.maxDecimals) {
+        errors[id] = `最多只能填到小數點後 ${rules.maxDecimals} 位`;
+      }
+    }
+  }
+  return errors;
+}
+
+/** 第 11 批 F #993(F-1):數量超過 999 / 不是整數的項目 ⇒ 錯誤訊息(確認鈕擋住)。 */
+export function pickerQuantityErrors(draft: PickerDraft): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const id of draft.order) {
+    const entry = draft.entries[id];
+    if (!entry) continue;
+    const error = itemQuantityError(entry.quantity);
+    if (error) errors[id] = error;
   }
   return errors;
 }

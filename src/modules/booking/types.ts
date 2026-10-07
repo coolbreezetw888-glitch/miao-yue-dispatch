@@ -485,6 +485,9 @@ export interface CustomerRelatedBooking {
 export interface BookingDetailMaterialCost {
   materialCostItemId: string;
   name: string;
+  /** 第 11 批 F #993:數量(既有資料 = 1)。 */
+  quantity: number;
+  /** 第 11 批 F #993 起語意是「單價」快照;小計 = amountSnapshot × quantity。 */
   amountSnapshot: number;
 }
 

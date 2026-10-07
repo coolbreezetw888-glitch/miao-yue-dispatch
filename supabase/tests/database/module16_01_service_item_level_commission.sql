@@ -361,7 +361,7 @@ select id from create_booking(
   p_start_at => '2026-11-10 21:00:00+08',
   p_customer_name => '料錢成本分攤測試客戶',
   p_customer_phone => '0966010007',
-  p_material_cost_item_ids => array['ec000000-0000-4000-8000-000000000034']::uuid[]
+  p_material_cost_items => '[{"material_cost_item_id":"ec000000-0000-4000-8000-000000000034","quantity":1}]'::jsonb
 , p_payment_method_id => '6044747d-245c-5c27-ba98-63d61997fb5d') \gset material_cost_booking_
 
 select confirm_booking(:'material_cost_booking_id'::uuid);

@@ -143,6 +143,8 @@ export function staffEditToBookingDetail(row: StaffBookingForEdit): BookingDetai
     materialCosts: (row.material_costs ?? []).map((c) => ({
       materialCostItemId: c.material_cost_item_id,
       name: c.name,
+      // 第 11 批 F #993:數量(舊版後端沒有這個鍵 ⇒ 1)。
+      quantity: Number(c.quantity ?? 1),
       amountSnapshot: Number(c.amount_snapshot),
     })),
     createdByName: "",

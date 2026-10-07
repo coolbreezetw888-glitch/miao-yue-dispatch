@@ -117,7 +117,7 @@ insert into payment_methods (id, merchant_id, name) values ('e743225a-fd2a-5a72-
 select id from create_booking(
   'bc000000-0000-4000-8000-000000000020', 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲'
+  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '[]'::jsonb, null, '客戶備註甲'
 , p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0') \gset booking1_
 
 select is(
@@ -168,7 +168,7 @@ select pg_temp.test_set_auth('bc000000-0000-4000-8000-000000000002');
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, '客戶備註甲(改過)'
+  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '[]'::jsonb, null, '客戶備註甲(改過)'
 , p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0');
 
 select is(
@@ -188,7 +188,7 @@ select is(
 select update_booking(
   :'booking1_id'::uuid, 'bc000000-0000-4000-8000-000000000051',
   jsonb_build_array(jsonb_build_object('service_item_id','bc000000-0000-4000-8000-000000000041','quantity',1,'unit_price',100)), '2026-09-22 10:00:00+08',
-  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '{}'::uuid[], null, null
+  '客戶甲', '0988000001', null, '內部備註甲', '{}'::uuid[], '[]'::jsonb, null, null
 , p_payment_method_id => 'e743225a-fd2a-5a72-8e8d-6fb5cf583db0');
 
 select is(

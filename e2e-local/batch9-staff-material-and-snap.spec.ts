@@ -135,7 +135,11 @@ test("G1 服務人員建單勾料錢 → 商家端看得到;再編輯拿掉 → 
   await picker.getByRole("button", { name: /^確認/ }).click();
   await form.locator("#booking-payment-method").click();
   await page.getByRole("option", { name: fixture.paymentMethodName }).click();
-  await form.getByRole("button", { name: new RegExp(MATERIAL_NAME) }).click();
+  // 第 11 批 F #993:料錢改成「選擇料錢」整頁。
+  await form.locator("#booking-material-costs").click();
+  const materialPicker = page.getByTestId("material-picker");
+  await materialPicker.getByRole("checkbox", { name: new RegExp(MATERIAL_NAME) }).click();
+  await materialPicker.getByRole("button", { name: /^確認/ }).click();
   await form.getByRole("button", { name: "建立預約" }).click();
   await expect(page.getByText(/已送出訂單/).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 
@@ -152,10 +156,18 @@ test("G1 服務人員建單勾料錢 → 商家端看得到;再編輯拿掉 → 
   await page.getByTestId("my-timeline-grid").getByText("E2E第9批料錢客戶").click();
   await page.getByRole("dialog").getByTestId("staff-edit-booking-button").click();
   const edit = page.getByRole("dialog");
-  const chip = edit.getByRole("button", { name: new RegExp(MATERIAL_NAME) });
-  await expect(chip).toHaveAttribute("aria-pressed", "true", { timeout: LOAD_TIMEOUT });
-  await chip.click();
-  await expect(chip).toHaveAttribute("aria-pressed", "false");
+  // 第 11 批 F #993:預帶的料錢在摘要裡;到「選擇料錢」整頁取消勾選後確認。
+  await expect(edit.getByTestId("booking-material-summary")).toContainText(MATERIAL_NAME, {
+    timeout: LOAD_TIMEOUT,
+  });
+  await edit.locator("#booking-material-costs").click();
+  const editPicker = page.getByTestId("material-picker");
+  const materialBox = editPicker.getByRole("checkbox", { name: new RegExp(MATERIAL_NAME) });
+  await expect(materialBox).toHaveAttribute("aria-checked", "true");
+  await materialBox.click();
+  await expect(materialBox).toHaveAttribute("aria-checked", "false");
+  await editPicker.getByRole("button", { name: /^確認/ }).click();
+  await expect(edit.getByTestId("booking-material-summary")).toHaveCount(0);
   await page.waitForTimeout(1500); // 紅利預覽要算完才能送(同第 7 批 E3)
   await edit.getByRole("button", { name: "儲存變更" }).click();
   const confirmPoints = page.getByRole("alertdialog").getByRole("button", { name: "確認送出" });

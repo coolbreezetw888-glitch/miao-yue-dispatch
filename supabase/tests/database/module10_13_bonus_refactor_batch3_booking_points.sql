@@ -272,16 +272,16 @@ select is(
   'A2 §3.4:update_booking 只剩 1 個版本、29 個參數(v2.4 裁決 22 ①)'
 );
 select ok(
-  has_function_privilege('authenticated', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
-  and has_function_privilege('authenticated', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
+  has_function_privilege('authenticated', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
+  and has_function_privilege('authenticated', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
   and has_function_privilege('authenticated', 'public.cancel_booking(uuid, text)', 'execute'),
   'A3:新簽章的 create_booking / update_booking 與 cancel_booking 對 authenticated 開放(正向對照)'
 );
 select ok(
-  not has_function_privilege('anon', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
-  and not has_function_privilege('public', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
-  and not has_function_privilege('anon', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
-  and not has_function_privilege('public', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
+  not has_function_privilege('anon', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
+  and not has_function_privilege('public', 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
+  and not has_function_privilege('public', 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)', 'execute')
   and not has_function_privilege('anon', 'public.cancel_booking(uuid, text)', 'execute'),
   'A4 權限衛生規則 1:drop/recreate 後重收權限 —— anon / PUBLIC 都沒有 EXECUTE'
 );
@@ -930,15 +930,15 @@ where merchant_id = 'db130000-0000-4000-8000-000000000021';
 -- =========================================================================
 select ok(
   (select prosrc ~ 'select points_balance into v_member_balance\s+from public\.members\s+where id = v_effective_member_id\s+for update'
-   from pg_proc where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
+   from pg_proc where oid = 'public.create_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, uuid)'::regprocedure),
   'E1 規則 2.3:create_booking 折抵前先 for update 鎖會員列才讀餘額(兩張單同時折抵不會把點數用兩次)'
 );
 select ok(
   (select prosrc ~ 'from public\.bookings\s+where id = p_booking_id\s+for update'
-   from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure)
+   from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure)
   -- 第 11 批 A #939(migration 20261007140150):p_member_id 之後一律改用 v_effective_member_id(改電話時 = 依新電話算出的會員),鎖的對象與順序不變
   and (select prosrc ~ 'from public\.members\s+where id in \(v_old_member_id, v_effective_member_id\)\s+order by id\s+for update'
-   from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure),
+   from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], jsonb, text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure),
   'E2:update_booking 先鎖訂單列、再依 id 順序鎖新舊會員列(避免交叉死鎖)'
 );
 select ok(

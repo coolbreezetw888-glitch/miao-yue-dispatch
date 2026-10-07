@@ -707,7 +707,7 @@ returns uuid language sql as $$
     p_customer_name => '王先生',
     p_customer_phone => '0955985100',
     p_customer_address => '台北市測試路 851 號',
-    p_material_cost_item_ids => array['f9851000-0000-4000-8000-000000000060'::uuid],
+    p_material_cost_items => '[{"material_cost_item_id":"f9851000-0000-4000-8000-000000000060","quantity":1}]'::jsonb,
     p_payment_method_id => 'f9851000-0000-4000-8000-000000000050'
   );
 $$;

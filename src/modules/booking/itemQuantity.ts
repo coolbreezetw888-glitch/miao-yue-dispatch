@@ -34,3 +34,21 @@ export function parseItemQuantity(raw: string | null | undefined): number {
   if (!Number.isFinite(parsed) || parsed < 1) return 1;
   return parsed;
 }
+
+/**
+ * 第 11 批 F #993(F-1):數量上限。服務項目與料錢成本共用,後端同步擋
+ * (booking_service_items / booking_material_costs 的 CHECK、private.parse_booking_material_cost_items)。
+ */
+export const ITEM_QUANTITY_MAX = 999;
+
+/**
+ * 第 11 批 F #993(F-1):數量輸入框的錯誤訊息;沒問題回 null。
+ * 規則跟 parseItemQuantity 同一套(空白 / 小於 1 一律當 1,不算錯),只多擋兩種:
+ * 超過 999、不是整數(例如 1.5)。整頁的「確認」鈕看到錯誤就擋住。
+ */
+export function itemQuantityError(raw: string | null | undefined): string | null {
+  const quantity = parseItemQuantity(raw);
+  if (quantity > ITEM_QUANTITY_MAX) return `數量最多 ${ITEM_QUANTITY_MAX}`;
+  if (!Number.isInteger(quantity)) return "數量只能填整數";
+  return null;
+}

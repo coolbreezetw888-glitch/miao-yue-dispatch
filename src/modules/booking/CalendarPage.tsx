@@ -129,6 +129,17 @@ import { BookingDetailDialog } from "./BookingDetailDialog";
 // SPECS-INDEX #979:「選擇項目」整頁(畫面)+ 草稿 / 寫回的純邏輯。
 import { ServiceItemPickerPage } from "./ServiceItemPickerPage";
 import type { AppliedPickerSelection } from "./serviceItemPickerLogic";
+// 第 11 批 F #993:料錢改成「選擇料錢」整頁(共用上面那一頁)+ 數量 / 自訂成本單價。
+import {
+  MATERIAL_UNIT_PRICE_MAX,
+  buildMaterialCostPayload,
+  buildMaterialPickerItems,
+  buildMaterialSummary,
+  formatMaterialAmount,
+  materialBaselinePrice,
+  materialSummaryFooter,
+  type LoadedMaterialCosts,
+} from "./materialCostSelection";
 // SPECS-INDEX #873:移除協助人員後「維持現狀 / 再加助手」的擋流程提示。
 import { AssistantRemovedPrompt } from "./assistantRemoval";
 import { assistantRemovedInfoAfterEdit, type AssistantRemovedInfo } from "./assistantRemovalLogic";
@@ -610,7 +621,16 @@ export function BookingFormDialog({
   // SPECS-INDEX #979:「選擇項目」整頁開著沒有。取代 #598 的分類篩選下拉(分類改成整頁裡的頁籤)。
   const [pickerOpen, setPickerOpen] = useState(false);
   const [assistantStaffIds, setAssistantStaffIds] = useState<string[]>([]);
+  // 第 11 批 F #993:料錢跟服務項目同構 —— id 清單 + 數量 + 單價(字串),整頁按「確認」才寫回。
   const [materialCostItemIds, setMaterialCostItemIds] = useState<string[]>([]);
+  const [materialCostQuantities, setMaterialCostQuantities] = useState<Record<string, string>>({});
+  const [materialCostUnitPrices, setMaterialCostUnitPrices] = useState<Record<string, string>>({});
+  // 編輯時這張單本來就有的料錢(開啟那一刻;整個編輯過程不變):決定整頁能列哪些已下架 / 功能關閉的品項、
+  // 摘要裡已下架品項的名稱。新增模式永遠是空的。
+  const [loadedMaterialCosts, setLoadedMaterialCosts] = useState<LoadedMaterialCosts>({});
+  // 「原價」基準(F-3):本來就在單上的 = 單價快照;被取消勾選後拿掉(再勾回來 = 跟新加一樣用現價)。
+  const [materialSnapshotBaseline, setMaterialSnapshotBaseline] = useState<LoadedMaterialCosts>({});
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [dateKey, setDateKey] = useState("");
   const [time, setTime] = useState("");
   const [timeChosenByUser, setTimeChosenByUser] = useState(false);
@@ -709,6 +729,7 @@ export function BookingFormDialog({
   useEffect(() => {
     if (!open) return;
     setPickerOpen(false); // #979:每次開啟表單,「選擇項目」整頁一律從關閉開始。
+    setMaterialPickerOpen(false); // 第 11 批 F:「選擇料錢」整頁同上。
     // 紅利系統重構 批次 7:每次開啟都重來(預覽 session、會員變更判斷、確認窗)。
     setPointsPreviewSession((n) => n + 1);
     previewMemberKeyRef.current = null;
@@ -743,7 +764,31 @@ export function BookingFormDialog({
         ),
       );
       setAssistantStaffIds(editingDetail.assistants.map((a) => a.staffId));
+      // 第 11 批 F #993(F-7):數量、單價快照一起帶入;單價快照同時是「原價」⇒ 自訂開關預設關。
       setMaterialCostItemIds(editingDetail.materialCosts.map((c) => c.materialCostItemId));
+      setMaterialCostQuantities(
+        Object.fromEntries(
+          editingDetail.materialCosts.map((c) => [c.materialCostItemId, String(c.quantity ?? 1)]),
+        ),
+      );
+      setMaterialCostUnitPrices(
+        Object.fromEntries(
+          editingDetail.materialCosts.map((c) => [
+            c.materialCostItemId,
+            String(Number(c.amountSnapshot)),
+          ]),
+        ),
+      );
+      {
+        const loaded: LoadedMaterialCosts = Object.fromEntries(
+          editingDetail.materialCosts.map((c) => [
+            c.materialCostItemId,
+            { price: Number(c.amountSnapshot), name: c.name },
+          ]),
+        );
+        setLoadedMaterialCosts(loaded);
+        setMaterialSnapshotBaseline(loaded);
+      }
       setDateKey(isoToTaipeiDateKey(editingDetail.start_at));
       setTime(isoToTaipeiTime(editingDetail.start_at));
       // 編輯:時間是這筆訂單當初選的 ⇒ 算「使用者選的」(變得不能約時要提示)。
@@ -808,6 +853,10 @@ export function BookingFormDialog({
       setLoadedUnitPriceSnapshots({});
       setAssistantStaffIds([]);
       setMaterialCostItemIds([]);
+      setMaterialCostQuantities({});
+      setMaterialCostUnitPrices({});
+      setLoadedMaterialCosts({});
+      setMaterialSnapshotBaseline({});
       setDateKey(prefill.dateKey ?? toDateKey(getTaipeiNow()));
       setTime(prefill.time ?? "10:00");
       // 主腦裁決(第 2 批第 3 項):從行事曆點某一格進來(prefill.time 有值)= 使用者選的;
@@ -1004,12 +1053,40 @@ export function BookingFormDialog({
     ],
   );
 
-  const materialCostTotal = useMemo(() => {
-    return materialCostItemIds.reduce((sum, id) => {
-      const item = (materialCostItems ?? []).find((m) => m.id === id);
-      return sum + (item ? Number(item.amount) : 0);
-    }, 0);
-  }, [materialCostItemIds, materialCostItems]);
+  // 第 11 批 F #993(F-3/F-4/F-6):料錢「原價」、摘要(單價 × 數量,含已下架)、整頁要列的品項。
+  const activeMaterialCostItems = useMemo(() => materialCostItems ?? [], [materialCostItems]);
+  const materialBaseline = useCallback(
+    (id: string) =>
+      materialBaselinePrice(
+        id,
+        materialSnapshotBaseline,
+        activeMaterialCostItems,
+        loadedMaterialCosts,
+      ),
+    [materialSnapshotBaseline, activeMaterialCostItems, loadedMaterialCosts],
+  );
+  const materialSummary = useMemo(
+    () =>
+      buildMaterialSummary({
+        ids: materialCostItemIds,
+        quantities: materialCostQuantities,
+        unitPrices: materialCostUnitPrices,
+        activeItems: activeMaterialCostItems,
+        loaded: loadedMaterialCosts,
+        baselinePrice: materialBaseline,
+      }),
+    [
+      materialCostItemIds,
+      materialCostQuantities,
+      materialCostUnitPrices,
+      activeMaterialCostItems,
+      loadedMaterialCosts,
+      materialBaseline,
+    ],
+  );
+  // 功能關閉時整區不顯示;但編輯的單上本來就有料錢 ⇒ 照樣顯示(只能保留 / 調整 / 移除既有的,13.3 末段)。
+  const showMaterialCostSection =
+    Boolean(materialCostEnabled) || (isEdit && Object.keys(loadedMaterialCosts).length > 0);
 
   // ───────── 紅利系統重構 批次 7(§4.6):紅利區塊 ─────────
   // 新增模式:帶電話、不帶會員(§12.1,由伺服器依電話找會員,跟 create_booking 同一套規則);
@@ -1191,6 +1268,22 @@ export function BookingFormDialog({
       });
     }
     setPickerOpen(false);
+  }
+
+  /** 第 11 批 F #993:「選擇料錢」整頁按「確認」⇒ 寫回三份料錢狀態;被取消勾選的品項拿掉原價基準
+   * (再勾回來 = 跟新加一樣用現價,比照上面服務項目的做法)。 */
+  function handleMaterialPickerConfirm(applied: AppliedPickerSelection) {
+    setMaterialCostItemIds(applied.serviceItemIds);
+    setMaterialCostQuantities(applied.itemQuantities);
+    setMaterialCostUnitPrices(applied.itemUnitPrices);
+    if (applied.removedIds.length > 0) {
+      setMaterialSnapshotBaseline((prev) => {
+        const next = { ...prev };
+        for (const id of applied.removedIds) delete next[id];
+        return next;
+      });
+    }
+    setMaterialPickerOpen(false);
   }
 
   // SPECS-INDEX #936(§12.2):點選面板裡的候選會員 ⇒ 電話 / 姓名 /(需要地址的產業才帶)地址
@@ -1392,7 +1485,13 @@ export function BookingFormDialog({
           customerPhone,
         }),
         assistantStaffIds,
-        materialCostItemIds,
+        // 第 11 批 F #993:料錢改送 {id, 數量, 單價}(單價 = 摘要上算的那一個)。
+        materialCostItems: buildMaterialCostPayload({
+          ids: materialCostItemIds,
+          quantities: materialCostQuantities,
+          unitPrices: materialCostUnitPrices,
+          baselinePrice: materialBaseline,
+        }),
         customTotalAmountEnabled,
         // 🔴 2026-09-30:這三個值原本是 `enabled && x.trim() ? Number(x) : null`,現在一律取
         // amountFields 解析好的值——跟上面金額預覽用的是同一份結果,所以「畫面上看到的金額」
@@ -1442,7 +1541,7 @@ export function BookingFormDialog({
           paymentMethodId: shared.paymentMethodId,
           customDurationEnabled: shared.customDurationEnabled,
           customDurationMinutes: shared.customDurationMinutes,
-          materialCostItemIds: shared.materialCostItemIds,
+          materialCostItems: shared.materialCostItems,
         };
         if (isEdit && editingBookingId) {
           const changeSummary = editingDetail
@@ -1629,9 +1728,10 @@ export function BookingFormDialog({
         // SPECS-INDEX #979:「選擇項目」整頁開著時,Esc = 整頁的「返回」(放棄這次修改),
         // 不可以把整張建單表單一起關掉(客服填了一半的資料會全部不見)。
         onEscapeKeyDown={(e) => {
-          if (!pickerOpen) return;
+          if (!pickerOpen && !materialPickerOpen) return;
           e.preventDefault();
           setPickerOpen(false);
+          setMaterialPickerOpen(false);
         }}
         title={isEdit ? "編輯預約" : "新增預約"}
         // #977 第 4 批:建立後的狀態依主要服務人員的「商家後台確認後直接接單」設定而定(全形標點)。
@@ -2200,43 +2300,74 @@ export function BookingFormDialog({
           />
 
           {/* ───────── 料錢成本 ───────── */}
-          {/* 建單功能擴充 2.3/5.1 第 3 點:料錢成本區塊,只有商家開啟功能時才顯示。 */}
-          {materialCostEnabled ? (
+          {/* 建單功能擴充 2.3/5.1 第 3 點:料錢成本區塊,只有商家開啟功能時才顯示。
+              第 11 批 F #993:原本一顆顆方塊,改成「選擇料錢 >」+ 已選摘要(跟「選擇項目」同樣式),
+              點了打開蓋滿表單的「選擇料錢」整頁。功能關閉但編輯的單上本來就有料錢 ⇒ 照樣顯示。 */}
+          {showMaterialCostSection ? (
             <DetailSection label="料錢成本" className="gap-4">
               <FormField
                 label="料錢成本(可留空，可多選)"
+                htmlFor="booking-material-costs"
                 helpLabel="說明：料錢成本是什麼"
                 help="記錄這次服務預期會用掉的材料成本，僅供操作者參考與之後算抽成基準用，不代表訂單金額。"
               >
                 <div className="flex flex-col gap-2.5">
-                  {(materialCostItems ?? []).length === 0 ? (
-                    <p className="text-[13px] text-muted-foreground">
-                      目前沒有上架中的料錢成本品項。
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {(materialCostItems ?? []).map((item) => (
-                        <ChoiceChip
-                          key={item.id}
-                          selected={materialCostItemIds.includes(item.id)}
-                          onClick={() =>
-                            setMaterialCostItemIds((prev) => toggleInArray(prev, item.id))
+                  <button
+                    id="booking-material-costs"
+                    type="button"
+                    data-testid="booking-material-picker-open"
+                    onClick={() => setMaterialPickerOpen(true)}
+                    className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-[16px] text-foreground transition-colors hover:bg-accent focus:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-[15px]"
+                  >
+                    <span
+                      className={cn(
+                        "min-w-0 truncate",
+                        materialSummary.rows.length === 0 && "text-muted-foreground",
+                      )}
+                    >
+                      {materialSummary.rows.length === 0
+                        ? "選擇料錢"
+                        : `已選 ${materialSummary.rows.length} 項`}
+                    </span>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-brand" aria-hidden="true" />
+                  </button>
+
+                  {/* 已選摘要:名稱 × 數量、右側小計;自訂單價 / 已下架加小字(13.3)。 */}
+                  {materialSummary.rows.length > 0 ? (
+                    <div
+                      data-testid="booking-material-summary"
+                      className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/30 px-3.5 py-3"
+                    >
+                      {materialSummary.rows.map((row) => (
+                        <DetailRow
+                          key={row.id}
+                          size="sm"
+                          label={
+                            <span className="break-words">
+                              {`${row.name} × ${row.quantity}`}
+                              {row.customUnitPrice ? (
+                                <span className="ml-1 text-xs text-muted-foreground">
+                                  {`(自訂單價 ${formatMaterialAmount(row.unitPrice)})`}
+                                </span>
+                              ) : null}
+                              {row.inactive ? (
+                                <span className="ml-1 text-xs text-muted-foreground">(已下架)</span>
+                              ) : null}
+                            </span>
                           }
                         >
-                          <span className="break-words text-left">
-                            {item.name}
-                            <span className="ml-1 tabular-nums text-muted-foreground">
-                              ${Number(item.amount).toFixed(0)}
-                            </span>
-                          </span>
-                        </ChoiceChip>
+                          {formatMaterialAmount(row.subtotal)}
+                        </DetailRow>
                       ))}
                     </div>
-                  )}
-                  {materialCostItemIds.length > 0 ? (
-                    <p className="text-xs tabular-nums text-muted-foreground">
-                      已選 {materialCostItemIds.length} 項，金額加總 ${materialCostTotal.toFixed(0)}
-                      (僅供操作者參考，不代表訂單金額)。
+                  ) : null}
+
+                  {materialSummary.rows.length > 0 ? (
+                    <p
+                      data-testid="booking-material-summary-total"
+                      className="text-xs tabular-nums text-muted-foreground"
+                    >
+                      {materialSummaryFooter(materialSummary.rows.length, materialSummary.total)}
                     </p>
                   ) : null}
                 </div>
@@ -2340,6 +2471,35 @@ export function BookingFormDialog({
             baselinePrice={pickerBaselinePrice}
             onConfirm={handlePickerConfirm}
             onBack={() => setPickerOpen(false)}
+          />
+        ) : null}
+        {/* 第 11 批 F #993:「選擇料錢」整頁 —— 直接共用上面那一頁(不分頁籤、不顯示工時 / 描述、
+            開關名「自訂成本單價」、testid 前綴 material-picker)。每次打開都重新掛載。 */}
+        {materialPickerOpen ? (
+          <ServiceItemPickerPage
+            items={buildMaterialPickerItems({
+              enabled: Boolean(materialCostEnabled),
+              activeItems: activeMaterialCostItems,
+              loaded: loadedMaterialCosts,
+            })}
+            categories={[]}
+            uncategorizedLabel=""
+            serviceItemIds={materialCostItemIds}
+            itemQuantities={materialCostQuantities}
+            itemUnitPrices={materialCostUnitPrices}
+            baselinePrice={materialBaseline}
+            onConfirm={handleMaterialPickerConfirm}
+            onBack={() => setMaterialPickerOpen(false)}
+            title="選擇料錢"
+            showCategoryTabs={false}
+            showDuration={false}
+            showDescription={false}
+            customPriceLabel="自訂成本單價"
+            priceLabel="成本單價"
+            listLabel="料錢成本品項"
+            emptyText="目前沒有上架中的料錢成本品項。到「料錢成本」頁面上架之後，這裡就會出現。"
+            testIdPrefix="material-picker"
+            customPriceRules={{ max: MATERIAL_UNIT_PRICE_MAX, maxDecimals: 2 }}
           />
         ) : null}
         <CardAlertDialog open={pointsReviewConfirmOpen} onOpenChange={setPointsReviewConfirmOpen}>

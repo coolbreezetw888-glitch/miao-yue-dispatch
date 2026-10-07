@@ -224,7 +224,7 @@ select id from create_booking(
   'd4000000-0000-4000-8000-000000000020', 'd4000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','d4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',2000)),
   '2026-09-22 10:00:00+08', '客戶甲', '0988000501',
-  p_material_cost_item_ids => array['d4000000-0000-4000-8000-000000000091']::uuid[],
+  p_material_cost_items => '[{"material_cost_item_id":"d4000000-0000-4000-8000-000000000091","quantity":1}]'::jsonb,
   p_payment_method_id => 'd4000000-0000-4000-8000-000000000060'
 ) \gset data01_booking_
 
@@ -249,7 +249,7 @@ select update_booking(
   :'data01_booking_id'::uuid, 'd4000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','d4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',2000)),
   '2026-09-22 10:00:00+08', '客戶甲', '0988000599',
-  p_material_cost_item_ids => array['d4000000-0000-4000-8000-000000000091']::uuid[],
+  p_material_cost_items => '[{"material_cost_item_id":"d4000000-0000-4000-8000-000000000091","quantity":1}]'::jsonb,
   p_payment_method_id => 'd4000000-0000-4000-8000-000000000060'
 );
 
@@ -274,10 +274,7 @@ select update_booking(
   :'data01_booking_id'::uuid, 'd4000000-0000-4000-8000-000000000040',
   jsonb_build_array(jsonb_build_object('service_item_id','d4000000-0000-4000-8000-000000000030','quantity',1,'unit_price',2000)),
   '2026-09-22 10:00:00+08', '客戶甲', '0988000599',
-  p_material_cost_item_ids => array[
-    'd4000000-0000-4000-8000-000000000091',
-    'd4000000-0000-4000-8000-000000000092'
-  ]::uuid[],
+  p_material_cost_items => '[{"material_cost_item_id":"d4000000-0000-4000-8000-000000000091","quantity":1},{"material_cost_item_id":"d4000000-0000-4000-8000-000000000092","quantity":1}]'::jsonb,
   p_payment_method_id => 'd4000000-0000-4000-8000-000000000060'
 );
 
