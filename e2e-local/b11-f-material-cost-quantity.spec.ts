@@ -281,13 +281,13 @@ for (const width of [375, 320]) {
       const b = materialCard(picker, MATERIAL_B_NAME);
       await b.getByRole("checkbox", { name: new RegExp(MATERIAL_B_NAME) }).click();
       await b.getByRole("switch", { name: "自訂成本單價" }).click();
-      await b.getByLabel("單價", { exact: true }).fill("12345678.5");
+      await b.getByLabel("單價", { exact: true }).fill("999999.5");
       await expectNoHorizontalOverflow(page, `${width} 寬選擇料錢整頁`);
       await page.screenshot({ path: `${SHOT_DIR}/H3-picker-${width}.png` });
       await picker.getByRole("button", { name: /^確認/ }).click();
       const summary = form.getByTestId("booking-material-summary");
       await summary.scrollIntoViewIfNeeded();
-      await expect(summary).toContainText("(自訂單價 $12,345,678.5)");
+      await expect(summary).toContainText("(自訂單價 $999,999.5)");
       await expectNoHorizontalOverflow(page, `${width} 寬建單表單料錢摘要`);
       await page.screenshot({ path: `${SHOT_DIR}/H3-summary-${width}.png` });
       expectOnlyLocalRequests(recorder);

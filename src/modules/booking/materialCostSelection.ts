@@ -23,6 +23,27 @@ import type { PickerItem } from "./serviceItemPickerLogic";
 /** 自訂成本單價上限(跟資料庫 numeric(10,2) 與後端 helper 一致,F-2)。 */
 export const MATERIAL_UNIT_PRICE_MAX = 99_999_999.99;
 
+// ─── 主腦裁決(防溢位):後端 private.parse_booking_material_cost_items /
+//     private.assert_booking_material_cost_limits 同一組上限 ─────────────────────────
+/** 單一料錢小計(單價 × 數量)上限。 */
+export const MATERIAL_SUBTOTAL_MAX = 1_000_000;
+/** 整張單料錢合計上限。 */
+export const MATERIAL_TOTAL_MAX = 9_999_999.99;
+export const MATERIAL_SUBTOTAL_MAX_MESSAGE = "單一料錢小計不能超過 $1,000,000";
+export const MATERIAL_TOTAL_MAX_MESSAGE = "料錢合計不能超過 $9,999,999.99，請調整單價或數量";
+
+/** 表單送出前的料錢上限檢查;沒問題回 null(有訊息 ⇒ 建立 / 儲存鈕擋住並顯示)。 */
+export function materialLimitError(summary: {
+  rows: { subtotal: number }[];
+  total: number;
+}): string | null {
+  if (summary.rows.some((row) => row.subtotal > MATERIAL_SUBTOTAL_MAX)) {
+    return MATERIAL_SUBTOTAL_MAX_MESSAGE;
+  }
+  if (summary.total > MATERIAL_TOTAL_MAX) return MATERIAL_TOTAL_MAX_MESSAGE;
+  return null;
+}
+
 /** 上架中的料錢品項(商家端 fetchMerchantMaterialCostItems / 服務人員端 staff options 都是這個形狀)。 */
 export interface MaterialCostOption {
   id: string;

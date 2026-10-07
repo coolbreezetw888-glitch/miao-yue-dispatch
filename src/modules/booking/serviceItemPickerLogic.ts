@@ -222,6 +222,38 @@ export function pickerCustomPriceErrors(
   return errors;
 }
 
+/**
+ * 第 11 批 F #993(主腦裁決,防溢位):單一項目小計(單價 × 數量)上限。料錢整頁用;服務項目不傳 = 不檢查。
+ * 單價:自訂開著且填得對 ⇒ 輸入值;否則 ⇒ 原價。
+ */
+export interface PickerSubtotalRule {
+  max: number;
+  message: string;
+}
+
+export function pickerSubtotalErrors(
+  draft: PickerDraft,
+  baselinePrice: (id: string) => number | null,
+  rule: PickerSubtotalRule | undefined,
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (!rule) return errors;
+  for (const id of draft.order) {
+    const entry = draft.entries[id];
+    if (!entry) continue;
+    let unit = baselinePrice(id);
+    if (entry.customPriceEnabled) {
+      const parsed = parseAmountInput(entry.customPrice);
+      if (!parsed.ok) continue; // 單價本身填錯,由 pickerCustomPriceErrors 報
+      unit = parsed.value;
+    }
+    if (unit === null) continue;
+    const subtotal = Math.round(unit * parseItemQuantity(entry.quantity) * 100) / 100;
+    if (subtotal > rule.max) errors[id] = rule.message;
+  }
+  return errors;
+}
+
 /** 第 11 批 F #993(F-1):數量超過 999 / 不是整數的項目 ⇒ 錯誤訊息(確認鈕擋住)。 */
 export function pickerQuantityErrors(draft: PickerDraft): Record<string, string> {
   const errors: Record<string, string> = {};

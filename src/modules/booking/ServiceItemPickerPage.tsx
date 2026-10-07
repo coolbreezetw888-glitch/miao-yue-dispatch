@@ -41,6 +41,7 @@ import {
   initPickerDraft,
   pickerCustomPriceErrors,
   pickerQuantityErrors,
+  pickerSubtotalErrors,
   resolveDefaultPickerTab,
   setPickerCustomPrice,
   setPickerCustomPriceEnabled,
@@ -51,6 +52,7 @@ import {
   type PickerCategory,
   type PickerCustomPriceRules,
   type PickerItem,
+  type PickerSubtotalRule,
   type PickerTab,
 } from "./serviceItemPickerLogic";
 import { ITEM_QUANTITY_MAX } from "./itemQuantity";
@@ -90,6 +92,8 @@ export interface ServiceItemPickerPageProps {
   testIdPrefix?: string | undefined;
   /** 自訂單價的額外限制(料錢:上限 99,999,999.99、小數兩位)。 */
   customPriceRules?: PickerCustomPriceRules | undefined;
+  /** 單一項目小計上限(料錢:1,000,000,主腦裁決防溢位);不傳 = 不檢查。 */
+  subtotalRule?: PickerSubtotalRule | undefined;
 }
 
 const ALL_ITEMS_TAB_KEY = "__all__";
@@ -114,6 +118,7 @@ export function ServiceItemPickerPage({
   listLabel = "服務項目",
   testIdPrefix = "picker",
   customPriceRules,
+  subtotalRule,
 }: ServiceItemPickerPageProps) {
   const [draft, setDraft] = useState(() =>
     initPickerDraft({ serviceItemIds, itemQuantities, itemUnitPrices, baselinePrice }),
@@ -133,9 +138,11 @@ export function ServiceItemPickerPage({
   const currentTab = tabs.find((tab) => tab.key === activeTab) ?? tabs[0] ?? null;
   const errors = pickerCustomPriceErrors(draft, customPriceRules);
   const quantityErrors = pickerQuantityErrors(draft);
+  const subtotalErrors = pickerSubtotalErrors(draft, baselinePrice, subtotalRule);
   const hasPriceError = Object.keys(errors).length > 0;
   const hasQuantityError = Object.keys(quantityErrors).length > 0;
-  const hasError = hasPriceError || hasQuantityError;
+  const hasSubtotalError = Object.keys(subtotalErrors).length > 0;
+  const hasError = hasPriceError || hasQuantityError || hasSubtotalError;
   const rootTestId = testIdPrefix === "picker" ? "service-item-picker" : testIdPrefix;
 
   // 開啟時把焦點放在返回箭頭(鍵盤 / 螢幕閱讀器使用者知道自己進到新的一頁)。
@@ -218,7 +225,7 @@ export function ServiceItemPickerPage({
               const quantity = entry?.quantity ?? "1";
               const atMin = !checked || Number(quantity) <= 1;
               const atMax = checked && Number(quantity) >= ITEM_QUANTITY_MAX;
-              const quantityError = quantityErrors[item.id] ?? null;
+              const quantityError = quantityErrors[item.id] ?? subtotalErrors[item.id] ?? null;
               return (
                 <li
                   key={item.id}
@@ -381,6 +388,7 @@ export function ServiceItemPickerPage({
               {`有項目的${customPriceLabel}填錯了（上面標紅的那幾格），修好之後才能確認。`}
             </AlertNote>
           ) : null}
+          {hasSubtotalError && subtotalRule ? <AlertNote>{subtotalRule.message}</AlertNote> : null}
           {hasQuantityError ? (
             <AlertNote>
               {`有項目的數量填錯了（最多 ${ITEM_QUANTITY_MAX}，只能填整數），修好之後才能確認。`}

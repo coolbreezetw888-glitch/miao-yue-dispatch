@@ -14,9 +14,11 @@
 --   ㉜~㉝    既有資料:不寫 quantity 的列 = 1;數量 1 的單抽成與改前公式相同(範例 A)
 --   ㉞~㊵    權限 / 結構:無 orders 客服 ⇒ 42501;別家品項 ⇒ 擋;沒開權限的服務人員 ⇒ 擋;helper 對 authenticated / anon 無 EXECUTE;
 --            四支各只剩 1 個版本且都是新參數;CHECK:料錢數量 0、服務項目數量 1000 ⇒ 23514
+--   ㊶~㊻    主腦裁決(防溢位):單一品項小計剛好 1,000,000 可以、多一點擋(有送單價 / 沒送單價兩條路都擋);
+--            整張單合計剛好 9,999,999.99 可以、多一點擋;寫入後檢查的 helper 不開放給前端
 begin;
 
-select plan(40);
+select plan(46);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -355,6 +357,41 @@ select throws_ok($$insert into public.booking_material_costs (booking_id, materi
   '23514', null, '㊴ 料錢數量 0 ⇒ CHECK 擋');
 select throws_ok($$update public.booking_service_items set quantity = 1000 where booking_id = '$$ || :'e1_id' || $$'$$,
   '23514', null, '㊵ 服務項目數量 1000 ⇒ CHECK 擋(F-1 兩邊一起訂 999)');
+
+-- =========================================================================
+-- ㊶~㊻ 主腦裁決(防溢位):單一品項小計 ≤ 1,000,000、整張單料錢合計 ≤ 9,999,999.99
+-- =========================================================================
+insert into public.material_cost_items (id, merchant_id, name, amount, status)
+select ('fb11f000-0000-4000-8000-00000000070' || n)::uuid, 'fb11f000-0000-4000-8000-000000000020', 'MT' || n, 1, 'active'
+from generate_series(0, 9) n;
+-- 10 個品項的 jsonb:前 p_n 個各 1,000,000(單價 1,000,000 × 1),再加一個指定單價的品項。
+create function pg_temp.many(p_n int, p_last numeric)
+returns jsonb language sql immutable as $$
+  select coalesce(jsonb_agg(jsonb_build_object('material_cost_item_id', 'fb11f000-0000-4000-8000-00000000070' || n, 'quantity', 1, 'unit_price', 1000000)), '[]'::jsonb)
+         || jsonb_build_array(jsonb_build_object('material_cost_item_id', 'fb11f000-0000-4000-8000-00000000070' || p_n, 'quantity', 1, 'unit_price', p_last))
+  from generate_series(0, p_n - 1) n;
+$$;
+grant execute on function pg_temp.many(int, numeric) to authenticated;
+
+select pg_temp.test_set_auth('fb11f000-0000-4000-8000-000000000001');
+select lives_ok($$select pg_temp.mk(jsonb_build_array(pg_temp.m('60', 2, 500000)), '2036-07-08 09:00+08')$$,
+  '㊶ 單一品項小計剛好 1,000,000(500,000 × 2)⇒ 可以');
+select throws_ok($$select pg_temp.mk(jsonb_build_array(pg_temp.m('60', 2, 500000.01)), '2036-07-08 11:00+08')$$,
+  'P0001', '單一料錢小計不能超過 $1,000,000，請調整單價或數量', '㊷ 單一品項小計 1,000,000.02 ⇒ 擋(有送單價,格式檢查就擋)');
+-- 沒送單價(用品項現價):寫入後才知道,由 assert helper 擋。MB 現價改 1,001.01 × 999 = 1,000,008.99。
+update public.material_cost_items set amount = 1001.01 where id = 'fb11f000-0000-4000-8000-000000000061';
+select throws_ok($$select pg_temp.mk(jsonb_build_array(pg_temp.m('61', 999)), '2036-07-08 13:00+08')$$,
+  'P0001', '單一料錢小計不能超過 $1,000,000，請調整單價或數量', '㊸ 沒送單價(用現價 1,001.01 × 999)超過 1,000,000 ⇒ 寫入後檢查擋下');
+update public.material_cost_items set amount = 600 where id = 'fb11f000-0000-4000-8000-000000000061';
+select lives_ok($$select pg_temp.mk(pg_temp.many(9, 999999.99), '2036-07-09 09:00+08')$$,
+  '㊹ 整張單料錢合計剛好 9,999,999.99(9 × 1,000,000 + 999,999.99)⇒ 可以');
+select throws_ok($$select pg_temp.mk(pg_temp.many(9, 1000000), '2036-07-09 11:00+08')$$,
+  'P0001', '這筆訂單的料錢合計不能超過 $9,999,999.99，請調整單價或數量', '㊺ 整張單合計 10,000,000 ⇒ 擋');
+select pg_temp.test_clear_auth();
+select ok(
+  not has_function_privilege('authenticated', 'private.assert_booking_material_cost_limits(uuid)', 'execute')
+  and not has_function_privilege('anon', 'private.assert_booking_material_cost_limits(uuid)', 'execute'),
+  '㊻ 寫入後檢查的 helper 對 authenticated / anon 都沒有 EXECUTE');
 
 select * from finish();
 rollback;

@@ -6,6 +6,8 @@
 --      amount_snapshot 語意改成「單價快照」(數值不變 ⇒ 既有訂單的料錢合計 / 抽成 / 報表數字完全不變)。
 --      booking_service_items.quantity 一起加上限 999(F-1)。
 --   ② 新 helper private.parse_booking_material_cost_items(jsonb):驗格式、抽出 (id, 數量, 單價)。不開放給前端。
+--      主腦裁決(防溢位):單一品項小計 ≤ 1,000,000、整張單料錢合計 ≤ 9,999,999.99
+--      (private.assert_booking_material_cost_limits,寫入後檢查)。
 --   ③ create_booking / update_booking / staff_create_booking / staff_update_booking:
 --      p_material_cost_item_ids uuid[] → p_material_cost_items jsonb(同位置換掉;參數名不同 = 新簽章 ⇒ 先 drop 舊簽章)。
 --      寫入:單價 = coalesce(前端 unit_price, 編輯時這張單的舊快照, 品項現價);數量 = 前端 quantity。
@@ -108,6 +110,10 @@ begin
       if v_price < 0 or v_price > 99999999.99 then
         raise exception '料錢成本的單價不能是負數，也不能超過 99,999,999.99';
       end if;
+      -- 主腦裁決(溢位):單一品項小計(單價 × 數量)上限 1,000,000。
+      if v_price * v_qty_num > 1000000 then
+        raise exception '單一料錢小計不能超過 $1,000,000，請調整單價或數量';
+      end if;
     end if;
 
     if v_id = any(v_seen) then
@@ -126,7 +132,42 @@ $function$;
 revoke execute on function private.parse_booking_material_cost_items(jsonb) from public, anon, authenticated, service_role;
 
 comment on function private.parse_booking_material_cost_items(jsonb) is
-  '第 11 批 F #993:驗證並拆開建單 / 改單的料錢參數 p_material_cost_items(jsonb 陣列,每項 {material_cost_item_id, quantity, unit_price | null})。null / [] ⇒ 空集合;不是陣列、缺 id、數量不是 1~999 整數、單價不是數字或 < 0 或 > 99,999,999.99、同一品項兩次 ⇒ raise 白話訊息。只給 create_booking / update_booking 內部呼叫,不開放給前端。';
+  '第 11 批 F #993:驗證並拆開建單 / 改單的料錢參數 p_material_cost_items(jsonb 陣列,每項 {material_cost_item_id, quantity, unit_price | null})。null / [] ⇒ 空集合;不是陣列、缺 id、數量不是 1~999 整數、單價不是數字或 < 0 或 > 99,999,999.99、有送單價時單一小計 > 1,000,000、同一品項兩次 ⇒ raise 白話訊息。只給 create_booking / update_booking 內部呼叫,不開放給前端。';
+
+-- ---------------------------------------------------------------------
+-- ②-2 主腦裁決(防數字溢位):寫入後檢查這張單的料錢上限
+--   單一品項小計(單價 × 數量)≤ 1,000,000;整張單料錢合計 ≤ 9,999,999.99。
+--   (抽成函式與店家報表的料錢變數是 numeric(10,2),上限 99,999,999.99;這兩道把單張單擋在遠低於它的地方。)
+--   單價沒送(null)時要等寫入才知道實際單價,所以放在寫入之後檢查;raise 會讓整筆交易回滾。
+-- ---------------------------------------------------------------------
+create or replace function private.assert_booking_material_cost_limits(p_booking_id uuid)
+returns void
+language plpgsql
+stable
+set search_path to 'public'
+as $function$
+begin
+  if exists (
+    select 1 from public.booking_material_costs bmc
+    where bmc.booking_id = p_booking_id
+      and bmc.amount_snapshot * bmc.quantity > 1000000
+  ) then
+    raise exception '單一料錢小計不能超過 $1,000,000，請調整單價或數量';
+  end if;
+  if (
+    select coalesce(sum(bmc.amount_snapshot * bmc.quantity), 0)
+    from public.booking_material_costs bmc
+    where bmc.booking_id = p_booking_id
+  ) > 9999999.99 then
+    raise exception '這筆訂單的料錢合計不能超過 $9,999,999.99，請調整單價或數量';
+  end if;
+end;
+$function$;
+
+revoke execute on function private.assert_booking_material_cost_limits(uuid) from public, anon, authenticated, service_role;
+
+comment on function private.assert_booking_material_cost_limits(uuid) is
+  '第 11 批 F #993(主腦裁決,防溢位):create_booking / update_booking 寫入料錢後檢查——單一品項小計(單價 × 數量)≤ 1,000,000、整張單料錢合計 ≤ 9,999,999.99,超過 raise 白話訊息(整筆回滾)。只給內部呼叫,不開放給前端。';
 
 -- ---------------------------------------------------------------------
 -- ③ 四支換參數簽章:先 drop 舊簽章(完整型別),再建新的
@@ -457,6 +498,8 @@ begin
     select v_booking_id, mci.id, m.quantity, coalesce(m.unit_price, mci.amount)
     from private.parse_booking_material_cost_items(p_material_cost_items) m
     join public.material_cost_items mci on mci.id = m.material_cost_item_id;
+    -- 主腦裁決(溢位):單一品項小計 ≤ 1,000,000、整張單料錢合計 ≤ 9,999,999.99(單價沒送時要寫入後才知道)。
+    perform private.assert_booking_material_cost_limits(v_booking_id);
   end if;
   -- [b11-f end]
 
@@ -917,6 +960,8 @@ begin
       )
     from private.parse_booking_material_cost_items(p_material_cost_items) m
     join public.material_cost_items mci on mci.id = m.material_cost_item_id;
+    -- 主腦裁決(溢位):單一品項小計 ≤ 1,000,000、整張單料錢合計 ≤ 9,999,999.99(單價沒送時要寫入後才知道)。
+    perform private.assert_booking_material_cost_limits(p_booking_id);
     -- [b11-f end]
   end if;
 

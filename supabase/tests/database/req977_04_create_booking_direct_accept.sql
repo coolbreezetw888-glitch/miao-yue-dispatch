@@ -74,7 +74,7 @@ select is(
   (select md5(reverted_src) from r977e_src),
   -- 第 11 批 F #993(migration 20261007140300)把料錢參數改成 jsonb(數量 / 自訂成本單價),基準改成「F 版本拿掉本批段落後」的指紋;
   -- 第 4 批改前指紋 d8fb4ffb50f0516c8c815aed24c09784。
-  'e789100f3d6b0b6be04c450180305805',
+  'ebfde815b68d045270ddffefd4b838d0',
   '① 拿掉本批新增段落、v_initial_status 換回 pending_confirmation 後,指紋等於改前(其餘內容逐字相同)'
 );
 

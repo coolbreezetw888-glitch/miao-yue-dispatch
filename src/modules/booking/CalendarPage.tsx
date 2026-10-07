@@ -131,12 +131,15 @@ import { ServiceItemPickerPage } from "./ServiceItemPickerPage";
 import type { AppliedPickerSelection } from "./serviceItemPickerLogic";
 // 第 11 批 F #993:料錢改成「選擇料錢」整頁(共用上面那一頁)+ 數量 / 自訂成本單價。
 import {
+  MATERIAL_SUBTOTAL_MAX,
+  MATERIAL_SUBTOTAL_MAX_MESSAGE,
   MATERIAL_UNIT_PRICE_MAX,
   buildMaterialCostPayload,
   buildMaterialPickerItems,
   buildMaterialSummary,
   formatMaterialAmount,
   materialBaselinePrice,
+  materialLimitError,
   materialSummaryFooter,
   type LoadedMaterialCosts,
 } from "./materialCostSelection";
@@ -1084,6 +1087,8 @@ export function BookingFormDialog({
       materialBaseline,
     ],
   );
+  // 主腦裁決(防溢位):單一小計 > 1,000,000 或合計 > 9,999,999.99 ⇒ 料錢區顯示訊息、建立 / 儲存鈕擋住。
+  const materialLimitMessage = materialLimitError(materialSummary);
   // 功能關閉時整區不顯示;但編輯的單上本來就有料錢 ⇒ 照樣顯示(只能保留 / 調整 / 移除既有的,13.3 末段)。
   const showMaterialCostSection =
     Boolean(materialCostEnabled) || (isEdit && Object.keys(loadedMaterialCosts).length > 0);
@@ -1384,6 +1389,10 @@ export function BookingFormDialog({
     }
     // 🔴 2026-09-30:四個金額欄位任何一格解析不出數字就擋在這裡。按鈕本身也已經 disabled
     // (見底部 ActionBar),這一道是防呆:欄位錯誤絕對不可以只顯示紅字就讓人送出去。
+    if (materialLimitMessage) {
+      toast.error(materialLimitMessage);
+      return;
+    }
     if (amountFields.hasError) {
       toast.error("金額欄位有填錯的地方", {
         description: "請看金額區塊裡標紅的欄位，只能填數字和小數點。",
@@ -1750,6 +1759,9 @@ export function BookingFormDialog({
                 金額欄位有填錯的地方(上面標紅的那幾格)，修好之後才能送出。金額只能填數字和小數點。
               </AlertNote>
             ) : null}
+            {materialLimitMessage ? (
+              <AlertNote>{`${materialLimitMessage}，修好之後才能送出。`}</AlertNote>
+            ) : null}
             <ActionBar>
               <FullPageLayerClose asChild>
                 <Button type="button" variant="neutral" size="touch">
@@ -1760,7 +1772,7 @@ export function BookingFormDialog({
                 type="button"
                 variant="primary"
                 size="touch"
-                disabled={saving || amountFields.hasError}
+                disabled={saving || amountFields.hasError || Boolean(materialLimitMessage)}
                 onClick={() => void handleSubmit()}
               >
                 {saving ? "儲存中⋯" : isEdit ? "儲存變更" : "建立預約"}
@@ -2362,6 +2374,11 @@ export function BookingFormDialog({
                     </div>
                   ) : null}
 
+                  {materialLimitMessage ? (
+                    <AlertNote data-testid="booking-material-limit-error">
+                      {materialLimitMessage}
+                    </AlertNote>
+                  ) : null}
                   {materialSummary.rows.length > 0 ? (
                     <p
                       data-testid="booking-material-summary-total"
@@ -2500,6 +2517,7 @@ export function BookingFormDialog({
             emptyText="目前沒有上架中的料錢成本品項。到「料錢成本」頁面上架之後，這裡就會出現。"
             testIdPrefix="material-picker"
             customPriceRules={{ max: MATERIAL_UNIT_PRICE_MAX, maxDecimals: 2 }}
+            subtotalRule={{ max: MATERIAL_SUBTOTAL_MAX, message: MATERIAL_SUBTOTAL_MAX_MESSAGE }}
           />
         ) : null}
         <CardAlertDialog open={pointsReviewConfirmOpen} onOpenChange={setPointsReviewConfirmOpen}>

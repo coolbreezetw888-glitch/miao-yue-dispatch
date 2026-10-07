@@ -320,7 +320,11 @@ describe("選擇料錢整頁(料錢模式)", () => {
     expect(within(picker).getByText(/有項目的自訂成本單價填錯了/)).toBeInTheDocument();
     fireEvent.change(within(a).getByLabelText("單價"), { target: { value: "100000000" } });
     expect(within(picker).getByRole("button", { name: /^確認/ })).toBeDisabled();
+    // 單價本身的上限 99,999,999.99 不算格式錯,但主腦裁決的單一小計上限 1,000,000 會擋。
     fireEvent.change(within(a).getByLabelText("單價"), { target: { value: "99999999.99" } });
+    expect(within(a).queryByText("不能大於 99999999.99")).toBeNull();
+    expect(within(picker).getByRole("button", { name: /^確認/ })).toBeDisabled();
+    fireEvent.change(within(a).getByLabelText("單價"), { target: { value: "1000000" } });
     expect(within(picker).getByRole("button", { name: /^確認/ })).toBeEnabled();
   });
 
@@ -425,5 +429,65 @@ describe("編輯帶入 / 已下架 / 功能關閉", () => {
     const picker = await openMaterialPicker();
     expect(card(picker, MAT_B)).toBeInTheDocument();
     expect(within(picker).queryByTestId(`material-picker-item-${MAT_A}`)).toBeNull();
+  });
+});
+
+describe("主腦裁決(防溢位):前端擋下", () => {
+  it("整頁:單一料錢小計超過 $1,000,000 ⇒ 該格紅字 + 確認擋住;剛好 1,000,000 ⇒ 可以確認", async () => {
+    renderForm(null);
+    const picker = await openMaterialPicker();
+    const a = card(picker, MAT_A);
+    fireEvent.click(within(a).getByRole("checkbox", { name: /冷媒/ }));
+    fireEvent.change(within(a).getByRole("spinbutton", { name: "「冷媒」的數量" }), {
+      target: { value: "2" },
+    });
+    fireEvent.click(within(a).getByRole("switch", { name: /自訂成本單價/ }));
+    fireEvent.change(within(a).getByLabelText("單價"), { target: { value: "500000.01" } });
+    expect(within(picker).getByTestId(`material-picker-quantity-error-${MAT_A}`)).toHaveTextContent(
+      "單一料錢小計不能超過 $1,000,000",
+    );
+    expect(within(picker).getByRole("button", { name: /^確認/ })).toBeDisabled();
+    fireEvent.change(within(a).getByLabelText("單價"), { target: { value: "500000" } });
+    expect(within(picker).getByRole("button", { name: /^確認/ })).toBeEnabled();
+  });
+
+  it("表單:料錢合計超過 $9,999,999.99 ⇒ 料錢區與按鈕列顯示訊息,「儲存變更」不能按", async () => {
+    // 10 個品項各 1,000,000(都是單上原有、已下架的,只為了湊出合計 10,000,000)。
+    m.getBooking.mockResolvedValue(
+      editingDetail(
+        Array.from({ length: 10 }, (_, i) => ({
+          materialCostItemId: `99999999-9999-4999-8999-99999999999${i}`,
+          name: `大額料錢${i}`,
+          quantity: 1,
+          amountSnapshot: 1_000_000,
+        })),
+      ),
+    );
+    renderForm(BOOKING_ID);
+    expect(await screen.findByTestId("booking-material-limit-error")).toHaveTextContent(
+      "料錢合計不能超過 $9,999,999.99，請調整單價或數量",
+    );
+    expect(screen.getByRole("button", { name: "儲存變更" })).toBeDisabled();
+    expect(
+      screen.getByText("料錢合計不能超過 $9,999,999.99，請調整單價或數量，修好之後才能送出。"),
+    ).toBeInTheDocument();
+  });
+
+  it("表單:合計剛好 $9,999,999.99 ⇒ 不顯示訊息,可以儲存", async () => {
+    m.getBooking.mockResolvedValue(
+      editingDetail([
+        ...Array.from({ length: 9 }, (_, i) => ({
+          materialCostItemId: `99999999-9999-4999-8999-99999999999${i}`,
+          name: `大額料錢${i}`,
+          quantity: 1,
+          amountSnapshot: 1_000_000,
+        })),
+        { materialCostItemId: MAT_A, name: "冷媒", quantity: 1, amountSnapshot: 999_999.99 },
+      ]),
+    );
+    renderForm(BOOKING_ID);
+    await screen.findByTestId("booking-material-summary");
+    expect(screen.queryByTestId("booking-material-limit-error")).toBeNull();
+    await waitFor(() => expect(screen.getByRole("button", { name: "儲存變更" })).toBeEnabled());
   });
 });

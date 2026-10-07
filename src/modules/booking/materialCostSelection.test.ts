@@ -8,6 +8,7 @@ import {
   buildMaterialSummary,
   formatMaterialAmount,
   materialBaselinePrice,
+  materialLimitError,
   materialSummaryFooter,
   type LoadedMaterialCosts,
 } from "./materialCostSelection";
@@ -15,6 +16,7 @@ import {
   initPickerDraft,
   pickerCustomPriceErrors,
   pickerQuantityErrors,
+  pickerSubtotalErrors,
   setPickerCustomPrice,
   setPickerCustomPriceEnabled,
   setPickerQuantityText,
@@ -207,5 +209,34 @@ describe("數量上限 999(F-1,服務項目與料錢共用)", () => {
       customPriceEnabled: true,
       customPrice: "88",
     });
+  });
+});
+
+describe("主腦裁決(防溢位):單一小計 ≤ 1,000,000、合計 ≤ 9,999,999.99", () => {
+  it("materialLimitError:剛好等於上限可以;超過一點擋", () => {
+    expect(materialLimitError({ rows: [{ subtotal: 1_000_000 }], total: 1_000_000 })).toBeNull();
+    expect(materialLimitError({ rows: [{ subtotal: 1_000_000.01 }], total: 1_000_000.01 })).toBe(
+      "單一料錢小計不能超過 $1,000,000",
+    );
+    expect(materialLimitError({ rows: [{ subtotal: 1 }], total: 9_999_999.99 })).toBeNull();
+    expect(materialLimitError({ rows: [{ subtotal: 1 }], total: 10_000_000 })).toBe(
+      "料錢合計不能超過 $9,999,999.99，請調整單價或數量",
+    );
+  });
+
+  it("pickerSubtotalErrors:自訂單價 / 原價 × 數量 超過才擋;不傳規則 = 不檢查", () => {
+    const rule = { max: 1_000_000, message: "單一料錢小計不能超過 $1,000,000" };
+    let draft = togglePickerItem({ order: [], entries: {} }, "a");
+    draft = setPickerCustomPriceEnabled(draft, "a", true, 200);
+    draft = setPickerQuantityText(draft, "a", "2");
+    draft = setPickerCustomPrice(draft, "a", "500000");
+    expect(pickerSubtotalErrors(draft, () => 200, rule)).toEqual({});
+    draft = setPickerCustomPrice(draft, "a", "500000.01");
+    expect(pickerSubtotalErrors(draft, () => 200, rule)).toEqual({ a: rule.message });
+    expect(pickerSubtotalErrors(draft, () => 200, undefined)).toEqual({});
+    // 自訂關掉 ⇒ 用原價:1,001.01 × 999 = 1,000,008.99 ⇒ 擋
+    draft = setPickerCustomPriceEnabled(draft, "a", false, 200);
+    draft = setPickerQuantityText(draft, "a", "999");
+    expect(pickerSubtotalErrors(draft, () => 1001.01, rule)).toEqual({ a: rule.message });
   });
 });
