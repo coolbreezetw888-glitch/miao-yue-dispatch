@@ -210,7 +210,7 @@ select is(
               birthday_bonus_enabled, birthday_line_message)::text
    from merchant_member_settings where merchant_id = 'db110000-0000-4000-8000-000000000020'),
   row('basic', 0, 0.00, false, 0, 0.00, 0, false, 0, true, true, false,
-      '生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。')::text,
+      '生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。')::text,
   'A1 §1.1:只帶 merchant_id 建立的設定列,13 個新欄位全部是規格書表格的預設值(開關 2/3 預設 true、其餘 0/false/basic、生日文案預設句)'
 );
 
@@ -317,7 +317,7 @@ set earn_mode = 'basic', basic_points_per_order = 0, basic_min_amount = 0, basic
     referral_inviter_reward_enabled = false, referral_subsequent_bonus_points = 0,
     referral_inviter_earning_enabled = true, referral_invitee_earning_enabled = true,
     birthday_bonus_enabled = false,
-    birthday_line_message = '生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。',
+    birthday_line_message = '生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。',
     policy_content = '原始政策'
 where merchant_id = 'db110000-0000-4000-8000-000000000020';
 
@@ -357,7 +357,7 @@ select lives_ok(
         referral_inviter_reward_enabled = false, referral_subsequent_bonus_points = 0,
         referral_inviter_earning_enabled = true, referral_invitee_earning_enabled = true,
         birthday_bonus_enabled = false,
-        birthday_line_message = '生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。'
+        birthday_line_message = '生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。'
     where merchant_id = 'db110000-0000-4000-8000-000000000020'$$,
   'B4 §3.10(關鍵回歸,絕對不能壞):只有會員系統設定鑰匙的客服存「會員政策」時,整列 upsert 把新舊全部規則欄位原樣送一次(值沒變)→ 必須成功'
 );

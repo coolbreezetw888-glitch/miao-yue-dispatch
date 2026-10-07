@@ -298,14 +298,14 @@ export function pickPayloadForDevice(
 // SPECS-INDEX #823:訂單被轉派之後,原本那位服務人員要收到「這筆單已經不是你的了」。
 //
 // 文字刻意用白話、寫給服務人員本人看,不是寫給工程師看:
-//   - 有查到接手的人 → 「這筆預約已改由 王小明 負責,已從你的行程移除」
+//   - 有查到接手的人 → 「這筆預約已改由 王小明 負責，已從你的行程移除」
 //   - 查不到(render_booking_notification_variables 的 staff_name 是空字串)→ 不要生出
 //     「已改由  負責」這種中間空一格的怪句子,改用不點名的版本。
 // =========================================================================
 export function buildReassignedAwaySummary(newStaffName: string | null | undefined): string {
   const name = (newStaffName ?? "").trim();
-  if (!name) return "這筆預約已改派給其他服務人員,已從你的行程移除";
-  return `這筆預約已改由 ${name} 負責,已從你的行程移除`;
+  if (!name) return "這筆預約已改派給其他服務人員，已從你的行程移除";
+  return `這筆預約已改由 ${name} 負責，已從你的行程移除`;
 }
 
 /**

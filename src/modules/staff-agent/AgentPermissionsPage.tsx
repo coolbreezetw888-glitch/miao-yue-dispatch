@@ -5,9 +5,8 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { LoadingSkeleton } from "@/components/patterns";
+import { LoadingSkeleton, SwitchRow } from "@/components/patterns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -75,17 +74,21 @@ function AgentPermissionsInner() {
             /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
             <LoadingSkeleton variant="lines" rows={5} />
           ) : (
+            /* #990 第 11 批:每項的說明收進名稱旁的 `?`(SwitchRow popover 模式),版面只剩名稱 + `?` + 開關。
+               保留 <ul><li> 結構(e2e 用 `main ul > li` 數列數);SwitchRow 也讓每個開關有正確的無障礙名稱。 */
             <ul className="space-y-2">
               {visibleAgentPermissionSections().map((section) => (
-                <li
-                  key={section.key}
-                  className="flex items-center justify-between rounded-md border border-border px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{section.label}</p>
-                    <p className="text-xs text-muted-foreground">{section.description}</p>
-                  </div>
-                  <Switch
+                <li key={section.key}>
+                  <SwitchRow
+                    id={`agent-permission-switch-${section.key}`}
+                    className="rounded-md px-3 py-2"
+                    title={section.label}
+                    description={section.description}
+                    descriptionMode="popover"
+                    helpLabel={`說明：${section.label}`}
+                    helpTriggerTestId={`permission-help-trigger-${section.key}`}
+                    helpPopoverTestId="permission-help-popover"
+                    titleTestId="permission-switch-title"
                     checked={grantedMap.get(section.key) ?? false}
                     onCheckedChange={(v) => handleToggle(section.key, v)}
                   />

@@ -136,7 +136,7 @@ describe("moveBooking(#818 推播 + #823 previousStaffId 交接)", () => {
       changeSummary: string;
       previousStaffId?: string;
     };
-    expect(payload.changeSummary).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(payload.changeSummary).toBe("您的預約內容已更新，請至系統查看最新內容");
     expect(payload.previousStaffId).toBe(A);
   });
 
@@ -156,7 +156,7 @@ describe("moveBooking(#818 推播 + #823 previousStaffId 交接)", () => {
     );
     expect(dispatchPushMock).toHaveBeenCalledTimes(1);
     const payload = dispatchPushMock.mock.calls[0]![0] as Record<string, unknown>;
-    expect(payload["changeSummary"]).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(payload["changeSummary"]).toBe("您的預約內容已更新，請至系統查看最新內容");
     expect(payload).not.toHaveProperty("previousStaffId");
   });
 

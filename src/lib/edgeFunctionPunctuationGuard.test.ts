@@ -24,33 +24,8 @@ const CJK = "[\\u3000-\\u303f\\u3400-\\u9fff\\uff00-\\uffef]";
 const HALF_WIDTH_NEXT_TO_CJK = new RegExp(`${CJK}[,:;!?]|[,:;!?]${CJK}|[)\\]][,:;!?]\\s*${CJK}`);
 const TEMPLATE_FRAGMENT_LEADING_HALF_WIDTH = new RegExp(`^[,:;!?]\\s+${CJK}`);
 
-const ALLOWLIST: { file: string; snippet: string; reason: string }[] = [
-  {
-    file: "supabase/functions/line-webhook/index.ts",
-    snippet: "綁定成功,之後這個 LINE 帳號會收到通知",
-    reason: "回覆進使用者 LINE 聊天室的訊息(LINE 文案,不是畫面錯誤訊息);第 10 批範圍外,列待決定",
-  },
-  {
-    file: "supabase/functions/line-webhook/index.ts",
-    snippet: "代碼無效或已過期,請重新產生",
-    reason: "回覆進使用者 LINE 聊天室的訊息(LINE 文案,不是畫面錯誤訊息);第 10 批範圍外,列待決定",
-  },
-  {
-    file: "supabase/functions/push-send-test/index.ts",
-    snippet: "看得到這則訊息,代表通知有送到這台裝置",
-    reason: "送到手機上的測試推播內文(推播文案,比照第 5 批 changeSummary.ts 推播文案不改);列待決定",
-  },
-  {
-    file: "supabase/functions/_shared/pushDispatchCore.ts",
-    snippet: "這筆預約已改派給其他服務人員,已從你的行程移除",
-    reason: "送到服務人員手機上的推播內文(推播文案,比照第 5 批不改);列待決定",
-  },
-  {
-    file: "supabase/functions/_shared/pushDispatchCore.ts",
-    snippet: "負責,已從你的行程移除",
-    reason: "同上一條的點名版本(推播文案);列待決定",
-  },
-];
+// 第 11 批 #989:原本五條(LINE 綁定回覆、測試推播、改派推播)都改成全形,放行清單清空;結構保留。
+const ALLOWLIST: { file: string; snippet: string; reason: string }[] = [];
 
 function findProjectRoot(): string {
   let dir = process.cwd();

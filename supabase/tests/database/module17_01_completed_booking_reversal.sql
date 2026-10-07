@@ -986,8 +986,8 @@ select cancel_completed_booking(:'rc_id'::uuid, '取消並退折抵') as result 
 select pg_temp.test_clear_auth();
 select is(
   (select note from member_point_transactions where booking_id = :'rc_id'::uuid and transaction_type = 'redeem_booking_refund'),
-  '訂單取消,退回紅利折抵 100 點',
-  'I11 🔴:退回那筆備註是「訂單取消,退回紅利折抵」(守 §4.1 第 7 步:先改狀態再退回;故障注入會轉紅)'
+  '訂單取消，退回紅利折抵 100 點',
+  'I11 🔴:退回那筆備註是「訂單取消，退回紅利折抵」(守 §4.1 第 7 步:先改狀態再退回;故障注入會轉紅)'
 );
 select is(
   (select r.balance_after || '/' || v.balance_after || '/' || v.points_delta

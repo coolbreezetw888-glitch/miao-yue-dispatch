@@ -371,7 +371,7 @@ describe("§3.14 局部 patch(取代整列 upsert)", () => {
       earn_mode: "basic",
       referral_inviter_earning_enabled: true,
       referral_invitee_earning_enabled: true,
-      birthday_line_message: "生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。",
+      birthday_line_message: "生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。",
     });
   });
 });

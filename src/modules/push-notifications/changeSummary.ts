@@ -5,7 +5,7 @@
 // 有沒有變 → 都沒有明顯差異就用通用文字。如果同時改了好幾項,不逐一列出,直接用通用文字,
 // 避免推播內文塞進一大段列點式文字被截斷成看不懂的殘缺句子。
 
-const GENERIC_MULTI_CHANGE_TEXT = "您的預約內容已更新,請至系統查看最新內容";
+const GENERIC_MULTI_CHANGE_TEXT = "您的預約內容已更新，請至系統查看最新內容";
 const MAX_SUMMARY_LENGTH = 60;
 
 export interface BookingChangeSummaryInput {

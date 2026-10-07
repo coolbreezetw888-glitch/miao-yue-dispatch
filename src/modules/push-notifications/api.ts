@@ -478,7 +478,7 @@ export interface DispatchPushNotificationInput {
   /**
    * SPECS-INDEX #823:這次編輯**之前**的主服務人員 id。只有 eventType === 'booking_updated'、而且
    * 主服務人員真的被換掉時才帶。有帶的話,Edge Function 會讓原本那位也收到一則
-   * 「這筆預約已改由 OOO 負責,已從你的行程移除」。
+   * 「這筆預約已改由 OOO 負責，已從你的行程移除」。
    *
    * 為什麼要由呼叫端帶:訂單沒有編輯歷史表,update_booking 一跑完,舊的那位是誰就查不到了。
    * 任何會換主服務人員的操作(編輯表單、拖拉轉派……)都應該把它帶上。

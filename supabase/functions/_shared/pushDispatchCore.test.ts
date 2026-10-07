@@ -910,28 +910,28 @@ const REASSIGN_PARAMS = {
   changeSummary: "服務人員改為 服務人員甲",
 };
 
-const AWAY_BODY = "2026-10-01 10:00 王小明:這筆預約已改由 服務人員甲 負責,已從你的行程移除";
+const AWAY_BODY = "2026-10-01 10:00 王小明:這筆預約已改由 服務人員甲 負責，已從你的行程移除";
 const NORMAL_BODY = "2026-10-01 10:00 王小明:服務人員改為 服務人員甲";
 
 Deno.test("#823 buildReassignedAwaySummary:有接手的人就點名;查不到就不點名,不要生出中間空一格的怪句子", () => {
-  assertEquals(buildReassignedAwaySummary("服務人員甲"), "這筆預約已改由 服務人員甲 負責,已從你的行程移除");
-  assertEquals(buildReassignedAwaySummary(""), "這筆預約已改派給其他服務人員,已從你的行程移除");
-  assertEquals(buildReassignedAwaySummary("   "), "這筆預約已改派給其他服務人員,已從你的行程移除");
-  assertEquals(buildReassignedAwaySummary(null), "這筆預約已改派給其他服務人員,已從你的行程移除");
-  assertEquals(buildReassignedAwaySummary(undefined), "這筆預約已改派給其他服務人員,已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary("服務人員甲"), "這筆預約已改由 服務人員甲 負責，已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(""), "這筆預約已改派給其他服務人員，已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary("   "), "這筆預約已改派給其他服務人員，已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(null), "這筆預約已改派給其他服務人員，已從你的行程移除");
+  assertEquals(buildReassignedAwaySummary(undefined), "這筆預約已改派給其他服務人員，已從你的行程移除");
 });
 
 Deno.test("#823 renderReassignedAwayBody:範本有 {{change_summary}} 就直接替換;範本沒有就補在最後一行", () => {
   const vars = { booking_date: "10/01 10:00", customer_name: "王小明", change_summary: "原本的異動摘要" };
-  const away = "這筆預約已改由 服務人員甲 負責,已從你的行程移除";
+  const away = "這筆預約已改由 服務人員甲 負責，已從你的行程移除";
   assertEquals(
     renderReassignedAwayBody("{{booking_date}} {{customer_name}}:{{change_summary}}", vars, away),
-    "10/01 10:00 王小明:這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+    "10/01 10:00 王小明:這筆預約已改由 服務人員甲 負責，已從你的行程移除",
   );
   // 商家把 {{change_summary}} 拿掉了 → 對被換掉的人來說重點會整個消失,所以補在最後一行。
   assertEquals(
     renderReassignedAwayBody("{{booking_date}} {{customer_name}} 的預約有異動", vars, away),
-    "10/01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+    "10/01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責，已從你的行程移除",
   );
   // 範本是空的(商家清空了)→ 只剩那句話,不要多一個換行開頭。
   assertEquals(renderReassignedAwayBody("", vars, away), away);
@@ -1102,7 +1102,7 @@ Deno.test("#823:商家範本沒有 {{change_summary}} 時,舊的那位仍然看�
   assertEquals(newStaffLog.rendered_body, "2026-10-01 10:00 王小明 的預約有異動");
   assertEquals(
     oldStaffLog.rendered_body,
-    "2026-10-01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責,已從你的行程移除",
+    "2026-10-01 10:00 王小明 的預約有異動\n這筆預約已改由 服務人員甲 負責，已從你的行程移除",
   );
 });
 
@@ -1123,7 +1123,7 @@ Deno.test("#823:staff_name 查不到(空字串)時,用不點名的句子,不會�
   const oldStaffLog = logs.find((l) => l.target_id === "staff-0")!;
   assertEquals(
     oldStaffLog.rendered_body,
-    "2026-10-01 10:00 王小明:這筆預約已改派給其他服務人員,已從你的行程移除",
+    "2026-10-01 10:00 王小明:這筆預約已改派給其他服務人員，已從你的行程移除",
   );
 });
 

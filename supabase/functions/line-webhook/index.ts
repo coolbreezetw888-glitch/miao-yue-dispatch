@@ -236,8 +236,8 @@ async function handleRequest(req: Request): Promise<Response> {
 
       if (event.replyToken) {
         const replyText = success
-          ? "綁定成功,之後這個 LINE 帳號會收到通知。"
-          : "代碼無效或已過期,請重新產生。";
+          ? "綁定成功，之後這個 LINE 帳號會收到通知。"
+          : "代碼無效或已過期，請重新產生。";
         await replyLineMessage(fetch, channelAccessToken, event.replyToken, replyText);
       }
     }

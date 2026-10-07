@@ -202,6 +202,20 @@ deno_version = 2
 [functions.birthday-line-dispatch]
 verify_jwt = false
 
+# 第 11 批 #989:以下三支正式庫本來就是 verify_jwt = false,寫死在這裡,
+# 避免之後有人一鍵部署全部 function 時被預設值 true 蓋掉。
+# line-webhook:由 LINE 伺服器呼叫,身上沒有 Supabase JWT,靠 x-line-signature 簽章驗證。
+[functions.line-webhook]
+verify_jwt = false
+
+# push-notify-reminder-dispatch:由 pg_cron 呼叫,沒有使用者 JWT。
+[functions.push-notify-reminder-dispatch]
+verify_jwt = false
+
+# push-test-ack:由 Service Worker 回報測試通知已送達,沒有使用者 JWT。
+[functions.push-test-ack]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

@@ -796,6 +796,12 @@ function StaffFormDialog({
                     </>
                   }
                   description={field.description}
+                  // #990 第 11 批:說明收進名稱旁的 `?`;「即將推出」標籤在名稱裡,`?` 排在標籤後面。
+                  descriptionMode="popover"
+                  helpLabel={`說明：${field.label}`}
+                  helpTriggerTestId={`permission-help-trigger-${field.key}`}
+                  helpPopoverTestId="permission-help-popover"
+                  titleTestId="permission-switch-title"
                   checked={Boolean(form[toCamel(field.key)])}
                   onCheckedChange={(v) => {
                     // #977 第 7 批(裁決 6):「新增編輯訂單」與「顯示會員資料」連動,先問再一起改。

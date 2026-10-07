@@ -56,7 +56,7 @@ export const TEST_PUSH_RATE_LIMIT = 3;
 
 /** §6.5 的誠實界線:測試推播的內容本身也不能承諾「已生效」,只能陳述「這是一則測試通知」。 */
 export const TEST_PUSH_TITLE = "秒約測試通知";
-export const TEST_PUSH_BODY = "這是一則測試通知。看得到這則訊息,代表通知有送到這台裝置。";
+export const TEST_PUSH_BODY = "這是一則測試通知。看得到這則訊息，代表通知有送到這台裝置。";
 
 export interface SendTestRequestBody {
   merchant_id?: string;

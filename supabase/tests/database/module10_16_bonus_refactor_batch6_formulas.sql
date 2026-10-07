@@ -124,7 +124,7 @@ select pg_temp.test_clear_auth();
 select is(
   (select row(policy_enabled, policy_content, earn_mode, birthday_line_message)::text
    from merchant_member_settings where merchant_id = 'db160000-0000-4000-8000-000000000020'),
-  row(true, '批次6政策', 'basic', '生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。')::text,
+  row(true, '批次6政策', 'basic', '生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。')::text,
   'A6:局部 upsert 只動了政策兩欄,紅利規則欄位(含新欄位)維持原值,沒有被寫回預設'
 );
 

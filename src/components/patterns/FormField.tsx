@@ -41,7 +41,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-import { HelpToggle } from "./HelpHint";
+import { HelpPopover, HelpToggle } from "./HelpHint";
 
 // ---------------------------------------------------------------------------
 // 欄位外框:標籤 / 必填 / ? / 字數 / 錯誤
@@ -598,6 +598,24 @@ interface SwitchRowProps {
   className?: string | undefined;
   /** 開關底下的常駐提醒(例如「為什麼不能開」),請放 <AlertNote>。 */
   children?: React.ReactNode | undefined;
+  /**
+   * 說明怎麼顯示(#990 第 11 批):
+   *   - `"inline"`(預設):名稱下方一行灰字,常駐。全站既有用法都是這個,行為不變。
+   *   - `"popover"`:灰字收進名稱後面的藍色 `?`(HelpPopover),點了才跳小框。
+   *     🔴 `?` 一定放在 <Label> 外面(同一行的兄弟元素):Label 有 htmlFor 指向開關,放進去的話
+   *        開關的無障礙名稱會混進「?」、名稱和 `?` 的點擊範圍也會黏在一起(規格書 §3.2 列為本項最容易踩的坑;
+   *        SwitchRowPopover.test.tsx 第 1 條用結構斷言守住)。
+   *     ⚠️ 只放「這是什麼、怎麼用」;「為什麼不能開 / 狀態跟你以為的不一樣」要用 children 放 <AlertNote> 常駐。
+   */
+  descriptionMode?: "inline" | "popover" | undefined;
+  /** popover 模式 `?` 的 aria-label,要寫完整句子,例:「說明：新增編輯訂單」。 */
+  helpLabel?: string | undefined;
+  /** popover 模式 `?` 按鈕的 data-testid(同一頁很多顆時用來區分)。 */
+  helpTriggerTestId?: string | undefined;
+  /** popover 模式小說明框的 data-testid。 */
+  helpPopoverTestId?: string | undefined;
+  /** 名稱(Label)的 data-testid,給 e2e 抓名稱文字用(不含 `?`)。 */
+  titleTestId?: string | undefined;
 }
 
 export function SwitchRow({
@@ -609,25 +627,53 @@ export function SwitchRow({
   disabled,
   className,
   children,
+  descriptionMode = "inline",
+  helpLabel,
+  helpTriggerTestId,
+  helpPopoverTestId,
+  titleTestId,
 }: SwitchRowProps) {
   const generatedId = React.useId();
   const switchId = id ?? generatedId;
+  const isPopover = descriptionMode === "popover";
+  const label = (
+    <Label
+      htmlFor={switchId}
+      data-testid={titleTestId}
+      className={cn(
+        isPopover ? "min-w-0" : "block",
+        "text-sm font-semibold leading-snug",
+        disabled ? "text-muted-foreground" : "text-foreground",
+      )}
+    >
+      {title}
+    </Label>
+  );
   return (
     <div className={cn("rounded-lg border border-border px-3.5 py-3", className)}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <Label
-            htmlFor={switchId}
-            className={cn(
-              "block text-sm font-semibold leading-snug",
-              disabled ? "text-muted-foreground" : "text-foreground",
-            )}
-          >
-            {title}
-          </Label>
-          {description ? (
-            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
-          ) : null}
+          {isPopover ? (
+            <div className="flex min-w-0 items-center gap-1">
+              {label}
+              {description ? (
+                <HelpPopover
+                  label={helpLabel ?? "說明"}
+                  triggerTestId={helpTriggerTestId}
+                  popoverTestId={helpPopoverTestId}
+                >
+                  {description}
+                </HelpPopover>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              {label}
+              {description ? (
+                <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
+              ) : null}
+            </>
+          )}
         </div>
         <Switch
           id={switchId}

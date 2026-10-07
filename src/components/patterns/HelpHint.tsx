@@ -70,15 +70,27 @@ export function HelpToggle({ label, className, children }: HelpToggleProps) {
  * (collisionPadding 16px = skill 三「手機左右留 16px 白邊」)。
  * 寬度 `min(20rem, 100vw − 32px)`:手機 320px 也不會超出畫面、不會造成橫向捲動;文字可換行。
  * 顏色沿用 HelpPanel 的 info 藍,跟欄位旁的 `?` 是同一套視覺語言。
+ * #990 第 11 批:SwitchRow 的 popover 模式也用這顆(客服權限頁、服務人員權限開關)。同一頁會有很多顆,
+ * 所以 data-testid 可以用 triggerTestId / popoverTestId 換掉(預設值不變,PageHeader 那顆照舊)。
  */
 interface HelpPopoverProps {
   /** `?` 的 aria-label。 */
   label?: string | undefined;
   className?: string | undefined;
+  /** `?` 按鈕的 data-testid,預設 `page-help-trigger`。 */
+  triggerTestId?: string | undefined;
+  /** 小說明框的 data-testid,預設 `page-help-popover`。 */
+  popoverTestId?: string | undefined;
   children: React.ReactNode;
 }
 
-export function HelpPopover({ label = "說明", className, children }: HelpPopoverProps) {
+export function HelpPopover({
+  label = "說明",
+  className,
+  triggerTestId = "page-help-trigger",
+  popoverTestId = "page-help-popover",
+  children,
+}: HelpPopoverProps) {
   const [open, setOpen] = React.useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -91,7 +103,7 @@ export function HelpPopover({ label = "說明", className, children }: HelpPopov
         <button
           type="button"
           aria-label={label}
-          data-testid="page-help-trigger"
+          data-testid={triggerTestId}
           className={cn(
             "group/help -my-[7px] inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             className,
@@ -113,7 +125,7 @@ export function HelpPopover({ label = "說明", className, children }: HelpPopov
       <PopoverContent
         align="start"
         collisionPadding={16}
-        data-testid="page-help-popover"
+        data-testid={popoverTestId}
         className="w-[min(20rem,calc(100vw-2rem))] whitespace-normal break-words rounded-md border-info/30 bg-info-soft px-3.5 py-3 text-[13px] leading-relaxed text-info-strong shadow-md [&_strong]:font-bold"
       >
         {children}

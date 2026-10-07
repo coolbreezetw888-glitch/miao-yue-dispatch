@@ -68,9 +68,9 @@ export type MemberPointTransaction = Tables<"member_point_transactions">;
 /** #615(SPECS-INDEX):商家自訂會員等級清單,純分類標籤用途,這次不跟紅利點數倍率或其他權益掛勾。 */
 export type MerchantMemberTier = Tables<"merchant_member_tiers">;
 
-/** §1.1 D:生日 LINE 文案的 schema 預設值(逐字照 migration 20261001020000)。 */
+/** §1.1 D:生日 LINE 文案的 schema 預設值(逐字照 migration 20261007140100,第 11 批 #989 改全形)。 */
 export const DEFAULT_BIRTHDAY_LINE_MESSAGE =
-  "生日快樂！本店已贈送您 {{points}} 點紅利,祝您有美好的一天。";
+  "生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。";
 
 export type MemberStatus = "active" | "removed";
 

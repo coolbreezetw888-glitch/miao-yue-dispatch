@@ -125,8 +125,10 @@ test("T2 權限開關逐列渲染,清單內容與原始碼定義一致,而且不
   // ⚠️ 刻意比對「整個陣列」而不是逐一 getByText:很多 label(例如「服務人員管理」)同時出現在
   //    別項的 description 裡(business_hours 的說明就引用了「服務人員管理」),逐一 getByText
   //    會直接撞 strict mode violation。
+  // #990 第 11 批:說明收進名稱旁的「?」(SwitchRow popover 模式),結構改了 ⇒ 改抓名稱專用的 data-testid
+  //    (名稱文字不含 `?`)。
   const renderedLabels = await permissionItems(page)
-    .locator("> div > p:nth-child(1)")
+    .getByTestId("permission-switch-title")
     .allTextContents();
   expect(renderedLabels).toEqual(VISIBLE_SECTIONS.map((s) => s.label));
 

@@ -15,7 +15,8 @@
 --   ⚠️ 不只看 raise:所有字串字面值都掃(比只看 raise 更嚴,format() 組字、變數暫存、回傳 jsonb 的文字都包含在內)。
 --
 -- 📌 放行清單(越短越好,每一條都寫理由;下方另有一條測試專抓「死掉的放行條目」):
---   見 pg_temp.req987_allow 的三條。
+--   目前是空的(第 11 批 #989 把原本三條預設文案 / 分類帳備註都改成全形後刪掉);結構保留,
+--   真的有不該改的字串再加回來(每一條都要寫理由)。
 begin;
 
 select plan(9);
@@ -55,13 +56,8 @@ $$;
 
 -- 放行清單:函式名稱 + 字串裡的一小段原文(snippet 空字串 = 整支函式的字串都放行)
 create function pg_temp.req987_allow() returns table(fn text, snippet text, reason text) language sql immutable as $$
-  values
-    ('public.seed_default_line_event_settings', '',
-     'LINE 通知預設文案:商家可以自己改的範本,開店時就複製進每家商家的資料;改預設值不會改到既有商家,要改得動資料(規格 1-2 第 5 點,另排)'),
-    ('private.protect_merchant_member_settings_rule_columns', '點紅利,祝您有美好的一天',
-     '生日 LINE 預設文案:這裡拿它來比對「商家是不是還在用預設值」,改了會讓判斷結果變掉(規格 1-2 第 5 點)'),
-    ('private.refund_booking_redeem', '紅利折抵 %s 點',
-     '紅利點數分類帳的備註文字(寫進資料列,不是錯誤訊息);改了新舊紀錄會不一致,列待決定')
+  -- 第 11 批 #989:放行清單清空(回空集合),結構保留
+  select null::text, null::text, null::text where false
 $$;
 
 -- ① 守門本體
@@ -115,9 +111,15 @@ select is(
 select is(
   (select count(*)::int from pg_temp.req987_violations($src$ raise exception 'it''s 不行,喔'; $src$)),
   1, '⑦ 字串裡有跳脫的單引號('''')也切得對');
+-- ⑧ 放行清單清空後,改用「在本交易內建一支故意寫半形的 public 函式」證明守門真的有掃 pg_proc
+--    (不是掃了空集合);pgTAP 結束會 rollback,不留痕。
+create function public.req987_probe() returns void language plpgsql as $probe$
+begin
+  raise exception '請稍後,再試';
+end $probe$;
 select ok(
-  exists (select 1 from pg_temp.req987_all_hits() h where h.fn = 'public.seed_default_line_event_settings'),
-  '⑧ 守門真的有掃到正式函式(放行的 LINE 預設文案有被抓到 ⇒ 證明不是掃了空集合)');
+  exists (select 1 from pg_temp.req987_all_hits() h where h.fn = 'public.req987_probe'),
+  '⑧ 守門真的有掃到 public 函式(本交易內故意建的半形探針函式有被抓到 ⇒ 證明不是掃了空集合)');
 select ok(
   (select count(distinct n.nspname || '.' || p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'private') and p.prokind in ('f', 'p')) > 200,

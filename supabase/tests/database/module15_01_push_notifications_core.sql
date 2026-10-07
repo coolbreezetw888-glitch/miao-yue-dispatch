@@ -211,7 +211,7 @@ select is(
 select is(
   (select message_body from merchant_push_event_settings
    where merchant_id = 'ec500000-0000-4000-8000-000000000021' and event_type = 'booking_updated'),
-  '{{booking_date}} {{customer_name}}:{{change_summary}}',
+  '{{booking_date}} {{customer_name}}：{{change_summary}}',
   '2.2:booking_updated 預設內文包含 {{change_summary}} 變數'
 );
 

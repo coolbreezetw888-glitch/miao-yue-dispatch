@@ -76,7 +76,7 @@ describe("computeBookingChangeSummary(規則 4.5 核心必測四種情境)", () 
         staffName: "王小明",
       },
     });
-    expect(summary).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(summary).toBe("您的預約內容已更新，請至系統查看最新內容");
   });
 
   it("情境四:沒有明顯差異 → 通用文字", () => {
@@ -84,7 +84,7 @@ describe("computeBookingChangeSummary(規則 4.5 核心必測四種情境)", () 
       original: BASE_ORIGINAL,
       next: { ...BASE_ORIGINAL },
     });
-    expect(summary).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(summary).toBe("您的預約內容已更新，請至系統查看最新內容");
   });
 
   it("邊界情況:服務項目變動但沒有提供 serviceNames 時退回通用文字(避免顯示空字串)", () => {
@@ -92,7 +92,7 @@ describe("computeBookingChangeSummary(規則 4.5 核心必測四種情境)", () 
       original: BASE_ORIGINAL,
       next: { ...BASE_ORIGINAL, serviceItemIds: ["item-x"] },
     });
-    expect(summary).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(summary).toBe("您的預約內容已更新，請至系統查看最新內容");
   });
 
   it("邊界情況:服務人員變動但沒有提供 staffName 時退回通用文字", () => {
@@ -100,7 +100,7 @@ describe("computeBookingChangeSummary(規則 4.5 核心必測四種情境)", () 
       original: BASE_ORIGINAL,
       next: { ...BASE_ORIGINAL, staffId: "staff-9" },
     });
-    expect(summary).toBe("您的預約內容已更新,請至系統查看最新內容");
+    expect(summary).toBe("您的預約內容已更新，請至系統查看最新內容");
   });
 
   it("超過 60 字時在前端就先截斷", () => {

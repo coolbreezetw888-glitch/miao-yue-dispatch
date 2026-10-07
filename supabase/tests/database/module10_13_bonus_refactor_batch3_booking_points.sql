@@ -733,7 +733,7 @@ select is(array[pg_temp.redeem_of(:'d1_id'::uuid), :'d1_ret_redeemed'],
   array[row(0, 0.00, 'db130000-0000-4000-8000-000000000068'::uuid)::text, '0'],
   'D1c:取消後訂單折抵歸 0、會員連結保留;cancel_booking 回傳的那一列也是最新值(0)');
 select is((select note from member_point_transactions where booking_id = :'d1_id'::uuid and transaction_type = 'redeem_booking_refund'),
-  '訂單取消,退回紅利折抵 200 點', 'D1d:退回紀錄的說明文字是白話');
+  '訂單取消，退回紅利折抵 200 點', 'D1d:退回紀錄的說明文字是白話');
 
 -- D2 冪等:再呼叫一次 refund 回 0、不寫任何東西
 select is(private.refund_booking_redeem(:'d1_id'::uuid), 0, 'D2a §3.11.1 冪等:第二次退回回傳 0');

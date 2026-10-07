@@ -58,17 +58,6 @@ const ALLOWLIST_DIRS: { dir: string; reason: string }[] = [];
  */
 const ALLOWLIST: { file: string; snippet: string; reason: string }[] = [
   {
-    file: "src/modules/members/types.ts",
-    snippet: "點紅利,祝您有美好的一天",
-    reason:
-      "生日 LINE 文案的資料庫預設值,逐字照 migration 20261001020000;LINE 預設文案這批不改(規格書第二節第 4 點)",
-  },
-  {
-    file: "src/modules/push-notifications/changeSummary.ts",
-    snippet: "您的預約內容已更新,請至系統查看最新內容",
-    reason: "手機推播內文(送到服務人員手機上的通知),推播文案這批不改(規格書第二節第 4 點)",
-  },
-  {
     file: "src/modules/booking/bookingDragMove.ts",
     snippet: "的回傳缺少 assistant_staff_id,無法建立復原輸入",
     reason: "內部防呆錯誤訊息,內容是程式欄位名稱(英文代碼混中文),列進待確認清單",
