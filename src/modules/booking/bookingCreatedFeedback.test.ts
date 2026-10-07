@@ -4,8 +4,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   BOOKING_CREATED_TOAST_DURATION_MS,
+  BOOKING_RELINKED_TOAST_DURATION_MS,
   buildBookingCreatedToast,
+  buildRelinkedMemberDescription,
   resolveSubmitMemberId,
+  shouldShowStaffRelinkNotice,
+  STAFF_RELINK_NOTICE,
 } from "./bookingCreatedFeedback";
 
 describe("resolveSubmitMemberId(§12.1 + §12.7)", () => {
@@ -224,5 +228,49 @@ describe("buildBookingCreatedToast 紅利行(紅利系統重構 §4.11)", () => 
       member_name_snapshot: null,
     }).lines;
     expect(lines).toEqual(["訂單金額 $1,000"]);
+  });
+});
+
+// SPECS-INDEX #939(第 11 批 A,規格書 §1.7):改掛後的儲存提示 + 服務人員端提示。
+describe("buildRelinkedMemberDescription(#939)", () => {
+  it("會員換了 ⇒「已改掛會員:{會員資料表的姓名}」,6 秒", () => {
+    expect(
+      buildRelinkedMemberDescription("m-a", { member_id: "m-b", member_name_snapshot: "李小華" }),
+    ).toBe("已改掛會員：李小華");
+    expect(BOOKING_RELINKED_TOAST_DURATION_MS).toBe(6000);
+  });
+  it("會員沒換 / 原本沒會員(補掛)/ 回傳沒有會員 / 快照空白 ⇒ null", () => {
+    expect(
+      buildRelinkedMemberDescription("m-a", { member_id: "m-a", member_name_snapshot: "王" }),
+    ).toBeNull();
+    expect(
+      buildRelinkedMemberDescription(null, { member_id: "m-b", member_name_snapshot: "李" }),
+    ).toBeNull();
+    expect(
+      buildRelinkedMemberDescription("m-a", { member_id: null, member_name_snapshot: null }),
+    ).toBeNull();
+    expect(
+      buildRelinkedMemberDescription("m-a", { member_id: "m-b", member_name_snapshot: "  " }),
+    ).toBeNull();
+    expect(buildRelinkedMemberDescription("m-a", undefined)).toBeNull();
+  });
+});
+
+describe("shouldShowStaffRelinkNotice(#939 服務人員端)", () => {
+  const base = { isEdit: true, originalMemberId: "m-a", originalPhone: "0912345678" };
+  it("有會員、電話改了 ⇒ 顯示;文案逐字", () => {
+    expect(shouldShowStaffRelinkNotice({ ...base, customerPhone: "0933111222" })).toBe(true);
+    expect(STAFF_RELINK_NOTICE).toBe(
+      "電話已更改，儲存後這筆訂單會改掛到這支電話的會員(沒有的話會自動建立)，紅利會重新計算。",
+    );
+  });
+  it("只改格式 / 沒會員 / 新增模式 ⇒ 不顯示", () => {
+    expect(shouldShowStaffRelinkNotice({ ...base, customerPhone: "0912-345-678" })).toBe(false);
+    expect(
+      shouldShowStaffRelinkNotice({ ...base, originalMemberId: null, customerPhone: "0933111222" }),
+    ).toBe(false);
+    expect(
+      shouldShowStaffRelinkNotice({ ...base, isEdit: false, customerPhone: "0933111222" }),
+    ).toBe(false);
   });
 });

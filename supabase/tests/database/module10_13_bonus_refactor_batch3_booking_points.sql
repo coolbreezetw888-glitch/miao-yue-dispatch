@@ -936,7 +936,8 @@ select ok(
 select ok(
   (select prosrc ~ 'from public\.bookings\s+where id = p_booking_id\s+for update'
    from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure)
-  and (select prosrc ~ 'from public\.members\s+where id in \(v_old_member_id, p_member_id\)\s+order by id\s+for update'
+  -- 第 11 批 A #939(migration 20261007140150):p_member_id 之後一律改用 v_effective_member_id(改電話時 = 依新電話算出的會員),鎖的對象與順序不變
+  and (select prosrc ~ 'from public\.members\s+where id in \(v_old_member_id, v_effective_member_id\)\s+order by id\s+for update'
    from pg_proc where oid = 'public.update_booking(uuid, uuid, jsonb, timestamptz, text, text, text, text, uuid[], uuid[], text, text, boolean, numeric, boolean, text, numeric, boolean, text, numeric, uuid, boolean, integer, uuid, boolean, integer, integer, boolean, uuid)'::regprocedure),
   'E2:update_booking 先鎖訂單列、再依 id 順序鎖新舊會員列(避免交叉死鎖)'
 );

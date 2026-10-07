@@ -28,6 +28,7 @@ export interface PendingAttachMember {
  *
  * 編輯模式(update_booking 不依電話比對,對 member_id 是無條件覆寫):
  *   ① 已連結會員 → 原 id(跟改版前 `member?.id ?? null` 相同,不讓 update_booking 清掉既有連結);
+ *      #939(第 11 批 A):電話改了(正規化後不同)時後端會忽略這個 id,改依新電話決定會員,前端照舊送原 id;
  *   ② 未連結、沒點選 → null(電話打完整也**不會**自動補掛,補掛一定要客服明確點選);
  *   ③ 未連結、點選了某位會員,而且他的電話(正規化後)等於表單電話欄目前的值 → 該會員 id;
  *   ④ 未連結、點選後電話又被改掉 → null(不可以把 A 的會員掛到電話是 B 的訂單上)。
@@ -129,4 +130,40 @@ export function buildBookingCreatedToast(
     title: booking.status === "accepted" ? "已送出訂單（已確認）" : "已送出訂單（待確認）",
     lines,
   };
+}
+
+/**
+ * SPECS-INDEX #939(第 11 批 A,規格書 §1.7):編輯已連結會員的訂單、改了電話 ⇒ 後端依新電話改掛會員。
+ * 儲存成功提示的描述:只有「原本有會員、回傳的 member_id 跟原本不同」才回 `已改掛會員:{姓名}`,
+ * 其餘回 null(提示維持只有標題「已更新預約」)。姓名用回傳列的 member_name_snapshot(會員資料表的姓名,
+ * 不是表單打的);萬一快照是空的就不顯示這一行,不拿訂單姓名頂替。
+ */
+export function buildRelinkedMemberDescription(
+  originalMemberId: string | null | undefined,
+  updated: { member_id?: string | null; member_name_snapshot?: string | null } | null | undefined,
+): string | null {
+  if (!originalMemberId || !updated?.member_id) return null;
+  if (updated.member_id === originalMemberId) return null;
+  const name = updated.member_name_snapshot?.trim();
+  return name ? `已改掛會員：${name}` : null;
+}
+
+/** #939 改掛提示的秒數(跟建單成功提示一樣 6 秒,規格書 §1.7)。 */
+export const BOOKING_RELINKED_TOAST_DURATION_MS = 6000;
+
+/**
+ * #939 服務人員端編輯畫面:這張單有會員、電話改了(正規化後跟原本不同)⇒ 電話欄下方常駐 `!`。
+ * 不寫姓名(服務人員端不為了這行多開會員資料出口)。
+ */
+export const STAFF_RELINK_NOTICE =
+  "電話已更改，儲存後這筆訂單會改掛到這支電話的會員(沒有的話會自動建立)，紅利會重新計算。";
+
+export function shouldShowStaffRelinkNotice(input: {
+  isEdit: boolean;
+  originalMemberId: string | null | undefined;
+  originalPhone: string | null | undefined;
+  customerPhone: string;
+}): boolean {
+  if (!input.isEdit || !input.originalMemberId) return false;
+  return !isSamePhone(input.originalPhone, input.customerPhone);
 }

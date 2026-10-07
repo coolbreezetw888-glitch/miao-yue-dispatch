@@ -22,7 +22,10 @@
 // (自動流程沒有點擊事件可以掛 ⇒ 改成狀態 C 的常駐 AlertNote)。
 //
 // 編輯模式(mode="edit",§12.7 第 2 點,使用者裁決「要保留補掛功能」):
-//   ・已連結會員的訂單 → 唯讀一行「已連結會員:{姓名}」,不查候選、不能改掛、也不能清除。
+//   ・已連結會員的訂單 → 電話沒改時唯讀一行「已連結會員:{姓名}」,不查候選、不能清除。
+//     🔴 SPECS-INDEX #939(第 11 批 A):電話改了 ⇒ 後端 update_booking 會依新電話改掛會員(找不到就自動
+//     建立),面板依 deriveEditLinkedPanelState 顯示 E0~E4 五種狀態,並在 E2 / E4 常駐 `!` 說明紅利後果
+//     (skill 二:「按下去會發生什麼」不能收進 `?`)。E1 點選候選只帶入資料,不設定補掛(那是沒連結的單才用的)。
 //   ・沒連結會員的訂單 → 一樣照狀態 A/B/C 顯示候選;**點選** = 帶入資料 + 記為「要補掛的會員」。
 //     update_booking 不依電話比對 ⇒ 狀態 C 不能說「將連結」,改成
 //     「這支電話是既有客戶:{姓名}(點一下即可連結到這筆訂單)」而且整行可點(效果同點選候選)。
@@ -34,9 +37,15 @@
 // 🔴 所有姓名 / 電話 / 黑名單原因都用 React 文字插值(自動轉義),不用 dangerouslySetInnerHTML。
 
 import { AlertNote, StatusTag } from "@/components/patterns";
+import { isValidTaiwanPhone } from "@/lib/validation";
 
 import { useMembersByPhone } from "./api";
-import { derivePhoneMatchPanelState } from "./memberPhoneMatch";
+import {
+  deriveEditLinkedPanelState,
+  derivePhoneMatchPanelState,
+  normalizeCustomerPhone,
+  relinkConsequenceText,
+} from "./memberPhoneMatch";
 import type { MemberPhoneMatchCandidate } from "./types";
 
 /** 編輯模式下,這筆訂單目前連結的會員(開啟表單時從 member_id / member_name_snapshot 帶入)。 */
@@ -66,6 +75,47 @@ function formatLastBookingDate(iso: string | null): string {
   return `最近消費 ${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+/** 開頭相符的候選清單(新增模式狀態 B、補掛、#939 E1 共用同一段)。 */
+function CandidateList({
+  candidates,
+  onApplyCandidate,
+}: {
+  candidates: MemberPhoneMatchCandidate[];
+  onApplyCandidate: (candidate: MemberPhoneMatchCandidate) => void;
+}) {
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-2">
+      <p className="mb-1.5 px-1 text-xs leading-relaxed text-muted-foreground">
+        開頭相符的客戶(點一下帶入資料)
+      </p>
+      <ul className="flex flex-col gap-1">
+        {candidates.map((c) => (
+          <li key={c.memberId}>
+            {/* 每一列是 44px 的可點列(觸控目標,skill 一);兩側都是動態文字,都要能折行。
+                這是列表項,不是 ① 主要按鈕 —— 沒有實心主題色。 */}
+            <button
+              type="button"
+              className="flex min-h-11 w-full cursor-pointer flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md bg-background px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onApplyCandidate(c)}
+            >
+              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <span className="break-words">{c.name}</span>
+                {c.phone ? (
+                  <span className="tabular-nums text-muted-foreground">{c.phone}</span>
+                ) : null}
+                {c.isBlacklisted ? <StatusTag tone="danger">黑名單</StatusTag> : null}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {formatLastBookingDate(c.lastBookingDate)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function MemberPhoneMatchPanel({
   merchantId,
   phone,
@@ -73,6 +123,9 @@ export function MemberPhoneMatchPanel({
   linkedMember,
   pendingAttachMember,
   onApplyCandidate,
+  originalPhone = null,
+  customerName = "",
+  originalRedeemedPoints = 0,
 }: {
   merchantId: string;
   phone: string;
@@ -87,21 +140,75 @@ export function MemberPhoneMatchPanel({
   pendingAttachMember: PendingAttachDisplay | null;
   /** 點選候選時呼叫(由建單表單把電話 / 姓名 / 地址帶入欄位;編輯模式另外記為要補掛的會員)。 */
   onApplyCandidate: (candidate: MemberPhoneMatchCandidate) => void;
+  /** #939:只在編輯模式使用 —— 這筆訂單載入時的電話(判斷「電話有沒有改」的基準)。 */
+  originalPhone?: string | null;
+  /** #939:表單目前的客戶姓名(E4「會用這支電話建立新會員:{姓名}」用)。 */
+  customerName?: string;
+  /** #939:這筆訂單載入時的紅利折抵點數(E2 / E4 後果說明分兩種文案)。 */
+  originalRedeemedPoints?: number;
 }) {
   const trimmedPhone = phone.trim();
   const isEditLinked = mode === "edit" && linkedMember !== null;
-  // hooks 不能放在條件式後面:已連結會員的編輯單傳 undefined 讓查詢停用(enabled=false),不打 RPC。
+  // #939:已連結會員的單,電話跟原本一樣(正規化後)就不查候選;改了才查(要知道新電話是誰的)。
+  const editLinkedPhoneUnchanged =
+    isEditLinked &&
+    normalizeCustomerPhone(trimmedPhone) !== null &&
+    normalizeCustomerPhone(trimmedPhone) === normalizeCustomerPhone(originalPhone);
+  // hooks 不能放在條件式後面:不需要查的時候傳 undefined 讓查詢停用(enabled=false),不打 RPC。
   const { data: candidates } = useMembersByPhone(
-    isEditLinked ? undefined : merchantId,
+    editLinkedPhoneUnchanged ? undefined : merchantId,
     trimmedPhone,
   );
 
   if (mode === "edit" && linkedMember) {
-    return (
+    const linkedLine = (
       <div className="flex min-h-11 items-center rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
         <span className="min-w-0 break-words text-foreground">
           <span className="text-muted-foreground">已連結會員：</span> {linkedMember.name}
         </span>
+      </div>
+    );
+    const editState = deriveEditLinkedPanelState({
+      phone: trimmedPhone,
+      originalPhone,
+      linkedMemberId: linkedMember.id,
+      phoneComplete: isValidTaiwanPhone(trimmedPhone),
+      candidates,
+    });
+    if (editState.kind === "unchanged") return linkedLine;
+    if (editState.kind === "hidden") return null;
+    if (editState.kind === "typing") {
+      return (
+        <CandidateList candidates={editState.candidates} onApplyCandidate={onApplyCandidate} />
+      );
+    }
+    // E2 / E4:「按下去會發生什麼」⇒ 常駐 `!`,不可收合(skill 二)。
+    const consequence = (
+      <AlertNote data-testid="member-relink-consequence">
+        {relinkConsequenceText(linkedMember.name, originalRedeemedPoints)}
+      </AlertNote>
+    );
+    if (editState.kind === "relink") {
+      return (
+        <div className="flex flex-col gap-2" data-testid="member-relink-panel">
+          {editState.match.isBlacklisted ? (
+            <BlacklistNote reason={editState.match.blacklistReason} />
+          ) : null}
+          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed">
+            <span className="text-muted-foreground">電話已更改，儲存後這筆訂單會改掛到：</span>
+            <span className="break-words text-foreground">{editState.match.name}</span>
+          </p>
+          {consequence}
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col gap-2" data-testid="member-relink-panel">
+        <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed">
+          <span className="text-muted-foreground">電話已更改，儲存後會用這支電話建立新會員：</span>
+          <span className="break-words text-foreground">{customerName.trim()}</span>
+        </p>
+        {consequence}
       </div>
     );
   }
@@ -154,35 +261,5 @@ export function MemberPhoneMatchPanel({
     );
   }
 
-  return (
-    <div className="rounded-md border border-border bg-muted/20 p-2">
-      <p className="mb-1.5 px-1 text-xs leading-relaxed text-muted-foreground">
-        開頭相符的客戶(點一下帶入資料)
-      </p>
-      <ul className="flex flex-col gap-1">
-        {state.candidates.map((c) => (
-          <li key={c.memberId}>
-            {/* 每一列是 44px 的可點列(觸控目標,skill 一);兩側都是動態文字,都要能折行。
-                這是列表項,不是 ① 主要按鈕 —— 沒有實心主題色。 */}
-            <button
-              type="button"
-              className="flex min-h-11 w-full cursor-pointer flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-md bg-background px-2.5 py-2 text-left text-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => onApplyCandidate(c)}
-            >
-              <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <span className="break-words">{c.name}</span>
-                {c.phone ? (
-                  <span className="tabular-nums text-muted-foreground">{c.phone}</span>
-                ) : null}
-                {c.isBlacklisted ? <StatusTag tone="danger">黑名單</StatusTag> : null}
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                {formatLastBookingDate(c.lastBookingDate)}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+  return <CandidateList candidates={state.candidates} onApplyCandidate={onApplyCandidate} />;
 }

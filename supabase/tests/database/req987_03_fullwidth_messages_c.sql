@@ -328,7 +328,8 @@ select is(
     $m$'找不到這筆預約，或沒有權限查看'$m$, $m$'找不到這筆預約,或沒有權限查看'$m$,
     $m$'請提供每個服務項目的單價，且不能是負數'$m$, $m$'請提供每個服務項目的單價,且不能是負數'$m$
   ])),
-  $m$a8e435488a282d73ca476b615898f343$m$,
+  -- 第 11 批 A #939(migration 20261007140150)改寫了會員判斷,基準改成「A 版本換回舊訊息後」的指紋;第 10 批改前指紋 a8e435488a282d73ca476b615898f343
+  $m$95c5923d88bc700377fef91084e052a1$m$,
   $m$public.preview_booking_points(p_merchant_id uuid, p_booking_id uuid, p_member_id uuid, p_customer_phone text, p_service_items jsonb, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.preview_booking_points(p_merchant_id uuid, p_booking_id uuid, p_member_id uuid, p_customer_phone text, p_service_items jsonb, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric)$m$),
@@ -385,7 +386,8 @@ select is(
     $m$'這位會員已下架，不能增加紅利折抵(可以調低或改成 0，把點數退回給會員)'$m$, $m$'這位會員已下架,不能增加紅利折抵(可以調低或改成 0,把點數退回給會員)'$m$,
     $m$'本單目前最多可折 NT$%(應付 NT$% 的 %)，原本的紅利折抵 % 點(NT$%)已超過上限，請先把折抵點數改成 % 點以下'$m$, $m$'本單目前最多可折 NT$%(應付 NT$% 的 %),原本的紅利折抵 % 點(NT$%)已超過上限,請先把折抵點數改成 % 點以下'$m$
   ])),
-  $m$ad73011a8c051b81809b0bf681b3c4e5$m$,
+  -- 第 11 批 A #939(migration 20261007140150)改寫了會員判斷,基準改成「A 版本換回舊訊息後」的指紋;第 10 批改前指紋 ad73011a8c051b81809b0bf681b3c4e5
+  $m$03794e2fc0ee47f63c3c7da1f9435029$m$,
   $m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid)$m$),

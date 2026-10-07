@@ -153,10 +153,14 @@ import {
 import { useBookingPointsPreview } from "./useBookingPointsPreview";
 import {
   BOOKING_CREATED_TOAST_DURATION_MS,
+  BOOKING_RELINKED_TOAST_DURATION_MS,
   buildBookingCreatedToast,
+  buildRelinkedMemberDescription,
   isSamePhone,
   type PendingAttachMember,
   resolveSubmitMemberId,
+  shouldShowStaffRelinkNotice,
+  STAFF_RELINK_NOTICE,
 } from "./bookingCreatedFeedback";
 import {
   setStaffDayOverride,
@@ -1510,7 +1514,7 @@ export function BookingFormDialog({
               },
             })
           : undefined;
-        await updateBooking({
+        const updated = await updateBooking({
           bookingId: editingBookingId,
           ...shared,
           // 🔴 紅利系統重構 §3.4 / 批次 7:規則在 buildUpdatePointsParams(有單元測試)——
@@ -1522,7 +1526,19 @@ export function BookingFormDialog({
             : { pointsRedeemed: null, pointsOverride: null }),
           ...(changeSummary ? { changeSummary } : {}),
         });
-        toast.success("已更新預約");
+        // SPECS-INDEX #939:改了電話 ⇒ 後端依新電話改掛會員;會員真的換了才多一行描述(文字插值,不用 innerHTML)。
+        const relinkedDescription = buildRelinkedMemberDescription(
+          editingDetail?.member_id,
+          updated,
+        );
+        if (relinkedDescription) {
+          toast.success("已更新預約", {
+            description: relinkedDescription,
+            duration: BOOKING_RELINKED_TOAST_DURATION_MS,
+          });
+        } else {
+          toast.success("已更新預約");
+        }
         if (editingDetail) {
           const removedInfo = assistantRemovedInfoAfterEdit({
             bookingId: editingBookingId,
@@ -1683,7 +1699,18 @@ export function BookingFormDialog({
                 create_booking 依送出當下的電話決定,這裡不指定。
                 編輯模式(§12.7):已連結會員 ⇒ 唯讀一行;沒連結 ⇒ 一樣列候選,點選 = 帶入 + 記為要補掛。 */}
             {/* #977 第 7 批:服務人員模式不顯示會員比對面板(新增時會員由後端依電話自動連結 / 建立;
-                編輯時維持原會員,不能補掛)。 */}
+                編輯時不能補掛;#939 起改了電話會由後端依新電話改掛,見下方常駐 `!`)。 */}
+            {/* SPECS-INDEX #939(第 11 批 A):服務人員改了已連結會員訂單的電話 ⇒ 後端一樣依新電話改掛,
+                這裡常駐 `!` 說明後果(不寫姓名,不為了這行多開會員資料出口)。 */}
+            {isStaffActor &&
+            shouldShowStaffRelinkNotice({
+              isEdit,
+              originalMemberId: editingDetail?.member_id,
+              originalPhone: editingDetail?.customer_phone,
+              customerPhone,
+            }) ? (
+              <AlertNote data-testid="staff-relink-notice">{STAFF_RELINK_NOTICE}</AlertNote>
+            ) : null}
             {isStaffActor ? null : (
               <MemberPhoneMatchPanel
                 merchantId={merchantId}
@@ -1692,6 +1719,10 @@ export function BookingFormDialog({
                 linkedMember={member}
                 pendingAttachMember={pendingAttachMember}
                 onApplyCandidate={handleApplyCandidate}
+                // #939:已連結會員的單改電話 ⇒ 面板顯示改掛 / 建立新會員與紅利後果。
+                originalPhone={isEdit ? (editingDetail?.customer_phone ?? null) : null}
+                customerName={customerName}
+                originalRedeemedPoints={isEdit ? (editingDetail?.points_redeemed ?? 0) : 0}
               />
             )}
             <FormField label="客戶 Email" htmlFor="booking-customer-email">

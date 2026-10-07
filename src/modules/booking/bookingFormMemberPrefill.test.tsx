@@ -462,5 +462,149 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
       const payload = updateBookingMock.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(payload["memberId"]).toBeNull();
     });
+
+    // ─── SPECS-INDEX #939(第 11 批 A,規格書 §1.7 / §5.2):已連結會員的單改電話 ⇒ 改掛會員 ───
+    describe("#939 已連結會員的單改電話(E0~E4)", () => {
+      const relinkPanel = () => screen.getByTestId("member-relink-panel");
+      const consequence = () => screen.getByTestId("member-relink-consequence");
+
+      it("E0:只改格式(0903-111-111)不算改電話 ⇒ 仍是「已連結會員」,沒有改掛提示", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903-111-111");
+        expect(screen.getByText("已連結會員：")).toBeInTheDocument();
+        expect(screen.queryByTestId("member-relink-panel")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("member-relink-consequence")).not.toBeInTheDocument();
+      });
+
+      it("E1:打到一半 ⇒ 列開頭相符的客戶;點選只帶入資料、不設定補掛,送出仍帶原會員 id(由後端依電話改掛)", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903");
+        expect(screen.getByText("開頭相符的客戶(點一下帶入資料)")).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: /陳大同/ }));
+        expect(phoneInput().value).toBe("0903222222");
+        expect(nameInput().value).toBe("陳大同");
+        expect(addressInput()?.value).toBe("台北市某處"); // 陳大同沒有地址 ⇒ 不覆蓋
+        expect(screen.queryByText("儲存後會連結到會員：")).not.toBeInTheDocument();
+        expect(relinkPanel()).toHaveTextContent("電話已更改，儲存後這筆訂單會改掛到：陳大同");
+
+        screen.getByRole("button", { name: "儲存變更" }).click();
+        await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
+        expect(updateBookingMock.mock.calls[0]?.[0]).toMatchObject({
+          memberId: LINKED_MEMBER_ID,
+          customerPhone: "0903222222",
+        });
+      });
+
+      it("E1:到府產業點選有地址的候選 ⇒ 地址一起帶入", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903");
+        fireEvent.click(screen.getByRole("button", { name: /李小華/ }));
+        expect(nameInput().value).toBe("李小華");
+        expect(addressInput()?.value).toBe("台北市信義路 1 號");
+      });
+
+      it("E2 + 黑名單:一行「會改掛到」+ 黑名單常駐 `!` + 後果 `!`(沒折抵版)", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903222222");
+        expect(relinkPanel()).toHaveTextContent("電話已更改，儲存後這筆訂單會改掛到：陳大同");
+        const notes = screen.getAllByRole("note").map((n) => n.textContent);
+        expect(notes).toContain("!這位客戶被列入黑名單：多次爽約");
+        expect(consequence()).toHaveTextContent(
+          "儲存後，這筆訂單的紅利改算給新的會員，派點依新會員重新計算。",
+        );
+        expect(screen.queryByText("已連結會員：")).not.toBeInTheDocument();
+      });
+
+      it("E2 不是黑名單 ⇒ 只有後果 `!`(一則)", async () => {
+        getBookingMock.mockResolvedValue({
+          ...editingDetail(LINKED_MEMBER_ID, "王小明"),
+          customer_phone: "0912000000",
+        });
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903111111");
+        expect(relinkPanel()).toHaveTextContent("電話已更改，儲存後這筆訂單會改掛到：李小華");
+        expect(screen.getAllByRole("note")).toHaveLength(1);
+      });
+
+      it("E3:完全相等的那位就是原會員(會員資料上的電話改過)⇒ 顯示同 E0", async () => {
+        getBookingMock.mockResolvedValue({
+          ...editingDetail("m-lee", "李小華"),
+          customer_phone: "0912000000",
+        });
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903111111");
+        expect(screen.getByText("已連結會員：")).toBeInTheDocument();
+        expect(screen.queryByTestId("member-relink-panel")).not.toBeInTheDocument();
+      });
+
+      it("E4:沒有會員的完整電話 ⇒「會用這支電話建立新會員:{表單姓名}」+ 後果 `!`(有折抵版,逐字)", async () => {
+        getBookingMock.mockResolvedValue({
+          ...editingDetail(LINKED_MEMBER_ID, "王小明"),
+          points_redeemed: 30,
+        });
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0912345678");
+        type(nameInput(), "林新客");
+        expect(relinkPanel()).toHaveTextContent("電話已更改，儲存後會用這支電話建立新會員：林新客");
+        expect(consequence()).toHaveTextContent(
+          "儲存後，這筆訂單的紅利改算給新的會員。原會員「王小明」的紅利折抵 30 點會全部退回給他，派點依新會員重新計算。",
+        );
+      });
+
+      it("面板裡沒有實心主題色按鈕(E1 候選列也一樣)", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903");
+        for (const b of screen.getAllByRole("button", { name: /李小華|陳大同/ })) {
+          expect(b.className).not.toMatch(/\bbg-(brand|primary)\b/);
+        }
+      });
+
+      it("儲存成功:會員真的換了 ⇒ 提示加描述「已改掛會員:{會員姓名}」(6 秒)", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        updateBookingMock.mockResolvedValue({
+          id: BOOKING_ID,
+          merchant_id: MERCHANT_ID,
+          member_id: "m-chen",
+          member_name_snapshot: "陳大同",
+        });
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903222222");
+        screen.getByRole("button", { name: "儲存變更" }).click();
+        await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1));
+        expect(toastMock.success).toHaveBeenCalledWith("已更新預約", {
+          description: "已改掛會員：陳大同",
+          duration: 6000,
+        });
+      });
+
+      it("儲存成功:會員沒換 ⇒ 提示只有標題「已更新預約」", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        updateBookingMock.mockResolvedValue({
+          id: BOOKING_ID,
+          merchant_id: MERCHANT_ID,
+          member_id: LINKED_MEMBER_ID,
+          member_name_snapshot: "王小明",
+        });
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        screen.getByRole("button", { name: "儲存變更" }).click();
+        await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1));
+        expect(toastMock.success).toHaveBeenCalledWith("已更新預約");
+      });
+    });
   });
 });

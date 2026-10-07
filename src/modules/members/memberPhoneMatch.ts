@@ -55,6 +55,60 @@ export function derivePhoneMatchPanelState(
   return { kind: "prefix", candidates: [...list] };
 }
 
+/**
+ * SPECS-INDEX #939(第 11 批 A,規格書 §1.7):編輯一筆**已連結會員**的訂單時,面板的五種狀態。
+ * 後端 update_booking 會在「電話正規化後跟原本不同」時依新電話改掛會員(找不到就自動建立),
+ * 這裡用同一條 normalize 規則先在畫面上講清楚「儲存後會發生什麼」。
+ *   E0 unchanged —— 電話沒改(只改格式也算沒改,A-1)
+ *   E1 typing    —— 電話改了、但還不是完整有效電話 ⇒ 跟新增模式狀態 B 一樣列開頭相符的候選(沒有就 hidden)
+ *   E2 relink    —— 完整電話完全相等某位會員,而且不是原會員 ⇒ 儲存後改掛到他
+ *   E3           —— 完全相等的那位就是原會員(會員資料上的電話改過)⇒ 顯示同 E0(回 unchanged)
+ *   E4 create    —— 完整有效電話、沒有任何會員 ⇒ 儲存後用這支電話建立新會員
+ * 完整電話但候選還沒查回來 ⇒ hidden(不先講「會建立新會員」再跳成「會改掛」)。
+ */
+export type EditLinkedPanelState =
+  | { kind: "unchanged" }
+  | { kind: "hidden" }
+  | { kind: "typing"; candidates: MemberPhoneMatchCandidate[] }
+  | { kind: "relink"; match: MemberPhoneMatchCandidate }
+  | { kind: "create" };
+
+export function deriveEditLinkedPanelState(input: {
+  phone: string;
+  originalPhone: string | null;
+  linkedMemberId: string;
+  /** 電話是否已經是完整有效的格式(isValidTaiwanPhone,跟後端 is_valid_taiwan_phone 同一條規則)。 */
+  phoneComplete: boolean;
+  candidates: readonly MemberPhoneMatchCandidate[] | null | undefined;
+}): EditLinkedPanelState {
+  const normalizedInput = normalizeCustomerPhone(input.phone);
+  if (normalizedInput !== null && normalizedInput === normalizeCustomerPhone(input.originalPhone)) {
+    return { kind: "unchanged" };
+  }
+  if (!input.phoneComplete) {
+    const list = input.candidates ?? [];
+    return list.length > 0 ? { kind: "typing", candidates: [...list] } : { kind: "hidden" };
+  }
+  if (input.candidates === undefined || input.candidates === null) return { kind: "hidden" };
+  const match = input.candidates.find((c) => normalizeCustomerPhone(c.phone) === normalizedInput);
+  if (match) {
+    return match.memberId === input.linkedMemberId
+      ? { kind: "unchanged" }
+      : { kind: "relink", match };
+  }
+  return { kind: "create" };
+}
+
+/** #939 E2 / E4 面板下方常駐 `!` 的後果說明(有折抵 / 沒折抵兩種,文案逐字照規格書 §1.7)。 */
+export function relinkConsequenceText(
+  originalMemberName: string,
+  originalRedeemedPoints: number,
+): string {
+  return originalRedeemedPoints > 0
+    ? `儲存後，這筆訂單的紅利改算給新的會員。原會員「${originalMemberName}」的紅利折抵 ${originalRedeemedPoints} 點會全部退回給他，派點依新會員重新計算。`
+    : "儲存後，這筆訂單的紅利改算給新的會員，派點依新會員重新計算。";
+}
+
 /** 建單表單裡,點選候選時會被帶入的三個欄位。 */
 export interface CustomerPrefillFields {
   customerPhone: string;

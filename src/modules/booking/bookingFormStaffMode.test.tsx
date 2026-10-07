@@ -460,3 +460,42 @@ describe("服務人員模式的料錢(#986 第 9 批,9-1 / 9-2)", () => {
     expect(payload["materialCostItemIds"]).toEqual([REMOVED_MATERIAL_ID]);
   });
 });
+
+// SPECS-INDEX #939(第 11 批 A,規格書 §1.7):服務人員改了有會員的單的電話 ⇒ 電話欄下方常駐 `!`。
+describe("服務人員模式:改電話的改掛提示(#939)", () => {
+  const phone = () => document.getElementById("booking-customer-phone") as HTMLInputElement;
+
+  it("這張單有會員、電話改了才出現 `!`;改回原電話(含只改格式)就消失", async () => {
+    m.fetchStaffBookingForEdit.mockResolvedValue(staffEditRow(false));
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    await waitFor(() => expect(phone().value).toBe("0912345678"));
+    expect(screen.queryByTestId("staff-relink-notice")).toBeNull();
+
+    fireEvent.change(phone(), { target: { value: "0933111222" } });
+    expect(screen.getByTestId("staff-relink-notice")).toHaveTextContent(
+      "電話已更改，儲存後這筆訂單會改掛到這支電話的會員(沒有的話會自動建立)，紅利會重新計算。",
+    );
+
+    fireEvent.change(phone(), { target: { value: "0912-345-678" } });
+    expect(screen.queryByTestId("staff-relink-notice")).toBeNull();
+  });
+
+  it("這張單沒有會員 ⇒ 改電話也不出現", async () => {
+    m.fetchStaffBookingForEdit.mockResolvedValue({
+      ...staffEditRow(false),
+      member_id: null,
+      member_name_snapshot: null,
+    });
+    renderForm({ editingBookingId: BOOKING_ID, staff: true });
+    await waitFor(() => expect(phone().value).toBe("0912345678"));
+    fireEvent.change(phone(), { target: { value: "0933111222" } });
+    expect(screen.queryByTestId("staff-relink-notice")).toBeNull();
+  });
+
+  it("商家模式不出現這則(商家端由會員面板說明)", async () => {
+    renderForm({ editingBookingId: BOOKING_ID });
+    await waitFor(() => expect(phone().value).not.toBe(""));
+    fireEvent.change(phone(), { target: { value: "0933111222" } });
+    expect(screen.queryByTestId("staff-relink-notice")).toBeNull();
+  });
+});
