@@ -42,6 +42,20 @@ vi.mock("./context", () => ({
   useBookingStatusChangeLogs: () => ({ data: [], isLoading: false }),
 }));
 
+// #996 第 11 批 K:管理員看已完成訂單時多了「服務人員抽成」區塊;這裡不測它,mock 掉避免真的打 RPC
+// (區塊本身的測試在 bookingDetailCommission.test.tsx)。
+vi.mock("@/modules/payroll/api", () => ({
+  fetchBookingCommissionSummary: vi.fn(async () => ({
+    has_record: false,
+    commission_amount: null,
+    computed_at: null,
+    recalculated_at: null,
+    staff_name: null,
+    staff_is_piece_rate: null,
+  })),
+  recalculateBookingCommission: vi.fn(),
+}));
+
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => ({
     merchant: { id: "merchant-1", name: "測試商家", industry_type: "in_store_beauty" },

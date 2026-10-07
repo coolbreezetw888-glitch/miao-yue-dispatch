@@ -251,4 +251,13 @@ describe("文案守門", () => {
     }
     expect(MATERIAL_COST_COMMISSION_COPY.title).toContain("服務人員");
   });
+
+  // #996 第 11 批 K-9:重算抽成開放給有「抽成與薪資設定」的客服 ⇒ 確認窗後半句跟著改。
+  it("K-9:確認窗寫「管理員或有「抽成與薪資設定」權限的客服可以…重新計算抽成」", () => {
+    for (const next of [true, false]) {
+      expect(MATERIAL_COST_COMMISSION_COPY.confirmBody(next)).toContain(
+        "如果要讓某幾筆舊訂單套用新設定，管理員或有「抽成與薪資設定」權限的客服可以在該訂單詳情按「重新計算抽成」。",
+      );
+    }
+  });
 });

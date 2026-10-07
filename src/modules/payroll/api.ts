@@ -379,10 +379,13 @@ export function useMerchantBillingSummary(
 }
 
 // =========================================================================
-// §3.8/§5.6:手動重新計算抽成(僅商家管理員,規則 2.6)。
+// §3.8/§5.6:手動重新計算抽成。
+// #996 第 11 批 K 起:商家管理員,或有「抽成與薪資設定」(commission_settings)權限的在職客服
+// (推翻原規則 2.6「僅商家管理員」);主要服務人員目前不是抽成制時後端擋下。
 // =========================================================================
-/** §5.6 對外介面:重新計算某筆已完成訂單的抽成金額。只有商家管理員能成功(規則 2.6,資料庫層
- * 用 private.is_merchant_admin 檢查,這裡不重複判斷,前端只需要把管理員以外的人擋在按鈕外)。
+/** §5.6 對外介面:重新計算某筆已完成訂單的抽成金額。權限由資料庫層
+ * private.can_manage_commission_settings(訂單所屬商家)判斷,這裡不重複判斷,前端只負責
+ * 把沒權限的人擋在按鈕外(預約詳情的「服務人員抽成」區塊,見 booking/BookingCommissionSection.tsx)。
  * 商家端三項調整規格書 §二 2.7.3:拿掉「臨時指定一個特別比例」的參數,語意改成「依商家目前
  * 最新的 staff_service_commission_rates 設定,重新算一次」。 */
 export async function recalculateBookingCommission(
@@ -393,6 +396,32 @@ export async function recalculateBookingCommission(
   });
   if (error) throw error;
   return data as BookingCommissionRecord;
+}
+
+/** #996 第 11 批 K-3:預約詳情「服務人員抽成」區塊用的總額摘要(只回總額,不回明細與比例)。
+ * 權限同重算(管理員或有「抽成與薪資設定」的客服);無權限與訂單不存在都是 42501。 */
+export interface BookingCommissionSummary {
+  has_record: boolean;
+  commission_amount: number | null;
+  computed_at: string | null;
+  recalculated_at: string | null;
+  staff_name: string | null;
+  /** 主要服務人員目前是不是抽成制(主腦裁決:不是就不能重算)。has_record = false 時為 null。 */
+  staff_is_piece_rate: boolean | null;
+}
+
+export async function fetchBookingCommissionSummary(
+  bookingId: string,
+): Promise<BookingCommissionSummary> {
+  const { data, error } = await supabase.rpc("get_booking_commission_summary", {
+    p_booking_id: bookingId,
+  });
+  if (error) throw error;
+  const raw = data as unknown as BookingCommissionSummary;
+  return {
+    ...raw,
+    commission_amount: raw.commission_amount === null ? null : Number(raw.commission_amount),
+  };
 }
 
 // =========================================================================

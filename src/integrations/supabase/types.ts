@@ -3616,6 +3616,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_booking_commission_summary: {
+        Args: { p_booking_id: string }
+        Returns: Json
+      }
       get_booking_points_ledger: {
         Args: { p_booking_id: string }
         Returns: Json

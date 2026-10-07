@@ -537,26 +537,26 @@ select is(
 );
 
 -- =========================================================================
--- ④ 規則 2.6(核心必測):手動重新計算抽成,只限商家管理員;規則 2.9 對照組。
+-- ④ 手動重新計算抽成。原規則 2.6「只限商家管理員」已被 #996(第 11 批 K)推翻:
+--    使用者裁決「管理員與客服都能用」+ 主腦決定「客服要有抽成與薪資設定(commission_settings)權限」。
+--    沒有鑰匙的客服仍被擋,見 b11_k_recalculate_commission_agents.sql。
 -- =========================================================================
--- 客服(被授權 commission_settings)呼叫 recalculate_booking_commission 被擋下。
+-- 客服(被授權 commission_settings)呼叫 recalculate_booking_commission 成功(#996 起)。
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000004');
 
-select throws_ok(
+select lives_ok(
   format($$select recalculate_booking_commission('%s')$$, :'rule24_booking1_id'::text),
-  '42501', '重新計算已完成訂單的抽成金額，只有商家管理員可以操作',
-  '規則 2.6(核心):被授權 commission_settings 的客服呼叫 recalculate_booking_commission 被擋下,即使已經被開通商家設定權限也一樣'
+  '#996 第 11 批 K(推翻規則 2.6):被授權 commission_settings 的客服呼叫 recalculate_booking_commission 成功'
 );
 
--- 對照組:同一個被擋下的客服,呼叫本模組其他一般設定功能(commission_settings 涵蓋範圍)可以成功——
--- 證明不是整個模組都鎖死,只有這一支函式特別敏感。
+-- 同一位客服,呼叫本模組其他一般設定功能(commission_settings 涵蓋範圍)也照常成功。
 select lives_ok(
   format(
     $$update staff_service_commission_rates set commission_value = 15
       where staff_id = '%s' and service_item_id = '%s'$$,
     'e8000000-0000-4000-8000-000000000041', 'e8000000-0000-4000-8000-000000000031'
   ),
-  '規則 2.6 對照組:同一個被 recalculate_booking_commission 擋下的客服,仍然可以正常操作 staff_service_commission_rates(一般設定功能沒有被連坐鎖死)'
+  '規則 2.9:同一位有 commission_settings 的客服,仍然可以正常操作 staff_service_commission_rates'
 );
 
 update staff_service_commission_rates set commission_value = 50

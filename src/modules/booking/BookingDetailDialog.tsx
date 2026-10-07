@@ -104,6 +104,8 @@ import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import { formatMaterialAmount } from "./materialCostSelection";
 import { CancelBookingConfirmButton } from "./CancelBookingConfirmButton";
+// #996 第 11 批 K:已完成訂單的「服務人員抽成」區塊 + 「重新計算抽成」按鈕。
+import { BookingCommissionSection } from "./BookingCommissionSection";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   BOOKING_STATUS_LABELS,
@@ -229,6 +231,8 @@ export function BookingDetailDialog({
   // 預覽查詢 disabled)之後 —— 否則呼叫端讓 ["booking-module"] 整組過期時,預覽查詢還是 active,會多打一次
   // 預覽 RPC,而這張單已經不是已完成 ⇒ 400「狀態已經改變」紅字。
   const [pendingChangedNotify, setPendingChangedNotify] = useState(false);
+  // #996 第 11 批 K-6:重新計算抽成送出中 ⇒ 預約詳情(全頁層)也不能關。
+  const [commissionBusy, setCommissionBusy] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -276,6 +280,10 @@ export function BookingDetailDialog({
   const { data: merchantRole } = useCurrentMerchantRole();
   const { data: canManageMembers } = useAgentPermission("members");
   const canViewMemberProfile = merchantRole === "admin" || canManageMembers === true;
+  // #996 第 11 批 K-4:「服務人員抽成」區塊只給管理員,或有「抽成與薪資設定」的客服(讀取中 = undefined ⇒ 不顯示)。
+  const { data: canManageCommission } = useAgentPermission("commission_settings");
+  const canSeeCommission =
+    merchantRole === "admin" || (merchantRole === "agent" && canManageCommission === true);
 
   // 2026-09-24 使用者裁決(任務 2):商家切成「到店服務」之後,既有訂單的客戶地址要隱藏。
   // industry_type 現在可以隨時切換(見 merchant/api.ts 2026-09-23 的說明,資料庫層鎖定的
@@ -571,6 +579,8 @@ export function BookingDetailDialog({
   // #965:全頁層要關(Esc / 右上角關閉)時,如果差額小卡窗已經要開、還沒收尾,一律改走 finishReversal
   // (等同按「知道了」:小卡窗與全頁層一起關、重抓列表),不讓收尾被跳過。
   function handleLayerOpenChange(next: boolean) {
+    // #996 第 11 批 K-6:重新計算抽成送出中,詳情不能關(等 RPC 回來)。
+    if (!next && commissionBusy) return;
     if (!next && shortfallPendingRef.current) {
       finishReversal();
       return;
@@ -873,6 +883,20 @@ export function BookingDetailDialog({
                     </DetailRow>
                   ))}
                 </DetailSection>
+              ) : null}
+
+              {/* #996 第 11 批 K-4:料錢成本之後、記錄之前(這裡排在客戶 / 紅利 / 備註之前,緊接料錢區)。 */}
+              {isCompletedOriginal && canSeeCommission ? (
+                <BookingCommissionSection
+                  bookingId={booking.id}
+                  onBusyChange={setCommissionBusy}
+                  onStateChanged={() => {
+                    void queryClient.invalidateQueries({
+                      queryKey: ["booking-module", "booking-detail", booking.id],
+                    });
+                    onChanged();
+                  }}
+                />
               ) : null}
 
               <DetailSection label="客戶">

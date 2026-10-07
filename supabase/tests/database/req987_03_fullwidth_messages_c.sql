@@ -344,6 +344,53 @@ select is(
 -- ----- public.recalculate_booking_commission(p_booking_id uuid) -----
 select is(
   md5(pg_temp.req987_swap_back($m$public.recalculate_booking_commission(p_booking_id uuid)$m$, array[
+    -- 第 11 批 K #996(migration 20261007140600):權限改 can_manage_commission_settings、加鎖、月薪制擋下。
+    -- 先把 K 的兩段換回 K 之前(第 10 批)的寫法,再套下面第 10 批的訊息對照;基準指紋不變。
+    replace($k1new$  -- 第 11 批 K #996:先不鎖讀商家 → 權限 → 再鎖訂單列讀狀態與主要服務人員(跟還原 / 取消已完成訂單排隊)。
+  select b.merchant_id
+  into v_merchant_id
+  from public.bookings b
+  where b.id = p_booking_id;
+
+  if not found then
+    raise exception '找不到這筆預約';
+  end if;
+
+  if not private.can_manage_commission_settings(v_merchant_id) then
+    raise exception '重新計算已完成訂單的抽成金額，只有商家管理員或有「抽成與薪資設定」權限的客服可以操作' using errcode = '42501';
+  end if;
+
+  select b.staff_id, b.status
+  into v_staff_id, v_status
+  from public.bookings b
+  where b.id = p_booking_id
+  for update;
+
+  if not found then
+    raise exception '找不到這筆預約';
+  end if;
+$k1new$, E'\r\n', E'\n'),
+    replace($k1old$  select b.merchant_id, b.staff_id, b.status
+  into v_merchant_id, v_staff_id, v_status
+  from public.bookings b
+  where b.id = p_booking_id;
+
+  if not found then
+    raise exception '找不到這筆預約';
+  end if;
+
+  if not private.is_merchant_admin(v_merchant_id) then
+    raise exception '重新計算已完成訂單的抽成金額，只有商家管理員可以操作' using errcode = '42501';
+  end if;
+$k1old$, E'\r\n', E'\n'),
+    replace($k2new$  -- 第 11 批 K #996(主腦裁決):主要服務人員目前不是抽成制(例如已改月薪)⇒ 不准重算。
+  if not exists (
+    select 1 from public.merchant_staff ms
+    where ms.id = v_staff_id and ms.compensation_type = 'piece_rate'
+  ) then
+    raise exception '這位服務人員目前不是抽成制，無法重新計算抽成';
+  end if;
+$k2new$, E'\r\n', E'\n') || E'\n', '',
     $m$'重新計算已完成訂單的抽成金額，只有商家管理員可以操作'$m$, $m$'重新計算已完成訂單的抽成金額,只有商家管理員可以操作'$m$,
     $m$'這筆訂單目前沒有抽成紀錄，無法重新計算(可能是月薪制服務人員，不適用抽成)'$m$, $m$'這筆訂單目前沒有抽成紀錄,無法重新計算(可能是月薪制服務人員,不適用抽成)'$m$
   ])),

@@ -439,10 +439,10 @@ select throws_ok(
 
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000002');
 
-select throws_ok(
+-- #996 第 11 批 K 推翻規則 2.6:有 commission_settings 的客服也可以重算(原本這裡斷言被擋)。
+select lives_ok(
   format($$select recalculate_booking_commission('%s')$$, :'multi_item_booking_id'::text),
-  '42501', '重新計算已完成訂單的抽成金額，只有商家管理員可以操作',
-  '§2.7.3:被授權 commission_settings 的客服呼叫 recalculate_booking_commission(新簽章)一樣被擋下,只有管理員能操作'
+  '§2.7.3 + #996:被授權 commission_settings 的客服呼叫 recalculate_booking_commission(新簽章)成功'
 );
 
 select pg_temp.test_clear_auth();
