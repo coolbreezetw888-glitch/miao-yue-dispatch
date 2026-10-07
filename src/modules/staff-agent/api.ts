@@ -510,6 +510,26 @@ export async function setAgentPermission(
   if (error) throw error;
 }
 
+export interface AgentPermissionChange {
+  sectionKey: string;
+  granted: boolean;
+}
+
+/**
+ * 第 11 批 E(#992):一次寫入多把權限(set_agent_permissions,一個交易,全部成功或全部不動)。
+ * 客服權限頁的所有寫入(含單一切換)都走這支;舊的 setAgentPermission 只剩 e2e fixture 等外部呼叫,下一批 drop。
+ */
+export async function setAgentPermissions(
+  agentId: string,
+  changes: readonly AgentPermissionChange[],
+): Promise<void> {
+  const { error } = await supabase.rpc("set_agent_permissions", {
+    p_agent_id: agentId,
+    p_changes: changes.map((c) => ({ section_key: c.sectionKey, granted: c.granted })),
+  });
+  if (error) throw error;
+}
+
 // =========================================================================
 // 5.1:角色判斷用的小工具查詢——回傳目前登入者在某商家「自己的」客服紀錄(若有)。
 // 不透過 RLS 疊加額外邏輯,單純查詢 merchant_agents(RLS 已允許 user_id = auth.uid() 讀自己的列)。

@@ -4325,6 +4325,10 @@ export type Database = {
         Args: { p_agent_id: string; p_granted: boolean; p_section_key: string }
         Returns: undefined
       }
+      set_agent_permissions: {
+        Args: { p_agent_id: string; p_changes: Json }
+        Returns: undefined
+      }
       set_material_cost_affects_commission: {
         Args: { p_enabled: boolean; p_merchant_id: string }
         Returns: Json
