@@ -218,11 +218,9 @@ export function blockShowsPoints(view: BookingPointsBlockView): boolean {
 // ---------------------------------------------------------------------------
 
 /** 「需 {條件}」括號裡的字(reward_condition_mode → 白話)。 */
+/** 第 11 批 D(#991):電話驗證相關的三個 mode 已退場,只剩 line_bound。 */
 export const REWARD_CONDITION_REQUIREMENT_TEXT: Record<string, string> = {
-  phone_verified: "電話已驗證",
   line_bound: "LINE 已綁定",
-  either: "電話已驗證或 LINE 已綁定",
-  both: "電話已驗證且 LINE 已綁定",
 };
 
 export function describeIneligibleReason(

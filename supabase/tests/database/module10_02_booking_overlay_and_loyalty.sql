@@ -613,10 +613,13 @@ select pg_temp.test_clear_auth();
 -- reward_condition_mode('phone_verified'/'none'),驗證行為完全對應(mode='phone_verified' 等同
 -- 舊版開啟開關,mode='none' 等同舊版關閉開關)。mode='line_bound'/'either'/'both' 的完整交集/
 -- 聯集驗證另外在 module10_04_reward_condition_mode.sql 覆蓋。
+-- 第 11 批 D(#991,2026-10-07):人工電話驗證標記退場,資格條件只剩 none / line_bound ⇒ 本段改用
+-- mode='line_bound' 表達同一個意圖(資格條件會擋 / 符合就放行);「符合」改由 fixture 直接把
+-- members.line_bound 設成 true(測試交易內,postgres 身分)。
 -- =========================================================================
 select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 
-update merchant_member_settings set reward_condition_mode = 'phone_verified'
+update merchant_member_settings set reward_condition_mode = 'line_bound'
 where merchant_id = 'eb000000-0000-4000-8000-000000000021';
 
 select id from create_member('eb000000-0000-4000-8000-000000000021', '未驗證電話會員', '0966000007') \gset unverified_member_
@@ -640,10 +643,12 @@ select complete_booking(:'unverified_booking_id'::uuid);
 select is(
   (select count(*)::int from member_point_transactions where booking_id = :'unverified_booking_id'::uuid),
   0,
-  '規則 2.8/#619:reward_condition_mode=phone_verified 時,未驗證電話的會員完成訂單,消費核發路徑被跳過(靜默略過,不算錯誤)'
+  '規則 2.8/#619:reward_condition_mode=line_bound 時,未綁 LINE 的會員完成訂單,消費核發路徑被跳過(靜默略過,不算錯誤)'
 );
 
-select set_member_phone_verified(:'unverified_member_id'::uuid, true);
+select pg_temp.test_clear_auth();
+update members set line_bound = true where id = :'unverified_member_id'::uuid;
+select pg_temp.test_set_auth('eb000000-0000-4000-8000-000000000001');
 
 select id from create_booking(
   p_merchant_id => 'eb000000-0000-4000-8000-000000000021',
@@ -664,7 +669,7 @@ select complete_booking(:'verified_booking_id'::uuid);
 select is(
   (select count(*)::int from member_point_transactions where booking_id = :'verified_booking_id'::uuid and transaction_type = 'earn_booking'),
   1,
-  '規則 2.8/#619:標記已驗證電話之後,同一位會員完成新訂單正常核發'
+  '規則 2.8/#619:綁定 LINE 之後,同一位會員完成新訂單正常核發'
 );
 
 -- reward_condition_mode='none' 時,不論是否驗證都正常核發(對應舊版政策關閉行為)。

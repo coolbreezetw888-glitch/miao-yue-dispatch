@@ -678,7 +678,7 @@ export default function ManagePage() {
       label: "會員管理",
       // SPECS-INDEX #830(2026-09-29):點數的餘額/異動歷史/登記兌換/手動調整整組從「紅利點數管理」
       // 搬到這裡的會員詳情頁,描述補上,讓使用者從卡片就看得出點數交易在這裡操作。
-      description: "管理會員基本資料、電話驗證、推薦名單，以及各會員的點數兌換、調整與異動歷史",
+      description: "管理會員基本資料、推薦名單，以及各會員的點數兌換、調整與異動歷史",
       icon: UserRound,
       visible: showMembersCard,
     },

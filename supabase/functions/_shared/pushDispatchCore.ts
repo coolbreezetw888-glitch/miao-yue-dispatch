@@ -311,7 +311,7 @@ export function buildReassignedAwaySummary(newStaffName: string | null | undefin
 /**
  * #823:把「已從你的行程移除」這句話套進商家自己設定的 booking_updated 文案。
  *
- * 正常情況(預設範本 `{{booking_date}} {{customer_name}}:{{change_summary}}`)只要把 change_summary
+ * 正常情況(預設範本 `{{booking_date}} {{customer_name}}：{{change_summary}}`)只要把 change_summary
  * 換成那句話就好。但商家可以自己改範本,如果他把 {{change_summary}} 拿掉了,套完之後那句話會
  * 整個消失 —— 對接手的人來說少一句無妨(他還是知道這單是他的),對被換掉的人來說卻是整個重點
  * 不見了,他會以為這單還是自己的。所以這裡多一道保險:套完之後找不到那句話,就補在最後一行。

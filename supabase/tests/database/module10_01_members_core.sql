@@ -1,7 +1,7 @@
 -- 模組 10(會員與紅利)— 對應規格書 .project/specs/會員與紅利.md §1.1~§1.4、§3.1~§3.5、§3.15、§3.16、
 -- 一之二節 RLS 影響評估。這支檔案涵蓋:CHECK 約束/預設值/跨商家隔離、can_manage_members/
 -- can_manage_member_settings、members 表 RPC-only 寫入模式、create_member/update_member/
--- deactivate_member/reactivate_member/set_member_phone_verified、seed_default_member_settings、
+-- deactivate_member/reactivate_member/(set_member_phone_verified 第 11 批 D 已退場)、seed_default_member_settings、
 -- 一之二節「既有 RLS 政策定義完全沒有變動」的回歸驗證。
 begin;
 
@@ -269,7 +269,7 @@ select is(
 select pg_temp.test_clear_auth();
 
 -- =========================================================================
--- ⑥ §3.5:deactivate_member / reactivate_member / set_member_phone_verified。
+-- ⑥ §3.5:deactivate_member / reactivate_member /(set_member_phone_verified 第 11 批 D 已退場)。
 -- =========================================================================
 select pg_temp.test_set_auth('ea000000-0000-4000-8000-000000000001');
 
@@ -287,18 +287,18 @@ select is(
   '3.5:reactivate_member 正確重新上架'
 );
 
-select set_member_phone_verified(:'member_a2_id'::uuid, true);
-select ok(
-  (select phone_verified from members where id = :'member_a2_id'::uuid) = true
-  and (select phone_verified_at from members where id = :'member_a2_id'::uuid) is not null,
-  '3.5:set_member_phone_verified(true) 正確標記已驗證與時間'
-);
+-- 第 11 批 D(#991,2026-10-07):人工電話驗證標記退場 ⇒ set_member_phone_verified 已 drop。
+-- 原本兩條「寫入正確」改成「寫入路徑已退場、欄位仍保留」(plan 數量不變)。
+select hasnt_function('public', 'set_member_phone_verified', array['uuid', 'boolean'],
+  '第 11 批 D:set_member_phone_verified 已退場(寫入路徑不存在)');
 
-select set_member_phone_verified(:'member_a2_id'::uuid, false);
 select ok(
-  (select phone_verified from members where id = :'member_a2_id'::uuid) = false
-  and (select phone_verified_at from members where id = :'member_a2_id'::uuid) is null,
-  '3.5:set_member_phone_verified(false) 正確清空驗證時間'
+  exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'members' and column_name = 'phone_verified'
+      and column_default = 'false' and is_nullable = 'NO'
+  ),
+  '第 11 批 D:members.phone_verified 欄位仍保留且 default false(只退場寫入路徑,欄位暫留)'
 );
 
 select pg_temp.test_clear_auth();

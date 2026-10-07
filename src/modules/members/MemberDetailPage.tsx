@@ -115,7 +115,6 @@ import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLin
 
 import {
   setMemberBlacklistStatus,
-  setMemberPhoneVerified,
   updateMember,
   useMember,
   useMemberReferrals,
@@ -416,7 +415,6 @@ function MemberDetailInner() {
   const { data: tiers } = useMerchantMemberTiers(member?.merchant_id, false);
   const tierNameById = new Map((tiers ?? []).map((t) => [t.id, t.name]));
 
-  const [verifying, setVerifying] = useState(false);
   const [copyLabel, setCopyLabel] = useState("複製");
 
   function refetchAll() {
@@ -424,20 +422,6 @@ function MemberDetailInner() {
     void queryClient.invalidateQueries({ queryKey: ["members-module", "related-bookings", id] });
     void queryClient.invalidateQueries({ queryKey: ["members-module", "referrals", id] });
     void queryClient.invalidateQueries({ queryKey: ["members-module", "members-list"] });
-  }
-
-  async function handleToggleVerified() {
-    if (!member) return;
-    setVerifying(true);
-    try {
-      await setMemberPhoneVerified(member.id, !member.phone_verified);
-      toast.success(member.phone_verified ? "已取消驗證標記" : "已標記為已驗證");
-      refetchAll();
-    } catch (err) {
-      toast.error("操作失敗", { description: getErrorMessage(err) });
-    } finally {
-      setVerifying(false);
-    }
   }
 
   async function handleUnblacklist() {
@@ -566,7 +550,7 @@ function MemberDetailInner() {
                  這裡講的是**身分**(本人證明過他是這支手機的主人,與登入方式無關),
                  「LINE 綁定」講的是**通知管道**(綁了才推播得出去)。
               🔴 判斷一律看 #908 的 identity_verified_at,**不看 line_bound、也不看 phone_verified**
-                 (phone_verified 是客服自己按的人工標記,不是客戶本人證明的)。 */}
+                 (phone_verified 原本是客服人工標記,第 11 批 D 已退場,恆為 false)。 */}
           <DetailSection label="會員狀態">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
@@ -626,29 +610,9 @@ function MemberDetailInner() {
           </DetailSection>
 
           <DetailSection label="標記">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[13px] text-muted-foreground">電話驗證狀態</p>
-                <p className="text-xs text-muted-foreground">此為人工標記，非簡訊驗證</p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {member.phone_verified ? (
-                  <StatusTag tone="success">已驗證</StatusTag>
-                ) : (
-                  <StatusTag tone="neutral">未驗證</StatusTag>
-                )}
-                {/* 可逆動作(隨時可以取消 / 重新標記)⇒ 不標紅,用 ② 次要。 */}
-                <Button
-                  type="button"
-                  variant="neutral"
-                  size="card"
-                  disabled={verifying}
-                  onClick={handleToggleVerified}
-                >
-                  {member.phone_verified ? "取消驗證標記" : "標記為已驗證"}
-                </Button>
-              </div>
-            </div>
+            {/* 第 11 批 D(#991,2026-10-07):「電話驗證狀態」人工標記整列拿掉(使用者裁決:客戶登入本來就要收
+                簡訊驗證碼,不需要客服人工標記)。資料庫寫入函式已 drop,欄位暫留、恆為 false。
+                🔴 不可再加回這一列或任何寫入 phone_verified 的入口。 */}
             {/* #616(SPECS-INDEX §10.4):黑名單狀態,純警告用途,不擋建單,不顯示給客戶端看見。 */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">

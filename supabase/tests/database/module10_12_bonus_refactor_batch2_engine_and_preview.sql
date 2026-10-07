@@ -380,17 +380,19 @@ select is(pg_temp.eng_points('db120000-0000-4000-8000-000000000061',
   'C12 §2.1:同一張訂單切回基本模式 ⇒ 只看基本設定(10 點),公式完全不參與');
 
 -- =========================================================================
--- D. §2.7 五種核發資格模式(建單當下判斷)
+-- D. §2.7 核發資格模式(建單當下判斷)
 --    61 一般(都沒有)/ 65 電話已驗證 / 66 LINE 已綁定 / 67 兩者皆是
+--    第 11 批 D(#991,2026-10-07):人工電話驗證標記退場,CHECK 只剩 none / line_bound ⇒
+--    原 D2(phone_verified)、D6(either)、D7(both)改成 line_bound 的「符合 / 不符合」兩條 +
+--    一條 CHECK 擋 'both'(plan 數量不變)。fixture 的 phone_verified 欄位保留(欄位還在)。
 -- =========================================================================
 select is(pg_temp.eng_reason('db120000-0000-4000-8000-000000000061'), 'ok',
   'D1 §2.7 none:一般會員 ⇒ 符合');
 
-update merchant_member_settings set reward_condition_mode = 'phone_verified'
+update merchant_member_settings set reward_condition_mode = 'line_bound'
 where merchant_id = 'db120000-0000-4000-8000-000000000021';
-select is(array[pg_temp.eng_reason('db120000-0000-4000-8000-000000000065'), pg_temp.eng_reason('db120000-0000-4000-8000-000000000066')],
-  array['ok', 'reward_condition'],
-  'D2 §2.7 phone_verified:電話已驗證 ⇒ 符合;只有 LINE ⇒ reward_condition');
+select is(pg_temp.eng_reason('db120000-0000-4000-8000-000000000067'), 'ok',
+  'D2 §2.7 line_bound(第 11 批 D 改寫):兩者皆是 ⇒ 符合');
 
 update merchant_member_settings set reward_condition_mode = 'line_bound'
 where merchant_id = 'db120000-0000-4000-8000-000000000021';
@@ -406,19 +408,14 @@ select results_eq(
 select is(pg_temp.eng_reason(null, true), 'reward_condition',
   'D5 §2.7 / §3.1:line_bound 模式下「全新會員」(未驗證、未綁 LINE)⇒ reward_condition');
 
-update merchant_member_settings set reward_condition_mode = 'either'
-where merchant_id = 'db120000-0000-4000-8000-000000000021';
-select is(array[pg_temp.eng_reason('db120000-0000-4000-8000-000000000066'), pg_temp.eng_reason('db120000-0000-4000-8000-000000000065'),
-                pg_temp.eng_reason('db120000-0000-4000-8000-000000000061')],
-  array['ok', 'ok', 'reward_condition'],
-  'D6 §2.7 either:LINE 或電話任一 ⇒ 符合;兩者皆無 ⇒ reward_condition');
+select is(pg_temp.eng_reason('db120000-0000-4000-8000-000000000061'), 'reward_condition',
+  'D6 §2.7 line_bound(第 11 批 D 改寫):兩者皆無 ⇒ reward_condition');
 
-update merchant_member_settings set reward_condition_mode = 'both'
-where merchant_id = 'db120000-0000-4000-8000-000000000021';
-select is(array[pg_temp.eng_reason('db120000-0000-4000-8000-000000000067'), pg_temp.eng_reason('db120000-0000-4000-8000-000000000065'),
-                pg_temp.eng_reason('db120000-0000-4000-8000-000000000066')],
-  array['ok', 'reward_condition', 'reward_condition'],
-  'D7 §2.7 both:兩者皆是 ⇒ 符合;只有其中一項 ⇒ reward_condition');
+select throws_ok(
+  $$update merchant_member_settings set reward_condition_mode = 'both'
+    where merchant_id = 'db120000-0000-4000-8000-000000000021'$$,
+  '23514', null,
+  'D7 第 11 批 D:reward_condition_mode = both 已退場,被 CHECK 擋下');
 
 update merchant_member_settings set reward_condition_mode = 'none'
 where merchant_id = 'db120000-0000-4000-8000-000000000021';

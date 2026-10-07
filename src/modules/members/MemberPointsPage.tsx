@@ -300,10 +300,8 @@ function MemberPointsPageInner() {
                       }))}
                     />
                   </FormField>
-                  <AlertNote>
-                    「電話已驗證」只是<strong>客服人工標記</strong>
-                    ，不是真的簡訊驗證，無法擋住用假電話註冊的人。
-                  </AlertNote>
+                  {/* 第 11 批 D(#991):「電話已驗證只是客服人工標記」那則常駐 `!` 拿掉 ——
+                      電話驗證相關選項已退場,下拉只剩「不限制 / 只看 LINE 已綁定」。 */}
                 </>
               )}
             </CardContent>

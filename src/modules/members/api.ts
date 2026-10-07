@@ -387,16 +387,6 @@ export async function reactivateMember(memberId: string): Promise<Member> {
   return data as Member;
 }
 
-/** §3.5(第〇節判斷 1):這是人工標記,不是真的簡訊驗證,呼叫端按鈕文案要清楚說明這一點。 */
-export async function setMemberPhoneVerified(memberId: string, verified: boolean): Promise<Member> {
-  const { data, error } = await supabase.rpc("set_member_phone_verified", {
-    p_member_id: memberId,
-    p_verified: verified,
-  });
-  if (error) throw error;
-  return data as Member;
-}
-
 // =========================================================================
 // §10.4(SPECS-INDEX #616):會員黑名單。純警告用途,不擋建單。
 // =========================================================================
@@ -679,9 +669,11 @@ export function useMerchantMembersList(
  *      ・`user_id` / `created_by_user_id` / `blacklisted_by_user_id` / `blacklisted_at` /
  *        `referred_by_member_id` / `referral_rewarded_at` / `last_birthday_bonus_year` /
  *        `phone_verified_at` / `created_at` / `updated_at` —— 畫面上沒有任何地方顯示。
+ *      ・`phone_verified` —— 第 11 批 D(2026-10-07)人工電話驗證標記退場,畫面不再顯示、
+ *        也沒有任何寫入路徑(欄位暫留,恆為 false)。`types.ts` 的 `MemberDetail` 同步拿掉。
  */
 const MEMBER_DETAIL_COLUMNS =
-  "id, merchant_id, name, phone, email, birthday, notes, status, tier_id, points_balance, referral_code, is_blacklisted, blacklist_reason, phone_verified, identity_verified_at, identity_first_verified_at";
+  "id, merchant_id, name, phone, email, birthday, notes, status, tier_id, points_balance, referral_code, is_blacklisted, blacklist_reason, identity_verified_at, identity_first_verified_at";
 
 export async function fetchMember(memberId: string): Promise<MemberDetail | null> {
   const { data, error } = await supabase

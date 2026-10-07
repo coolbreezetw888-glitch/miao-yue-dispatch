@@ -416,7 +416,7 @@ export const AGENT_PERMISSION_SECTIONS: AgentPermissionSectionDef[] = [
     // member_points 的客服打得開那一頁(RequireMemberPointsAccess 看 members),但規則卡片整組不渲染,
     // 只看到「你目前的權限看不到這頁的規則設定」(MemberPointsPage.tsx)。所以改寫成「進得去、但看不到規則」。
     description:
-      "開放後客服可以新增、編輯、下架會員資料，標記電話已驗證，並可在會員詳情頁查看點數餘額與異動歷史、登記兌換點數，也能進入「紅利點數」頁，但看不到裡面的規則設定。要查看或修改紅利規則需另外開啟「紅利點數」權限；手動調整點數只有商家管理員能做。",
+      "開放後客服可以新增、編輯、下架會員資料，並可在會員詳情頁查看點數餘額與異動歷史、登記兌換點數，也能進入「紅利點數」頁，但看不到裡面的規則設定。要查看或修改紅利規則需另外開啟「紅利點數」權限；手動調整點數只有商家管理員能做。",
   },
   {
     key: "member_points",

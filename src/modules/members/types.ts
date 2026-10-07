@@ -59,7 +59,6 @@ export type MemberDetail = Pick<
   | "referral_code"
   | "is_blacklisted"
   | "blacklist_reason"
-  | "phone_verified"
   | "identity_verified_at"
   | "identity_first_verified_at"
 >;
@@ -82,15 +81,14 @@ export const MEMBER_STATUS_LABELS: Record<MemberStatus, string> = {
 export type MemberTierStatus = "active" | "removed";
 
 /** #619(SPECS-INDEX):核發獎勵資格判斷條件,取代原本單一的 require_verified_phone_for_rewards
- * boolean 開關。 */
-export type RewardConditionMode = "none" | "phone_verified" | "line_bound" | "either" | "both";
+ * boolean 開關。
+ * 第 11 批 D(#991,2026-10-07):人工電話驗證標記退場 ⇒ 靠它的 phone_verified / either / both
+ * 三個選項一併收掉(資料庫 CHECK 同步收緊成 none / line_bound),只剩 2 個選項。 */
+export type RewardConditionMode = "none" | "line_bound";
 
 export const REWARD_CONDITION_MODE_LABELS: Record<RewardConditionMode, string> = {
   none: "不限制",
-  phone_verified: "只看電話已驗證",
   line_bound: "只看 LINE 已綁定",
-  either: "電話已驗證或 LINE 已綁定，任一即可",
-  both: "電話已驗證且 LINE 已綁定，兩者都要符合",
 };
 
 /** 紅利系統重構 §1.5:分類帳 transaction_type 從 5 種擴成 10 種(CHECK 在批次 1)。 */

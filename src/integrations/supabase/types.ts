@@ -4373,46 +4373,6 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      set_member_phone_verified: {
-        Args: { p_member_id: string; p_verified: boolean }
-        Returns: {
-          birthday: string | null
-          blacklist_reason: string | null
-          blacklisted_at: string | null
-          blacklisted_by_user_id: string | null
-          created_at: string
-          created_by_user_id: string | null
-          email: string | null
-          id: string
-          identity_first_verified_at: string | null
-          identity_verified_at: string | null
-          identity_verified_via: string | null
-          is_blacklisted: boolean
-          last_birthday_bonus_year: number | null
-          line_bound: boolean
-          line_user_id: string | null
-          merchant_id: string
-          name: string
-          notes: string | null
-          phone: string | null
-          phone_verified: boolean
-          phone_verified_at: string | null
-          points_balance: number
-          referral_code: string
-          referral_rewarded_at: string | null
-          referred_by_member_id: string | null
-          status: string
-          tier_id: string | null
-          updated_at: string
-          user_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "members"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       set_merchant_line_credentials: {
         Args: {
           p_channel_access_token: string

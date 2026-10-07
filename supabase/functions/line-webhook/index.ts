@@ -3,7 +3,7 @@
 // 判斷 8(多租戶單一共用網址)。這是本模組風險最高的一步(安全性/簽章驗證),見第七節「Deno」。
 //
 // 流程:
-//   1. 讀取「原始位元組」(regla 2.2 第 1 點:不能先 JSON.parse 再重新字串化)。
+//   1. 讀取「原始位元組」(規則 2.2 第 1 點:不能先 JSON.parse 再重新字串化)。
 //   2. 解析 JSON 取出 destination(此時內容尚未驗證,不可信任,只拿來查表)。
 //   3. 查 merchant_line_configs where line_bot_user_id = destination,查無資料 → 回 200 不處理
 //      (安靜跳過,不洩漏「這個 destination 存不存在」的資訊)。

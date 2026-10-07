@@ -180,7 +180,8 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$update merchant_member_settings set reward_condition_mode = 'phone_verified'
+  -- 第 11 批 D(#991):樣本值由 'phone_verified'(已退場)換成 'line_bound';測的是權限,不是值。
+  $$update merchant_member_settings set reward_condition_mode = 'line_bound'
     where merchant_id = 'da070000-0000-4000-8000-000000000020'$$,
   '42501', null,
   '任務 6(核心):「核發獎勵資格條件」(reward_condition_mode)也歸紅利點數管理,member_settings 改不動'
@@ -219,7 +220,7 @@ select pg_temp.test_set_auth('da070000-0000-4000-8000-000000000002');
 select lives_ok(
   $$update merchant_member_settings
     set basic_points_per_order = 200, birthday_bonus_points = 60,
-        reward_condition_mode = 'phone_verified', points_feature_enabled = false
+        reward_condition_mode = 'line_bound', points_feature_enabled = false
     where merchant_id = 'da070000-0000-4000-8000-000000000020'$$,
   '任務 6(反面對照):被開通 member_points 的客服 P 可以修改全部五個紅利點數規則欄位'
 );

@@ -1,6 +1,6 @@
 -- 模組 10(會員與紅利)— SPECS-INDEX #614(§10.2/§10.2.1)+ #619(§10.7)。
--- get_members_by_phone(電話查詢索引,不當唯一鍵)+ reward_condition_mode 五選一(核心必測:
--- line_bound/either/both 的交集/聯集邏輯,phone_verified/none 已在 module10_02 覆蓋)。
+-- get_members_by_phone(電話查詢索引,不當唯一鍵)+ reward_condition_mode(核心必測:line_bound)。
+-- 第 11 批 D(#991,2026-10-07):either / both / phone_verified 已退場,改測 CHECK 擋下這三個值。
 begin;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
@@ -35,7 +35,7 @@ create trigger req977_full_day_windows
   for each row execute function pg_temp.req977_full_day_windows();
 -- ─── 墊片結束 ──────────────────────────────────────────────────────────────────────────────
 
-select plan(14);
+select plan(12);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -206,8 +206,8 @@ select id from create_member('ee000000-0000-4000-8000-000000000021', '只綁LINE
 select id from create_member('ee000000-0000-4000-8000-000000000021', '兩者都有會員', '0977000003') \gset cond_both_
 select id from create_member('ee000000-0000-4000-8000-000000000021', '兩者都沒有會員', '0977000004') \gset cond_neither_
 
-select set_member_phone_verified(:'cond_phone_only_id'::uuid, true);
-select set_member_phone_verified(:'cond_both_id'::uuid, true);
+-- 第 11 批 D(#991):set_member_phone_verified 已退場 ⇒ 原本把「只驗證電話」「兩者都有」兩位會員標成
+-- 電話已驗證的兩行刪除(phone_verified 恆為 false);line_bound 那段的意圖不受影響。
 
 select pg_temp.test_clear_auth();
 
@@ -251,96 +251,29 @@ select is(
   '#619(line_bound 模式):只綁 LINE 的會員正確核發'
 );
 
--- mode = 'either':任一即可。
-update merchant_member_settings set reward_condition_mode = 'either'
-where merchant_id = 'ee000000-0000-4000-8000-000000000021';
+-- 第 11 批 D(#991,2026-10-07):人工電話驗證標記退場 ⇒ 資料庫 CHECK 收緊成 none / line_bound。
+-- 原本 either / both / phone_verified 三段(5 條)改成「CHECK 擋下這三個值」(3 條),plan 14 → 12。
+select pg_temp.test_clear_auth();
 
-select id from create_booking(
-  p_merchant_id => 'ee000000-0000-4000-8000-000000000021', p_staff_id => 'ee000000-0000-4000-8000-000000000041',
-  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ee000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => '2026-12-16 11:00:00+08', p_customer_name => 'either模式-只驗電話', p_customer_phone => '0977000001',
-  p_payment_method_id => 'ee000000-0000-4000-8000-000000000071',
-  p_member_id => :'cond_phone_only_id'::uuid
-) \gset either_booking_phone_
-select confirm_booking(:'either_booking_phone_id'::uuid);
-select complete_booking(:'either_booking_phone_id'::uuid);
-
-select id from create_booking(
-  p_merchant_id => 'ee000000-0000-4000-8000-000000000021', p_staff_id => 'ee000000-0000-4000-8000-000000000041',
-  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ee000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => '2026-12-16 12:00:00+08', p_customer_name => 'either模式-都沒有', p_customer_phone => '0977000004',
-  p_payment_method_id => 'ee000000-0000-4000-8000-000000000071',
-  p_member_id => :'cond_neither_id'::uuid
-) \gset either_booking_neither_
-select confirm_booking(:'either_booking_neither_id'::uuid);
-select complete_booking(:'either_booking_neither_id'::uuid);
-
-select is(
-  (select count(*)::int from member_point_transactions where booking_id = :'either_booking_phone_id'::uuid),
-  1,
-  '#619(either 模式):只驗證電話(沒綁 LINE)的會員一樣核發(任一即可)'
+select throws_ok(
+  $$update merchant_member_settings set reward_condition_mode = 'either'
+    where merchant_id = 'ee000000-0000-4000-8000-000000000021'$$,
+  '23514', null,
+  '第 11 批 D:reward_condition_mode = either 已退場,被 CHECK 擋下'
 );
 
-select is(
-  (select count(*)::int from member_point_transactions where booking_id = :'either_booking_neither_id'::uuid),
-  0,
-  '#619(either 模式):兩者都沒有的會員不核發'
+select throws_ok(
+  $$update merchant_member_settings set reward_condition_mode = 'both'
+    where merchant_id = 'ee000000-0000-4000-8000-000000000021'$$,
+  '23514', null,
+  '第 11 批 D:reward_condition_mode = both 已退場,被 CHECK 擋下'
 );
 
--- mode = 'both':兩者都要。
-update merchant_member_settings set reward_condition_mode = 'both'
-where merchant_id = 'ee000000-0000-4000-8000-000000000021';
-
-select id from create_booking(
-  p_merchant_id => 'ee000000-0000-4000-8000-000000000021', p_staff_id => 'ee000000-0000-4000-8000-000000000041',
-  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ee000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => '2026-12-16 13:00:00+08', p_customer_name => 'both模式-只驗電話', p_customer_phone => '0977000001',
-  p_payment_method_id => 'ee000000-0000-4000-8000-000000000071',
-  p_member_id => :'cond_phone_only_id'::uuid
-) \gset both_booking_phone_only_
-select confirm_booking(:'both_booking_phone_only_id'::uuid);
-select complete_booking(:'both_booking_phone_only_id'::uuid);
-
-select id from create_booking(
-  p_merchant_id => 'ee000000-0000-4000-8000-000000000021', p_staff_id => 'ee000000-0000-4000-8000-000000000041',
-  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ee000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => '2026-12-16 14:00:00+08', p_customer_name => 'both模式-兩者都有', p_customer_phone => '0977000003',
-  p_payment_method_id => 'ee000000-0000-4000-8000-000000000071',
-  p_member_id => :'cond_both_id'::uuid
-) \gset both_booking_both_
-select confirm_booking(:'both_booking_both_id'::uuid);
-select complete_booking(:'both_booking_both_id'::uuid);
-
-select is(
-  (select count(*)::int from member_point_transactions where booking_id = :'both_booking_phone_only_id'::uuid),
-  0,
-  '#619(both 模式,核心):只驗證電話、沒綁 LINE 的會員不核發(兩者都要)'
-);
-
-select is(
-  (select count(*)::int from member_point_transactions where booking_id = :'both_booking_both_id'::uuid),
-  1,
-  '#619(both 模式,核心):兩者都有的會員正確核發'
-);
-
--- mode = 'phone_verified':對照組,只看電話已驗證,不看 LINE(跟 module10_02 的驗證方向互補)。
-update merchant_member_settings set reward_condition_mode = 'phone_verified'
-where merchant_id = 'ee000000-0000-4000-8000-000000000021';
-
-select id from create_booking(
-  p_merchant_id => 'ee000000-0000-4000-8000-000000000021', p_staff_id => 'ee000000-0000-4000-8000-000000000041',
-  p_service_items => jsonb_build_array(jsonb_build_object('service_item_id','ee000000-0000-4000-8000-000000000031','quantity',1,'unit_price',1000)),
-  p_start_at => '2026-12-16 15:00:00+08', p_customer_name => 'phone_verified模式-只綁LINE', p_customer_phone => '0977000002',
-  p_payment_method_id => 'ee000000-0000-4000-8000-000000000071',
-  p_member_id => :'cond_line_only_id'::uuid
-) \gset pv_booking_line_only_
-select confirm_booking(:'pv_booking_line_only_id'::uuid);
-select complete_booking(:'pv_booking_line_only_id'::uuid);
-
-select is(
-  (select count(*)::int from member_point_transactions where booking_id = :'pv_booking_line_only_id'::uuid),
-  0,
-  '#619(phone_verified 模式,對照組):只綁 LINE、沒驗證電話的會員不核發(這個模式只看電話)'
+select throws_ok(
+  $$update merchant_member_settings set reward_condition_mode = 'phone_verified'
+    where merchant_id = 'ee000000-0000-4000-8000-000000000021'$$,
+  '23514', null,
+  '第 11 批 D:reward_condition_mode = phone_verified 已退場,被 CHECK 擋下'
 );
 
 select pg_temp.test_clear_auth();

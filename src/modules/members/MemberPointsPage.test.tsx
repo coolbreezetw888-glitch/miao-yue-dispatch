@@ -485,3 +485,49 @@ function grant(partial: Partial<BirthdayBonusGrant>): BirthdayBonusGrant {
     ...partial,
   };
 }
+
+// 第 11 批 D(#991,2026-10-07):人工電話驗證標記退場 ⇒ 核發獎勵資格條件只剩 2 個選項,
+// 「電話已驗證只是客服人工標記」那則常駐 `!` 一併拿掉(說的東西已不存在)。
+describe("第 11 批 D:核發獎勵資格條件只剩 2 個選項", () => {
+  function stubRadixPointerApis() {
+    // jsdom 沒有這幾個 API,Radix Select 打開時會呼叫。
+    const proto = Element.prototype as unknown as Record<string, unknown>;
+    proto["hasPointerCapture"] ??= () => false;
+    proto["releasePointerCapture"] ??= () => undefined;
+    proto["scrollIntoView"] ??= () => undefined;
+  }
+
+  it("下拉打開只有「不限制」「只看 LINE 已綁定」兩個選項", async () => {
+    stubRadixPointerApis();
+    renderPage();
+    await userEvent.click(screen.getByRole("combobox", { name: "資格條件" }));
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["不限制", "只看 LINE 已綁定"]);
+  });
+
+  it("選「只看 LINE 已綁定」⇒ 存 line_bound", async () => {
+    stubRadixPointerApis();
+    renderPage();
+    await userEvent.click(screen.getByRole("combobox", { name: "資格條件" }));
+    await userEvent.click(await screen.findByRole("option", { name: "只看 LINE 已綁定" }));
+    await waitFor(() =>
+      expect(state.saveMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ rewardConditionMode: "line_bound" }),
+      ),
+    );
+  });
+
+  it("不再出現「電話已驗證只是客服人工標記」的提醒,畫面上也沒有任何「電話已驗證」", () => {
+    renderPage();
+    expect(screen.queryByText(/客服人工標記/)).toBeNull();
+    expect(document.body.textContent ?? "").not.toMatch(/電話已驗證/);
+  });
+
+  it("D-4:資料庫若讀到已退場的舊值(理論上被 CHECK 擋住)⇒ 頁面照樣渲染不崩潰", () => {
+    state.settings = makeSettings({ reward_condition_mode: "either" });
+    renderPage();
+    expect(screen.getByRole("combobox", { name: "資格條件" })).toBeInTheDocument();
+    expect(screen.getByText("核發獎勵資格條件")).toBeInTheDocument();
+  });
+});

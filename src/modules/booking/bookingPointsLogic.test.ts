@@ -138,8 +138,9 @@ describe("describeIneligibleReason(§4.6 第 1 點)", () => {
     expect(describeIneligibleReason("reward_condition", "existing", "line_bound")).toBe(
       "此會員未符合商家設定的核發資格條件(需 LINE 已綁定)",
     );
+    // 第 11 批 D(#991):電話驗證相關 mode(phone_verified / either / both)已退場 ⇒ 視同未知 mode,不帶括號。
     expect(describeIneligibleReason("reward_condition", "given", "both")).toBe(
-      "此會員未符合商家設定的核發資格條件(需 電話已驗證且 LINE 已綁定)",
+      "此會員未符合商家設定的核發資格條件",
     );
     expect(describeIneligibleReason("reward_condition", "new", "line_bound")).toBe(
       "新客戶尚未完成驗證，依商家設定這筆訂單不派點",

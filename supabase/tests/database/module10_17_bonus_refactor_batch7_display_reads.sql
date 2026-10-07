@@ -38,8 +38,10 @@ $$;
 -- Fixture
 --   使用者:1 A 店管理員 / 2 客服O(orders)/ 3 客服M(members)/ 4 客服B(billing)/
 --           5 客服P(member_points)/ 6 B 店管理員
---   A 店:紅利開啟、基本模式每筆 10 點、資格條件 phone_verified
---   會員:101「未驗證」(phone_verified false)、102「已驗證」(phone_verified true)
+--   A 店:紅利開啟、基本模式每筆 10 點、資格條件 line_bound
+--   會員:101「未驗證」(line_bound false)、102「已驗證」(line_bound true)
+--   第 11 批 D(#991,2026-10-07):原本用 phone_verified 模式 + phone_verified 欄位;人工電話驗證標記退場、
+--   CHECK 只剩 none / line_bound ⇒ 改用 line_bound 表達同一件事(資格不符 / 符合)。
 -- =========================================================================
 insert into auth.users (id, email) values
   ('db170000-0000-4000-8000-000000000001', 'pgtap-m1017-admin@test.local'),
@@ -79,7 +81,7 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
 
 -- B 店刻意不插設定列(若建商家時已自動補了一列,值也一定是預設的 true,C 段斷言照樣成立)。
 insert into merchant_member_settings (merchant_id, reward_condition_mode, earn_mode, basic_points_per_order, basic_min_amount)
-values ('db170000-0000-4000-8000-000000000020', 'phone_verified', 'basic', 10, 0);
+values ('db170000-0000-4000-8000-000000000020', 'line_bound', 'basic', 10, 0);
 
 insert into service_items (id, merchant_id, name, price, item_type, duration_minutes, status) values
   ('db170000-0000-4000-8000-000000000031', 'db170000-0000-4000-8000-000000000020', '清洗', 1000, 'primary', 30, 'active');
@@ -87,9 +89,9 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit) values
   ('db170000-0000-4000-8000-000000000041', 'db170000-0000-4000-8000-000000000020', '服務人員A', '0901001701', true);
 
-insert into members (id, merchant_id, name, phone, referral_code, points_balance, status, phone_verified) values
-  ('db170000-0000-4000-8000-000000000101', 'db170000-0000-4000-8000-000000000020', '未驗證會員', '0917000101', 'M1017A01', 0, 'active', false),
-  ('db170000-0000-4000-8000-000000000102', 'db170000-0000-4000-8000-000000000020', '已驗證會員', '0917000102', 'M1017A02', 500, 'active', true);
+insert into members (id, merchant_id, name, phone, referral_code, points_balance, status, line_bound, line_user_id) values
+  ('db170000-0000-4000-8000-000000000101', 'db170000-0000-4000-8000-000000000020', '未驗證會員', '0917000101', 'M1017A01', 0, 'active', false, null),
+  ('db170000-0000-4000-8000-000000000102', 'db170000-0000-4000-8000-000000000020', '已驗證會員', '0917000102', 'M1017A02', 500, 'active', true, 'Upgtap1017line102');
 
 -- 訂單 901:已完成、預定 30 點(人工設定)、折抵 50 點(5 元);902:已確認、沒派點。
 insert into bookings (id, merchant_id, staff_id, customer_name, customer_phone, start_at, end_at, status,
@@ -125,7 +127,7 @@ select pg_temp.test_set_auth('db170000-0000-4000-8000-000000000002');  -- 只有
 select is(
   (select row(r ->> 'ineligible_reason', r ->> 'reward_condition_mode', (r ->> 'auto_points')::int)::text
    from pg_temp.pv('0917000101') r),
-  row('reward_condition', 'phone_verified', 0)::text,
+  row('reward_condition', 'line_bound', 0)::text,
   'A1 §4.6:不符資格 ⇒ 預覽多回 reward_condition_mode(畫面「需 {條件}」用),只有 orders 鑰匙也拿得到'
 );
 
@@ -138,8 +140,8 @@ select is(
 
 select is(
   (select r -> 'member' ->> 'resolution' || '/' || (r ->> 'reward_condition_mode') from pg_temp.pv('0917999999') r),
-  'new/phone_verified',
-  'A3:新客戶(送出後自動建立)在 phone_verified 模式下 ⇒ reward_condition 也帶條件'
+  'new/line_bound',
+  'A3:新客戶(送出後自動建立)在 line_bound 模式下 ⇒ reward_condition 也帶條件'
 );
 
 select pg_temp.test_clear_auth();
