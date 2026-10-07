@@ -12,6 +12,7 @@ import {
   confirmBooking as apiConfirmBooking,
   createBooking as apiCreateBooking,
   fetchBookingCardExtras,
+  clearStaffDayOverride as apiClearStaffDayOverride,
   setStaffDayOverride as apiSetStaffDayOverride,
   updateBooking as apiUpdateBooking,
   updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
@@ -222,10 +223,18 @@ export async function setStaffDayOverride(
   return apiSetStaffDayOverride(staffId, overrideDate, startTime, endTime, isAvailable);
 }
 
-// 使用者裁決(2026-09-24):行事曆時段選單的「清除例外(恢復預設)」入口整個拿掉,這裡原本包一層
-// 的 clearStaffDayOverride 對外介面也隨之移除(唯一的呼叫端就是 CalendarPage)。資料庫函式
-// clear_staff_day_override 與 api.ts 的同名 wrapper 都保留——模組 14(服務人員端)
-// src/modules/staff-portal/context.tsx 仍然直接從 @/modules/booking/api 使用它。
+// 使用者裁決(2026-09-24):行事曆時段選單的「清除例外(恢復預設)」入口整個拿掉(選單上仍然沒有這個選項)。
+// SPECS-INDEX #1004(第 14 批)把這支對外介面加回來:點格子「關閉 → 再開啟」時,如果開啟後剛好回到每週時段
+// 原本的狀態,CalendarPage 改成**刪掉**這一格的例外(恢復白色),不再留一筆「例外開啟」(淡紫底 + 紫框)。
+// 何時刪、何時寫由 daySlotGrid.ts 的 planDayOverrideToggle 決定。
+export async function clearStaffDayOverride(
+  staffId: string,
+  overrideDate: string,
+  startTime: string,
+  endTime: string,
+): Promise<void> {
+  return apiClearStaffDayOverride(staffId, overrideDate, startTime, endTime);
+}
 
 /** 模組 6 §6.1 對外介面:直接取得單筆訂單的金額 breakdown,供模組 8/12 之後複用,
  * 不用重新查三張關聯表自己加總。 */

@@ -178,12 +178,12 @@ test("E2 服務人員關閉 / 再開啟自己的一格時段,商家端同格跟�
   await slot(page, "15:00").click();
   await page.getByRole("menuitem", { name: "開啟時段" }).click();
   await expect(page.getByText("已開啟這個時段")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(slot(page, "15:00")).toHaveAttribute("data-slot-state", "override-open", {
+  // #1004(第 14 批):再開啟 = 回到每週時段原本的狀態 ⇒ 刪掉例外(白色 available),
+  // 不再留一筆 is_available=true 的「例外開啟」(畫成淡紫底 + 紫框,使用者回報的 bug)。
+  await expect(slot(page, "15:00")).toHaveAttribute("data-slot-state", "available", {
     timeout: LOAD_TIMEOUT,
   });
-  expect(await schedule()).toEqual([
-    expect.objectContaining({ start_time: "15:00:00", is_available: true }),
-  ]);
+  expect(await schedule()).toEqual([]);
   expectOnlyLocalRequests(recorder);
 });
 

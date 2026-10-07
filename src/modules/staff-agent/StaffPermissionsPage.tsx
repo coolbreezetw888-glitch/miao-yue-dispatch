@@ -128,7 +128,7 @@ function StaffPermissionsInner() {
 
 export default function StaffPermissionsPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireMerchantAdmin featureName="服務人員權限設定">
       <StaffPermissionsInner />
     </RequireMerchantAdmin>
   );

@@ -577,9 +577,16 @@ async function indicatorStates(page: Page): Promise<string[]> {
 
 async function openMobileCalendar(
   browser: Browser,
+  options: { blockRealtime?: boolean } = {},
 ): Promise<{ context: BrowserContext; page: Page; cdp: CDPSession }> {
   const context = await newMobileContext(browser);
   const page = await context.newPage();
+  // #1003(第 14 批)起商家端行事曆有即時同步:別的 session 新增訂單,畫面幾秒內就會自己出現。
+  // M1 要驗的是「下拉刷新」本身,所以把 Realtime 的 WebSocket 擋掉(等同即時同步斷線),
+  // 才能證明訂單是下拉刷新抓回來的。即時同步本身由 b14-calendar-live-sync-and-cards.spec.ts 驗。
+  if (options.blockRealtime) {
+    await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => ws.close());
+  }
   // iPhone UA 會跳「加入主畫面」浮動提示(InstallPwaHint),蓋住格線下半部 ⇒ 先寫入「7 天內不再提示」。
   await page.addInitScript(() => {
     window.localStorage.setItem("miaoyue_pwa_install_hint_dismissed_at", String(Date.now()));
@@ -603,7 +610,7 @@ async function openMobileCalendar(
 test("M1 手機 375px:另一個 session 新增訂單 → 頁面頂端往下拉放開 → 新訂單出現(沒有整頁重載)", async ({
   browser,
 }) => {
-  const { context, page, cdp } = await openMobileCalendar(browser);
+  const { context, page, cdp } = await openMobileCalendar(browser, { blockRealtime: true });
   try {
     const bookingId = await createBookingAsAdmin(fixture, {
       staffId: fixture.staffBId,

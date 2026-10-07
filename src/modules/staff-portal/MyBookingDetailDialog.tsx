@@ -166,7 +166,12 @@ export function MyBookingDetailDialog({
                   編輯
                 </Button>
               ) : null}
-              {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
+              {showConfirm ? (
+                <StaffConfirmBookingButton
+                  bookingId={booking.id}
+                  onDone={() => onOpenChange(false)}
+                />
+              ) : null}
               {actions.showComplete ? (
                 <StaffCompleteBookingButton
                   bookingId={booking.id}
@@ -181,7 +186,12 @@ export function MyBookingDetailDialog({
                   關閉
                 </Button>
               </FullPageLayerClose>
-              {showConfirm ? <StaffConfirmBookingButton bookingId={booking.id} /> : null}
+              {showConfirm ? (
+                <StaffConfirmBookingButton
+                  bookingId={booking.id}
+                  onDone={() => onOpenChange(false)}
+                />
+              ) : null}
             </ActionBar>
           )
         }
@@ -275,15 +285,23 @@ export function MyBookingDetailDialog({
  * #977 第 4 批:「確認接單」主要按鈕。獨立成一個小元件,讓 mutation(需要 QueryClient)只在按鈕真的出現時才建立
  * —— 已確認 / 已完成 / 協助人員的詳情不會掛任何寫入用的 hook。
  * 成功 ⇒ 提示 + useStaffConfirmBooking 內部立刻 invalidate 行事曆查詢(詳情、列表、鈴鐺待確認數一起更新)。
- * 失敗 ⇒ 顯示後端的中文原因(例如「這筆訂單已經不是待確認狀態，請重新整理」)。
+ * 失敗 ⇒ 顯示後端的中文原因(例如「這筆訂單已經不是待確認狀態，請重新整理」),詳情維持開著。
+ * #1008(第 14 批,#977 使用者裁決):成功後自動關掉詳情,回到原本所在的行事曆(日期 / 檢視不變)。
  */
-function StaffConfirmBookingButton({ bookingId }: { bookingId: string }) {
+function StaffConfirmBookingButton({
+  bookingId,
+  onDone,
+}: {
+  bookingId: string;
+  onDone: () => void;
+}) {
   const confirmMutation = useStaffConfirmBooking();
 
   function handleConfirm() {
     confirmMutation.mutate(bookingId, {
       onSuccess: () => {
         toast.success("已確認接單");
+        onDone();
       },
       onError: (err) => {
         toast.error("確認接單失敗", { description: getErrorMessage(err) });

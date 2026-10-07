@@ -320,7 +320,7 @@ function IndustryTransferWizardPageInner() {
 
 export default function IndustryTransferWizardPage() {
   return (
-    <RequireDataImportAccess>
+    <RequireDataImportAccess featureName="產業轉移">
       <IndustryTransferWizardPageInner />
     </RequireDataImportAccess>
   );

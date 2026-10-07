@@ -379,7 +379,7 @@ function LineSettingsPageInner() {
 
 export default function LineSettingsPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireMerchantAdmin featureName="LINE 串接設定">
       <LineSettingsPageInner />
     </RequireMerchantAdmin>
   );

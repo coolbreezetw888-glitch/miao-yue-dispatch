@@ -283,7 +283,7 @@ function AgentPermissionsInner() {
 
 export default function AgentPermissionsPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireMerchantAdmin featureName="客服權限設定">
       <AgentPermissionsInner />
     </RequireMerchantAdmin>
   );

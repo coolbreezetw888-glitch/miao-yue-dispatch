@@ -11,7 +11,7 @@
 
 import { useRef, useState } from "react";
 
-import { isoToTaipeiTime, timeToMinutes } from "./dateUtils";
+import { buildTaipeiIso, isoToTaipeiTime, timeToMinutes } from "./dateUtils";
 
 // ---------------------------------------------------------------------------
 // SPECS-INDEX #641:服務人員時間軸單一時段格子——手機版橫向滑動誤觸建單/開關時段修復。
@@ -141,6 +141,8 @@ export interface ResolvedDaySlot {
   foreignBusy: boolean;
   /** 這一格有單日例外。 */
   isOverride: boolean;
+  /** SPECS-INDEX #1004:不看單日例外時,這一格照「營業時間 ∩ 每週固定可預約時段」原本可不可以預約。 */
+  templateAvailable: boolean;
   /** 套上單日例外之後,這一格最後可不可以預約。 */
   finalAvailable: boolean;
   /** 輸出到 data-slot-state 的值。 */
@@ -177,9 +179,67 @@ export function resolveDaySlot(input: {
   return {
     foreignBusy,
     isOverride,
+    templateAvailable: inWindow,
     finalAvailable,
     state: foreignBusy ? "cross-store-occupied" : daySlotState(isOverride, finalAvailable),
   };
+}
+
+/** SPECS-INDEX #1004:行事曆點格子「開啟 / 關閉時段」實際要對資料庫做什麼。 */
+export type DayOverrideToggleAction =
+  /** 寫一筆單日例外(set_staff_day_override)。 */
+  | { kind: "set"; isAvailable: boolean }
+  /** 刪掉這一格的單日例外,回到每週固定時段原本的樣子(clear_staff_day_override)。 */
+  | { kind: "clear" };
+
+/**
+ * SPECS-INDEX #1004(第 14 批):點格子切換時段,要「寫例外」還是「刪例外」。
+ *
+ * 問題:改版前一律呼叫 set_staff_day_override(upsert)。一格本來就在每週時段裡(白色可預約)→ 關閉
+ * = 寫一筆 is_available=false 的例外(斜線)→ 再開啟 = 把那一筆**改成** is_available=true 而不是刪掉 ⇒
+ * 資料庫多留一筆「例外開啟」,畫面照 #5.5 第 4 點畫成淡紫底 + 紫框(override-open),不是原本的白色。
+ * (正式庫 2026-10-07 只讀查到 2 筆這種殘留,就是使用者截圖那兩格。)反方向一樣:每週時段外的灰格
+ * 「開啟 → 再關閉」會留一筆 false 例外,畫成斜線「時段排休」,不是原本的灰色。
+ *
+ * 規則(使用者原話「正確應該是恢復原本的狀態」,兩個方向一致):
+ *   切換後的目標狀態 === 每週時段原本的狀態,而且這格目前有例外 ⇒ 刪例外(回到原樣);否則寫例外。
+ * 刪例外走 clear_staff_day_override,它不回報「這段時間還有幾筆既有預約」⇒ 關閉方向的提醒筆數由呼叫端用
+ * 畫面上已載入的當天訂單自己算(countBookingsInSlot),文案照舊。
+ *
+ * 刻意做在前端、不改 set_staff_day_override:服務人員端「整天休假」是寫 00:00–24:00 共 48 筆 false,
+ * 用「剛好 48 筆而且全部 false」判斷整天休假;如果資料庫一律把「跟每週時段相同」的格子改成刪除,營業時間外
+ * 的格子會被刪掉、整天休假就認不出來了。這裡只在行事曆點單一格時才刪那一格;整天休假的那天每一格都已經是
+ * 「不可預約」,只會出現「開啟」方向,而「開啟其中一格」本來就代表那天不再是整天休假(改版前寫成 true 也一樣)。
+ */
+export function planDayOverrideToggle(slot: {
+  isOverride: boolean;
+  templateAvailable: boolean;
+  finalAvailable: boolean;
+}): DayOverrideToggleAction {
+  const target = !slot.finalAvailable;
+  if (slot.isOverride && target === slot.templateAvailable) return { kind: "clear" };
+  return { kind: "set", isAvailable: target };
+}
+
+/**
+ * SPECS-INDEX #1004:關閉方向改成刪例外時,clear_staff_day_override 不會回報衝突筆數 ⇒ 用畫面上已載入的
+ * 這位服務人員當天的訂單自己算。條件跟 set_staff_day_override 的計數一致:不含已取消、時間有重疊、
+ * 同一張單(主要 + 協助都算到他)只算一次。時間用完整時間戳比,跨午夜的單也不會算錯。
+ */
+export function countBookingsInSlot(
+  bookings: readonly { id: string; start_at: string; end_at: string; status: string }[],
+  dateKey: string,
+  startTime: string,
+  endTime: string,
+): number {
+  const rangeStart = Date.parse(buildTaipeiIso(dateKey, startTime.slice(0, 5)));
+  const rangeEnd = rangeStart + (timeToMinutes(endTime) - timeToMinutes(startTime)) * 60_000;
+  const ids = new Set<string>();
+  for (const b of bookings) {
+    if (b.status === "cancelled") continue;
+    if (Date.parse(b.start_at) < rangeEnd && Date.parse(b.end_at) > rangeStart) ids.add(b.id);
+  }
+  return ids.size;
 }
 
 /**

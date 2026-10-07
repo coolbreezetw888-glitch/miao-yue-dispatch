@@ -246,7 +246,7 @@ function ImportHistoryPageInner() {
 
 export default function ImportHistoryPage() {
   return (
-    <RequireDataImportAccess>
+    <RequireDataImportAccess featureName="匯入紀錄">
       <ImportHistoryPageInner />
     </RequireDataImportAccess>
   );

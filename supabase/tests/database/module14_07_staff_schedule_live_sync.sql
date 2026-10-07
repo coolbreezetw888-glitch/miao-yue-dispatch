@@ -942,10 +942,13 @@ select pg_temp.reset_sig();
 -- I. 🔴 #892 沒有任何寫入政策(收得到、發不出去)
 -- -------------------------------------------------------------------------
 select is(
-  (select array_agg(policyname || ':' || cmd || ':' || array_to_string(roles, ',') || ':' || permissive)
+  (select array_agg(policyname || ':' || cmd || ':' || array_to_string(roles, ',') || ':' || permissive order by policyname)
    from pg_policies where schemaname = 'realtime' and tablename = 'messages'),
-  array['staff_schedule_broadcast_receive:SELECT:authenticated:PERMISSIVE'],
-  'I1 🔴 #892:realtime.messages 只有 1 條政策,而且是 SELECT、只給 authenticated(沒有任何 INSERT / UPDATE / DELETE / ALL 政策)'
+  -- SPECS-INDEX #1003(第 14 批)新增第二條 SELECT 政策 merchant_calendar_broadcast_receive(商家端行事曆頻道);
+  -- 「沒有任何寫入政策」這條鐵律不變。
+  array['merchant_calendar_broadcast_receive:SELECT:authenticated:PERMISSIVE',
+        'staff_schedule_broadcast_receive:SELECT:authenticated:PERMISSIVE'],
+  'I1 🔴 #892:realtime.messages 只有 SELECT 政策(服務人員班表 + #1003 商家行事曆)、只給 authenticated(沒有任何 INSERT / UPDATE / DELETE / ALL 政策)'
 );
 select ok(
   has_table_privilege('authenticated', 'realtime.messages', 'INSERT')

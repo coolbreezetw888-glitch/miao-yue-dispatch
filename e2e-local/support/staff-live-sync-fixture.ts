@@ -523,5 +523,22 @@ export async function teardownLiveSyncFixture(fixture: LiveSyncFixture): Promise
   const signalLeft = psqlLocal(`select count(*) from realtime.messages where ${where};`);
   if (signalLeft !== "0") throw new Error(`teardown 後 realtime.messages 仍有 ${signalLeft} 列`);
   actions.push(`已硬刪除本次頻道的訊號列(realtime.messages)${signalRows} 列,刪後 0 列`);
+
+  // ⑤ SPECS-INDEX #1003(第 14 批)起,訂單 / 時段變動也會對商家行事曆頻道 merchant:<id>:calendar 發訊號
+  //    ⇒ 本次所有商家(含同集團開的分店)的那幾列也一併清掉,同樣先查、刪、再查必須為 0。
+  if (merchantIds.some((id) => !UUID_RE.test(id)))
+    throw new Error("teardown 中止:merchant id 格式不對");
+  const merchantWhere = `topic in (${merchantIds.map((id) => `'merchant:${id.toLowerCase()}:calendar'`).join(", ")})`;
+  const merchantSignalRows = psqlLocal(
+    `select count(*) from realtime.messages where ${merchantWhere};`,
+  );
+  psqlLocal(`delete from realtime.messages where ${merchantWhere};`);
+  const merchantSignalLeft = psqlLocal(
+    `select count(*) from realtime.messages where ${merchantWhere};`,
+  );
+  if (merchantSignalLeft !== "0") {
+    throw new Error(`teardown 後 realtime.messages 商家頻道仍有 ${merchantSignalLeft} 列`);
+  }
+  actions.push(`已硬刪除本次商家行事曆頻道的訊號列 ${merchantSignalRows} 列,刪後 0 列`);
   return actions;
 }

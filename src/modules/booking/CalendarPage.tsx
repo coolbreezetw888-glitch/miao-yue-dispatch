@@ -178,6 +178,7 @@ import {
   STAFF_RELINK_NOTICE,
 } from "./bookingCreatedFeedback";
 import {
+  clearStaffDayOverride,
   setStaffDayOverride,
   useBookingStartTimeInterval,
   useMerchantBookings,
@@ -234,12 +235,20 @@ import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // SPECS-INDEX #977 第 7 批:背景格子元件與每格狀態的純函式搬到共用檔(服務人員端時間軸也用同一份)。
 import { DaySlotCell } from "./DaySlotCell";
+import { whiteBookingBlockStyle } from "./bookingBlockLayout";
+import { useMerchantCalendarLiveSync } from "./useMerchantCalendarLiveSync";
 import { DayStatusCountBadges } from "./DayStatusCountBadges";
 import {
   bookingIdsNeedingAssistantLookup,
   countMerchantDayStatusBadges,
 } from "./merchantMonthBadges";
-import { daySlotState, resolveDaySlot, SLOT_TAP_VS_DRAG_THRESHOLD_PX } from "./daySlotGrid";
+import {
+  countBookingsInSlot,
+  daySlotState,
+  planDayOverrideToggle,
+  resolveDaySlot,
+  SLOT_TAP_VS_DRAG_THRESHOLD_PX,
+} from "./daySlotGrid";
 // 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
 // 下面給管理員/客服看的跨服務人員行事曆(CalendarPageInner)。這是本檔案唯一一處依賴模組 14 的地方。
 import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
@@ -2806,6 +2815,10 @@ function CalendarPageInner() {
     refetch: refetchSchedule,
   } = useMerchantDaySchedule(merchantId, selectedDateKey);
 
+  // SPECS-INDEX #1003 / #1006(第 14 批):商家端行事曆即時同步。服務人員改每週時段、別的分頁開關時段、
+  // 同集團別家店替同一個人建單 / 改時間 ⇒ 資料庫對這家店的私有頻道發「請重查」,這裡收到就重抓上面幾支查詢。
+  useMerchantCalendarLiveSync(merchantId);
+
   const [formOpen, setFormOpen] = useState(false);
   const [formPrefill, setFormPrefill] = useState<BookingFormPrefill>({});
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
@@ -2843,22 +2856,36 @@ function CalendarPageInner() {
 
   // 建單與訂單管理介面優化 §1:拿掉 DayOverrideDialog(選時間範圍+開關的對話框),改成點擊
   // 選單項目直接切換,範圍固定是目前點擊的這一格半小時(不是選一段時間範圍)。方向跟目前顯示
-  // 狀態相反(目前可預約就關閉,不可預約就開啟),呼叫既有的 set_staff_day_override,不新增
-  // 任何後端邏輯。
+  // 狀態相反(目前可預約就關閉,不可預約就開啟)。
+  // SPECS-INDEX #1004(第 14 批):切換後如果剛好回到每週時段原本的狀態,改成刪掉這一格的例外(恢復原本的
+  // 白色 / 灰色),不再留一筆「例外開啟」(淡紫底 + 紫框)或「例外關閉」(斜線)。兩個方向一致。
+  // 判斷在 daySlotGrid.ts 的 planDayOverrideToggle(服務人員端時間軸共用)。
   async function handleToggleDayOverride(
     staffId: string,
     startTime: string,
     endTime: string,
-    currentlyAvailable: boolean,
+    slot: { isOverride: boolean; templateAvailable: boolean; finalAvailable: boolean },
+    staffBookings: readonly DayScheduleOwnBooking[],
   ) {
+    const currentlyAvailable = slot.finalAvailable;
+    const action = planDayOverrideToggle(slot);
     try {
-      const conflictCount = await setStaffDayOverride(
-        staffId,
-        selectedDateKey,
-        startTime,
-        endTime,
-        !currentlyAvailable,
-      );
+      let conflictCount = 0;
+      if (action.kind === "clear") {
+        await clearStaffDayOverride(staffId, selectedDateKey, startTime, endTime);
+        // 刪例外不會回報衝突筆數 ⇒ 關閉方向用畫面上已載入的這位服務人員當天訂單自己算,提醒照舊。
+        if (currentlyAvailable) {
+          conflictCount = countBookingsInSlot(staffBookings, selectedDateKey, startTime, endTime);
+        }
+      } else {
+        conflictCount = await setStaffDayOverride(
+          staffId,
+          selectedDateKey,
+          startTime,
+          endTime,
+          action.isAvailable,
+        );
+      }
       if (conflictCount > 0) {
         // §1 第 4 點:不阻擋操作,只提示既有預約筆數,不做自動取消/自動通知。
         toast.warning(
@@ -3268,13 +3295,14 @@ function CalendarPageInner() {
                       : slots.map((slot, i) => {
                           // §5.3 / §5.5 第 4 點:單日例外 → 可約區間 → 跨店佔用的判斷,
                           // #977 第 7 批搬到 daySlotGrid.ts 的 resolveDaySlot(服務人員端時間軸共用同一份)。
-                          const { isOverride, finalAvailable, foreignBusy } = resolveDaySlot({
+                          const resolvedSlot = resolveDaySlot({
                             slotStartMin: timeToMinutes(slot.start),
                             slotEndMin: timeToMinutes(slot.end),
                             availableWindows: s.available_windows,
                             overrides: s.availability_overrides,
                             foreignBookings: s.foreign_bookings,
                           });
+                          const { isOverride, finalAvailable, foreignBusy } = resolvedSlot;
 
                           if (foreignBusy) {
                             // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
@@ -3374,7 +3402,8 @@ function CalendarPageInner() {
                                   s.staff_id,
                                   slot.start,
                                   slot.end,
-                                  finalAvailable,
+                                  resolvedSlot,
+                                  s.bookings,
                                 )
                               }
                             />
@@ -3404,7 +3433,11 @@ function CalendarPageInner() {
                           style={{
                             top,
                             height,
-                            ...bookingBlockStyle(effectiveStatusColors, b.status),
+                            // #1005(第 14 批):改用服務人員端那種白底卡片(左邊 4px 狀態色條 + 細框),
+                            // 狀態色照舊讀商家自訂的訂單狀態顏色。兩端共用 whiteBookingBlockStyle。
+                            ...whiteBookingBlockStyle(
+                              bookingBlockStyle(effectiveStatusColors, b.status),
+                            ),
                           }}
                           controller={dragController}
                         />

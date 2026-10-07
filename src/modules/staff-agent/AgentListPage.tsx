@@ -710,7 +710,7 @@ function AgentListInner() {
 
 export default function AgentListPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireMerchantAdmin featureName="客服管理">
       <AgentListInner />
     </RequireMerchantAdmin>
   );

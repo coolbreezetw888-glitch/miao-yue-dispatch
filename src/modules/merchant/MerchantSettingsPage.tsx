@@ -674,7 +674,7 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
 
 export default function MerchantSettingsPage() {
   return (
-    <RequireMerchantAdmin>
+    <RequireMerchantAdmin featureName="商家設定">
       <MerchantSettingsPageInner />
     </RequireMerchantAdmin>
   );

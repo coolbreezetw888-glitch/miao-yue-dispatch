@@ -4,6 +4,7 @@
 //   ・待確認 + 主要服務人員 ⇒ 底部出現「確認接單」;協助人員、已確認、已完成、已取消都不出現
 //   ・按下 ⇒ 呼叫 staffConfirmBooking(後端 staff_confirm_booking)⇒ 成功提示 ⇒ 立刻 invalidate 行事曆查詢
 //     (my-booking-schedule / my-day-schedule-state),不只等即時同步
+//   ・#1008(第 14 批):成功 ⇒ 自動關掉詳情(onOpenChange(false));失敗 ⇒ 不關
 //   ・失敗 ⇒ 顯示後端的中文原因
 //   ・標題列狀態標籤吃商家自訂顏色(跟列表卡片同一份)
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -65,6 +66,7 @@ const STATUS_COLORS = {
 };
 
 let queryClient: QueryClient;
+let onOpenChangeMock: ReturnType<typeof vi.fn>;
 
 function renderDialog(booking: MyBookingScheduleItem) {
   return render(
@@ -75,7 +77,7 @@ function renderDialog(booking: MyBookingScheduleItem) {
         showCustomerAddress={false}
         statusColors={STATUS_COLORS}
         open={true}
-        onOpenChange={() => {}}
+        onOpenChange={onOpenChangeMock}
       />
     </QueryClientProvider>,
   );
@@ -86,6 +88,7 @@ beforeEach(() => {
   staffConfirmBookingMock.mockReset();
   toastSuccessMock.mockReset();
   toastErrorMock.mockReset();
+  onOpenChangeMock = vi.fn();
 });
 
 afterEach(() => cleanup());
@@ -121,6 +124,8 @@ describe("服務人員端預約詳情:確認接單按鈕(#977 第 4 批)", () =>
     const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey));
     expect(keys).toContain(JSON.stringify(["staff-portal-module", "my-booking-schedule"]));
     expect(keys).toContain(JSON.stringify(["staff-portal-module", "my-day-schedule-state"]));
+    // #1008(第 14 批,#977 使用者裁決):成功後自動關掉詳情,回到行事曆卡片列表。
+    expect(onOpenChangeMock).toHaveBeenCalledWith(false);
   });
 
   it("後端擋下 ⇒ 顯示後端的中文原因,不顯示成功", async () => {
@@ -135,6 +140,8 @@ describe("服務人員端預約詳情:確認接單按鈕(#977 第 4 批)", () =>
       "這筆訂單已經不是待確認狀態",
     );
     expect(toastSuccessMock).not.toHaveBeenCalled();
+    // #1008:失敗時維持停在詳情,不關。
+    expect(onOpenChangeMock).not.toHaveBeenCalled();
   });
 });
 

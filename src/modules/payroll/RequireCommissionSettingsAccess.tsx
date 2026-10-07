@@ -13,6 +13,11 @@ import { useNavigate } from "react-router-dom";
 import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
+import {
+  agentPermissionLabel,
+  notifyPermissionDenied,
+  shouldNotifyPermissionDenied,
+} from "@/modules/staff-agent/permissionDeniedNotice";
 
 export function RequireCommissionSettingsAccess({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -30,9 +35,13 @@ export function RequireCommissionSettingsAccess({ children }: { children: ReactN
   useEffect(() => {
     if (loading) return;
     if (!merchant || !allowed) {
+      // #1007(第 14 批):客服沒有這個權限被導回時,跳「你沒有「X」的權限」提示,不再安靜導回。
+      if (shouldNotifyPermissionDenied({ hasMerchant: merchant != null, role })) {
+        notifyPermissionDenied(agentPermissionLabel("commission_settings"));
+      }
       navigate("/app", { replace: true });
     }
-  }, [merchant, allowed, loading, navigate]);
+  }, [merchant, allowed, loading, navigate, role]);
 
   if (loading || !merchant || !allowed) {
     return <GuardLoading />;

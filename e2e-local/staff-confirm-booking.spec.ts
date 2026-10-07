@@ -4,7 +4,7 @@
 // 每一條都斷言「這一頁只打本機」(request-guard)。
 //
 //   E1 服務人員:月曆今天的格子兩色數字(待確認 2、已確認 1);鈴鐺紅點 2、清單頂端「你有 2 筆訂單待確認」,
-//      點了到我的行事曆;打開 10:00 那張 ⇒「確認接單」⇒ 成功提示、詳情變「已確認」、按鈕消失;
+//      點了到我的行事曆;打開 10:00 那張 ⇒「確認接單」⇒ 成功提示、詳情自動關閉(#1008);
 //      不重新整理,月曆數字立刻變成待確認 1、已確認 2,鈴鐺紅點變 1;資料庫操作紀錄是服務人員本人
 //   E2 商家管理員:鈴鐺看到「服務人員確認接單時」那一則(含服務人員與客戶姓名),點了到訂單管理
 //   E3 管理員在後台建單指派給開了「商家後台確認後直接接單」的服務人員 ⇒ 成功提示「已送出訂單（已確認）」、
@@ -85,9 +85,8 @@ test("E1 服務人員:兩色數字、鈴鐺待確認提醒、確認接單後立�
   await expect(dialog.getByText("待確認", { exact: true })).toBeVisible();
   await dialog.getByTestId("staff-confirm-booking-button").click();
   await expect(page.getByText("已確認接單")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(dialog.getByText("已確認", { exact: true })).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(dialog.getByTestId("staff-confirm-booking-button")).toHaveCount(0);
-  await dialog.getByRole("contentinfo").getByRole("button", { name: "關閉" }).click();
+  // #1008(第 14 批,#977 使用者裁決):確認成功後詳情自動關閉,回到行事曆卡片列表(原本要自己按「關閉」)。
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 
   // 不重新整理:數字立刻更新
   await expect(cell.getByTestId("day-pending-count")).toHaveText("1", { timeout: LOAD_TIMEOUT });

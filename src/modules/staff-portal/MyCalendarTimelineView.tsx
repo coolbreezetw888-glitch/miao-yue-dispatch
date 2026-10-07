@@ -36,7 +36,7 @@
 // 設計上直接改成接受 staffId,由呼叫端(已經透過 useActiveMyStaffRecord 拿到 staffId)傳入,
 // 減少一層不必要的間接轉換。已在回報中向主腦說明這個偏離。
 
-import { useCallback, useMemo, type CSSProperties } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -50,9 +50,13 @@ import {
   useCalendarBookingDrag,
 } from "@/modules/booking/calendarBookingDrag";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { BookingBlockContent } from "@/modules/booking/BookingBlockContent";
+import { whiteBookingBlockStyle } from "@/modules/booking/bookingBlockLayout";
 import { DaySlotCell } from "@/modules/booking/DaySlotCell";
 import {
   buildStaffDayAvailableWindows,
+  countBookingsInSlot,
+  planDayOverrideToggle,
   resolveDaySlot,
   SLOT_TAP_VS_DRAG_THRESHOLD_PX,
 } from "@/modules/booking/daySlotGrid";
@@ -68,6 +72,7 @@ import {
 } from "@/modules/booking/types";
 
 import {
+  clearMyDayOverride,
   useMyBookingStatusColors,
   useMyCalendarStateStyles,
   useMyDayBusinessHours,
@@ -214,16 +219,34 @@ export function MyCalendarTimelineView({
     moveFn: (input) => staffMoveBooking(input),
   });
 
-  async function handleToggleSlot(start: string, end: string, currentlyAvailable: boolean) {
+  // SPECS-INDEX #1004(第 14 批):跟商家端同一支 planDayOverrideToggle —— 切換後回到每週時段原本的狀態時,
+  // 刪掉這一格的例外(恢復原本的白色 / 灰色),兩個方向一致。刪例外走 clear_staff_day_override
+  // (資料庫放行條件 can_self_manage_availability,方案 B2 的人本來就有,「時段排休」分頁也是用這支)。
+  async function handleToggleSlot(
+    start: string,
+    end: string,
+    slot: { isOverride: boolean; templateAvailable: boolean; finalAvailable: boolean },
+  ) {
     if (!staffId) return;
+    const currentlyAvailable = slot.finalAvailable;
+    const action = planDayOverrideToggle(slot);
     try {
-      const conflictCount = await staffSetMySlot({
-        staffId,
-        date: selectedDateKey,
-        startTime: start,
-        endTime: end,
-        isAvailable: !currentlyAvailable,
-      });
+      let conflictCount = 0;
+      if (action.kind === "clear") {
+        await clearMyDayOverride(staffId, selectedDateKey, start, end);
+        // 刪例外不會回報衝突筆數 ⇒ 關閉方向用已載入的當天訂單(主要 + 協助)自己算,提醒照舊。
+        if (currentlyAvailable) {
+          conflictCount = countBookingsInSlot(bookings, selectedDateKey, start, end);
+        }
+      } else {
+        conflictCount = await staffSetMySlot({
+          staffId,
+          date: selectedDateKey,
+          startTime: start,
+          endTime: end,
+          isAvailable: action.isAvailable,
+        });
+      }
       // 文字跟商家端 handleToggleDayOverride 一樣:有既有預約只提示不擋。
       if (conflictCount > 0) {
         toast.warning(
@@ -352,11 +375,7 @@ export function MyCalendarTimelineView({
                 showOverrideOption={showOverride}
                 overrideOptionLabel={resolved.finalAvailable ? "關閉時段" : "開啟時段"}
                 onToggleOverride={() =>
-                  void handleToggleSlot(
-                    slot.start,
-                    minutesToTime(slotEndMin),
-                    resolved.finalAvailable,
-                  )
+                  void handleToggleSlot(slot.start, minutesToTime(slotEndMin), resolved)
                 }
               />
             );
@@ -448,7 +467,7 @@ export function MyCalendarTimelineView({
                   height,
                   left: 64,
                   right: 4,
-                  ...staffPortalWhiteBlockStyle(
+                  ...whiteBookingBlockStyle(
                     bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
                   ),
                 }}
@@ -470,20 +489,23 @@ export function MyCalendarTimelineView({
               // 🔴 SPECS-INDEX #981(2026-10-06):服務人員端「時間軸格線」檢視的預約色塊也照 #970 一律白底
               // (規格書:服務人員端行事曆含各種檢視)。做法:沿用 bookingBlockStyle 的文字色 / 邊框色,
               // 只把背景換成卡片底色(var(--card),深色模式自動跟著主題),再補一條 4px 左側狀態色條,
-              // 狀態仍一眼看得出來。⚠️ 刻意只在這個檔案就地覆寫,**不改 bookingBlockStyle 本身** ——
-              // 那支函式商家端 CalendarPage.tsx 也在用,商家端行事曆的色塊不在這次範圍內。
+              // 狀態仍一眼看得出來。⚠️ **不改 bookingBlockStyle 本身**。
+              // #1005(第 14 批):商家端也改用同一種白底卡片,原本在這個檔案的 staffPortalWhiteBlockStyle
+              // 搬到 booking/bookingBlockLayout.ts 的 whiteBookingBlockStyle,兩端共用。
               style={{
                 top,
                 height,
-                ...staffPortalWhiteBlockStyle(
+                ...whiteBookingBlockStyle(
                   bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
                 ),
               }}
             >
-              <p className="truncate font-medium">
-                {b.customer_name}
-                {b.role_in_booking === "assistant" ? "(協助)" : ""}
-              </p>
+              {/* #1005(第 14 批,主腦補上的決定):服務人員端卡片也是「時間標籤 / 虛線 / 名字」,跟商家端同一個元件。 */}
+              <BookingBlockContent
+                startAt={b.start_at}
+                name={`${b.customer_name}${b.role_in_booking === "assistant" ? "(協助)" : ""}`}
+                height={height}
+              />
             </button>
           );
         })}
@@ -500,20 +522,4 @@ export function MyCalendarTimelineView({
       ) : null}
     </div>
   );
-}
-
-/** #981:把商家端共用的色塊樣式(淡色底 + 實色字 + 半透明框)轉成服務人員端的白底版本。
- * 背景 = 卡片底色;左側 4px 用狀態的實色(= bookingBlockStyle 的文字色),其他三邊維持原本的半透明框。 */
-function staffPortalWhiteBlockStyle(base: {
-  backgroundColor: string;
-  color: string;
-  borderColor: string;
-}): CSSProperties {
-  return {
-    color: base.color,
-    borderColor: base.borderColor,
-    borderLeftColor: base.color,
-    borderLeftWidth: 4,
-    backgroundColor: "var(--card)",
-  };
 }

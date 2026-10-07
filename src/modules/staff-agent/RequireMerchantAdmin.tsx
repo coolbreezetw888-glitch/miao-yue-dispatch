@@ -11,8 +11,16 @@ import { useNavigate } from "react-router-dom";
 import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useCurrentMerchantRole } from "./context";
+import { notifyPermissionDenied, shouldNotifyPermissionDenied } from "./permissionDeniedNotice";
 
-export function RequireMerchantAdmin({ children }: { children: ReactNode }) {
+export function RequireMerchantAdmin({
+  children,
+  featureName,
+}: {
+  children: ReactNode;
+  /** #1007:被擋時提示裡的功能名稱(各頁傳自己的頁名;沒傳就照舊安靜導回)。 */
+  featureName?: string;
+}) {
   const navigate = useNavigate();
   const { merchant, isLoading: merchantLoading } = useCurrentMerchant();
   const { data: role, isLoading: roleLoading } = useCurrentMerchantRole();
@@ -20,9 +28,13 @@ export function RequireMerchantAdmin({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (merchantLoading || roleLoading) return;
     if (!merchant || role !== "admin") {
+      // #1007(第 14 批):這幾頁只給商家管理員,客服被導回時跳「你沒有「X」的權限」提示。
+      if (featureName && shouldNotifyPermissionDenied({ hasMerchant: merchant != null, role })) {
+        notifyPermissionDenied(featureName);
+      }
       navigate("/app", { replace: true });
     }
-  }, [merchant, merchantLoading, role, roleLoading, navigate]);
+  }, [merchant, merchantLoading, role, roleLoading, navigate, featureName]);
 
   if (merchantLoading || roleLoading || !merchant || role !== "admin") {
     return <GuardLoading />;
