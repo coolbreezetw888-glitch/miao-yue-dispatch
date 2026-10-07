@@ -43,7 +43,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { useCardColumnAlign } from "./cardDialogColumnAlign";
+import { columnAlignAttrs, useCardColumnAlign } from "./cardDialogColumnAlign";
 import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import { useOverlayDirtyDismiss } from "./overlayDirtyDismiss";
 import { CARD_STRIP_MAX_HEIGHT } from "./overlayDismissLogic";
@@ -137,16 +137,7 @@ const CardDialogContent = React.forwardRef<
             event.preventDefault();
           }}
           className={CARD_DIALOG_CONTENT_CLASS}
-          data-card-col-align={columnAlign ? "" : undefined}
-          style={
-            columnAlign
-              ? ({
-                  ...style,
-                  "--card-col-center": `${columnAlign.center}px`,
-                  "--card-col-width": `${columnAlign.width}px`,
-                } as React.CSSProperties)
-              : style
-          }
+          {...columnAlignAttrs(columnAlign, style)}
           {...props}
         >
           {parts.header}

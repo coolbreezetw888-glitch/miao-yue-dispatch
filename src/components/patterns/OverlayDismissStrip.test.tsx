@@ -304,7 +304,10 @@ describe("全頁層電腦版寬度(J-16 / J-17)", () => {
     expect(defaultClass).toContain("sm:top-14");
     expect(defaultClass).not.toMatch(/560|760/);
     expect(wideClass).toBe(defaultClass);
-    expect(FULL_PAGE_PANEL_CLASS).toBe("sm:w-[calc(100%-32px)] sm:max-w-6xl");
+    // 第 16 批 #1010:量不到內容欄時的退回規則不變;另外加上對齊內容欄用的 sm:data-[card-col-align]:*(含 transition-none)。
+    expect(FULL_PAGE_PANEL_CLASS.startsWith("sm:w-[calc(100%-32px)] sm:max-w-6xl ")).toBe(true);
+    expect(FULL_PAGE_PANEL_CLASS).toContain("sm:data-[card-col-align]:w-[var(--card-col-width)]");
+    expect(FULL_PAGE_PANEL_CLASS).toContain("sm:data-[card-col-align]:transition-none");
   });
 
   it("只拉寬不重排:殼裡沒有 grid-cols / 多欄", () => {

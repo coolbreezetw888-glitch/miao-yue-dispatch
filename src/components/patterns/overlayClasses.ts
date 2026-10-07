@@ -40,9 +40,11 @@ export const CARD_FOOTER_CLASS =
  *  🔴 transition-none:CARD_CONTENT_CLASS 的 duration-200 沒限定屬性(= transition all),不取消的話
  *     寬度 / left 會跑 200ms 過渡,打開時「先寬後縮」、拉視窗也慢半拍(第 15 批 QA 打回)。只在對齊狀態取消,
  *     確認窗 CardAlertDialog 共用的 CARD_CONTENT_CLASS 不動;進場淡入 / 縮放是 animation,不受影響。 */
-const CARD_DIALOG_COLUMN_ALIGN_CLASS =
+/*  第 16 批 #1010:全頁層 FullPageLayer 也用同一組(FULL_PAGE_PANEL_CLASS),屬性 / 變數由
+ *  cardDialogColumnAlign.ts 的 columnAlignAttrs 掛上。 */
+const COLUMN_ALIGN_CLASS =
   "sm:data-[card-col-align]:left-[var(--card-col-center)] sm:data-[card-col-align]:w-[var(--card-col-width)] sm:data-[card-col-align]:max-w-none sm:data-[card-col-align]:transition-none";
-export const CARD_DIALOG_CONTENT_CLASS = `${CARD_CONTENT_CLASS} sm:top-[calc(50%+19px)] sm:max-w-6xl sm:max-h-[calc(100dvh-74px)] sm:gap-0 sm:overflow-hidden sm:p-0 ${CARD_DIALOG_COLUMN_ALIGN_CLASS}`;
+export const CARD_DIALOG_CONTENT_CLASS = `${CARD_CONTENT_CLASS} sm:top-[calc(50%+19px)] sm:max-w-6xl sm:max-h-[calc(100dvh-74px)] sm:gap-0 sm:overflow-hidden sm:p-0 ${COLUMN_ALIGN_CLASS}`;
 /** 中間內容區:手機 display:contents(子元素照舊直接排在卡片裡,跟改版前一模一樣);電腦自己捲動。 */
 export const CARD_DIALOG_BODY_CLASS =
   "contents sm:flex sm:min-h-0 sm:min-w-0 sm:flex-col sm:gap-4 sm:overflow-y-auto sm:px-5 sm:py-4";
@@ -57,7 +59,9 @@ export const CARD_DIALOG_FOOTER_CLASS =
 export const CARD_CLOSE_CLASS =
   "absolute right-2 top-2 inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none";
 
-/** 全頁層電腦版寬度(第 11 批 J,#995 J-16):隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px
- *  (= 行事曆頁內容容器 `max-w-6xl`;用同一個 Tailwind token,之後內容容器改寬度兩邊一起改)。
- *  只拉寬不重排;手機 < 640px 不受影響(全部是 sm: 前綴)。 */
-export const FULL_PAGE_PANEL_CLASS = "sm:w-[calc(100%-32px)] sm:max-w-6xl";
+/** 全頁層電腦版寬度。
+ *  第 16 批 #1010 起:寬度 / 水平位置對齊底下那頁的主要內容欄(跟小卡窗同一套量測與 class,
+ *  見上方 COLUMN_ALIGN_CLASS;底下有全頁層 ⇒ 對齊下層面板)。對齊狀態同樣 transition-none,不會「先寬後縮」。
+ *  量不到(或內容欄 < 320px)⇒ 退回第 11 批 J(#995 J-16):隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px
+ *  (= 行事曆頁內容容器 `max-w-6xl`)。只拉寬不重排;手機 < 640px 不受影響(全部是 sm: 前綴)。 */
+export const FULL_PAGE_PANEL_CLASS = `sm:w-[calc(100%-32px)] sm:max-w-6xl ${COLUMN_ALIGN_CLASS}`;

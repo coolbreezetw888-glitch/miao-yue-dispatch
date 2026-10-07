@@ -5,8 +5,9 @@
  * 規格全部寫死在這個殼裡,**個別頁面不准再自己寫 max-w-* / h-[92vh] 這類尺寸**:
  *   - 手機:整個螢幕蓋滿,像進到新頁面;關閉鈕在左上角 ✕
  *   - 電腦:置中大面板、上緣留 56px(這條是「點了關閉」的空白條)、下緣 18px,🔴 不會佔滿 27 吋螢幕;
- *     寬度隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px(= 行事曆頁內容容器 max-w-6xl),只拉寬不重排
- *     (第 11 批 J,#995 J-16 ~ J-18)。關閉:右上角 ✕、底部「取消」、Esc、點面板正上方的空白條
+ *     寬度 / 水平位置對齊底下那頁的主要內容欄(第 16 批 #1010,跟小卡窗同一套,見 cardDialogColumnAlign.ts;
+ *     底下有全頁層 ⇒ 對齊下層面板),瀏覽器拉寬拉窄跟著變;量不到 ⇒ 退回第 11 批 J(#995 J-16 ~ J-18):
+ *     隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px。只拉寬不重排。關閉:右上角 ✕、底部「取消」、Esc、點面板正上方的空白條
  *   - 🔴 點遮罩(左右兩側、下方)不會關(J-1);Esc / 空白條遇到 dirty 先問「確定放棄這次輸入？」(J-9、J-10)
  *   - 標題列固定在上方、按鈕列固定在底部、只有中間會捲動
  *   - 寬度只有一檔(J-16);size prop 保留但不再分寬度(@deprecated,J-17)
@@ -35,6 +36,7 @@ import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { columnAlignAttrs, useCardColumnAlign } from "./cardDialogColumnAlign";
 import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import { FULL_PAGE_PANEL_CLASS, OVERLAY_CLASS } from "./overlayClasses";
 import { useOverlayDirtyDismiss } from "./overlayDirtyDismiss";
@@ -103,6 +105,7 @@ const FullPageLayerContent = React.forwardRef<
       onEscapeKeyDown,
       onPointerDownOutside,
       onInteractOutside,
+      style,
       ...props
     },
     ref,
@@ -113,14 +116,20 @@ const FullPageLayerContent = React.forwardRef<
     const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
     // 空白條要量面板的位置,所以自己也留一份 ref。
     const panelRef = React.useRef<HTMLDivElement | null>(null);
+    // 第 16 批 #1010:對齊頁面內容欄要在面板真的掛上去之後才量 ⇒ 另外用 state 記住節點。
+    const [panelNode, setPanelNode] = React.useState<HTMLDivElement | null>(null);
     const autoFocusRef = autoFocus.ref;
     const setPanelRef = React.useCallback(
       (node: HTMLDivElement | null) => {
         panelRef.current = node;
+        setPanelNode(node);
         autoFocusRef(node);
       },
       [autoFocusRef],
     );
+    // 電腦版寬度 / 水平位置 = 底下頁面主要內容欄(或下層全頁層面板);量不到 ⇒ null,走第 11 批 J 規則。
+    // 手機不受影響:對齊用的 class 全部是 sm: 前綴(overlayClasses.ts FULL_PAGE_PANEL_CLASS)。
+    const columnAlign = useCardColumnAlign(panelNode);
     const dismiss = useOverlayDirtyDismiss({ dirty, onEscapeKeyDown });
     return (
       <DialogPrimitive.Portal>
@@ -150,6 +159,7 @@ const FullPageLayerContent = React.forwardRef<
             "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
             SIZE_CLASS[size],
           )}
+          {...columnAlignAttrs(columnAlign, style)}
           {...props}
         >
           <header className="shrink-0 border-b border-border">

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CARD_COLUMN_MIN_WIDTH,
+  columnAlignAttrs,
   computeCardColumnAlign,
   findPageColumnElement,
   measureCardColumnAlign,
@@ -60,5 +61,19 @@ describe("找不到內容欄 ⇒ null(小卡窗走第 12 批規則)", () => {
     root.append(document.createElement("div"));
     document.body.append(root);
     expect(findPageColumnElement(root)).toBe(null);
+  });
+});
+
+describe("columnAlignAttrs(第 16 批 #1010:小卡窗 / 全頁層共用)", () => {
+  it("量不到 ⇒ 不掛屬性、style 原樣", () => {
+    const style = { color: "red" };
+    expect(columnAlignAttrs(null, style)).toEqual({ "data-card-col-align": undefined, style });
+  });
+
+  it("量到 ⇒ 掛屬性 + CSS 變數,保留原本 style", () => {
+    expect(columnAlignAttrs({ center: 640, width: 728 }, { color: "red" })).toEqual({
+      "data-card-col-align": "",
+      style: { color: "red", "--card-col-center": "640px", "--card-col-width": "728px" },
+    });
   });
 });

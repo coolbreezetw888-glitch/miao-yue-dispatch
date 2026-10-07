@@ -6,7 +6,7 @@
 //   2. 1280 × 800 編輯料錢成本品項:同上
 //   3. 1280 × 520(內容比畫面長):上緣 56、下緣離底 18、中間捲動、標題列與按鈕列不動
 //   4. 1280 確認窗(取消預約):仍 400 寬、按鈕靠右(不變);空白條沒字
-//   5. 1280 全頁層(新增預約):1152 寬、上緣 56(不變);空白條沒字
+//   5. 1280 全頁層(預約詳情):1112 寬(第 16 批 #1010 起 = 訂單管理內容欄;原 1152)、上緣 56(不變);空白條沒字
 //   6. 375 × 812:小卡窗 / 確認窗 / 全頁層跟改版前一樣(位置、寬度、按鈕各半;截圖)
 //
 // 截圖存 B12_SHOTS(預設 test-results/b12-shots/;🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
@@ -303,13 +303,14 @@ async function openDetail(page: Page, customerName: string): Promise<Locator> {
   return layer;
 }
 
-test("4~5. 確認窗(1280)仍 400 寬、按鈕靠右;全頁層 1152 寬、上緣 56;兩者空白條都沒字", async ({
+test("4~5. 確認窗(1280)仍 400 寬、按鈕靠右;全頁層 1112 寬、上緣 56;兩者空白條都沒字", async ({
   browser,
 }) => {
   const page = await openAsAdmin(browser, 1280, 800, "/app/manage");
   const layer = await openDetail(page, cancelBooking.customerName);
   const lb = await settledBox(layer);
-  expect(Math.round(lb.width)).toBe(1152);
+  // 第 16 批 #1010:= 訂單管理內容欄(max-w-6xl 1152 − 左右 px-5)= 1112。
+  expect(Math.round(lb.width)).toBe(1112);
   expect(Math.round(lb.y)).toBe(56);
   await expect(page.locator(STRIP)).toHaveCount(1);
   await expect(page.locator(STRIP)).toHaveText("");

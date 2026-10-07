@@ -1,12 +1,12 @@
 // 第 11 批 J(#995):電腦版大視窗加寬 + 點外面不關 + 上方空白條 + 填過資料先問放棄。本機 Supabase 專用
 // (e2e-local 設定,loopback guard 生效,不碰正式庫)。規格書:.project/specs/改掛會員與預設文案全形-第11批.md §17.7。
 //
-//   1. 1280 × 800 新增預約:寬 1152、上緣 56;點左側遮罩不關;點面板正上方(y=28)直接關(沒填)
-//   2. 1920 × 1080:寬 1152 置中;1024 × 768:寬 992
+//   1. 1280 × 800 新增預約:寬 1112(第 16 批起 = 行事曆內容欄)、上緣 56;點左側遮罩不關;點面板正上方(y=28)直接關(沒填)
+//   2. 1920 × 1080:寬 1112 置中;1024 × 768:寬 984(第 16 批起 = 行事曆內容欄;原 1152 / 992)
 //   3. 填客戶姓名 → Esc ⇒「確定放棄這次輸入？」→ 繼續編輯(姓名還在)→ 點上方空白 ⇒ 再問 → 放棄 ⇒ 關
 //   4. 「選擇項目」整頁開著按 Esc ⇒ 只回到表單
 //   5. 預約詳情(檢視型):Esc / 點上方空白 ⇒ 直接關
-//   6. 編輯服務人員:1280 寬時 1152、兩欄格線還是兩欄;服務項目下拉開著點遮罩 ⇒ 只關下拉
+//   6. 編輯服務人員:1280 寬時 856(第 16 批起 = 服務人員管理頁 4xl 內容欄;原 1152)、兩欄格線還是兩欄;服務項目下拉開著點遮罩 ⇒ 只關下拉
 //   7. 小卡窗(付款方式新增):點遮罩不關、點卡片正上方 24px ⇒ 關;填名稱後點同處 ⇒ 問放棄
 //   8. 確認窗(取消預約):點上方空白 = 取消,預約沒被取消
 //   9. 375 × 812:全頁層滿版、沒有空白條;小卡窗點遮罩不關、點卡片正上方 ⇒ 關
@@ -15,6 +15,7 @@
 //  ※ 第 12 批 #1001:小卡窗電腦版改成跟全頁層同寬(1280 ⇒ 1152),7 的寬度斷言跟著改;
 //    第 15 批 #1009 再改成對齊頁面內容欄(付款方式頁 1280 ⇒ 856),完整驗收在 b15-card-dialog-column-align.spec.ts;
 //    完整的第 12 批驗收在 b12-card-dialog-wide.spec.ts。
+//  ※ 第 16 批 #1010:全頁層也改成對齊頁面內容欄,1 / 2 / 6 的寬度斷言跟著改;完整驗收在 b16-full-page-layer-column-align.spec.ts。
 //  ・浮出面板(日期時間選擇 Popover;服務人員表單的服務項目下拉見 6)點外面照舊收起,視窗不動
 // 截圖存 test-results/b11-j-shots/(🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
 //
@@ -132,15 +133,15 @@ test("1~3. 新增預約(1280):寬度、點遮罩不關、上方空白條、填�
   const recorder = recordRequestHosts(page);
   let dialog = await openNewBooking(page);
   const box = await settledBox(dialog);
-  // 1. 寬 = min(1280 - 32, 1152) = 1152,置中;上緣 56。
-  expect(Math.round(box.width)).toBe(1152);
-  expect(Math.round(box.x)).toBe(64);
+  // 1. 第 16 批 #1010:寬 = 行事曆內容欄(max-w-6xl 1152 − 左右 px-5)= 1112,x = 64 + 20 = 84;上緣 56。
+  expect(Math.round(box.width)).toBe(1112);
+  expect(Math.round(box.x)).toBe(84);
   expect(Math.round(box.y)).toBe(56);
   const strip = await stripBox(page);
   expect(Math.round(strip.y)).toBe(0);
   expect(Math.round(strip.height)).toBe(56);
-  expect(Math.round(strip.x)).toBe(64);
-  expect(Math.round(strip.width)).toBe(1152);
+  expect(Math.round(strip.x)).toBe(84);
+  expect(Math.round(strip.width)).toBe(1112);
   // 第 12 批 #1000:條上沒有字。
   await expect(page.locator(STRIP)).toHaveText("");
   await page.screenshot({ path: `${SHOTS}/1280-new-booking.png` });
@@ -187,20 +188,22 @@ test("1~3. 新增預約(1280):寬度、點遮罩不關、上方空白條、填�
   await page.context().close();
 });
 
-test("2. 1920 寬:1152 置中;1024 寬:992", async ({ browser }) => {
+test("2. 1920 寬:1112 置中;1024 寬:984", async ({ browser }) => {
   const wide = await openAsAdmin(browser, 1920, 1080, "/app/manage");
   const d1 = await openNewBooking(wide);
   const b1 = await settledBox(d1);
-  expect(Math.round(b1.width)).toBe(1152);
-  expect(Math.round(b1.x)).toBe((1920 - 1152) / 2);
+  // 第 16 批 #1010:= 行事曆內容欄 1112,置中。
+  expect(Math.round(b1.width)).toBe(1112);
+  expect(Math.round(b1.x)).toBe((1920 - 1112) / 2);
   await wide.screenshot({ path: `${SHOTS}/1920-new-booking.png` });
   await wide.context().close();
 
   const narrow = await openAsAdmin(browser, 1024, 768, "/app/manage");
   const d2 = await openNewBooking(narrow);
   const b2 = await settledBox(d2);
-  expect(Math.round(b2.width)).toBe(992);
-  expect(Math.round(b2.x)).toBe(16);
+  // 第 16 批 #1010:1024 寬時行事曆容器 = 整個畫面,內容欄 = 1024 − 左右 20 = 984,x = 20。
+  expect(Math.round(b2.width)).toBe(984);
+  expect(Math.round(b2.x)).toBe(20);
   await narrow.context().close();
 });
 
@@ -272,7 +275,7 @@ test("8. 確認窗(取消預約):點上方空白 = 取消,預約沒被取消", a
   await page.context().close();
 });
 
-test("6. 編輯服務人員(1280):1152 寬、兩欄還是兩欄;服務項目下拉開著點遮罩 ⇒ 只關下拉", async ({
+test("6. 編輯服務人員(1280):856 寬、兩欄還是兩欄;服務項目下拉開著點遮罩 ⇒ 只關下拉", async ({
   browser,
 }) => {
   const page = await openAsAdmin(browser, 1280, 800, "/app/staff");
@@ -283,7 +286,8 @@ test("6. 編輯服務人員(1280):1152 寬、兩欄還是兩欄;服務項目下�
     .filter({ has: page.getByRole("heading", { name: "編輯服務人員" }) });
   await expect(dialog).toBeVisible({ timeout: LOAD_TIMEOUT });
   const box = await settledBox(dialog);
-  expect(Math.round(box.width)).toBe(1152);
+  // 第 16 批 #1010:= 服務人員管理頁內容欄(max-w-4xl 896 − 左右 px-5)= 856。
+  expect(Math.round(box.width)).toBe(856);
   const columns = await dialog.locator("#staff-name").evaluate((el) => {
     const grid = el.closest(".grid") as HTMLElement | null;
     return grid ? getComputedStyle(grid).gridTemplateColumns.split(" ").length : 0;

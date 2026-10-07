@@ -717,4 +717,12 @@ react-remove-scroll 只有「最上層」那把鎖生效,modal Popover 會掛自
 - 🔴 新頁面一律用標準頁面容器(`mx-auto max-w-* px-5`),否則小卡窗會量不到、退回 1152 寬。不在 AppLayout 底下的獨立路由(登入、onboarding 等)會退回舊規則。
 - 🔴 對齊狀態必須 `transition-none`:`CARD_CONTENT_CLASS` 的 `duration-200` 是 transition all,不取消會「先寬後縮」(QA 抓到,b15 test 6 逐畫面守門)。不要改共用的 `CARD_CONTENT_CLASS`(確認窗也用)。
 - ⚠️ 主腦補的:水平位置也對齊內容欄(不是畫面正中);疊在全頁層上對齊面板外框。要退可只改 `cardDialogColumnAlign.ts`。
-- 全頁層 FullPageLayer 目前仍是統一 1152,在 3xl/4xl 頁面會比內容欄寬 296~424px;要不要比照對齊待使用者裁決。
+- ~~全頁層統一 1152~~ → 第 16 批已改,見下一段。
+
+### 2026-10-08 第 16 批(#1010)全頁層也對齊頁面內容欄(使用者裁決 A)
+
+- 全頁層 FullPageLayer 跟小卡窗共用 `cardDialogColumnAlign.ts` 量測 + `overlayClasses.ts` 的 `COLUMN_ALIGN_CLASS`(含 transition-none);量不到或 < 320px 退回左右 16px、最寬 1152。
+- 實測寬度:6xl 頁 1112、4xl 頁 856、3xl 頁 728;728 窄欄下建單表單 / 服務人員端預約詳情沒擠壞。
+- 🔴「底下那層」= DOM 順序排在自己前面的開著的窗(isBeneath);疊在上面的窗不算,否則兩層會互相對齊、跟著晃。
+- ⚠️ 未定義情境:若日後出現「從小卡窗裡打開全頁層」,全頁層會去對齊那張小卡窗;新增這種流程時要先決定規則。
+- 小卡窗疊在全頁層上、拉動視窗時,上層可能晚一格才對齊(目前全站沒有這種實際疊法,確認窗固定 400 不受影響)。

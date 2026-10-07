@@ -1,5 +1,8 @@
 // 第 15 批 #1009:電腦版小卡窗(CardDialog)的左右邊界對齊「底下那頁的主要內容欄」。
-// 🔴 只給 CardDialog 殼用,頁面不要 import;也不要逐頁硬寫寬度。
+// 第 16 批 #1010:全頁層(FullPageLayer)也共用這一套(使用者裁決 A:全站規則一致)。
+//   檔名 / 函式名沿用第 15 批(measureCardColumnAlign、useCardColumnAlign),不改名,免得動到 b15 e2e;
+//   文中的「卡片」= 正在量的那一層(小卡窗或全頁層面板)。
+// 🔴 只給 CardDialog / FullPageLayer 兩個殼用,頁面不要 import;也不要逐頁硬寫寬度。
 //
 // 使用者原話(2026-10-07,料錢成本管理 → 編輯品項截圖):「這個寬度應該要同紅框的寬度,現在反而過寬。」
 // 紅框 = 頁面標題下方那塊主要內容卡片的左右邊界 = 頁面容器(`mx-auto max-w-* px-5`)扣掉左右內距的那一欄。
@@ -8,8 +11,10 @@
 //   1. App 殼層的主要內容容器標 `data-app-content-root`(AppLayout / PlatformAdminShell 的 <main>)。
 //   2. 小卡窗打開時往下找「真正的頁面容器」:從 root 開始,遇到有左右內距、或比 root 窄的元素就是它;
 //      否則往唯一 / 第一個看得到的子元素走(最多幾層)。量它扣掉邊框與內距後的左右邊界。
-//   3. 底下有全頁層(FullPageLayer)開著 ⇒ 改對齊全頁層面板的左右邊界(規格書 #1009)。
-//   4. 都找不到(或量出來太窄)⇒ 回傳 null,小卡窗退回第 12 批規則(左右 16px、最寬 1152px)。
+//   3. 底下有全頁層(FullPageLayer)開著 ⇒ 改對齊全頁層面板的左右邊界(規格書 #1009;
+//      第 16 批起全頁層上再開全頁層也一樣對齊下層面板)。「底下」= DOM 順序在自己前面的那一層
+//      (Radix 每層各自 portal 到 body 尾端,先開的在前);疊在自己上面的窗不算,免得互相對齊。
+//   4. 都找不到(或量出來太窄)⇒ 回傳 null,退回原規則(左右 16px、最寬 1152px:小卡窗第 12 批、全頁層第 11 批 J)。
 //   量測用 offsetWidth(不受 zoom 動畫的 transform 影響)+ getBoundingClientRect 的中心點
 //   (scale 以中心為原點,中心不會動),所以全頁層還在進場動畫時量到的也是最終位置。
 
@@ -85,7 +90,13 @@ export function findPageColumnElement(root: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** 底下開著的全頁層面板(排除小卡窗自己、浮出面板 Popover)。 */
+/** el 在 card 前面(= 先開、在底下)。card 還沒掛進 document(例如 e2e 直接呼叫量測函式)⇒ 不篩順序。 */
+function isBeneath(el: HTMLElement, card: HTMLElement): boolean {
+  if (!card.isConnected) return true;
+  return (el.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+}
+
+/** 底下開著的全頁層面板(排除自己、疊在自己上面的窗、浮出面板 Popover)。 */
 function findOpenUnderlyingLayer(card: HTMLElement): HTMLElement | null {
   const candidates = Array.from(
     document.querySelectorAll<HTMLElement>('[role="dialog"][data-state="open"]'),
@@ -94,6 +105,7 @@ function findOpenUnderlyingLayer(card: HTMLElement): HTMLElement | null {
       el !== card &&
       !el.contains(card) &&
       !card.contains(el) &&
+      isBeneath(el, card) &&
       !el.closest("[data-radix-popper-content-wrapper]") &&
       getComputedStyle(el).position === "fixed" &&
       el.offsetWidth > 0,
@@ -155,4 +167,21 @@ export function useCardColumnAlign(card: HTMLElement | null): CardColumnAlign | 
   }, [card]);
 
   return align;
+}
+
+/** 量到欄位時掛在那一層上的屬性 / CSS 變數(CardDialog、FullPageLayer 共用;class 見 overlayClasses.ts
+ *  COLUMN_ALIGN_CLASS)。量不到 ⇒ 不掛屬性、style 原樣,各殼走自己的原規則。 */
+export function columnAlignAttrs(
+  align: CardColumnAlign | null,
+  style: React.CSSProperties | undefined,
+): { "data-card-col-align": "" | undefined; style: React.CSSProperties | undefined } {
+  if (!align) return { "data-card-col-align": undefined, style };
+  return {
+    "data-card-col-align": "",
+    style: {
+      ...style,
+      "--card-col-center": `${align.center}px`,
+      "--card-col-width": `${align.width}px`,
+    } as React.CSSProperties,
+  };
 }

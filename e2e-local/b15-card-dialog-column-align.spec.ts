@@ -505,7 +505,8 @@ test("4. 全頁層檢查(只量、不改):各頁內容欄寬 vs 全頁層寬", a
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       const col = await pageColumn(page);
-      // 全頁層電腦版寬度規則:min(畫面寬 − 32, 1152)(FULL_PAGE_PANEL_CLASS,所有使用處同一檔)。
+      // 第 15 批當時的全頁層規則:min(畫面寬 − 32, 1152)(只是對照用的舊數字)。
+      // 第 16 批 #1010 起全頁層也對齊內容欄,實際寬度改在 b16-full-page-layer-column-align.spec.ts 量。
       const vw = await page.evaluate(() => document.documentElement.clientWidth);
       const layer = Math.min(vw - 32, 1152);
       console.log(
