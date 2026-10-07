@@ -648,6 +648,74 @@ describe("編輯表單的紅利區塊(紅利系統重構 §4.6 編輯模式)", (
     expect(payload["pointsOverrideReset"]).toBe(false);
   });
 
+  it("🔴 #939 A-3:把電話改成原會員自己目前的電話(預覽 given:A → existing:A)⇒ 折抵維持、不提示重設,送出照原折抵", async () => {
+    getBookingMock.mockResolvedValue(
+      editingDetail({ points_redeemed: 100, points_redeem_amount_snapshot: 10 }),
+    );
+    previewMock.mockImplementation(async (input: { customerPhone: string }) =>
+      input.customerPhone === "0912345678"
+        ? previewOk({
+            member: { resolution: "given", member_id: MEMBER_ID, name: "王小明", balance: 20 },
+          })
+        : previewOk({
+            member: { resolution: "existing", member_id: MEMBER_ID, name: "王小明", balance: 20 },
+          }),
+    );
+    renderForm(BOOKING_ID);
+    await waitFor(() => expect(screen.getByText("會員：王小明")).toBeInTheDocument());
+    expect(screen.getByLabelText(/折抵點數/)).toHaveValue("100");
+
+    fireEvent.change(document.getElementById("booking-customer-phone") as HTMLElement, {
+      target: { value: "0955666777" },
+    });
+    await settlePreview();
+    await waitFor(() => expect(lastPreviewArgs()["customerPhone"]).toBe("0955666777"));
+    await settlePreview();
+    expect(screen.queryByText("客戶電話已變更，紅利折抵已重設")).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /使用點數折抵/ })).toHaveAttribute(
+      "data-state",
+      "checked",
+    );
+    expect(screen.getByLabelText(/折抵點數/)).toHaveValue("100");
+
+    await clickSubmit("儲存變更");
+    await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
+    const payload = updateBookingMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload["pointsRedeemed"]).toBe(100);
+    expect(payload["pointsRedeemMemberId"]).toBe(MEMBER_ID);
+  });
+
+  it("#939:改成另一位會員的電話(given:A → existing:B)⇒ 照舊重設折抵並提示", async () => {
+    getBookingMock.mockResolvedValue(
+      editingDetail({ points_redeemed: 100, points_redeem_amount_snapshot: 10 }),
+    );
+    previewMock.mockImplementation(async (input: { customerPhone: string }) =>
+      input.customerPhone === "0912345678"
+        ? previewOk({
+            member: { resolution: "given", member_id: MEMBER_ID, name: "王小明", balance: 20 },
+          })
+        : previewOk({
+            member: {
+              resolution: "existing",
+              member_id: OTHER_MEMBER_ID,
+              name: "李小華",
+              balance: 900,
+            },
+          }),
+    );
+    renderForm(BOOKING_ID);
+    await waitFor(() => expect(screen.getByText("會員：王小明")).toBeInTheDocument());
+    fireEvent.change(document.getElementById("booking-customer-phone") as HTMLElement, {
+      target: { value: "0922333444" },
+    });
+    await waitFor(() => expect(screen.getByText("會員：李小華")).toBeInTheDocument());
+    expect(screen.getByText("客戶電話已變更，紅利折抵已重設")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /使用點數折抵/ })).toHaveAttribute(
+      "data-state",
+      "unchecked",
+    );
+  });
+
   it("未人工設定、重算後建議值變了 ⇒ 提示「派點數已從 A 點變成 B 點」", async () => {
     getBookingMock.mockResolvedValue(editingDetail());
     previewMock.mockResolvedValue(

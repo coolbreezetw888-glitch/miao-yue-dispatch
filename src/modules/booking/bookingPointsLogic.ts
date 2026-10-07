@@ -395,10 +395,18 @@ export function validateRedeemPoints(raw: string, redeem: PointsRedeemInfo): Red
 // 判斷 24:預覽對到的會員變了 ⇒ 折抵歸零
 // ---------------------------------------------------------------------------
 
-/** 預覽對到「哪一位」的識別字。沒有派點狀態(錯誤、功能關閉)時回 null = 不判斷。 */
+/** 預覽對到「哪一位」的識別字。沒有派點狀態(錯誤、功能關閉)時回 null = 不判斷。
+ *  🔴 SPECS-INDEX #939(A-3):`given`(前端指定)跟 `existing`(依電話找到)只要會員 id 相同就是**同一位**,
+ *     用同一個前綴 `member:`。編輯時把電話改成原會員自己目前的電話,預覽會從 given:A 變成 existing:A ——
+ *     會員根本沒換,不可以關掉折抵、清成 0(否則一儲存就把原會員的折抵退掉、分類帳多一列)。
+ *     其他類型(none / new / ambiguous / phone_incomplete)照舊用自己的類型當前綴。 */
 export function previewMemberKey(preview: BookingPointsPreview | undefined): string | null {
   if (!preview || !preview.featureEnabled || preview.error !== null) return null;
-  return `${preview.resolution}:${preview.memberId ?? ""}`;
+  const kind =
+    preview.resolution === "given" || preview.resolution === "existing"
+      ? "member"
+      : preview.resolution;
+  return `${kind}:${preview.memberId ?? ""}`;
 }
 
 /**

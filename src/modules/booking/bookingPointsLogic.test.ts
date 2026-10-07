@@ -271,7 +271,44 @@ describe("判斷 24:會員變了 ⇒ 折抵歸零", () => {
     expect(
       previewMemberKey(parseBookingPointsPreview({ feature_enabled: true, error: "x" })),
     ).toBeNull();
-    expect(previewMemberKey(parseBookingPointsPreview(rawPreview()))).toBe("existing:m-1");
+    // #939:given / existing 共用 member: 前綴(同一位會員不論怎麼對到,識別字都一樣)。
+    expect(previewMemberKey(parseBookingPointsPreview(rawPreview()))).toBe("member:m-1");
+  });
+
+  // SPECS-INDEX #939 A-3:編輯時把電話改成原會員自己目前的電話 ⇒ 預覽從 given:A 變 existing:A,會員沒換。
+  function keyOf(resolution: string, memberId: string | null) {
+    return previewMemberKey(
+      parseBookingPointsPreview(
+        rawPreview({
+          member: { resolution, member_id: memberId, name: memberId ? "某會員" : null, balance: 0 },
+        }),
+      ),
+    );
+  }
+
+  it("#939 A-3:given:A → existing:A ⇒ 同一位,不重設折抵", () => {
+    expect(keyOf("given", "m-a")).toBe(keyOf("existing", "m-a"));
+    expect(
+      shouldResetRedeemOnMemberChange(keyOf("given", "m-a"), keyOf("existing", "m-a"), true),
+    ).toBe(false);
+    expect(
+      shouldResetRedeemOnMemberChange(keyOf("existing", "m-a"), keyOf("given", "m-a"), true),
+    ).toBe(false);
+  });
+
+  it("#939:given:A → existing:B(真的換人)⇒ 重設;其他類型維持原本判斷", () => {
+    expect(
+      shouldResetRedeemOnMemberChange(keyOf("given", "m-a"), keyOf("existing", "m-b"), true),
+    ).toBe(true);
+    expect(shouldResetRedeemOnMemberChange(keyOf("given", "m-a"), keyOf("new", null), true)).toBe(
+      true,
+    );
+    expect(
+      shouldResetRedeemOnMemberChange(keyOf("given", "m-a"), keyOf("phone_incomplete", null), true),
+    ).toBe(true);
+    expect(shouldResetRedeemOnMemberChange(keyOf("given", "m-a"), keyOf("none", null), true)).toBe(
+      true,
+    );
   });
 });
 
