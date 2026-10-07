@@ -10,9 +10,25 @@ import {
   MAX_BOOKING_DAYS_AHEAD_LIMIT,
   MIN_ADVANCE_BOOKING_DAYS_LIMIT,
   MIN_BOOKING_DAYS_AHEAD_LIMIT,
+  STAFF_COMPENSATION_TYPE_LABELS,
   type MerchantStaff,
+  type StaffCompensationType,
   type StaffLoginStatus,
 } from "./types";
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
+
+/**
+ * 第 11 批 G(#994,G-2):計酬類型下拉的 onValueChange 防護(白名單版)。
+ * 空字串(Radix 幽靈事件)與不在 STAFF_COMPENSATION_TYPE_LABELS 裡的值一律忽略,不會洗掉表單值。
+ */
+export function guardStaffCompensationTypeChange(
+  onChange: (value: StaffCompensationType) => void,
+): (value: string) => void {
+  return guardPhantomEmptyChange<StaffCompensationType>(
+    onChange,
+    (v) => v in STAFF_COMPENSATION_TYPE_LABELS,
+  );
+}
 
 export type StaffListFilter = "all" | "unlisted" | "listed" | "removed";
 

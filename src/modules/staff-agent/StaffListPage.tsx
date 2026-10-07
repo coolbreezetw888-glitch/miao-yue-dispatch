@@ -50,13 +50,13 @@ import {
   CardDialogFooter,
   CardDialogHeader,
   CardDialogTitle,
-  ChoiceChip,
-  ChoiceChipGroup,
   ComingSoonTag,
   EmptyState,
   ErrorState,
   FieldInput,
+  FieldMultiSelect,
   FieldNativeSelect,
+  FieldSelect,
   FieldTextarea,
   FieldTime,
   FormField,
@@ -71,6 +71,7 @@ import {
   TodoTag,
   UnderlineTabsList,
   UnderlineTabsTrigger,
+  type FieldMultiSelectOption,
   type ListCardMenuItem,
 } from "@/components/patterns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -120,6 +121,7 @@ import { RequireStaffManagementAccess } from "./RequireStaffManagementAccess";
 import { StaffAvatarUploader } from "./StaffAvatarUploader";
 import {
   countStaffByFilter,
+  guardStaffCompensationTypeChange,
   matchesStaffListFilter,
   merchantUsesStaffLogin,
   shouldMarkPendingLoginAsTodo,
@@ -201,8 +203,12 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
 }
 
 /** 全頁層表單裡每一個區塊的小標題(跟 FormField 的標籤同一套 13px 粗體)。 */
-function FormSectionTitle({ children }: { children: React.ReactNode }) {
-  return <p className="text-[13px] font-semibold leading-none text-foreground">{children}</p>;
+function FormSectionTitle({ children, id }: { children: React.ReactNode; id?: string }) {
+  return (
+    <p id={id} className="text-[13px] font-semibold leading-none text-foreground">
+      {children}
+    </p>
+  );
 }
 
 /** 表單裡「目前還沒有 / 請先儲存」這類提示的虛線框。 */
@@ -365,7 +371,7 @@ function AvailabilityWindowsEditor({
 const STAFF_FORM_ID = "staff-form";
 
 // 全頁層(盤點 A3 / A4):受控開關,新增與編輯共用同一個元件,只差 staff 是不是 null。
-function StaffFormDialog({
+export function StaffFormDialog({
   merchantId,
   staff,
   open,
@@ -430,19 +436,49 @@ function StaffFormDialog({
     return categories?.find((c) => c.id === categoryId)?.name ?? UNCATEGORIZED_LABEL;
   }
 
+  // 第 11 批 G(G-7):寫入中的服務項目(那一列顯示小轉圈、不能重複點;其他列照常可點)。
+  const [busyServiceItemIds, setBusyServiceItemIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
   async function handleToggleServiceItem(serviceItemId: string, checked: boolean) {
     if (!staff) return;
+    setBusyServiceItemIds((prev) => new Set(prev).add(serviceItemId));
     try {
       if (checked) {
         await addStaffServiceItem(staff.id, serviceItemId);
       } else {
         await removeStaffServiceItem(staff.id, serviceItemId);
       }
-      await queryClient.invalidateQueries({ queryKey: staffServiceItemsQueryKey });
     } catch (err) {
       toast.error("更新服務項目失敗", { description: getErrorMessage(err) });
+    } finally {
+      // 成功或失敗都重抓:勾選狀態一律以資料庫為準(G-7)。
+      await queryClient.invalidateQueries({ queryKey: staffServiceItemsQueryKey });
+      setBusyServiceItemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(serviceItemId);
+        return next;
+      });
     }
   }
+
+  // 第 11 批 G:多選下拉的選項(上架中的在前、已下架但仍綁著的在後)與已選集合。
+  const serviceItemOptions: FieldMultiSelectOption[] = [
+    ...(activeServiceItems ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+      detail: `${categoryName(item.category_id)} ・ $${Number(item.price).toFixed(0)}`,
+      keywords: categoryName(item.category_id),
+    })),
+    ...(removedSelectedItems ?? []).map((item) => ({
+      value: item.id,
+      label: item.name,
+      keywords: categoryName(item.category_id),
+      removed: true,
+    })),
+  ];
+  const selectedServiceItemIds: ReadonlySet<string> = new Set(serviceItemIds ?? []);
 
   useEffect(() => {
     if (open) {
@@ -620,16 +656,23 @@ function StaffFormDialog({
                 ⚠️ 2026-09-24:選項的中文從「按件計酬」改成「抽成制」,底層的值 'piece_rate'
                    完全不動(資料庫存的是英文,中文只在這一層顯示)。
                 ui-v1-full:單選改成 ChoiceChipGroup(skill 二之七,radiogroup 語意、方向鍵可切換),
-                值直接來自常數白名單。 */}
+                值直接來自常數白名單。第 11 批 G 再改成下拉(見下方)。 */}
             <FormField
               label="計酬類型"
+              htmlFor="staff-compensation-type"
               helpLabel="說明：計酬類型會影響什麼"
               help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能)；抽成制則是用「可預約時段」調整接單時間。"
             >
-              <ChoiceChipGroup
-                aria-label="計酬類型"
+              {/* 第 11 批 G(#994,2026-10-07,使用者指定):兩顆方塊改成下拉(FieldSelect,跟 #979 付款方式一致)。
+                  仍是按「儲存」才寫入。標籤「計酬類型」經由 htmlFor 成為下拉的無障礙名稱。
+                  guardPhantomEmptyChange 白名單版:表單打開時 useEffect 會把 staff 的值灌進來,正是 Radix
+                  幽靈空值會洗掉值的時序(src/lib/radixSelectGuard.ts)。 */}
+              <FieldSelect<StaffCompensationType>
+                id="staff-compensation-type"
                 value={form.compensationType ?? "piece_rate"}
-                onValueChange={(type) => setField("compensationType", type)}
+                onValueChange={guardStaffCompensationTypeChange((v) =>
+                  setField("compensationType", v),
+                )}
                 options={(["piece_rate", "monthly_salary"] as StaffCompensationType[]).map(
                   (type) => ({ value: type, label: STAFF_COMPENSATION_TYPE_LABELS[type] }),
                 )}
@@ -638,12 +681,13 @@ function StaffFormDialog({
           </div>
 
           <div className="flex flex-col gap-2">
-            <FormSectionTitle>服務項目</FormSectionTitle>
+            <FormSectionTitle id="staff-service-items-label">服務項目</FormSectionTitle>
             {/* 模組 4 規格書 4.4:先判斷「商家是否有任何 status='active' 的服務項目」,
                 不是只看「這位服務人員目前已勾選幾項」——避免把「商家根本沒有服務項目可選」
                 跟「有服務項目、只是這位人員還沒被勾選任何一項」這兩種情況搞混。
                 ui-v1-full:多選改成可點的方塊(skill 二之七:選中 = 主題色框 + 勾,手機好按),
-                點一下就立刻寫入 / 移除關聯(行為跟原本的打勾方框一模一樣)。 */}
+                點一下就立刻寫入 / 移除關聯(行為跟原本的打勾方框一模一樣)。
+                第 11 批 G 再改成多選下拉(見下方),即存行為不變。 */}
             {activeServiceItemsLoading ? (
               <LoadingSkeleton variant="lines" rows={2} />
             ) : !merchantHasAnyServiceItems ? (
@@ -653,47 +697,19 @@ function StaffFormDialog({
                 請先儲存這位服務人員的基本資料，儲存後重新點選「編輯」即可勾選服務項目。
               </FormPlaceholder>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {activeServiceItems!.map((item) => {
-                  const checked = serviceItemIds?.includes(item.id) ?? false;
-                  return (
-                    <ChoiceChip
-                      key={item.id}
-                      selected={checked}
-                      onClick={() => handleToggleServiceItem(item.id, !checked)}
-                      className="max-w-full"
-                    >
-                      <span className="min-w-0 break-words text-left">
-                        {item.name}
-                        {/* 分類名稱是商家自訂文字、長度不固定,放在名稱後面用淡字帶過。 */}
-                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                          {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
-                        </span>
-                      </span>
-                    </ChoiceChip>
-                  );
-                })}
-                {removedSelectedItems && removedSelectedItems.length > 0
-                  ? removedSelectedItems.map((item) => (
-                      <ChoiceChip
-                        key={item.id}
-                        selected
-                        onClick={() => handleToggleServiceItem(item.id, false)}
-                        className="max-w-full border-dashed opacity-70"
-                      >
-                        <span className="min-w-0 break-words text-left">
-                          {item.name}
-                          <span className="ml-1 text-xs font-normal text-muted-foreground">
-                            (已下架)
-                          </span>
-                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                            {categoryName(item.category_id)} ・ ${Number(item.price).toFixed(0)}
-                          </span>
-                        </span>
-                      </ChoiceChip>
-                    ))
-                  : null}
-              </div>
+              /* 第 11 批 G(#994,2026-10-07,使用者指定):一排方塊改成多選下拉 FieldMultiSelect。
+                 點一列 = 立刻寫入 / 移除(handleToggleServiceItem,行為跟方塊一模一樣),清單不自動關;
+                 已下架但仍綁著的項目排在最後(「已下架」分隔標題下),取消勾選後就選不回來。 */
+              <FieldMultiSelect
+                id="staff-service-items"
+                aria-labelledby="staff-service-items-label"
+                testIdPrefix="staff-service-items"
+                placeholder="請選擇服務項目"
+                options={serviceItemOptions}
+                selected={selectedServiceItemIds}
+                busyValues={busyServiceItemIds}
+                onToggle={(itemId, next) => handleToggleServiceItem(itemId, next)}
+              />
             )}
           </div>
 

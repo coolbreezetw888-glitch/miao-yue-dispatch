@@ -18,11 +18,13 @@
 // | 右緣漸層要不要顯示(橫捲提示) | useHorizontalScrollHint.ts | 六 |
 // | `?` 說明鈕 / `!` 提醒條 | HelpHint.tsx | 二 |
 // | 彈窗開窗時不自動聚焦(手機不彈鍵盤)| overlayAutoFocus.ts | 三、兩種窗(SPECS-INDEX #861)|
+// | 多選下拉(外框摘要 + 勾選清單,點了即存;第 11 批 G 使用者指定例外)| FieldMultiSelect.tsx / fieldMultiSelectLogic.ts | 二之七例外 + 三之五 |
 
 export * from "./ActionBar";
 export * from "./CardAlertDialog";
 export * from "./CardDialog";
 export * from "./DetailRows";
+export * from "./FieldMultiSelect";
 export * from "./FormField";
 export * from "./FullPageLayer";
 export * from "./GuardLoading";
