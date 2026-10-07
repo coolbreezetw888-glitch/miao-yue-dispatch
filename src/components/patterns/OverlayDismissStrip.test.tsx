@@ -170,7 +170,9 @@ describe("③ 確認窗:點空白條 = 取消(走 onOpenChange(false)),不跑「
     await user().click(overlay());
     expect(onOpenChange).not.toHaveBeenCalled();
     const strip = strips()[0]!;
-    expect(strip.textContent).toContain("取消");
+    // 第 12 批 #1000:條上不顯示任何字或圖示。
+    expect(strip.textContent).toBe("");
+    expect(strip.querySelector("svg")).toBeNull();
     await user().click(strip);
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onCancelClick).not.toHaveBeenCalled();

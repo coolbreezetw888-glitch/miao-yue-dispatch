@@ -199,7 +199,6 @@ const FullPageLayerContent = React.forwardRef<
         <OverlayDismissStrip
           targetRef={panelRef}
           maxHeight={FULL_PAGE_STRIP_MAX_HEIGHT}
-          label="關閉"
           onDismiss={dismiss.requestDismiss}
         />
       </DialogPrimitive.Portal>

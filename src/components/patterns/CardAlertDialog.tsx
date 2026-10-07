@@ -128,7 +128,6 @@ const CardAlertDialogContent = React.forwardRef<
         <OverlayDismissStrip
           targetRef={cardRef}
           maxHeight={CARD_STRIP_MAX_HEIGHT}
-          label="取消"
           onDismiss={requestDismiss}
         />
       ) : null}

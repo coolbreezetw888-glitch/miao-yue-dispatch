@@ -140,10 +140,11 @@ describe.each<[Shell, string]>([
     expect(await screen.findByText(DISCARD_CHANGES_COPY.title)).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
     // 放棄確認窗自己的上方空白條 = 繼續編輯。
-    const confirmStrip = [
-      ...document.querySelectorAll<HTMLElement>("[data-overlay-dismiss-strip]"),
-    ].at(-1)!;
-    expect(confirmStrip.textContent).toContain("取消");
+    const allStrips = [...document.querySelectorAll<HTMLElement>("[data-overlay-dismiss-strip]")];
+    // 下層視窗一條 + 放棄確認窗一條;最後一條是放棄確認窗的(第 12 批 #1000 起條上沒有字,改用數量確認)。
+    expect(allStrips).toHaveLength(2);
+    const confirmStrip = allStrips.at(-1)!;
+    expect(confirmStrip.textContent).toBe("");
     await user.click(confirmStrip);
     await waitFor(() =>
       expect(screen.queryByText(DISCARD_CHANGES_COPY.title)).not.toBeInTheDocument(),

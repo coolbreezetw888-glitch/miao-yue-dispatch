@@ -11,7 +11,9 @@
 //   8. 確認窗(取消預約):點上方空白 = 取消,預約沒被取消
 //   9. 375 × 812:全頁層滿版、沒有空白條;小卡窗點遮罩不關、點卡片正上方 ⇒ 關
 //  10. 320 寬:小卡窗沒有橫向捲動
-//  11. 深色模式:空白條的「關閉」字看得到(截圖)
+//  11. 深色模式:空白條沒有字(第 12 批 #1000 起條上不顯示文字;原本驗「字看得到」)
+//  ※ 第 12 批 #1001:小卡窗電腦版改成跟全頁層同寬(1280 ⇒ 1152),7 的寬度斷言跟著改;
+//    完整的第 12 批驗收在 b12-card-dialog-wide.spec.ts。
 //  ・浮出面板(日期時間選擇 Popover;服務人員表單的服務項目下拉見 6)點外面照舊收起,視窗不動
 // 截圖存 test-results/b11-j-shots/(🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
 //
@@ -138,7 +140,8 @@ test("1~3. 新增預約(1280):寬度、點遮罩不關、上方空白條、填�
   expect(Math.round(strip.height)).toBe(56);
   expect(Math.round(strip.x)).toBe(64);
   expect(Math.round(strip.width)).toBe(1152);
-  await expect(page.locator(STRIP)).toHaveText(/關閉/);
+  // 第 12 批 #1000:條上沒有字。
+  await expect(page.locator(STRIP)).toHaveText("");
   await page.screenshot({ path: `${SHOTS}/1280-new-booking.png` });
 
   // 點左側遮罩、右側遮罩、下方遮罩 ⇒ 都不關。
@@ -252,8 +255,9 @@ test("8. 確認窗(取消預約):點上方空白 = 取消,預約沒被取消", a
   await expect(alert).toBeVisible();
   const card = await settledBox(alert);
   const strips = page.locator(STRIP);
-  // 最上層那條(確認窗自己的)寫「取消」。
-  await expect(strips.last()).toHaveText(/取消/);
+  // 全頁層一條 + 確認窗一條;第 12 批 #1000 起條上沒有字。
+  await expect(strips).toHaveCount(2);
+  await expect(strips.last()).toHaveText("");
   await page.screenshot({ path: `${SHOTS}/1280-cancel-confirm-strip.png` });
   await page.mouse.click(card.x + card.width / 2, card.y - 24);
   await expect(alert).toHaveCount(0);
@@ -310,7 +314,8 @@ test("7. 小卡窗(付款方式新增):點遮罩不關、點卡片正上方關;�
   const page = await openAsAdmin(browser, 1280, 800, "/app/payment-methods");
   let dialog = await openNewPaymentMethod(page);
   const box = await settledBox(dialog);
-  expect(Math.round(box.width)).toBe(400);
+  // 第 12 批 #1001:電腦版小卡窗跟全頁層同寬(原本 400)。
+  expect(Math.round(box.width)).toBe(1152);
   const strip = await stripBox(page);
   expect(Math.round(strip.height)).toBe(48);
   expect(Math.round(strip.y + strip.height)).toBe(Math.round(box.y));
@@ -383,18 +388,14 @@ test("9~10. 手機 375:全頁層滿版沒有空白條;小卡窗點遮罩不關�
   await tiny.context().close();
 });
 
-test("11. 深色模式:空白條的「關閉」字看得到", async ({ browser }) => {
+test("11. 深色模式:空白條沒有字(第 12 批 #1000)", async ({ browser }) => {
   const page = await openAsAdmin(browser, 1280, 800, "/app/manage");
   await page.evaluate(() => document.documentElement.classList.add("dark"));
   await openNewBooking(page);
   await stripBox(page);
-  const label = page.locator(STRIP).locator("span").first();
-  const colors = await label.evaluate((el) => ({
-    color: getComputedStyle(el).color,
-    opacity: getComputedStyle(el).opacity,
-  }));
-  expect(colors.color).not.toBe("rgba(0, 0, 0, 0)");
-  expect(Number(colors.opacity)).toBeGreaterThan(0.3);
+  await expect(page.locator(STRIP)).toHaveText("");
+  await expect(page.locator(STRIP).locator("*")).toHaveCount(0);
+  expect(await page.locator(STRIP).evaluate((el) => getComputedStyle(el).cursor)).toBe("pointer");
   await page.locator(STRIP).hover();
   await page.screenshot({ path: `${SHOTS}/1280-dark-strip.png` });
   await page.context().close();

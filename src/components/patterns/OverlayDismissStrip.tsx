@@ -11,28 +11,21 @@
  *   - 它是 Portal 裡、遮罩之後的兄弟元素(fixed、pointer-events-auto、z-50),用 ResizeObserver +
  *     resize + animationend 量視窗本體的 getBoundingClientRect() 定位。
  *   - aria-hidden、不可 Tab 聚焦(鍵盤用 Esc;螢幕閱讀器用既有 ✕ / 取消鈕)。
+ *   - 第 12 批 #1000(使用者裁決):條上**不顯示任何字或 ✕ 圖示**(原本的「✕ 關閉 / 取消」會疊在後面頁面的
+ *     標題上);行為完全不變。滑鼠移上去仍是手指游標 + 極淡的底色。
  */
 
 import * as React from "react";
-import { X } from "lucide-react";
-
 import { computeStripRect, sameRect, type StripRect } from "./overlayDismissLogic";
 
 interface OverlayDismissStripProps {
   /** 視窗本體(Radix Content)的 ref。 */
   targetRef: React.RefObject<HTMLElement | null>;
   maxHeight: number;
-  /** 「關閉」(全頁層 / 小卡窗)或「取消」(確認窗)。 */
-  label: string;
   onDismiss: () => void;
 }
 
-export function OverlayDismissStrip({
-  targetRef,
-  maxHeight,
-  label,
-  onDismiss,
-}: OverlayDismissStripProps) {
+export function OverlayDismissStrip({ targetRef, maxHeight, onDismiss }: OverlayDismissStripProps) {
   const [rect, setRect] = React.useState<StripRect | null>(null);
 
   React.useLayoutEffect(() => {
@@ -72,7 +65,7 @@ export function OverlayDismissStrip({
     <div
       aria-hidden="true"
       data-overlay-dismiss-strip=""
-      className="group pointer-events-auto fixed z-50 flex cursor-pointer select-none items-center justify-center rounded-lg transition-colors hover:bg-background/10"
+      className="pointer-events-auto fixed z-50 cursor-pointer select-none rounded-lg transition-colors hover:bg-background/10"
       // pointer-events 也寫一份 inline:Radix 模態視窗開著時 body 是 pointer-events:none,空白條一定要能點。
       style={{
         top: rect.top,
@@ -82,11 +75,6 @@ export function OverlayDismissStrip({
         pointerEvents: "auto",
       }}
       onClick={onDismiss}
-    >
-      <span className="inline-flex items-center gap-1 text-[13px] text-background opacity-60 transition-opacity group-hover:opacity-100">
-        <X className="h-4 w-4" />
-        {label}
-      </span>
-    </div>
+    />
   );
 }
