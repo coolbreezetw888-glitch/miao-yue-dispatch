@@ -36,6 +36,7 @@ import {
   FieldInput,
   FieldTextarea,
   FormField,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 
@@ -68,16 +69,27 @@ export function EditMyStaffProfileDialog({
   const [intro, setIntro] = useState(staff.intro ?? "");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(staff.avatar_url);
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995 J-14 / J-15):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  // 頭像不算:頭像是「上傳成功就直接存檔」(見 handleAvatarUpload),不是按儲存才寫入。
+  const formDirty = useFormDirty({ name, nickname, phone, intro });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setName(staff.name);
-      setNickname(staff.nickname ?? "");
-      setPhone(staff.phone ?? "");
-      setIntro(staff.intro ?? "");
+      const initial = {
+        name: staff.name,
+        nickname: staff.nickname ?? "",
+        phone: staff.phone ?? "",
+        intro: staff.intro ?? "",
+      };
+      setName(initial.name);
+      setNickname(initial.nickname);
+      setPhone(initial.phone);
+      setIntro(initial.intro);
       setAvatarUrl(staff.avatar_url);
+      markFormClean(initial);
     }
-  }, [open, staff]);
+  }, [open, staff, markFormClean]);
 
   // merchant_staff.phone 資料庫層已改為 NOT NULL + 台灣手機號碼格式 CHECK 約束
   // (SPECS-INDEX #595/#596),這裡比照 StaffListPage.tsx §8.1 的驗證規則,不能讓服務人員
@@ -145,7 +157,7 @@ export function EditMyStaffProfileDialog({
   return (
     <CardDialog open={open} onOpenChange={setOpen}>
       <CardDialogTrigger asChild>{trigger}</CardDialogTrigger>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>編輯個人資料</CardDialogTitle>
           <CardDialogDescription>只能修改姓名/暱稱/電話/頭像/簡介這幾項。</CardDialogDescription>

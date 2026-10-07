@@ -47,6 +47,7 @@ import {
   StatusTag,
   UnderlineTabsList,
   UnderlineTabsTrigger,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,15 +161,25 @@ function AgentFormDialog({
   // 但這個對話框已經是「管理員幫客服改基本資料」的完整入口,少一個職位欄位反而奇怪。
   const [jobTitle, setJobTitle] = useState(agent?.job_title ?? "");
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ name, nickname, phone, jobTitle });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open && agent) {
-      setName(agent.name);
-      setNickname(agent.nickname ?? "");
-      setPhone(agent.phone ?? "");
-      setJobTitle(agent.job_title ?? "");
+      const initial = {
+        name: agent.name,
+        nickname: agent.nickname ?? "",
+        phone: agent.phone ?? "",
+        jobTitle: agent.job_title ?? "",
+      };
+      setName(initial.name);
+      setNickname(initial.nickname);
+      setPhone(initial.phone);
+      setJobTitle(initial.jobTitle);
+      markFormClean(initial);
     }
-  }, [open, agent]);
+  }, [open, agent, markFormClean]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -210,7 +221,7 @@ function AgentFormDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>編輯客服資料</CardDialogTitle>
           <CardDialogDescription>

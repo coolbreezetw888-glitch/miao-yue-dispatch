@@ -48,6 +48,7 @@ import {
   parseAmountInput,
   SwitchRow,
   TodoTag,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -410,7 +411,8 @@ function StaffServiceCommissionDialog({
 
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
-      {/* size="wide":每個服務項目一列(開關 + 模式 + 數值),560px 的電腦面板會太擠。 */}
+      {/* size="wide":第 11 批 J 起已不分寬度(全頁層電腦版一律隨瀏覽器寬度伸縮、最寬 1152px),
+          留著只是不想在這批動到這行;下次動到這個檔時順手刪。每一格即存 ⇒ 不傳 dirty(直接關)。 */}
       <FullPageLayerContent
         size="wide"
         title={`${staff.name} 的抽成設定`}
@@ -707,18 +709,25 @@ function StaffSalarySettingsDialog({
   const [saving, setSaving] = useState(false);
   // 月薪的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明)。
   const [baseSalaryError, setBaseSalaryError] = useState<string | null>(null);
+  // 第 11 批 J(#995):填過資料(跟打開 / 資料載入時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ baseSalary, quotaDays });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (!open) return;
     setBaseSalaryError(null);
-    setBaseSalary(settings ? String(settings.monthly_base_salary) : "0");
-    setQuotaDays(
-      settings?.monthly_leave_quota_days !== undefined &&
+    const initial = {
+      baseSalary: settings ? String(settings.monthly_base_salary) : "0",
+      quotaDays:
+        settings?.monthly_leave_quota_days !== undefined &&
         settings?.monthly_leave_quota_days !== null
-        ? String(settings.monthly_leave_quota_days)
-        : "",
-    );
-  }, [open, settings]);
+          ? String(settings.monthly_leave_quota_days)
+          : "",
+    };
+    setBaseSalary(initial.baseSalary);
+    setQuotaDays(initial.quotaDays);
+    markFormClean(initial);
+  }, [open, settings, markFormClean]);
 
   // 🔴 2026-09-30:月薪欄位換成 FieldAmountInput(type="text")之後原生的 min={0} step="1" 就沒了,
   // 所以解析一律走 parseAmountInput,並且傳 integerOnly(這一欄原本是 step="1",月薪不收小數)。
@@ -758,6 +767,7 @@ function StaffSalarySettingsDialog({
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title={`${staff.name} 的薪資設定`}
         subtitle="月薪金額 + 月休天數(僅供參考，不影響扣款計算)。"
         footer={

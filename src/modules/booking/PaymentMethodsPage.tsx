@@ -35,6 +35,7 @@ import {
   PageHeader,
   parseAmountInput,
   StatusTag,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -264,12 +265,17 @@ function PaymentMethodFormDialog({
     method ? methodToFormState(method) : EMPTY_METHOD_FORM,
   );
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty(form);
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setForm(method ? methodToFormState(method) : EMPTY_METHOD_FORM);
+      const initial = method ? methodToFormState(method) : EMPTY_METHOD_FORM;
+      setForm(initial);
+      markFormClean(initial);
     }
-  }, [open, method]);
+  }, [open, method, markFormClean]);
 
   function setField<K extends keyof MethodFormState>(key: K, value: MethodFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -307,7 +313,7 @@ function PaymentMethodFormDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯付款方式" : "新增付款方式"}</CardDialogTitle>
           <CardDialogDescription>

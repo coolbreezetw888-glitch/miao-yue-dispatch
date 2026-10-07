@@ -85,6 +85,7 @@ import {
   FormField,
   LoadingSkeleton,
   PageHeader,
+  useFormDirty,
 } from "@/components/patterns";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
@@ -169,15 +170,25 @@ function EditProfileDialog({
   const [phone, setPhone] = useState(currentPhone);
   const [agentName, setAgentName] = useState(agent?.name ?? "");
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ name, jobTitle, phone, agentName });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setName(currentName);
-      setJobTitle(currentJobTitle);
-      setPhone(currentPhone);
-      setAgentName(agent?.name ?? "");
+      const initial = {
+        name: currentName,
+        jobTitle: currentJobTitle,
+        phone: currentPhone,
+        agentName: agent?.name ?? "",
+      };
+      setName(initial.name);
+      setJobTitle(initial.jobTitle);
+      setPhone(initial.phone);
+      setAgentName(initial.agentName);
+      markFormClean(initial);
     }
-  }, [open, currentName, currentJobTitle, currentPhone, agent]);
+  }, [open, currentName, currentJobTitle, currentPhone, agent, markFormClean]);
 
   const isAgentRole = role === "agent";
 
@@ -258,7 +269,7 @@ function EditProfileDialog({
           頁面不再自己寫 max-h-[90vh] / max-w-lg。
           📌 欄位改成單欄:小卡窗在電腦上固定 400px,兩欄會讓每個 44px 欄位只剩不到 180px,
              比原本的 max-w-lg(512px)窄很多 —— 殼的寬度是全站統一規格,所以改欄位排法。 */}
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>編輯個人資料</CardDialogTitle>
           <CardDialogDescription>只會更新你自己的資料，不會影響到其他人。</CardDialogDescription>

@@ -76,12 +76,13 @@ import {
   FullPageLayerTrigger,
   HelpToggle,
   ListCard,
+  type ListCardMenuItem,
   LoadingSkeleton,
   PageHeader,
   StatusTag,
   UnderlineTabsList,
   UnderlineTabsTrigger,
-  type ListCardMenuItem,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -206,6 +207,9 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
   const [referrer, setReferrer] = useState<{ id: string; name: string } | null>(null);
   const [tierId, setTierId] = useState(UNASSIGNED_TIER_VALUE);
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟空白表單不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ name, phone, email, birthday, notes, referrer, tierId });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (!open) {
@@ -216,8 +220,18 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
       setNotes("");
       setReferrer(null);
       setTierId(UNASSIGNED_TIER_VALUE);
+      // 關掉就清成空白表單 ⇒ 下次打開時的基準 = 空白(第一次掛載時 open=false 也會跑到這裡)。
+      markFormClean({
+        name: "",
+        phone: "",
+        email: "",
+        birthday: "",
+        notes: "",
+        referrer: null,
+        tierId: UNASSIGNED_TIER_VALUE,
+      });
     }
-  }, [open]);
+  }, [open, markFormClean]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -262,6 +276,7 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
       </FullPageLayerTrigger>
       {/* 7 個欄位、一定要捲 ⇒ 全頁層(skill 三「📐 分類原則」)。 */}
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title="新增會員"
         subtitle="會員由商家建立，不是消費者自己註冊。只有姓名是必填的。"
         footer={

@@ -30,10 +30,11 @@ import {
   FieldTextarea,
   FormField,
   ListCard,
+  type ListCardMenuItem,
   LoadingSkeleton,
   PageHeader,
   StatusTag,
-  type ListCardMenuItem,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,12 +93,17 @@ function LeaveTypeFormDialog({
     leaveType ? leaveTypeToFormState(leaveType) : EMPTY_FORM,
   );
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty(form);
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setForm(leaveType ? leaveTypeToFormState(leaveType) : EMPTY_FORM);
+      const initial = leaveType ? leaveTypeToFormState(leaveType) : EMPTY_FORM;
+      setForm(initial);
+      markFormClean(initial);
     }
-  }, [open, leaveType]);
+  }, [open, leaveType, markFormClean]);
 
   function setField<K extends keyof LeaveTypeFormState>(key: K, value: LeaveTypeFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -135,7 +141,7 @@ function LeaveTypeFormDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯假別" : "新增假別"}</CardDialogTitle>
           <CardDialogDescription>

@@ -31,6 +31,7 @@ import {
   FormField,
   LoadingSkeleton,
   parseAmountInput,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 
@@ -79,6 +80,9 @@ export function LeaveDeductionRuleDialog({
   const [saving, setSaving] = useState(false);
   // 固定金額的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明)。
   const [fixedAmountError, setFixedAmountError] = useState<string | null>(null);
+  // 第 11 批 J(#995):填過資料(跟載入的現有規則不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ mode, percentageValue, fixedAmountValue });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     // 🔴 2026-09-30 QA:這個 effect 靠「rule 有值」才會跑,所以查詢失敗時三個 state 會停在
@@ -86,11 +90,17 @@ export function LeaveDeductionRuleDialog({
     // 「錯誤但不是載入中」的狀態下是可以按的 ⇒ 一按就把真實規則靜默覆寫成「不扣款」。
     // 現在出錯時整個表單換成 ErrorState(下面),儲存鈕也一起擋掉,見 disabled 的條件。
     if (!open || !rule) return;
-    setMode(rule.deduction_mode as DeductionMode);
-    setPercentageValue(rule.percentage_value !== null ? String(rule.percentage_value) : "0");
-    setFixedAmountValue(rule.fixed_amount_value !== null ? String(rule.fixed_amount_value) : "0");
+    const initial = {
+      mode: rule.deduction_mode as DeductionMode,
+      percentageValue: rule.percentage_value !== null ? String(rule.percentage_value) : "0",
+      fixedAmountValue: rule.fixed_amount_value !== null ? String(rule.fixed_amount_value) : "0",
+    };
+    setMode(initial.mode);
+    setPercentageValue(initial.percentageValue);
+    setFixedAmountValue(initial.fixedAmountValue);
     setFixedAmountError(null);
-  }, [open, rule]);
+    markFormClean(initial);
+  }, [open, rule, markFormClean]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -155,7 +165,7 @@ export function LeaveDeductionRuleDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           {/* 假別名稱是商家自填的,長度不固定 ⇒ 標題要能折行。 */}
           <CardDialogTitle className="break-words">「{leaveTypeName}」的扣款規則</CardDialogTitle>

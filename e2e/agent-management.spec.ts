@@ -200,6 +200,9 @@ test("T4 電話填 0912(格式錯)→ 儲存 → 看到白話錯誤,而且對話
   await expect(phoneInput(dialog)).toHaveValue("0912");
   // 清單上的暱稱仍是 T3 的值(這次失敗的送出沒有動到任何資料)。
   await page.keyboard.press("Escape");
+  // 第 11 批 J(#995):電話欄改過 = 填過資料 ⇒ Esc 先問「確定放棄這次輸入？」,按「放棄」才關。
+  await page.getByTestId("discard-changes-confirm").getByRole("button", { name: "放棄" }).click();
+  await expect(dialog).toHaveCount(0);
   await expect(fixtureRow(page)).toContainText(newNickname());
 });
 

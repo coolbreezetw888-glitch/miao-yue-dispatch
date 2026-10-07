@@ -24,6 +24,7 @@ import {
   FormField,
   StatusTag,
   TodoTag,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -100,6 +101,8 @@ export function AdminSuggestLoginEmailDialog({
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  // 第 11 批 J(#995):打開那一刻的內容當基準,改過 ⇒ Esc / 上方空白先問放棄。
+  const emailDirty = useFormDirty(email);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -133,13 +136,19 @@ export function AdminSuggestLoginEmailDialog({
   }
 
   return (
-    <CardDialog open={open} onOpenChange={setOpen}>
+    <CardDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) emailDirty.markClean(email);
+        setOpen(next);
+      }}
+    >
       <CardDialogTrigger asChild>
         <Button type="button" variant="text" size="card" className="-ml-2 h-8 px-2">
           修改登入信箱
         </Button>
       </CardDialogTrigger>
-      <CardDialogContent>
+      <CardDialogContent dirty={emailDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle className="break-words">
             建議「{personLabel}」的新登入信箱

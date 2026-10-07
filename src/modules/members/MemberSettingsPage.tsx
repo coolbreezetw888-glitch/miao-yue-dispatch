@@ -76,11 +76,12 @@ import {
   FullPageLayerContent,
   FullPageLayerTrigger,
   ListCard,
+  type ListCardMenuItem,
   LoadingSkeleton,
   PageHeader,
   StatusTag,
   SwitchRow,
-  type ListCardMenuItem,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -202,13 +203,18 @@ function TierFormDialog({
   const [name, setName] = useState(tier?.name ?? "");
   const [sortOrder, setSortOrder] = useState(String(tier?.sort_order ?? 0));
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ name, sortOrder });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setName(tier?.name ?? "");
-      setSortOrder(String(tier?.sort_order ?? 0));
+      const initial = { name: tier?.name ?? "", sortOrder: String(tier?.sort_order ?? 0) };
+      setName(initial.name);
+      setSortOrder(initial.sortOrder);
+      markFormClean(initial);
     }
-  }, [open, tier]);
+  }, [open, tier, markFormClean]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -242,7 +248,7 @@ function TierFormDialog({
     <CardDialog open={open} onOpenChange={setOpen}>
       <CardDialogTrigger asChild>{trigger}</CardDialogTrigger>
       {/* 2 個欄位 ⇒ 小卡窗(skill 三「📐 分類原則」第 3 點)。 */}
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯會員等級" : "新增會員等級"}</CardDialogTitle>
           <CardDialogDescription>

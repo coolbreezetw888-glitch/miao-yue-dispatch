@@ -15,6 +15,7 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  AlertNote,
   CardDialog,
   CardDialogClose,
   CardDialogContent,
@@ -22,7 +23,6 @@ import {
   CardDialogFooter,
   CardDialogHeader,
   CardDialogTitle,
-  AlertNote,
   EmptyState,
   ErrorState,
   FieldAmountInput,
@@ -36,6 +36,7 @@ import {
   parseAmountInput,
   StatusTag,
   SwitchRow,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -315,12 +316,18 @@ function MaterialCostItemFormDialog({
   // 金額的欄位級錯誤(skill 二之七:框變紅 + 下面一行 `!` 說明,不只變紅、也不只跳 toast)。
   const [amountError, setAmountError] = useState<string | null>(null);
 
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty(form);
+  const markFormClean = formDirty.markClean;
+
   useEffect(() => {
     if (open) {
-      setForm(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
+      const initial = item ? itemToFormState(item) : EMPTY_ITEM_FORM;
+      setForm(initial);
+      markFormClean(initial);
       setAmountError(null);
     }
-  }, [open, item]);
+  }, [open, item, markFormClean]);
 
   function setField<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -366,7 +373,7 @@ function MaterialCostItemFormDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>{isEdit ? "編輯料錢成本品項" : "新增料錢成本品項"}</CardDialogTitle>
           <CardDialogDescription>

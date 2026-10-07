@@ -102,6 +102,7 @@ import {
   LoadingSkeleton,
   PageHeader,
   StatusTag,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,17 +157,29 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
   const [notes, setNotes] = useState(member.notes ?? "");
   const [tierId, setTierId] = useState(member.tier_id ?? UNASSIGNED_TIER_VALUE);
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ name, phone, email, birthday, notes, tierId });
+  const markFormClean = formDirty.markClean;
 
   useEffect(() => {
     if (open) {
-      setName(member.name);
-      setPhone(member.phone ?? "");
-      setEmail(member.email ?? "");
-      setBirthday(member.birthday ?? "");
-      setNotes(member.notes ?? "");
-      setTierId(member.tier_id ?? UNASSIGNED_TIER_VALUE);
+      const initial = {
+        name: member.name,
+        phone: member.phone ?? "",
+        email: member.email ?? "",
+        birthday: member.birthday ?? "",
+        notes: member.notes ?? "",
+        tierId: member.tier_id ?? UNASSIGNED_TIER_VALUE,
+      };
+      setName(initial.name);
+      setPhone(initial.phone);
+      setEmail(initial.email);
+      setBirthday(initial.birthday);
+      setNotes(initial.notes);
+      setTierId(initial.tierId);
+      markFormClean(initial);
     }
-  }, [open, member]);
+  }, [open, member, markFormClean]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -210,6 +223,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
       </FullPageLayerTrigger>
       {/* 7 個欄位、一定要捲 ⇒ 全頁層(skill 三「📐 分類原則」)。 */}
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title="編輯會員資料"
         subtitle="只有姓名是必填的。推薦人不能改 —— 推薦獎勵是依建立當下那筆關係核發的。"
         footer={
@@ -319,6 +333,8 @@ function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: (
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):原因欄跟打開時不同 ⇒ Esc / 上方空白先問放棄(打開那一刻的內容當基準)。
+  const reasonDirty = useFormDirty(reason);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -341,7 +357,13 @@ function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: (
   }
 
   return (
-    <CardDialog open={open} onOpenChange={setOpen}>
+    <CardDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) reasonDirty.markClean(reason);
+        setOpen(next);
+      }}
+    >
       <CardDialogTrigger asChild>
         {/* 🔴 不標紅:黑名單是可逆的(旁邊就有「解除黑名單」),而且不刪任何資料 ⇒ ② 次要。
             原本是實心紅(variant="destructive"),那違反 skill 二之三「危險動作不做實心紅」
@@ -351,7 +373,7 @@ function BlacklistDialog({ member, onSaved }: { member: MemberDetail; onSaved: (
         </Button>
       </CardDialogTrigger>
       {/* 只有 1 個欄位 ⇒ 小卡窗(skill 三「📐 分類原則」第 3 點)。 */}
-      <CardDialogContent>
+      <CardDialogContent dirty={reasonDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>列入黑名單</CardDialogTitle>
           <CardDialogDescription>

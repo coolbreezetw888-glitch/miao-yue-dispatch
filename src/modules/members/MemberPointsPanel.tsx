@@ -60,6 +60,7 @@ import {
   FieldTextarea,
   FormField,
   parseAmountInput,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 
@@ -84,6 +85,8 @@ function RedeemPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
   const [pointsError, setPointsError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):打開那一刻的內容當基準,改過 ⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ points, note });
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -122,6 +125,7 @@ function RedeemPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
     <CardDialog
       open={open}
       onOpenChange={(next) => {
+        if (next) formDirty.markClean({ points, note });
         setOpen(next);
         // 關窗再打開時不要留著上一次的紅字。
         if (!next) setPointsError(null);
@@ -133,7 +137,7 @@ function RedeemPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
         </Button>
       </CardDialogTrigger>
       {/* 2 個欄位 ⇒ 小卡窗(skill 三「📐 分類原則」第 3 點)。 */}
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>登記兌換點數</CardDialogTitle>
           <CardDialogDescription>
@@ -202,6 +206,8 @@ function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
   const [deltaError, setDeltaError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  // 第 11 批 J(#995):打開那一刻的內容當基準,改過 ⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty({ delta, note });
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -249,6 +255,7 @@ function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
     <CardDialog
       open={open}
       onOpenChange={(next) => {
+        if (next) formDirty.markClean({ delta, note });
         setOpen(next);
         if (!next) setDeltaError(null);
       }}
@@ -259,7 +266,7 @@ function AdjustPointsDialog({ member, onSaved }: { member: MemberDetail; onSaved
         </Button>
       </CardDialogTrigger>
       {/* 2 個欄位 ⇒ 小卡窗。 */}
-      <CardDialogContent>
+      <CardDialogContent dirty={formDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle>手動調整點數</CardDialogTitle>
           <CardDialogDescription>

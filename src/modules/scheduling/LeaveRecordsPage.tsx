@@ -44,6 +44,7 @@ import {
   PageHeader,
   StatusTag,
   type StatusTone,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,6 +116,11 @@ function CreateLeaveDialog({
   // disabled + 加註記)。過濾規則抽成純函式 filterMonthlySalaryStaff(見 types.ts 的說明)。
   const monthlySalaryStaff = useMemo(() => filterMonthlySalaryStaff(staffList), [staffList]);
 
+  // 第 11 批 J(#995):填過資料(跟空白表單不同)⇒ Esc / 上方空白先問放棄。
+  // 「仍要建立(有衝突)」那個勾選是送出前的確認,不算填資料。
+  const formDirty = useFormDirty({ staffId, leaveTypeId, startDate, endDate, notes });
+  const markFormClean = formDirty.markClean;
+
   useEffect(() => {
     if (open) {
       setStaffId("");
@@ -124,8 +130,9 @@ function CreateLeaveDialog({
       setNotes("");
       setConflicts(null);
       setConfirmDespiteConflicts(false);
+      markFormClean({ staffId: "", leaveTypeId: "", startDate: "", endDate: "", notes: "" });
     }
-  }, [open]);
+  }, [open, markFormClean]);
 
   // 選完服務人員+日期區間後,即時查詢這段期間既有的預約衝突清單(規則 2.6 第 1 點)。
   useEffect(() => {
@@ -199,6 +206,7 @@ function CreateLeaveDialog({
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title="登記請假"
         subtitle="只有月薪制的服務人員可以登記請假紀錄，建立即生效(這次不做審核流程)。"
         footer={
