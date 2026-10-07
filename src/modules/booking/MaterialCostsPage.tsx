@@ -31,6 +31,7 @@ import {
   HelpToggle,
   ListCard,
   LoadingSkeleton,
+  OnOffStateText,
   PageHeader,
   parseAmountInput,
   StatusTag,
@@ -77,7 +78,8 @@ async function fetchMaterialCostEnabled(merchantId: string): Promise<boolean> {
 // 放在這個頁面最上方(料錢成本品項清單 Card 之前)。RLS 已放寬成同時允許
 // can_manage_material_costs,不再要求 can_manage_business_hours,所以這裡不需要額外的
 // 權限判斷——能進到這個頁面的人(RequireMaterialCostsAccess 已擋過一次)就能操作這個開關。
-function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
+// #998 第 11 批 I:匯出給 vitest 直接 render(狀態字顏色斷言);頁面用法不變。
+export function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
   const featureFlagQueryKey = materialCostEnabledQueryKey(merchantId);
   const queryClient = useQueryClient();
   const {
@@ -125,10 +127,19 @@ function MaterialCostEnabledToggle({ merchantId }: { merchantId: string }) {
           // 原本的「已開啟 / 已關閉」狀態文字保留在說明列,不讓人只看開關猜狀態。
           <SwitchRow
             title="啟用料錢成本功能"
+            // #998 第 11 批 I:「目前已開啟 / 目前已關閉」變色粗體(開綠、關紅),後半句照舊灰字;整句文字不變。
             description={
-              enabled
-                ? "目前已開啟，建單表單會出現「料錢成本」區塊。"
-                : "目前已關閉，建單表單不會出現「料錢成本」區塊。"
+              <>
+                <OnOffStateText
+                  on={enabled === true}
+                  onText="目前已開啟"
+                  offText="目前已關閉"
+                  testId="material-cost-feature-state"
+                />
+                {enabled
+                  ? "，建單表單會出現「料錢成本」區塊。"
+                  : "，建單表單不會出現「料錢成本」區塊。"}
+              </>
             }
             checked={enabled ?? false}
             onCheckedChange={handleToggle}

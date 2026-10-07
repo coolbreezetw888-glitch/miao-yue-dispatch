@@ -64,7 +64,7 @@ vi.mock("@/modules/payroll/api", async (importOriginal) => {
   };
 });
 
-import { MaterialCostCommissionToggle } from "./MaterialCostsPage";
+import { MaterialCostCommissionToggle, MaterialCostEnabledToggle } from "./MaterialCostsPage";
 import { MATERIAL_COST_COMMISSION_COPY } from "./materialCostCommissionCopy";
 import { parseMaterialCostCommissionSetting } from "./api";
 import { MerchantPayrollSettingsCard } from "@/modules/payroll/PayrollSettingsPage";
@@ -223,11 +223,67 @@ describe("抽成與薪資設定頁改唯讀一行(8-3)", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
+  it("#998 第 11 批 I:只有「目前開啟 / 目前關閉」變色粗體(開綠、關紅),整行文字不變", () => {
+    mocks.payrollSettings.current = {
+      data: { commission_basis_type: "net_of_material_cost" },
+      isLoading: false,
+      isError: false,
+    };
+    const { unmount } = renderWithProviders(<MerchantPayrollSettingsCard merchantId="m1" />);
+    let state = screen.getByTestId("payroll-material-commission-state");
+    expect(state.textContent).toBe("目前開啟");
+    expect(state).toHaveAttribute("data-state", "on");
+    expect(state.className).toContain("text-success-strong");
+    expect(state.className).toContain("font-semibold");
+    // 狀態字在整行裡面;整行其他字維持灰色
+    const line = screen.getByTestId("payroll-material-commission-readonly");
+    expect(line).toContainElement(state);
+    expect(line.className).toContain("text-muted-foreground");
+    unmount();
+
+    mocks.payrollSettings.current = {
+      data: { commission_basis_type: "gross" },
+      isLoading: false,
+      isError: false,
+    };
+    renderWithProviders(<MerchantPayrollSettingsCard merchantId="m1" />);
+    state = screen.getByTestId("payroll-material-commission-state");
+    expect(state.textContent).toBe("目前關閉");
+    expect(state).toHaveAttribute("data-state", "off");
+    expect(state.className).toContain("text-destructive-strong");
+    expect(screen.getByTestId("payroll-material-commission-readonly").textContent).toBe(
+      "料錢影響抽成：目前關閉。要修改請到「料錢成本管理」。",
+    );
+  });
+
   it("讀不到設定 ⇒ ErrorState,不顯示開或關", () => {
     mocks.payrollSettings.current = { data: undefined, isLoading: false, isError: true };
     renderWithProviders(<MerchantPayrollSettingsCard merchantId="m1" />);
     expect(screen.getByText("讀不到商家層級的抽成設定")).toBeInTheDocument();
     expect(screen.queryByTestId("payroll-material-commission-readonly")).not.toBeInTheDocument();
+  });
+});
+
+describe("#998 第 11 批 I:料錢成本管理頁「料錢成本功能」開關列的狀態字", () => {
+  it("開啟 ⇒「目前已開啟」綠色粗體;後半句照舊、整句文字不變", async () => {
+    mocks.getFeatureFlag.mockResolvedValue(true);
+    renderWithProviders(<MaterialCostEnabledToggle merchantId="m1" />);
+    const state = await screen.findByTestId("material-cost-feature-state");
+    expect(state.textContent).toBe("目前已開啟");
+    expect(state).toHaveAttribute("data-state", "on");
+    expect(state.className).toContain("text-success-strong");
+    expect(state.className).toContain("font-semibold");
+    expect(state.parentElement?.textContent).toBe("目前已開啟，建單表單會出現「料錢成本」區塊。");
+  });
+
+  it("關閉 ⇒「目前已關閉」紅色粗體;後半句照舊、整句文字不變", async () => {
+    mocks.getFeatureFlag.mockResolvedValue(false);
+    renderWithProviders(<MaterialCostEnabledToggle merchantId="m1" />);
+    const state = await screen.findByTestId("material-cost-feature-state");
+    expect(state.textContent).toBe("目前已關閉");
+    expect(state).toHaveAttribute("data-state", "off");
+    expect(state.className).toContain("text-destructive-strong");
+    expect(state.parentElement?.textContent).toBe("目前已關閉，建單表單不會出現「料錢成本」區塊。");
   });
 });
 

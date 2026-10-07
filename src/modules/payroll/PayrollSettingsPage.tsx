@@ -43,6 +43,7 @@ import {
   FullPageLayerContent,
   ListCard,
   LoadingSkeleton,
+  OnOffStateText,
   PageHeader,
   parseAmountInput,
   SwitchRow,
@@ -139,8 +140,12 @@ export function MerchantPayrollSettingsCard({ merchantId }: { merchantId: string
                 className="text-sm text-muted-foreground"
                 data-testid="payroll-material-commission-readonly"
               >
-                料錢影響抽成：目前
-                {settings?.commission_basis_type === "net_of_material_cost" ? "開啟" : "關閉"}
+                料錢影響抽成：
+                {/* #998 第 11 批 I:只有「目前開啟 / 目前關閉」變色粗體(開綠、關紅),其他字維持灰色;整行文字不變。 */}
+                <OnOffStateText
+                  on={settings?.commission_basis_type === "net_of_material_cost"}
+                  testId="payroll-material-commission-state"
+                />
                 。要修改請到
                 {canOpenMaterialCostsPage ? (
                   <Link
