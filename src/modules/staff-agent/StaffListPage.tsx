@@ -391,6 +391,10 @@ export function StaffFormDialog({
   const [orderSwitchConfirm, setOrderSwitchConfirm] = useState<
     "confirm-enable-member-info" | "confirm-disable-orders" | null
   >(null);
+  // #999 第 11 批:每次打開小卡窗 +1,當成 CardAlertDialog 的 key(比照第 11 批 E 的 AgentPermissionsPage)。
+  // 🔴 不加的話,「取消 → 100~200ms 內又點開關」時,上一次還在退場的小卡窗本體留在 body、新的遮罩被插在它後面,
+  //    遮罩蓋在小卡窗上面 ⇒ 按鈕點不到。換 key = 上一組整個丟掉、重新掛載,遮罩與本體一起重新插入。
+  const [orderSwitchDialogSeq, setOrderSwitchDialogSeq] = useState(0);
   const queryClient = useQueryClient();
 
   const staffServiceItemsQueryKey = ["staff-agent-module", "staff-service-items", staff?.id];
@@ -826,7 +830,10 @@ export function StaffFormDialog({
                       showMemberInfo: Boolean(form.showMemberInfo),
                     });
                     if (decision.kind === "apply") setField(toCamel(field.key), v);
-                    else setOrderSwitchConfirm(decision.kind);
+                    else {
+                      setOrderSwitchDialogSeq((n) => n + 1);
+                      setOrderSwitchConfirm(decision.kind);
+                    }
                   }}
                 >
                   {/* #977 第 7 批:舊資料(新增編輯訂單開、顯示會員資料關)⇒ 常駐 `!`,不自動改資料。 */}
@@ -846,6 +853,7 @@ export function StaffFormDialog({
               ))}
             </div>
             <CardAlertDialog
+              key={orderSwitchDialogSeq}
               open={orderSwitchConfirm !== null}
               onOpenChange={(next) => {
                 if (!next) setOrderSwitchConfirm(null);
