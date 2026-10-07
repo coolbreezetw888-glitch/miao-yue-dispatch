@@ -8,7 +8,8 @@
 export const OVERLAY_CLASS =
   "fixed inset-0 z-50 bg-foreground/40 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0";
 
-/** 小卡窗 / 確認窗本體(手機規格;確認窗電腦也用這個):置中、16px 圓角(rounded-xl = --radius + 4px)、手機左右各留 16px、電腦固定 400px、高度隨內容。
+/** 小卡窗 / 確認窗本體(手機規格;確認窗電腦也用這個):置中、16px 圓角(rounded-xl = --radius + 4px)、手機左右各留 16px、最寬 400px、高度隨內容
+ *  (電腦版:確認窗照這個 400px;小卡窗 CardDialog 另外疊上 CARD_DIALOG_CONTENT_CLASS 拉寬)。
  *  max-h + overflow 只是極端小螢幕的保險(skill 說「不捲動」,正常內容量不會觸發)。 */
 export const CARD_CONTENT_CLASS =
   "fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-32px)] max-w-[400px] max-h-[calc(100dvh-32px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-xl border bg-background p-5 shadow-lg duration-200 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95";

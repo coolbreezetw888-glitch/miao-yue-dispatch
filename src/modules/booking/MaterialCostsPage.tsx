@@ -3,7 +3,7 @@
 //
 // ui-v1-full 第二階段第 2 批(2026-09-29,盤點 #9 / #10):
 //   - 新增 / 編輯品項(2 欄)→ ui-overlay-patterns 的小卡窗殼(CardDialog),受控開關,
-//     底部「取消 / 儲存」手機各半、電腦靠右;欄位改 FormField / FieldInput / FieldAmountInput。
+//     底部「取消 / 儲存」手機各半、電腦也平均分寬(第 12 批 #1001,原本電腦靠右);欄位改 FormField / FieldInput / FieldAmountInput。
 //   - 品項列改 ListCard(skill 二之五):右側只放「編輯」+ ⋯(下架收進 ⋯,可逆 ⇒ 不標紅);
 //     已下架整張變灰、主要動作換成「重新上架」。
 //   - 料錢成本功能開關改 SwitchRow(skill 二之七「開關做成一整列」)。

@@ -23,7 +23,7 @@
 // ui-v1-full 第 3 批(2026-09-30):套用 ui-overlay-patterns skill。
 //   - 兩顆對話框(登記兌換 / 手動調整)各只有 2 個欄位 ⇒ **小卡窗** CardDialog
 //     (skill 三「📐 分類原則」第 3 點),不再自己寫 max-w-sm;按鈕列補「取消」,
-//     手機左右各半、電腦靠右由殼統一。
+//     按鈕平均分寬(手機左右各半;電腦第 12 批 #1001 起也平均分寬,原本靠右)由殼統一。
 //   - 欄位改 FormField + FieldInput / FieldTextarea,必填用紅色 `*`。
 //   - 🔴 兩個點數輸入框從 `type="number"` 改成文字輸入 + tabular-nums(比照 skill 二之七
 //     金額欄位不用 type=number 的同一個理由:type=number 在手機上滑動會誤改數字、在桌機滑鼠
