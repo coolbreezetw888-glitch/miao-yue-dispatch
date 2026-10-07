@@ -23,3 +23,8 @@ export const CARD_FOOTER_CLASS =
 /** 小卡窗右上角的 ✕:視覺 20px、點擊區 36px。 */
 export const CARD_CLOSE_CLASS =
   "absolute right-2 top-2 inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none";
+
+/** 全頁層電腦版寬度(第 11 批 J,#995 J-16):隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px
+ *  (= 行事曆頁內容容器 `max-w-6xl`;用同一個 Tailwind token,之後內容容器改寬度兩邊一起改)。
+ *  只拉寬不重排;手機 < 640px 不受影響(全部是 sm: 前綴)。 */
+export const FULL_PAGE_PANEL_CLASS = "sm:w-[calc(100%-32px)] sm:max-w-6xl";

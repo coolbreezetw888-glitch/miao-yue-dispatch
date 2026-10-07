@@ -20,6 +20,8 @@
 // | 彈窗開窗時不自動聚焦(手機不彈鍵盤)| overlayAutoFocus.ts | 三、兩種窗(SPECS-INDEX #861)|
 // | 多選下拉(外框摘要 + 勾選清單,點了即存;第 11 批 G 使用者指定例外)| FieldMultiSelect.tsx / fieldMultiSelectLogic.ts | 二之七例外 + 三之五 |
 // | 句中「目前開啟 / 目前關閉」狀態字(開綠、關紅、粗體;第 11 批 I)| OnOffStateText.tsx | 二之四 |
+// | 「填過資料」判斷(dirty;Esc / 上方空白條先問放棄;第 11 批 J)| formDirty.ts | 三之六 |
+// | 視窗正上方「點了關閉」的空白條 + 放棄確認(只給三個殼用,不 export)| OverlayDismissStrip.tsx / overlayDirtyDismiss.tsx / overlayDismissLogic.ts | 三之六 |
 
 export * from "./ActionBar";
 export * from "./CardAlertDialog";
@@ -27,6 +29,7 @@ export * from "./CardDialog";
 export * from "./DetailRows";
 export * from "./FieldMultiSelect";
 export * from "./FormField";
+export * from "./formDirty";
 export * from "./FullPageLayer";
 export * from "./GuardLoading";
 export * from "./HelpHint";

@@ -234,6 +234,9 @@ test("行事曆 /app/calendar(週/月檢視、預約詳情、編輯、新增預�
   });
   await assertNoHorizontalOverflow(page, "行事曆(新增預約表單彈窗,已選長名稱服務項目)");
   await page.keyboard.press("Escape");
+  // 第 11 批 J(#995):已選了服務人員與服務項目 = 填過資料 ⇒ Esc 先問「確定放棄這次輸入？」,按「放棄」才關。
+  await page.getByTestId("discard-changes-confirm").getByRole("button", { name: "放棄" }).click();
+  await expect(newBookingDialog).toHaveCount(0);
 
   // 月檢視。
   await page.getByRole("radio", { name: "月檢視" }).click();

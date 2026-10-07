@@ -527,6 +527,52 @@ describe("§5.4 送出與成功後", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
   });
 
+  // 第 11 批 J(#995 J-14 L2):還原 / 取消子畫面原因欄有字 ⇒ Esc 先問放棄;沒字 ⇒ 直接關。
+  it("第 11 批 J:原因欄有字 ⇒ Esc 先問「確定放棄這次輸入？」;清空 ⇒ Esc 直接關", async () => {
+    renderDialog();
+    await openReversal("還原完成");
+    fireEvent.change(reasonBox(), { target: { value: "誤按" } });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeTruthy();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByRole("button", { name: "繼續編輯" }));
+    await waitFor(() => expect(screen.queryByText("確定放棄這次輸入？")).toBeNull());
+    fireEvent.change(reasonBox(), { target: { value: "  " } });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("第 11 批 J × #965:送出成功跳差額小卡窗時原因已存進去 ⇒ 不再算填過(全頁層的關閉走 finishReversal)", async () => {
+    // #965 的競態(Esc 在小卡窗剛插入時落到下面的全頁層)jsdom 重現不了;改用「直接觸發全頁層的上方空白條」
+    // 走同一條 Esc 路徑:假裝面板上方有 200px,空白條才會畫出來。
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          top: 200,
+          left: 100,
+          width: 400,
+          height: 300,
+          right: 500,
+          bottom: 500,
+          x: 100,
+          y: 200,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
+    try {
+      await openShortfallDialog();
+      const layerStrip = document.querySelector<HTMLElement>("[data-overlay-dismiss-strip]");
+      expect(layerStrip).not.toBeNull();
+      await act(async () => {
+        fireEvent.click(layerStrip!);
+      });
+      expect(screen.queryByText("確定放棄這次輸入？")).toBeNull();
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    } finally {
+      rect.mockRestore();
+    }
+  });
+
   it("QA 打回 3:成功後不會再多打一次預覽(onChanged 等子畫面關掉之後才呼叫)", async () => {
     renderDialog();
     await openReversal("還原完成");

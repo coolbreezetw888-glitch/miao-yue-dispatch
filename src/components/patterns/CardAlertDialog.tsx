@@ -6,6 +6,12 @@
  * 明確二選一的確認。⚠️ **按 Esc 會關**(Radix AlertDialog 只擋點遮罩,不擋 Esc;#844 批次 4 QA 實測),
  * 效果等同按「取消」那顆 —— 走 onOpenChange(false)。有輸入欄位的短表單請用 CardDialog。
  *
+ * 第 11 批 J(#995 J-7、J-8、J-12):卡片正上方 48px 有「點了取消」的空白條,**等同按 Esc**
+ *   (先跑頁面的 onEscapeKeyDown,被 preventDefault 就不關;沒被攔 ⇒ 觸發殼裡隱藏的 Close ⇒ onOpenChange(false))。
+ *   🔴 不會跑頁面「取消」鈕自己的 onClick ⇒ 取消要做的事一律寫在 onOpenChange(false)。
+ *   🔴「必須選一個」的確認窗(例:協助人員已移除)傳 dismissStrip={false} 不畫空白條。
+ *   確認窗不做 dirty(J-12):Esc / 空白條直接取消。
+ *
  * 按鈕階層(skill 二之三):
  *   - CardAlertDialogCancel  → ② 次要(白底灰框)
  *   - CardAlertDialogAction tone="primary"(預設)→ ① 主要(實心主題色)
@@ -52,6 +58,8 @@ import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { CARD_STRIP_MAX_HEIGHT, createDismissEscapeEvent } from "./overlayDismissLogic";
+import { OverlayDismissStrip } from "./OverlayDismissStrip";
 import {
   CARD_CONTENT_CLASS,
   CARD_DESCRIPTION_CLASS,
@@ -64,15 +72,69 @@ import {
 const CardAlertDialog = AlertDialogPrimitive.Root;
 const CardAlertDialogTrigger = AlertDialogPrimitive.Trigger;
 
+interface CardAlertDialogContentProps extends Omit<
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>,
+  "className"
+> {
+  /** 預設 true:卡片正上方畫「點了取消」的空白條。「必須選一個」的確認窗傳 false。 */
+  dismissStrip?: boolean | undefined;
+}
+
 const CardAlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
-  Omit<React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>, "className">
->((props, ref) => (
-  <AlertDialogPrimitive.Portal>
-    <AlertDialogPrimitive.Overlay className={OVERLAY_CLASS} />
-    <AlertDialogPrimitive.Content ref={ref} className={CARD_CONTENT_CLASS} {...props} />
-  </AlertDialogPrimitive.Portal>
-));
+  CardAlertDialogContentProps
+>(({ dismissStrip = true, onEscapeKeyDown, children, ...props }, ref) => {
+  const cardRef = React.useRef<HTMLDivElement | null>(null);
+  const closeRef = React.useRef<HTMLButtonElement | null>(null);
+  const setCardRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      cardRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
+  // 空白條 = Esc:先讓頁面的 onEscapeKeyDown 有機會攔(例:送出中不能關),沒攔才關。
+  const requestDismiss = React.useCallback(() => {
+    const event = createDismissEscapeEvent();
+    onEscapeKeyDown?.(event);
+    if (event.defaultPrevented) return;
+    closeRef.current?.click();
+  }, [onEscapeKeyDown]);
+  return (
+    <AlertDialogPrimitive.Portal>
+      <AlertDialogPrimitive.Overlay className={OVERLAY_CLASS} />
+      <AlertDialogPrimitive.Content
+        ref={setCardRef}
+        className={CARD_CONTENT_CLASS}
+        {...(onEscapeKeyDown ? { onEscapeKeyDown } : {})}
+        {...props}
+      >
+        {children}
+        {dismissStrip ? (
+          // 隱藏的關閉鈕(⇒ onOpenChange(false))。用 Action 不用 Cancel:Cancel 會搶走 Radix 開窗時
+          // 「焦點放在取消鈕」的 cancelRef;Action 底層一樣是 Dialog Close,但不碰 cancelRef,也不是頁面的「取消」鈕。
+          <AlertDialogPrimitive.Action
+            ref={closeRef}
+            hidden
+            tabIndex={-1}
+            aria-hidden="true"
+            style={{ display: "none" }}
+            data-overlay-hidden-close=""
+          />
+        ) : null}
+      </AlertDialogPrimitive.Content>
+      {dismissStrip ? (
+        <OverlayDismissStrip
+          targetRef={cardRef}
+          maxHeight={CARD_STRIP_MAX_HEIGHT}
+          label="取消"
+          onDismiss={requestDismiss}
+        />
+      ) : null}
+    </AlertDialogPrimitive.Portal>
+  );
+});
 CardAlertDialogContent.displayName = "CardAlertDialogContent";
 
 const CardAlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

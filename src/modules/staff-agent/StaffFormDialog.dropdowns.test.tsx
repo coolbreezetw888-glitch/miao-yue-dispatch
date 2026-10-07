@@ -170,3 +170,60 @@ describe("第 11 批 G:服務項目多選下拉", () => {
     expect(screen.getByRole("combobox", { name: "計酬類型" })).toHaveTextContent("抽成制");
   });
 });
+
+// 第 11 批 J(#995 J-14 L11):編輯服務人員的「填過資料」接線(服務項目欄位即存,不算)。
+describe("第 11 批 J:編輯服務人員 × 填過資料才問放棄", () => {
+  function renderWithSpy(staff: MerchantStaff | null, onOpenChange: (o: boolean) => void) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <StaffFormDialog
+            merchantId="merchant-1"
+            staff={staff}
+            open
+            onOpenChange={onOpenChange}
+            onSaved={() => undefined}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("打開不改 ⇒ Esc 直接關", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithSpy(STAFF, onOpenChange);
+    await screen.findByRole("combobox", { name: "計酬類型" });
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("確定放棄這次輸入？")).toBeNull();
+  });
+
+  it("改姓名一個字 ⇒ Esc 先問「確定放棄這次輸入？」、不關", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithSpy(STAFF, onOpenChange);
+    await user.type(await screen.findByLabelText(/姓名/), "A");
+    await user.keyboard("{Escape}");
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it("只動即存的服務項目下拉 ⇒ 不算填過,Esc 直接關", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithSpy(STAFF, onOpenChange);
+    const trigger = await screen.findByTestId("staff-service-items-trigger");
+    await user.click(trigger);
+    await user.click(await screen.findByTestId("staff-service-items-option-item-1"));
+    await waitFor(() => expect(m.addStaffServiceItem).toHaveBeenCalled());
+    // 第一次 Esc 只收起下拉(浮出面板,J-2),視窗不動;第二次才輪到視窗。
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByTestId("staff-service-items-content")).toBeNull());
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("確定放棄這次輸入？")).toBeNull();
+  });
+});

@@ -55,6 +55,7 @@ import {
   ErrorState,
   FieldInput,
   FieldMultiSelect,
+  type FieldMultiSelectOption,
   FieldNativeSelect,
   FieldSelect,
   FieldTextarea,
@@ -64,6 +65,7 @@ import {
   FullPageLayerClose,
   FullPageLayerContent,
   ListCard,
+  type ListCardMenuItem,
   LoadingSkeleton,
   PageHeader,
   StatusTag,
@@ -71,8 +73,7 @@ import {
   TodoTag,
   UnderlineTabsList,
   UnderlineTabsTrigger,
-  type FieldMultiSelectOption,
-  type ListCardMenuItem,
+  useFormDirty,
 } from "@/components/patterns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -200,6 +201,15 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
     canUploadConstructionPhotos: staff.can_upload_construction_photos,
     compensationType: staff.compensation_type as "monthly_salary" | "piece_rate",
   };
+}
+
+/**
+ * 第 11 批 J(#995 J-14 / J-15):「填過資料」要比的表單內容。
+ * 服務項目欄位是即存的(不在 form 裡),本來就不算。頭像:編輯既有服務人員時「上傳完就直接存檔」⇒ 不算;
+ * 新增時要按儲存才會寫進服務人員資料 ⇒ 算。
+ */
+function staffFormDirtyValue(form: StaffFormState, isEdit: boolean): StaffFormState {
+  return isEdit ? { ...form, avatarUrl: null } : form;
 }
 
 /** 全頁層表單裡每一個區塊的小標題(跟 FormField 的標籤同一套 13px 粗體)。 */
@@ -484,11 +494,17 @@ export function StaffFormDialog({
   ];
   const selectedServiceItemIds: ReadonlySet<string> = new Set(serviceItemIds ?? []);
 
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty(staffFormDirtyValue(form, isEdit));
+  const markFormClean = formDirty.markClean;
+
   useEffect(() => {
     if (open) {
-      setForm(staff ? staffToFormState(staff) : EMPTY_FORM);
+      const initial = staff ? staffToFormState(staff) : EMPTY_FORM;
+      setForm(initial);
+      markFormClean(staffFormDirtyValue(initial, Boolean(staff)));
     }
-  }, [open, staff]);
+  }, [open, staff, markFormClean]);
 
   function setField<K extends keyof StaffFormState>(key: K, value: StaffFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -553,9 +569,10 @@ export function StaffFormDialog({
 
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
-      {/* size="wide":這張表有兩欄格線 + 8 個開關列 + LINE / 推播區塊,560px 的電腦面板偏長,
-          760px 較合適(2026-09-29 主腦同意)。手機無差(照樣滿版)。 */}
+      {/* size="wide":第 11 批 J 起已不分寬度(全頁層電腦版一律隨瀏覽器寬度伸縮、最寬 1152px),
+          留著只是不想在這批動到這行;下次動到這個檔時順手刪。手機無差(照樣滿版)。 */}
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title={isEdit ? "編輯服務人員" : "新增服務人員"}
         size="wide"
         footer={
@@ -931,14 +948,18 @@ function InviteStaffLoginDialog({
 }) {
   const [loginEmail, setLoginEmail] = useState("");
   const [inviting, setInviting] = useState(false);
+  // 第 11 批 J(#995):打開時是空白(沒有預填)⇒ 基準就是空字串。
+  const loginEmailDirty = useFormDirty(loginEmail);
+  const markLoginEmailClean = loginEmailDirty.markClean;
 
   // 每次打開對話框都清空(而不是留著上次沒送出的內容),沿用本檔案其他對話框的既有慣例。
   // 沒有可以預填的來源了,理由見上方註解。
   useEffect(() => {
     if (open) {
       setLoginEmail("");
+      markLoginEmailClean("");
     }
-  }, [open]);
+  }, [open, markLoginEmailClean]);
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
@@ -971,7 +992,7 @@ function InviteStaffLoginDialog({
 
   return (
     <CardDialog open={open} onOpenChange={onOpenChange}>
-      <CardDialogContent>
+      <CardDialogContent dirty={loginEmailDirty.dirty}>
         <CardDialogHeader>
           <CardDialogTitle className="break-words">邀請「{staff?.name}」開通登入</CardDialogTitle>
           <CardDialogDescription>

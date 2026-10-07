@@ -592,6 +592,16 @@ export function BookingDetailDialog({
     <>
       <FullPageLayer open={open} onOpenChange={handleLayerOpenChange}>
         <FullPageLayerContent
+          // 第 11 批 J(#995 J-14):一般詳情是檢視型(Esc / 上方空白直接關);只有在「還原 / 取消已完成訂單」
+          // 子畫面、原因欄有填字時才算「填過資料」⇒ 先問「確定放棄這次輸入？」。
+          // 🔴 送出中、或已送出成功跳出差額小卡窗時不算(那時原因已經存進去了):#965 要求這時按 Esc
+          //    一律走 handleLayerOpenChange → finishReversal(等同「知道了」),不能被放棄確認攔下來。
+          dirty={
+            reversalAction !== null &&
+            reversalReason.trim() !== "" &&
+            !busy &&
+            shortfallNotice === null
+          }
           title={
             reversalAction
               ? REVERSAL_TITLES[reversalAction]

@@ -9,20 +9,25 @@
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  CardDialog,
+  CardDialogClose,
+  CardDialogContent,
+  CardDialogDescription,
+  CardDialogFooter,
+  CardDialogHeader,
+  CardDialogTitle,
+  CardDialogTrigger,
+  FieldInput,
+  FormField,
+  useFormDirty,
+} from "@/components/patterns";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
+
+const CHANGE_LOGIN_EMAIL_FORM_ID = "change-login-email-form";
+const EMPTY_CHANGE_LOGIN_EMAIL = { email: "", confirmEmail: "" };
 
 export function ChangeLoginEmailDialog({
   trigger,
@@ -36,10 +41,14 @@ export function ChangeLoginEmailDialog({
   const [email, setEmail] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // 第 11 批 J(#995 J-3 / J-14):改用全站統一的小卡窗殼(點外面不關、上方空白條 = 關閉);
+  // 兩格都是空白開始 ⇒ 基準 = 空白,填了字再按 Esc / 點上方空白會先問放棄。
+  const formDirty = useFormDirty({ email, confirmEmail });
 
   function resetForm() {
     setEmail("");
     setConfirmEmail("");
+    formDirty.markClean(EMPTY_CHANGE_LOGIN_EMAIL);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -73,55 +82,63 @@ export function ChangeLoginEmailDialog({
   }
 
   return (
-    <Dialog
+    <CardDialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) resetForm();
+        // 打開 = 空白表單那一刻當基準;關掉 = 清空。
+        resetForm();
       }}
     >
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>更改登入信箱</DialogTitle>
-          <DialogDescription>
+      <CardDialogTrigger asChild>{trigger}</CardDialogTrigger>
+      <CardDialogContent dirty={formDirty.dirty}>
+        <CardDialogHeader>
+          <CardDialogTitle>更改登入信箱</CardDialogTitle>
+          <CardDialogDescription>
             送出後系統會寄一封驗證信到新信箱，你需要點連結確認後，登入信箱才會真的改變。
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor="change-login-email-new">新的登入 Email</Label>
-            <Input
+          </CardDialogDescription>
+        </CardDialogHeader>
+        <form id={CHANGE_LOGIN_EMAIL_FORM_ID} onSubmit={handleSubmit} className="space-y-4">
+          <FormField label="新的登入 Email" htmlFor="change-login-email-new" required>
+            <FieldInput
               id="change-login-email-new"
               type="email"
               required
               autoComplete="email"
-              className="mt-2"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
             />
-          </div>
-          <div>
-            <Label htmlFor="change-login-email-confirm">再輸入一次新信箱</Label>
-            <Input
+          </FormField>
+          <FormField label="再輸入一次新信箱" htmlFor="change-login-email-confirm" required>
+            <FieldInput
               id="change-login-email-confirm"
               type="email"
               required
               autoComplete="email"
-              className="mt-2"
               value={confirmEmail}
               onChange={(e) => setConfirmEmail(e.target.value)}
               placeholder="you@example.com"
             />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={submitting || !email.trim() || !confirmEmail.trim()}>
-              {submitting ? "送出中⋯" : "送出並寄出驗證信"}
-            </Button>
-          </DialogFooter>
+          </FormField>
         </form>
-      </DialogContent>
-    </Dialog>
+        <CardDialogFooter>
+          <CardDialogClose asChild>
+            <Button type="button" variant="neutral" size="touch">
+              取消
+            </Button>
+          </CardDialogClose>
+          <Button
+            type="submit"
+            form={CHANGE_LOGIN_EMAIL_FORM_ID}
+            variant="primary"
+            size="touch"
+            disabled={submitting || !email.trim() || !confirmEmail.trim()}
+          >
+            {submitting ? "送出中⋯" : "送出並寄出驗證信"}
+          </Button>
+        </CardDialogFooter>
+      </CardDialogContent>
+    </CardDialog>
   );
 }

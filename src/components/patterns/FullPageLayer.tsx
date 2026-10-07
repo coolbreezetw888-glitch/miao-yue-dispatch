@@ -4,9 +4,12 @@
  * 用在:長表單、需要捲動的編輯畫面、沒有欄位但內容長的詳情(預約詳情)。
  * 規格全部寫死在這個殼裡,**個別頁面不准再自己寫 max-w-* / h-[92vh] 這類尺寸**:
  *   - 手機:整個螢幕蓋滿,像進到新頁面;關閉鈕在左上角 ✕
- *   - 電腦:置中大面板、上下各留 18px,🔴 不會佔滿 27 吋螢幕;關閉鈕在右上角 ✕(或底部「取消」)
+ *   - 電腦:置中大面板、上緣留 56px(這條是「點了關閉」的空白條)、下緣 18px,🔴 不會佔滿 27 吋螢幕;
+ *     寬度隨瀏覽器寬度伸縮、左右各留 16px、最寬 1152px(= 行事曆頁內容容器 max-w-6xl),只拉寬不重排
+ *     (第 11 批 J,#995 J-16 ~ J-18)。關閉:右上角 ✕、底部「取消」、Esc、點面板正上方的空白條
+ *   - 🔴 點遮罩(左右兩側、下方)不會關(J-1);Esc / 空白條遇到 dirty 先問「確定放棄這次輸入？」(J-9、J-10)
  *   - 標題列固定在上方、按鈕列固定在底部、只有中間會捲動
- *   - 寬度只有兩檔具名尺寸(size="default" 560px / size="wide" 760px),要更寬請改這裡,不要在頁面上寫
+ *   - 寬度只有一檔(J-16);size prop 保留但不再分寬度(@deprecated,J-17)
  *
  * 用法:
  *   <FullPageLayer open={open} onOpenChange={setOpen}>
@@ -33,15 +36,19 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
-import { OVERLAY_CLASS } from "./overlayClasses";
+import { FULL_PAGE_PANEL_CLASS, OVERLAY_CLASS } from "./overlayClasses";
+import { useOverlayDirtyDismiss } from "./overlayDirtyDismiss";
+import { FULL_PAGE_STRIP_MAX_HEIGHT } from "./overlayDismissLogic";
+import { OverlayDismissStrip } from "./OverlayDismissStrip";
 
 const FullPageLayer = DialogPrimitive.Root;
 const FullPageLayerTrigger = DialogPrimitive.Trigger;
 const FullPageLayerClose = DialogPrimitive.Close;
 
+// 第 11 批 J(J-16 / J-17):電腦版寬度只剩一檔,default / wide 都對應同一個 class。
 const SIZE_CLASS = {
-  default: "sm:max-w-[560px]",
-  wide: "sm:max-w-[760px]",
+  default: FULL_PAGE_PANEL_CLASS,
+  wide: FULL_PAGE_PANEL_CLASS,
 } as const;
 
 interface FullPageLayerContentProps extends Omit<
@@ -54,9 +61,16 @@ interface FullPageLayerContentProps extends Omit<
   titleExtra?: React.ReactNode | undefined;
   /** 底部固定按鈕列。三顆等寬請包在 <ActionBar> 裡(skill 二之三「底部動作列:三顆等寬」)。 */
   footer?: React.ReactNode | undefined;
-  /** 電腦版面板寬度的具名尺寸。default 560px 給一般表單 / 詳情;wide 760px 給兩欄格線 + 多個開關列 /
-   *  每個服務項目一列的那種長表(例:服務人員表單)。 */
+  /**
+   * @deprecated 第 11 批 J 起全頁層電腦版一律同寬(隨瀏覽器寬度伸縮、最寬 1152px);default / wide 輸出相同。
+   * 保留只是為了不動到還在傳 size="wide" 的頁面,下次動到那些頁面時順手刪掉。
+   */
   size?: keyof typeof SIZE_CLASS | undefined;
+  /**
+   * 有「按儲存才寫入」的欄位、而且使用者改過(跟打開時的內容不同)⇒ true。用 useFormDirty 算(formDirty.ts)。
+   * true 時 Esc / 點上方空白條會先問「確定放棄這次輸入？」;✕ 與「取消」鈕不問(J-11)。預設 false。
+   */
+  dirty?: boolean | undefined;
   /**
    * 🔵 可見的副標:標題列下方一行小字灰色(例:「名稱、金額、類型、工時皆為必填。」),同時也是
    * 螢幕閱讀器的描述(Radix Description)。跟標題列一樣固定在上方,不隨內容捲走。
@@ -85,6 +99,10 @@ const FullPageLayerContent = React.forwardRef<
       subtitle,
       description,
       onOpenAutoFocus,
+      dirty = false,
+      onEscapeKeyDown,
+      onPointerDownOutside,
+      onInteractOutside,
       ...props
     },
     ref,
@@ -93,12 +111,33 @@ const FullPageLayerContent = React.forwardRef<
     // (建單、編輯服務人員……),第一個可聚焦元素幾乎都是輸入框,所以這裡是使用者回報的主場。
     // 焦點改放在對話框容器本身,理由與無障礙考量見 overlayAutoFocus.ts。
     const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
+    // 空白條要量面板的位置,所以自己也留一份 ref。
+    const panelRef = React.useRef<HTMLDivElement | null>(null);
+    const autoFocusRef = autoFocus.ref;
+    const setPanelRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        panelRef.current = node;
+        autoFocusRef(node);
+      },
+      [autoFocusRef],
+    );
+    const dismiss = useOverlayDirtyDismiss({ dirty, onEscapeKeyDown });
     return (
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className={OVERLAY_CLASS} />
         <DialogPrimitive.Content
-          ref={autoFocus.ref}
+          ref={setPanelRef}
           onOpenAutoFocus={autoFocus.onOpenAutoFocus}
+          onEscapeKeyDown={dismiss.handleEscapeKeyDown}
+          // J-1:點外面(遮罩、toast、畫面任何外面)一律不關;頁面自己傳的同名 handler 先跑。
+          onPointerDownOutside={(event) => {
+            onPointerDownOutside?.(event);
+            event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            onInteractOutside?.(event);
+            event.preventDefault();
+          }}
           // 沒有 Description 時要明確給 undefined,Radix 才不會在 console 警告缺少 aria-describedby;
           // 有 Description 時不能傳(傳 undefined 會蓋掉 Radix 自動連結的 id)。
           {...(subtitle || description ? {} : { "aria-describedby": undefined })}
@@ -106,8 +145,8 @@ const FullPageLayerContent = React.forwardRef<
             // 手機:整個螢幕蓋滿(dvh 才會避開 iOS Safari 的網址列)。
             "fixed inset-0 z-50 flex h-dvh w-full flex-col bg-background focus:outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-            // 電腦:置中面板、上下各留 18px、左右最少留 16px、圓角 16px。
-            "sm:inset-x-auto sm:inset-y-[18px] sm:left-1/2 sm:h-auto sm:w-[calc(100%-32px)] sm:-translate-x-1/2 sm:overflow-hidden sm:rounded-xl sm:border sm:shadow-lg",
+            // 電腦:置中面板、上緣 56px(空白條)、下緣 18px、左右最少留 16px、圓角 16px;寬度見 SIZE_CLASS。
+            "sm:inset-x-auto sm:top-14 sm:bottom-[18px] sm:left-1/2 sm:h-auto sm:-translate-x-1/2 sm:overflow-hidden sm:rounded-xl sm:border sm:shadow-lg",
             "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
             SIZE_CLASS[size],
           )}
@@ -153,7 +192,16 @@ const FullPageLayerContent = React.forwardRef<
               {footer}
             </footer>
           ) : null}
+          {dismiss.hiddenClose}
+          {dismiss.discardConfirm}
         </DialogPrimitive.Content>
+        {/* J-4 / J-5:面板正上方的空白條(只有電腦;手機滿版上方 0px ⇒ 不畫)。 */}
+        <OverlayDismissStrip
+          targetRef={panelRef}
+          maxHeight={FULL_PAGE_STRIP_MAX_HEIGHT}
+          label="關閉"
+          onDismiss={dismiss.requestDismiss}
+        />
       </DialogPrimitive.Portal>
     );
   },

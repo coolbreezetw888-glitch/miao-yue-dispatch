@@ -48,6 +48,7 @@ import {
   PageHeader,
   parseAmountInput,
   StatusTag,
+  useFormDirty,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -344,13 +345,19 @@ function ServiceItemFormDialog({
   // #986 第 9 批:描述超過 200 字 ⇒ 欄位下方一行錯誤、擋送出(資料庫 CHECK 是最後一道)。
   const [descriptionError, setDescriptionError] = useState<string | null>(null);
 
+  // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
+  const formDirty = useFormDirty(form);
+  const markFormClean = formDirty.markClean;
+
   useEffect(() => {
     if (open) {
-      setForm(item ? itemToFormState(item) : EMPTY_ITEM_FORM);
+      const initial = item ? itemToFormState(item) : EMPTY_ITEM_FORM;
+      setForm(initial);
+      markFormClean(initial);
       setPriceError(null);
       setDescriptionError(null);
     }
-  }, [open, item]);
+  }, [open, item, markFormClean]);
 
   function setField<K extends keyof ItemFormState>(key: K, value: ItemFormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -422,6 +429,7 @@ function ServiceItemFormDialog({
   return (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         title={isEdit ? "編輯服務項目" : "新增服務項目"}
         subtitle="名稱、金額、類型、工時皆為必填。"
         footer={

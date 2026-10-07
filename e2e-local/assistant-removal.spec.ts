@@ -128,6 +128,13 @@ test("E1 從協助卡移除 → 擋流程提示關不掉 → 維持現狀:主服
   await expect(prompt).toBeVisible();
   await page.mouse.click(8, 400);
   await expect(prompt).toBeVisible();
+  // 第 11 批 J(#995 J-8):必須選一個 ⇒ 這個確認窗上方沒有「點了取消」的空白條,點它上方也關不掉。
+  await expect(page.locator("[data-overlay-dismiss-strip]")).toHaveCount(0);
+  {
+    const p = await prompt.boundingBox();
+    await page.mouse.click(p!.x + p!.width / 2, p!.y - 24);
+    await expect(prompt).toBeVisible();
+  }
 
   // 手機寬度下小卡窗不超出畫面。
   await page.setViewportSize({ width: 375, height: 667 });

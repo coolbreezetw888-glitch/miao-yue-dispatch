@@ -68,6 +68,7 @@ import {
   LoadingSkeleton,
   PageHeader,
   SwitchRow,
+  useFormDirty,
   useHorizontalScrollHint,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
@@ -714,6 +715,93 @@ export function BookingFormDialog({
   // 每次開啟表單換一個值,預覽 hook 只沿用同一次開啟的上一筆結果(見 useBookingPointsPreview.ts)。
   const [pointsPreviewSession, setPointsPreviewSession] = useState(0);
 
+  // 第 11 批 J(#995 J-13 / J-14):「填過資料」判斷。只比「按儲存才寫入」的表單狀態(含服務項目 / 數量 / 單價、
+  // 料錢);「選擇項目 / 選擇料錢」整頁裡的草稿不算(整頁按確認才寫回這些狀態)。
+  const formDirtyValue = useMemo(
+    () => ({
+      staffId,
+      serviceItemIds,
+      itemQuantities,
+      itemUnitPrices,
+      assistantStaffIds,
+      materialCostItemIds,
+      materialCostQuantities,
+      materialCostUnitPrices,
+      dateKey,
+      time,
+      customerName,
+      customerPhone,
+      customerEmail,
+      customerAddress,
+      notes,
+      customerNotes,
+      hideNotesFromStaff,
+      pendingAttachMemberId: pendingAttachMember?.id ?? null,
+      customDurationEnabled,
+      customDurationMinutes,
+      customTotalAmountEnabled,
+      customTotalAmount,
+      discountEnabled,
+      discountMode,
+      discountValue,
+      taxEnabled,
+      taxMode,
+      taxValue,
+      paymentMethodValue,
+      pointsOverrideEnabled,
+      pointsOverrideInput,
+      pointsRedeemEnabled,
+      pointsRedeemInput,
+    }),
+    [
+      staffId,
+      serviceItemIds,
+      itemQuantities,
+      itemUnitPrices,
+      assistantStaffIds,
+      materialCostItemIds,
+      materialCostQuantities,
+      materialCostUnitPrices,
+      dateKey,
+      time,
+      customerName,
+      customerPhone,
+      customerEmail,
+      customerAddress,
+      notes,
+      customerNotes,
+      hideNotesFromStaff,
+      pendingAttachMember,
+      customDurationEnabled,
+      customDurationMinutes,
+      customTotalAmountEnabled,
+      customTotalAmount,
+      discountEnabled,
+      discountMode,
+      discountValue,
+      taxEnabled,
+      taxMode,
+      taxValue,
+      paymentMethodValue,
+      pointsOverrideEnabled,
+      pointsOverrideInput,
+      pointsRedeemEnabled,
+      pointsRedeemInput,
+    ],
+  );
+  const formDirty = useFormDirty(formDirtyValue);
+  const markFormClean = formDirty.markClean;
+  // 這張表單的初始值是幾十個 setXxx 分開灌的,同一個 effect 裡拿不到「灌完之後」的整份值 ⇒
+  // 灌完時把這個數字 +1,下一次 render(值都已經灌好)再 markClean。系統自己做的調整(時間不能約被自動清空)
+  // 發生在使用者還沒動過表單時,也用同一招重拍基準,不算「填過」。
+  const [formCleanRequest, setFormCleanRequest] = useState(0);
+  useEffect(() => {
+    if (formCleanRequest === 0) return;
+    markFormClean(formDirtyValue);
+    // 只在 formCleanRequest 變了的時候拍(拍的是那一次 render 的整份值)。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formCleanRequest]);
+
   // 模組 9 v2 §5.2:選項 = 商家目前上架中的付款方式,再加上「這筆訂單編輯前本來就選的
   // 那一筆」(即使它現在已經下架),詳見 types.ts buildPaymentMethodOptions 的說明。
   const paymentMethodOptions = useMemo(
@@ -847,6 +935,7 @@ export function BookingFormDialog({
           ? String(editingDetail.custom_duration_minutes)
           : "",
       );
+      setFormCleanRequest((n) => n + 1); // 第 11 批 J:編輯 = 資料載入、灌完這一刻當基準。
     } else {
       // #977 第 7 批:服務人員模式的主要服務人員固定是自己(裁決 3),不看 prefill。
       setStaffId(actor.kind === "staff" ? actor.staffId : (prefill.staffId ?? ""));
@@ -891,6 +980,7 @@ export function BookingFormDialog({
       setPointsOverrideInput("");
       setPointsRedeemEnabled(false);
       setPointsRedeemInput("");
+      setFormCleanRequest((n) => n + 1); // 第 11 批 J:新增 = 空白表單這一刻當基準。
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEdit, editingDetail, merchantTaxSettings]);
@@ -1734,6 +1824,7 @@ export function BookingFormDialog({
   const formLayer = (
     <FullPageLayer open={open} onOpenChange={onOpenChange}>
       <FullPageLayerContent
+        dirty={formDirty.dirty}
         // SPECS-INDEX #979:「選擇項目」整頁開著時,Esc = 整頁的「返回」(放棄這次修改),
         // 不可以把整張建單表單一起關掉(客服填了一半的資料會全部不見)。
         onEscapeKeyDown={(e) => {
@@ -1964,6 +2055,11 @@ export function BookingFormDialog({
                   setDateKey(d);
                   setTime(t);
                   if (source === "user") setTimeChosenByUser(true);
+                  // 第 11 批 J:使用者還沒動過表單時,系統自動清空時間(同一天、時間變空)不算「填過」⇒ 重拍基準。
+                  // 換日期也是 source="auto",但那是使用者的操作,不能重拍(所以要求日期沒變)。
+                  else if (t === "" && d === dateKey && !formDirty.dirty) {
+                    setFormCleanRequest((n) => n + 1);
+                  }
                 }}
               />
             </FormField>

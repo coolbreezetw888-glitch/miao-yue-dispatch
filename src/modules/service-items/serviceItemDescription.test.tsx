@@ -183,3 +183,51 @@ describe("選擇項目整頁(9-9)", () => {
     expect(screen.queryByTestId("picker-item-description-c")).toBeNull();
   });
 });
+
+// 第 11 批 J(#995 J-14 L10):新增 / 編輯服務項目的「填過資料」接線。
+describe("服務項目表單 × 填過資料才問放棄(第 11 批 J)", () => {
+  it("編輯:打開不改 ⇒ Esc 直接關;改一個字 ⇒ Esc 先問「確定放棄這次輸入？」", async () => {
+    renderPage();
+    const card = (await screen.findByTestId("service-item-description-i1")).closest(
+      "li",
+    ) as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "編輯" }));
+    let dialog = await screen.findByRole("dialog", { name: "編輯服務項目" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "編輯服務項目" })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("確定放棄這次輸入？")).not.toBeInTheDocument();
+
+    const card2 = (await screen.findByTestId("service-item-description-i1")).closest(
+      "li",
+    ) as HTMLElement;
+    fireEvent.click(within(card2).getByRole("button", { name: "編輯" }));
+    dialog = await screen.findByRole("dialog", { name: "編輯服務項目" });
+    fireEvent.change(document.getElementById("item-name") as HTMLElement, {
+      target: { value: "冷氣清洗A" },
+    });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    // 視窗沒關:欄位還在、值還在(放棄確認窗疊在上面時下層被 aria-hidden,不用 role 找)。
+    expect(document.getElementById("item-name")).toHaveValue("冷氣清洗A");
+  });
+
+  it("新增:空白表單不填 ⇒ Esc 直接關;填名稱 ⇒ Esc 先問", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "新增服務項目" }));
+    let dialog = await screen.findByRole("dialog", { name: "新增服務項目" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "新增服務項目" })).not.toBeInTheDocument(),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "新增服務項目" }));
+    dialog = await screen.findByRole("dialog", { name: "新增服務項目" });
+    fireEvent.change(document.getElementById("item-name") as HTMLElement, {
+      target: { value: "新項目" },
+    });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+  });
+});

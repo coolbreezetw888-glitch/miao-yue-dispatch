@@ -474,3 +474,135 @@ describe("建單表單 × 時間只列能約的(#980)", () => {
     expect(screen.queryByText("這個時間已無法預約，請重新選擇")).not.toBeInTheDocument();
   });
 });
+
+// 第 11 批 J(#995 J-13 / J-14 L1):建單 / 編輯預約的「填過資料」接線。
+// 打開不改 ⇒ Esc 直接關;改一個字 ⇒ Esc 先問「確定放棄這次輸入？」。
+// 特別釘住「基準拍太早」那一類(一打開就問放棄):編輯資料非同步載入、系統預設 10:00 被自動清空。
+describe("建單表單 × 填過資料才問放棄(第 11 批 J)", () => {
+  const EDIT_DETAIL = {
+    id: BOOKING_ID,
+    merchant_id: MERCHANT_ID,
+    staff_id: STAFF_ID,
+    start_at: "2036-01-07T02:00:00+00:00",
+    end_at: "2036-01-07T03:00:00+00:00",
+    status: "accepted",
+    customer_name: "王小明",
+    customer_phone: "0912345678",
+    customer_email: null,
+    customer_address: null,
+    notes: null,
+    customer_notes: null,
+    hide_notes_from_staff: false,
+    member_id: null,
+    member_name_snapshot: null,
+    custom_total_amount_enabled: false,
+    custom_total_amount: null,
+    discount_enabled: false,
+    discount_mode: null,
+    discount_value: null,
+    tax_enabled: false,
+    tax_mode_snapshot: null,
+    tax_value_snapshot: null,
+    final_amount_snapshot: 2200,
+    payment_method_id: PAYMENT_METHOD_ID,
+    payment_method_name_snapshot: "現金",
+    custom_duration_enabled: false,
+    custom_duration_minutes: null,
+    points_planned: 0,
+    points_planned_auto: 0,
+    points_planned_overridden: false,
+    points_redeemed: 0,
+    points_redeem_amount_snapshot: 0,
+    serviceItems: [
+      { id: ITEM_WALL, name: "壁掛普通", quantity: 1, unitPriceSnapshot: 2200, lineTotal: 2200 },
+    ],
+    assistants: [],
+    materialCosts: [],
+  };
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  async function settle() {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+  }
+
+  function pressEscOnForm() {
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  }
+
+  it("新增:不改 ⇒ Esc 直接關", async () => {
+    slotsMock.mockResolvedValue(ALL_DAY_START_TIMES);
+    const onOpenChange = vi.fn();
+    renderForm({ onOpenChange });
+    await settle();
+    pressEscOnForm();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("確定放棄這次輸入？")).not.toBeInTheDocument();
+  });
+
+  it("新增:填客戶姓名一個字 ⇒ Esc 先問放棄,不關", async () => {
+    slotsMock.mockResolvedValue(ALL_DAY_START_TIMES);
+    const onOpenChange = vi.fn();
+    renderForm({ onOpenChange });
+    await settle();
+    fireEvent.change(document.getElementById("booking-customer-name") as HTMLElement, {
+      target: { value: "王" },
+    });
+    pressEscOnForm();
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("新增:在「選擇項目」整頁勾項目、按確認寫回表單 ⇒ 算填過", async () => {
+    slotsMock.mockResolvedValue(ALL_DAY_START_TIMES);
+    const onOpenChange = vi.fn();
+    renderForm({ onOpenChange });
+    await settle();
+    const picker = openPicker();
+    fireEvent.click(within(picker).getByRole("checkbox", { name: /壁掛普通/ }));
+    fireEvent.click(within(picker).getByRole("button", { name: /^確認/ }));
+    await settle();
+    pressEscOnForm();
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it("🔴 系統預設 10:00 不能約、被自動清空 ⇒ 不算填過,Esc 直接關", async () => {
+    slotsMock.mockResolvedValue(["11:00", "11:30"]);
+    const onOpenChange = vi.fn();
+    renderForm({ onOpenChange, prefillTime: null });
+    await waitFor(() =>
+      expect(document.getElementById("booking-datetime")).toHaveTextContent("請選擇日期時間"),
+    );
+    await settle();
+    pressEscOnForm();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("確定放棄這次輸入？")).not.toBeInTheDocument();
+  });
+
+  it("編輯:資料載入後不改 ⇒ Esc 直接關;改一個字 ⇒ Esc 先問", async () => {
+    slotsMock.mockResolvedValue(ALL_DAY_START_TIMES);
+    getBookingMock.mockResolvedValue(EDIT_DETAIL);
+    const onOpenChange = vi.fn();
+    renderForm({ editingBookingId: BOOKING_ID, onOpenChange });
+    await waitFor(() =>
+      expect(document.getElementById("booking-customer-name")).toHaveValue("王小明"),
+    );
+    await settle();
+    pressEscOnForm();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    onOpenChange.mockClear();
+
+    fireEvent.change(document.getElementById("booking-customer-name") as HTMLElement, {
+      target: { value: "王小明2" },
+    });
+    pressEscOnForm();
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+});
