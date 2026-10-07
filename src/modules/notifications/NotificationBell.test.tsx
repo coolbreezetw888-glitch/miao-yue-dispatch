@@ -465,4 +465,94 @@ describe("NotificationBell", () => {
     openPanel();
     expect(useMyNotificationsMock).toHaveBeenCalledWith(MY_NOTIFICATIONS_DEFAULT_LIMIT, true);
   });
+
+  // -----------------------------------------------------------------------
+  // SPECS-INDEX #997 第 11 批 H:已完成訂單被取消 / 被還原
+  // -----------------------------------------------------------------------
+  it("#997:已完成訂單被取消 / 被還原兩種新事件顯示中文標籤,不露英文代碼", () => {
+    useMyNotificationsMock.mockReturnValue({
+      data: [
+        makeRow({
+          id: "c1",
+          booking_id: "b-c",
+          target_type: "admin",
+          event_type: "booking_completed_cancelled",
+          title: "已完成訂單被取消",
+          body: "管理員甲 將 2027/03/03 10:00「客戶二號」的已完成訂單取消。原因：客人不要了",
+        }),
+        makeRow({
+          id: "r1",
+          booking_id: "b-r",
+          target_type: "admin",
+          event_type: "booking_completed_reverted",
+          title: "已完成訂單被還原",
+          body: "管理員甲 將 2027/03/02 10:00「客戶一號」的已完成訂單還原為已確認。原因：打錯",
+        }),
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<NotificationBell />);
+    openPanel();
+    expect(screen.getByText("已完成訂單被取消時")).toBeInTheDocument();
+    expect(screen.getByText("已完成訂單被還原時")).toBeInTheDocument();
+    expect(screen.queryByText("booking_completed_cancelled")).not.toBeInTheDocument();
+    expect(screen.queryByText("booking_completed_reverted")).not.toBeInTheDocument();
+  });
+
+  it.each(["admin", "agent"] as const)(
+    "#997:%s 點了新事件 ⇒ 標已讀並導到訂單管理",
+    (targetType) => {
+      useMyNotificationsMock.mockReturnValue({
+        data: [
+          makeRow({
+            id: `x-${targetType}`,
+            target_type: targetType,
+            event_type: "booking_completed_reverted",
+            title: "已完成訂單被還原",
+            body: "內文",
+          }),
+        ],
+        isLoading: false,
+        isError: false,
+      });
+      render(<NotificationBell />);
+      openPanel();
+      fireEvent.click(screen.getByTestId("notification-row"));
+      expect(markReadMutateMock).toHaveBeenCalledWith([`x-${targetType}`]);
+      expect(navigateMock).toHaveBeenCalledWith("/app/orders");
+    },
+  );
+
+  it("#997:取消時推播另寫的 booking_cancelled(120 秒內同單)只顯示一列,點了兩列一起標已讀", () => {
+    useMyNotificationsMock.mockReturnValue({
+      data: [
+        makeRow({
+          id: "push",
+          target_type: "admin",
+          event_type: "booking_cancelled",
+          title: "預約已取消",
+          body: "推播那則",
+          created_at: "2026-10-07T10:00:30.000Z",
+        }),
+        makeRow({
+          id: "db",
+          target_type: "admin",
+          event_type: "booking_completed_cancelled",
+          title: "已完成訂單被取消",
+          body: "資料庫那則",
+          created_at: "2026-10-07T10:00:00.000Z",
+        }),
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<NotificationBell />);
+    openPanel();
+    expect(screen.getAllByTestId("notification-row")).toHaveLength(1);
+    expect(screen.getByText("資料庫那則")).toBeInTheDocument();
+    expect(screen.queryByText("推播那則")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("notification-row"));
+    expect(markReadMutateMock).toHaveBeenCalledWith(["db", "push"]);
+  });
 });

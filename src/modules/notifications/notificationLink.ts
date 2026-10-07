@@ -131,7 +131,7 @@ export function mergeNotificationRows(rows: UserNotification[]): MergedNotificat
     }
   }
 
-  const merged = [...groups.values()];
+  const merged = absorbCompletedCancellationDuplicates([...groups.values()]);
   for (const item of merged) {
     // 固定顯示順序 admin → agent → staff,不受輸入順序影響(顯示文字與測試斷言才穩定)。
     item.targetTypes.sort(
@@ -141,6 +141,57 @@ export function mergeNotificationRows(rows: UserNotification[]): MergedNotificat
   }
   merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   return merged;
+}
+
+/**
+ * SPECS-INDEX #997 第 11 批 H:取消「已完成」訂單時,資料庫先寫一則 `booking_completed_cancelled`;
+ * 管理員若打開「同時發送取消通知」,前端在 RPC 成功後才呼叫推播,Edge Function 再寫一則
+ * `booking_cancelled`。兩則講的是同一件事 ⇒ **只在鈴鐺畫面**併成一則(資料庫兩列都保留,
+ * Edge Function 不用動、不用重新部署)。
+ */
+export const COMPLETED_CANCELLATION_MERGE_WINDOW_MS = 120_000;
+
+/**
+ * 吸收規則(§15.4):某組 `booking_cancelled`,若有一組 `booking_completed_cancelled` 是同 `merchant_id` +
+ * 同 `booking_id`,且 `booking_cancelled` 那組的時間比它**晚 0 ~ 120 秒**(資料庫那則一定先寫)⇒
+ * 把 `booking_cancelled` 組的 ids 併進去(點一下兩列都標已讀;任一列未讀就算未讀;身份聯集),
+ * 畫面只顯示 `booking_completed_cancelled` 那組的標題 / 內文 / 時間。不符合條件就各自顯示。
+ */
+function absorbCompletedCancellationDuplicates(groups: MergedNotification[]): MergedNotification[] {
+  const completed = groups.filter(
+    (g) => g.event_type === "booking_completed_cancelled" && g.booking_id !== null,
+  );
+  if (completed.length === 0) return groups;
+
+  const absorbed = new Set<MergedNotification>();
+  for (const group of groups) {
+    if (group.event_type !== "booking_cancelled" || group.booking_id === null) continue;
+    const cancelledAt = new Date(group.created_at).getTime();
+    if (Number.isNaN(cancelledAt)) continue;
+
+    let target: MergedNotification | null = null;
+    let bestDiff = Number.POSITIVE_INFINITY;
+    for (const candidate of completed) {
+      if (candidate.merchant_id !== group.merchant_id) continue;
+      if (candidate.booking_id !== group.booking_id) continue;
+      const diff = cancelledAt - new Date(candidate.created_at).getTime();
+      if (Number.isNaN(diff) || diff < 0 || diff > COMPLETED_CANCELLATION_MERGE_WINDOW_MS) continue;
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        target = candidate;
+      }
+    }
+    if (!target) continue;
+
+    target.ids.push(...group.ids);
+    if (group.read_at === null) target.read_at = null;
+    for (const t of group.targetTypes) {
+      if (!target.targetTypes.includes(t)) target.targetTypes.push(t);
+    }
+    absorbed.add(group);
+  }
+
+  return absorbed.size === 0 ? groups : groups.filter((g) => !absorbed.has(g));
 }
 
 /**
@@ -192,6 +243,9 @@ export function formatRelativeNotificationTime(createdAt: string, now: Date = ne
  */
 export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   booking_confirmed: "服務人員確認接單時",
+  // SPECS-INDEX #997 第 11 批 H:由資料庫寫給其他管理員與有訂單管理權限的在職客服(純站內,推播設定沒有)。
+  booking_completed_cancelled: "已完成訂單被取消時",
+  booking_completed_reverted: "已完成訂單被還原時",
 };
 
 /** SPECS-INDEX #977 第 4 批:服務人員視角鈴鐺頂端的待確認提醒文字。 */

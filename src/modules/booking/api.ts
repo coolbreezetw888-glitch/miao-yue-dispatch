@@ -714,7 +714,9 @@ export async function fetchCompletedBookingReversalPreview(
   return data as unknown as CompletedBookingReversalPreview;
 }
 
-/** 還原完成(completed → accepted)。§3.7:**一律不發**任何 LINE / 推播。 */
+/**
+ * 還原完成(completed → accepted)。§3.7:不發 LINE / 推播;站內鈴鐺由資料庫寫給其他管理員與客服(第 11 批 H)。
+ */
 export async function revertCompletedBooking(
   bookingId: string,
   reason: string,
@@ -730,7 +732,8 @@ export async function revertCompletedBooking(
 /**
  * 取消已完成訂單(completed → cancelled)。§3.7 / Q2 定案 C:**預設不通知**;只有管理員在確認畫面
  * 打開開關(notify === true)才比照 cancelBooking 發 LINE + 推播(不等待、吞錯誤)。
- * notify 同時傳給 p_notify_requested,只用來寫稽核表 notified(資料庫不發通知)。
+ * notify 同時傳給 p_notify_requested,只用來寫稽核表 notified。資料庫不發 LINE / 推播;站內鈴鐺由資料庫
+ * 寫給其他管理員與客服(第 11 批 H,與開關無關;開關打開時推播另寫的 booking_cancelled 鈴鐺在畫面合併)。
  */
 export async function cancelCompletedBooking(
   bookingId: string,

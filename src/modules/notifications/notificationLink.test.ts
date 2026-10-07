@@ -9,7 +9,11 @@ import { describe, expect, it } from "vitest";
 //    但**不可以靜默分岔** —— 這條測試就是那道防護。
 import { PUSH_TARGET_URLS } from "@/modules/push-notifications/pushPayload";
 
+import { PUSH_NOTIFICATION_EVENT_LABELS } from "@/modules/push-notifications/types";
+
 import {
+  BELL_ONLY_EVENT_LABELS,
+  COMPLETED_CANCELLATION_MERGE_WINDOW_MS,
   formatRelativeNotificationTime,
   formatUnreadBadgeText,
   mergeNotificationRows,
@@ -264,5 +268,120 @@ describe("確認接單鈴鐺給客服(#986 第 9 批)", () => {
     expect(resolveNotificationLink({ target_type: merged[0]!.primaryTargetType })).toBe(
       "/app/orders",
     );
+  });
+});
+
+// SPECS-INDEX #997 第 11 批 H:已完成訂單被取消 / 被還原的鈴鐺。
+describe("#997 第 11 批 H:新事件標籤", () => {
+  it("兩個新標籤只在鈴鐺專用清單,不進推播設定(否則推播設定頁會多兩張不能用的卡)", () => {
+    expect(BELL_ONLY_EVENT_LABELS["booking_completed_cancelled"]).toBe("已完成訂單被取消時");
+    expect(BELL_ONLY_EVENT_LABELS["booking_completed_reverted"]).toBe("已完成訂單被還原時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain(
+      "booking_completed_cancelled",
+    );
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("booking_completed_reverted");
+  });
+});
+
+describe("#997 第 11 批 H:booking_cancelled 併進 booking_completed_cancelled(§15.4)", () => {
+  const completedRow = (overrides: Partial<UserNotification> = {}) =>
+    makeRow({
+      id: "db",
+      target_type: "admin",
+      event_type: "booking_completed_cancelled",
+      title: "已完成訂單被取消",
+      body: "管理員甲 將 2027/03/03 10:00「客戶二號」的已完成訂單取消。原因：客人不要了",
+      created_at: "2026-10-07T10:00:00.000Z",
+      read_at: "2026-10-07T10:05:00.000Z",
+      ...overrides,
+    });
+  const pushRow = (overrides: Partial<UserNotification> = {}) =>
+    makeRow({
+      id: "push",
+      target_type: "admin",
+      event_type: "booking_cancelled",
+      title: "預約已取消",
+      body: "推播那則",
+      created_at: "2026-10-07T10:01:30.000Z",
+      read_at: "2026-10-07T10:05:00.000Z",
+      ...overrides,
+    });
+
+  it("時間窗是 120 秒", () => {
+    expect(COMPLETED_CANCELLATION_MERGE_WINDOW_MS).toBe(120_000);
+  });
+
+  it("① 120 秒內、同一張訂單 ⇒ 併成一組:ids 兩個、顯示 completed 那組的標題 / 內文 / 時間", () => {
+    const merged = mergeNotificationRows([pushRow(), completedRow()]);
+    expect(merged).toHaveLength(1);
+    expect([...merged[0]!.ids].sort()).toEqual(["db", "push"]);
+    expect(merged[0]!.event_type).toBe("booking_completed_cancelled");
+    expect(merged[0]!.title).toBe("已完成訂單被取消");
+    expect(merged[0]!.body).toContain("的已完成訂單取消。");
+    expect(merged[0]!.created_at).toBe("2026-10-07T10:00:00.000Z");
+    expect(merged[0]!.key).toBe("db");
+  });
+
+  it("① 剛好 120 秒、差 0 秒都算", () => {
+    expect(
+      mergeNotificationRows([pushRow({ created_at: "2026-10-07T10:02:00.000Z" }), completedRow()]),
+    ).toHaveLength(1);
+    expect(
+      mergeNotificationRows([pushRow({ created_at: "2026-10-07T10:00:00.000Z" }), completedRow()]),
+    ).toHaveLength(1);
+  });
+
+  it("② 121 秒 ⇒ 兩組各自顯示", () => {
+    expect(
+      mergeNotificationRows([pushRow({ created_at: "2026-10-07T10:02:01.000Z" }), completedRow()]),
+    ).toHaveLength(2);
+  });
+
+  it("③ 不同訂單 ⇒ 兩組", () => {
+    expect(mergeNotificationRows([pushRow({ booking_id: "b2" }), completedRow()])).toHaveLength(2);
+  });
+
+  it("③ 不同商家 ⇒ 兩組", () => {
+    expect(mergeNotificationRows([pushRow({ merchant_id: "m2" }), completedRow()])).toHaveLength(2);
+  });
+
+  it("④ booking_cancelled 比 completed 早 ⇒ 兩組", () => {
+    expect(
+      mergeNotificationRows([pushRow({ created_at: "2026-10-07T09:59:59.000Z" }), completedRow()]),
+    ).toHaveLength(2);
+  });
+
+  it("⑤ 任一列未讀 ⇒ 整組未讀(兩種方向都驗)", () => {
+    const a = mergeNotificationRows([pushRow({ read_at: null }), completedRow()]);
+    expect(a).toHaveLength(1);
+    expect(a[0]!.read_at).toBeNull();
+    const b = mergeNotificationRows([pushRow(), completedRow({ read_at: null })]);
+    expect(b).toHaveLength(1);
+    expect(b[0]!.read_at).toBeNull();
+  });
+
+  it("身份聯集:completed 以管理員、推播以客服 ⇒ 兩個身份都列出,目的地仍是訂單管理", () => {
+    const merged = mergeNotificationRows([pushRow({ target_type: "agent" }), completedRow()]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.targetTypes).toEqual(["admin", "agent"]);
+    expect(resolveNotificationLink({ target_type: merged[0]!.primaryTargetType })).toBe(
+      "/app/orders",
+    );
+  });
+
+  it("只有其中一種 ⇒ 照舊各自顯示", () => {
+    const onlyPush = mergeNotificationRows([pushRow()]);
+    expect(onlyPush).toHaveLength(1);
+    expect(onlyPush[0]!.event_type).toBe("booking_cancelled");
+    expect(mergeNotificationRows([completedRow()])).toHaveLength(1);
+  });
+
+  it("還原(booking_completed_reverted)不會吸收 booking_cancelled", () => {
+    expect(
+      mergeNotificationRows([
+        pushRow(),
+        completedRow({ event_type: "booking_completed_reverted" }),
+      ]),
+    ).toHaveLength(2);
   });
 });
