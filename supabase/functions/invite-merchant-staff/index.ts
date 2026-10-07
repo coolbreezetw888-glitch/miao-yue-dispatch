@@ -7,8 +7,10 @@
 //      (還沒開通過登入,避免重複邀請已經有帳號的人),否則回傳明確錯誤。
 //   3. 用 service_role key 建立另一個 client,查詢這個 login_email 是否已有 auth.users 帳號
 //      (複用既有 lookup_user_id_by_email,只給 service_role 呼叫)。
-//      - 已存在:略過寄信,取得該帳號的 user_id,login_status 直接是 active。
+//      - 已開通:略過寄信,取得該帳號的 user_id,login_status 直接是 active。
 //      - 不存在:呼叫 auth.admin.inviteUserByEmail(...),取得新建立的 user_id,login_status 是 invited。
+//      - 第 13 批 #1002:存在但還沒開通(別家商家邀請過、對方還沒設密碼):重寄邀請信,login_status 是 invited。
+//      (改用 lookup_auth_account_by_email,見 _shared/inviteAccountResolver.ts)
 //   4. 呼叫 record_invited_staff_login(...)(3.11,用 service_role client 呼叫,內部會緊接著呼叫
 //      seed_default_staff_permissions 種入預設權限)。
 //   5. 回傳成功/失敗結果給前端。
@@ -27,6 +29,10 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import {
+  resolveInviteAccount,
+  supabaseInviteAccountDeps,
+} from "../_shared/inviteAccountResolver.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -145,43 +151,35 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
     return jsonResponse({ error: "這位服務人員已經開通登入了" }, 409);
   }
 
-  const { data: existingUserId, error: lookupError } = await adminClient.rpc(
-    "lookup_user_id_by_email",
-    { p_email: loginEmail },
+  // 第 13 批 #1002:不能只看「auth 有沒有這個帳號」——別家商家寄過邀請、對方還沒開通時帳號也已經存在。
+  // 判斷與寄信邏輯集中在 _shared/inviteAccountResolver.ts(跟 invite-merchant-agent 共用):
+  //   查無帳號 → 寄邀請信(invited);已開通 → 規則 2.6 直接開通(active);
+  //   有帳號但還沒開通 → 重寄邀請信 / 設定密碼信(invited),對方設好密碼後所有商家一起轉 active。
+  const resolved = await resolveInviteAccount(
+    loginEmail,
+    `${PUBLIC_SITE_URL}/app/staff-invite-complete`,
+    supabaseInviteAccountDeps(adminClient),
   );
 
-  if (lookupError) {
-    console.error("[invite-merchant-staff] lookup_user_id_by_email 呼叫失敗", lookupError);
+  if (resolved.kind === "lookup_error") {
+    console.error("[invite-merchant-staff] lookup_auth_account_by_email 呼叫失敗", resolved.error);
     return jsonResponse({ error: "查詢帳號時發生錯誤，請稍後再試" }, 500);
   }
 
-  let userId: string;
-  let loginStatus: "invited" | "active";
-  const alreadyHadAccount = Boolean(existingUserId);
-
-  if (existingUserId) {
-    // 規則 2.6(比照模組 3):對方已經有秒約帳號,不重複寄邀請信,直接開通,狀態直接是 active。
-    userId = existingUserId as string;
-    loginStatus = "active";
-  } else {
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      loginEmail,
-      { redirectTo: `${PUBLIC_SITE_URL}/app/staff-invite-complete` },
+  if (resolved.kind === "send_error") {
+    return jsonResponse(
+      {
+        error: `邀請信寄送失敗：${resolved.message}(Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
+      },
+      502,
     );
-
-    if (inviteError || !inviteData?.user) {
-      console.error("[invite-merchant-staff] inviteUserByEmail 失敗", inviteError);
-      return jsonResponse(
-        {
-          error: `邀請信寄送失敗：${inviteError?.message ?? "請稍後再試"}(Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
-        },
-        502,
-      );
-    }
-
-    userId = inviteData.user.id;
-    loginStatus = "invited";
   }
+
+  const userId = resolved.userId;
+  const loginStatus = resolved.status;
+  // 只有「直接開通」時才是 true(前端據此顯示「已直接開通登入」而不是「邀請信已寄出」)。刻意不再用
+  // 「auth 有沒有這個帳號」:那會讓呼叫者知道這個信箱是不是被別家商家邀請過還沒開通。
+  const alreadyHadAccount = loginStatus === "active";
 
   // 步驟 3:寫入 merchant_staff 的登入身份欄位(record_invited_staff_login 只授權給 service_role,
   // 內部會緊接著呼叫 seed_default_staff_permissions 種入四項自助功能的預設權限,判斷 1)。

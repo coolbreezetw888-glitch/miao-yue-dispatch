@@ -3,9 +3,10 @@
 //   1. 用呼叫者的 JWT 建立 anon-key client,呼叫 am_i_merchant_admin(merchant_id)(3.2)——
 //      回傳 false 就直接拒絕(403)。這是規格書明確要求的「第一步先驗證權限」,不是收到請求就
 //      無條件執行特權操作。
-//   2. 用 service_role key 建立另一個 client,查詢這個 email 是否已有 auth.users 帳號(規則 2.6)。
-//      - 已存在:略過寄信,取得該帳號的 user_id。
+//   2. 用 service_role key 建立另一個 client,查詢這個 email 的 auth.users 帳號與開通狀態(規則 2.6)。
+//      - 已開通:略過寄信,取得該帳號的 user_id。
 //      - 不存在:呼叫 auth.admin.inviteUserByEmail(...),取得新建立的 user_id。
+//      - 第 13 批 #1002:存在但還沒開通(別家商家邀請過、對方還沒設密碼):重寄邀請信,狀態 invited。
 //   3. 呼叫 record_invited_merchant_agent(...)(3.6,用 service_role client 呼叫),
 //      依步驟 2 的結果決定 status 是 'active' 還是 'invited'。
 //   4. 回傳成功/失敗結果給前端,失敗訊息要清楚。
@@ -21,6 +22,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { isValidTaiwanMobilePhone } from "../_shared/phoneValidation.ts";
+import {
+  resolveInviteAccount,
+  supabaseInviteAccountDeps,
+} from "../_shared/inviteAccountResolver.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -133,43 +138,35 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { data: existingUserId, error: lookupError } = await adminClient.rpc(
-    "lookup_user_id_by_email",
-    { p_email: email },
+  // 第 13 批 #1002:不能只看「auth 有沒有這個帳號」——別家商家寄過邀請、對方還沒開通時帳號也已經存在。
+  // 判斷與寄信邏輯集中在 _shared/inviteAccountResolver.ts(跟 invite-merchant-staff 共用):
+  //   查無帳號 → 寄邀請信(invited);已開通 → 規則 2.6 直接加入(active);
+  //   有帳號但還沒開通 → 重寄邀請信 / 設定密碼信(invited),對方設好密碼後所有商家一起轉 active。
+  const resolved = await resolveInviteAccount(
+    email,
+    `${PUBLIC_SITE_URL}/app/agent-invite-complete`,
+    supabaseInviteAccountDeps(adminClient),
   );
 
-  if (lookupError) {
-    console.error("[invite-merchant-agent] lookup_user_id_by_email 呼叫失敗", lookupError);
+  if (resolved.kind === "lookup_error") {
+    console.error("[invite-merchant-agent] lookup_auth_account_by_email 呼叫失敗", resolved.error);
     return jsonResponse({ error: "查詢帳號時發生錯誤，請稍後再試" }, 500);
   }
 
-  let userId: string;
-  let status: "invited" | "active";
-  const alreadyHadAccount = Boolean(existingUserId);
-
-  if (existingUserId) {
-    // 規則 2.6:對方已經有秒約帳號,不重複寄邀請信,直接加入,狀態直接是 active。
-    userId = existingUserId as string;
-    status = "active";
-  } else {
-    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
-      { redirectTo: `${PUBLIC_SITE_URL}/app/agent-invite-complete` },
+  if (resolved.kind === "send_error") {
+    return jsonResponse(
+      {
+        error: `邀請信寄送失敗：${resolved.message}(見規則 2.5，Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
+      },
+      502,
     );
-
-    if (inviteError || !inviteData?.user) {
-      console.error("[invite-merchant-agent] inviteUserByEmail 失敗", inviteError);
-      return jsonResponse(
-        {
-          error: `邀請信寄送失敗：${inviteError?.message ?? "請稍後再試"}(見規則 2.5，Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
-        },
-        502,
-      );
-    }
-
-    userId = inviteData.user.id;
-    status = "invited";
   }
+
+  const userId = resolved.userId;
+  const status = resolved.status;
+  // 只有「直接加入」時才是 true(前端據此顯示「已加為客服」而不是「邀請信已寄出」)。刻意不再用
+  // 「auth 有沒有這個帳號」:那會讓呼叫者知道這個信箱是不是被別家商家邀請過還沒開通。
+  const alreadyHadAccount = status === "active";
 
   // 步驟 3:寫入 merchant_agents(record_invited_merchant_agent 只授權給 service_role)。
   const { data: agentId, error: recordError } = await adminClient.rpc(
