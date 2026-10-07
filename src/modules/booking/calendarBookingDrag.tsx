@@ -54,6 +54,7 @@ import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { moveBooking, type MoveBookingNotifyContext } from "./api";
+import { BookingBlockContent } from "./BookingBlockContent";
 import {
   buildUndoInput,
   canDrag,
@@ -660,10 +661,12 @@ export function DraggableBookingBlock({
       // 坑 6:長按不要跳出系統右鍵選單 / iOS 文字選取 callout。
       onContextMenu={draggable ? (e) => e.preventDefault() : undefined}
     >
-      <p className="truncate font-medium">
-        {b.customer_name}
-        {b.role === "assistant" ? "(協助)" : ""}
-      </p>
+      {/* #1005(第 14 批):卡片內容改成「時間標籤 / 虛線 / 名字」,半小時卡片一行(商家端、服務人員端共用)。 */}
+      <BookingBlockContent
+        startAt={b.start_at}
+        name={`${b.customer_name}${b.role === "assistant" ? "(協助)" : ""}`}
+        height={typeof style.height === "number" ? style.height : undefined}
+      />
     </button>
   );
 }
