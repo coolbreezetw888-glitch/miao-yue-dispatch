@@ -29,7 +29,12 @@ description: 秒約服務人員端行事曆「即時同步」(Supabase Realtime 
   - 觸發:每週時段、單日例外、訂單、助手四張表;訂單/助手另外 fan-out 到同集團同一人(`same_person_staff_ids_in_group`)所在的其他店。同一筆交易同一家店只發 1 則;發送失敗不影響存檔。
   - 收聽權限:`private.can_listen_merchant_calendar_topic` → `can_manage_bookings`。`realtime.messages` 只有 2 條 SELECT 政策(服務人員、商家),**沒有寫入政策**;新增頻道時 pgTAP 的政策數量斷言要跟著改。
   - 前端:`booking/useMerchantCalendarLiveSync.ts` + `merchantCalendarChannel.ts`,去抖/重連補查/被拒 3 次放棄共用 `staffScheduleChannel.ts` 的純函式;收到訊號只重抓 5 支行事曆查詢。
-  - **不涵蓋**:請假紀錄、營業時間、服務人員資料(例如「後台無時段限制」開關)變動。要加就在對應表掛 trigger 呼叫 `notify_merchant_calendar_changed`。
+  - ~~不涵蓋請假 / 營業時間 / 服務人員資料~~ → 第 17 批 #1011(2026-10-08,migration `20261008100000_req1011`)已補:
+    - `staff_leave_records`、`merchant_business_hours`、`merchant_staff` 各掛 trigger,**只在行事曆實際讀的欄位變動時發**(請假:staff_id/status/start_date/end_date/假別;營業時間:day_of_week/is_closed/open_time/close_time;服務人員→商家:merchant_id/name/status/unlimited_backend_edit/正規化電話;→本人另加 can_create_edit_orders/show_member_info/compensation_type)。intro、avatar、備註、no_time_slot_limit 等不發。
+    - 請假、營業時間**不跨店**(灰格只算訂單、可預約檢查只看自己那列)。⚠️ 電話變動會通知同集團新舊電話相同的其他店(`private.notify_calendar_for_phone_peers`,可單獨移除)。
+    - 服務人員端收到訊號現在也重抓 `my-day-business-hours`、`my-staff-record`(推翻 #896 Q1 部分);商家端多重抓 staff-list。
+    - 建單表單已開著時不重抓可選時段(沿用「表單不閃動」原則)。
+    - 新表要加即時同步:照這三支 trigger 的寫法,欄位篩選 + 交易內去重 + 每段 begin/exception。
   - 每個開著行事曆的商家分頁多佔 1 條 Realtime 連線(Free 上限 200,#901)。
   - e2e 的清理程式要連 `merchant:%:calendar` 的訊號列一起清(b14 有寫,其他測試尚未補)。
 

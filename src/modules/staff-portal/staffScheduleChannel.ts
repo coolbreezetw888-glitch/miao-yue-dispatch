@@ -78,16 +78,24 @@ export function shouldRefreshFromBroadcast(message: unknown): boolean {
 /**
  * 要 invalidate 的 queryKey 前綴,對應 context.tsx 的:
  * - useMyBookingSchedule:`["staff-portal-module", "my-booking-schedule", staffId, startDate, endDate]`
- * - useMyDayScheduleState:`["staff-portal-module", "my-day-schedule-state", staffId, date]`
+ * - useMyDayScheduleState:`["staff-portal-module", "my-day-schedule-state", staffId, date]`(含請假)
+ * - useMyDayBusinessHours:`["staff-portal-module", "my-day-business-hours", staffId, date]`
+ * - useMyStaffRecord:`["staff-portal-module", "my-staff-record", merchantId]`
  *
- * 刻意**不**包含 my-staff-record / my-staff-permission / my-booking-status-colors /
- * my-calendar-state-styles / my-day-business-hours / my-availability-overrides —— 那些跟訂單變動無關。
+ * SPECS-INDEX #1011(第 17 批):資料庫在「自己商家的營業時間」「自己的服務人員資料(後台無時段限制、
+ * 新增編輯訂單、會員資訊、計酬方式、名字…)」變動時也會發同一種 schedule_changed 訊號
+ * (migration 20261008100000),所以多重查後兩個;請假已經在 my-day-schedule-state 裡。
+ *
+ * 仍然刻意**不**包含 my-staff-permission / my-booking-status-colors / my-calendar-state-styles /
+ * my-availability-overrides —— 資料庫不會因為那些變動發訊號。
  * 用前綴 invalidate 會把所有已快取的日期範圍標成過期,但 React Query 只會立刻重抓「目前畫面上
- * 掛著的那一段」,實際成本就是 1 次 RPC(#896 / Q1 裁決)。
+ * 掛著的那一段」(#896 / Q1 裁決的精神不變;多出來的兩支都是查一列的輕量查詢)。
  */
 export const STAFF_SCHEDULE_INVALIDATE_KEYS = [
   ["staff-portal-module", "my-booking-schedule"],
   ["staff-portal-module", "my-day-schedule-state"],
+  ["staff-portal-module", "my-day-business-hours"],
+  ["staff-portal-module", "my-staff-record"],
 ] as const;
 
 /**

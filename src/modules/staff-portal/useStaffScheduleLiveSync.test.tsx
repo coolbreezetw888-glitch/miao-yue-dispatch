@@ -22,6 +22,7 @@ const defaultClient = vi.hoisted(() => ({ channel: vi.fn(), removeChannel: vi.fn
 vi.mock("@/integrations/supabase/client", () => ({ supabase: defaultClient }));
 
 import { useStaffScheduleLiveSync, type StaffScheduleRealtimeClient } from "./context";
+import { STAFF_SCHEDULE_INVALIDATE_KEYS } from "./staffScheduleChannel";
 
 const STAFF_A = "3f2a1b8c-4d5e-6f70-8192-a3b4c5d6e7f8";
 const STAFF_B = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -110,9 +111,9 @@ function renderLiveSync(initial: HookProps, strict = false) {
   );
 }
 
-/** 只數 #896 那兩個 key 的 invalidate 次數(一次 flush = 2 次呼叫)。 */
+/** 一次 flush = STAFF_SCHEDULE_INVALIDATE_KEYS.length 次 invalidate(#896 兩個 + #1011 兩個)。 */
 function flushCount(): number {
-  return invalidateSpy.mock.calls.length / 2;
+  return invalidateSpy.mock.calls.length / STAFF_SCHEDULE_INVALIDATE_KEYS.length;
 }
 
 beforeEach(() => {
@@ -187,7 +188,7 @@ describe("useStaffScheduleLiveSync — 什麼時候訂閱(#895)", () => {
 });
 
 describe("useStaffScheduleLiveSync — 收到訊號重查(#896 / #900)", () => {
-  it("一則合法訊號 ⇒ 400ms 後只 invalidate #896 的兩個 key", () => {
+  it("一則合法訊號 ⇒ 400ms 後只 invalidate #896 的兩個 key + #1011 的兩個 key", () => {
     const { client, channels } = createFakeClient();
     renderLiveSync({ staffId: STAFF_A, hasCalendarView: true, client });
     channels[0]!.emitBroadcast(SCHEDULE_MSG);
@@ -197,6 +198,8 @@ describe("useStaffScheduleLiveSync — 收到訊號重查(#896 / #900)", () => {
     expect(invalidateSpy.mock.calls.map((c) => c[0])).toEqual([
       { queryKey: ["staff-portal-module", "my-booking-schedule"] },
       { queryKey: ["staff-portal-module", "my-day-schedule-state"] },
+      { queryKey: ["staff-portal-module", "my-day-business-hours"] },
+      { queryKey: ["staff-portal-module", "my-staff-record"] },
     ]);
   });
 

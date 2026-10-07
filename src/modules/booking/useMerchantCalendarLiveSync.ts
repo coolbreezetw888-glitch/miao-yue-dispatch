@@ -3,6 +3,8 @@
 // 資料庫(migration 20261007160000)在「每週固定可預約時段 / 單日例外 / 訂單 / 助手」變動時,對受影響
 // 商家的私有頻道 `merchant:<merchant_id>:calendar` 發一則不含任何內容的 `calendar_changed` 訊號
 // (同集團同一個人在別家店的訂單變動,也會發給這家店 ⇒ 灰色「外店預約中」即時出現)。
+// #1011(第 17 批,migration 20261008100000)起,請假、營業時間、服務人員資料(名字 / 在職 / 後台無時段限制 /
+// 電話)變動也發同一種訊號,收到後做的事不變。
 // 這支 hook 只負責「收到就把行事曆標成過期」,資料照舊 100% 走 get_merchant_day_schedule 等既有查詢。
 //
 // 生命週期與錯誤處理**逐條照抄服務人員端 useStaffScheduleLiveSync**(staff-realtime-sync skill),

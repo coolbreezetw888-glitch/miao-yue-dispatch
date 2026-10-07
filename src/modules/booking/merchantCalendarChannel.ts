@@ -58,6 +58,9 @@ export function shouldRefreshMerchantCalendar(message: unknown): boolean {
  * - month-badge-assistants:月曆日期格「協助」那一段的查詢
  * - booking-card-extras:卡片列表上的服務項目 / 金額
  * - staff-availability-windows:建單表單開著時,時段選單要跟著每週時段變
+ * - ["staff-agent-module", "staff-list"](#1011 第 17 批):服務人員名單(欄名 / 在職與否)。資料庫在服務人員的
+ *   名字、在職狀態、後台無時段限制等欄位變動時也會發訊號(migration 20261008100000);請假與營業時間
+ *   已經包含在 day-schedule 裡,不用另外加。
  * 刻意**不**整個 ["booking-module"] 一起洗:那會連訂單狀態顏色、營業時間設定、建單表單的選項都重抓,
  * 客服填到一半的建單表單選項會閃動。React Query 只會立刻重抓「目前畫面上掛著的那幾支」。
  */
@@ -67,6 +70,7 @@ export const MERCHANT_CALENDAR_INVALIDATE_KEYS = [
   ["booking-module", "month-badge-assistants"],
   ["booking-module", "booking-card-extras"],
   ["booking-module", "staff-availability-windows"],
+  ["staff-agent-module", "staff-list"],
 ] as const;
 
 /** 對每個 key 呼叫 invalidateQueries。任何失敗只記 console.warn(即時同步只是加分項,不能讓畫面壞掉)。 */

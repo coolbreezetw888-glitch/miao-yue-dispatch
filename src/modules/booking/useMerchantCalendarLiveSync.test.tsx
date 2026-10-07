@@ -165,6 +165,7 @@ describe("merchantCalendarChannel 純邏輯", () => {
       ["booking-module", "month-badge-assistants"],
       ["booking-module", "booking-card-extras"],
       ["booking-module", "staff-availability-windows"],
+      ["staff-agent-module", "staff-list"],
     ]);
     expect(invalidateMerchantCalendar(null)).toBe(false);
   });

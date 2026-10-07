@@ -135,27 +135,35 @@ describe("#894 shouldRefreshFromBroadcast:supabase-js 回呼收到的外層信�
   });
 });
 
-describe("#896 invalidateStaffSchedule:只重查兩個 key", () => {
-  it("清單逐字等於 my-booking-schedule 與 my-day-schedule-state 兩個前綴", () => {
+describe("#896 / #1011 invalidateStaffSchedule:只重查四個 key", () => {
+  it("清單逐字等於 my-booking-schedule / my-day-schedule-state / my-day-business-hours / my-staff-record", () => {
     expect(STAFF_SCHEDULE_INVALIDATE_KEYS).toEqual([
       ["staff-portal-module", "my-booking-schedule"],
       ["staff-portal-module", "my-day-schedule-state"],
+      ["staff-portal-module", "my-day-business-hours"],
+      ["staff-portal-module", "my-staff-record"],
     ]);
   });
 
-  it("剛好 invalidate 那兩個 key,回傳 true", () => {
+  it("剛好 invalidate 那四個 key,回傳 true", () => {
     const queryClient = makeQueryClient();
     expect(invalidateStaffSchedule(queryClient)).toBe(true);
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(4);
     expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(1, {
       queryKey: ["staff-portal-module", "my-booking-schedule"],
     });
     expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(2, {
       queryKey: ["staff-portal-module", "my-day-schedule-state"],
     });
+    expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: ["staff-portal-module", "my-day-business-hours"],
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(4, {
+      queryKey: ["staff-portal-module", "my-staff-record"],
+    });
   });
 
-  it("沒有碰 my-staff-record / my-staff-permission,也沒有整個 staff-portal-module 一起洗", () => {
+  it("沒有碰 my-staff-permission 等資料庫不發訊號的 query,也沒有整個 staff-portal-module 一起洗", () => {
     const queryClient = makeQueryClient();
     invalidateStaffSchedule(queryClient);
     const keys = queryClient.invalidateQueries.mock.calls.map(
@@ -165,11 +173,9 @@ describe("#896 invalidateStaffSchedule:只重查兩個 key", () => {
       expect(key.length).toBeGreaterThanOrEqual(2);
       expect(key[0]).toBe("staff-portal-module");
       expect([
-        "my-staff-record",
         "my-staff-permission",
         "my-booking-status-colors",
         "my-calendar-state-styles",
-        "my-day-business-hours",
         "my-availability-overrides",
       ]).not.toContain(key[1]);
     }
@@ -193,7 +199,7 @@ describe("#896 invalidateStaffSchedule:只重查兩個 key", () => {
     expect(stale(["staff-portal-module", "my-day-schedule-state", STAFF_ID, "2026-10-01"])).toBe(
       true,
     );
-    expect(stale(["staff-portal-module", "my-staff-record", "merchant-1"])).toBe(false);
+    expect(stale(["staff-portal-module", "my-staff-record", "merchant-1"])).toBe(true);
     expect(
       stale(["staff-portal-module", "my-staff-permission", STAFF_ID, "staff_calendar_view"]),
     ).toBe(false);
@@ -224,7 +230,9 @@ describe("#896 invalidateStaffSchedule:只重查兩個 key", () => {
           .mockImplementation(() => Promise.resolve()),
       };
       expect(() => invalidateStaffSchedule(queryClient)).not.toThrow();
-      expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+      expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(
+        STAFF_SCHEDULE_INVALIDATE_KEYS.length,
+      );
       expect(warn).toHaveBeenCalledTimes(1);
     });
 
@@ -235,7 +243,7 @@ describe("#896 invalidateStaffSchedule:只重查兩個 key", () => {
       expect(invalidateStaffSchedule(queryClient)).toBe(true);
       await Promise.resolve();
       await Promise.resolve();
-      expect(warn).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledTimes(STAFF_SCHEDULE_INVALIDATE_KEYS.length);
     });
   });
 });
@@ -398,7 +406,7 @@ describe("#900 去抖:trailing 400ms + maxWait 2000ms", () => {
     warn.mockRestore();
   });
 
-  it("跟 invalidateStaffSchedule 串起來:批次改 5 張單 → 只打 2 次 invalidate(1 輪 × 2 個 key)", () => {
+  it("跟 invalidateStaffSchedule 串起來:批次改 5 張單 → 只打 1 輪 invalidate(1 輪 × 4 個 key)", () => {
     const queryClient = makeQueryClient();
     const scheduler = createStaffScheduleRefreshScheduler(() =>
       invalidateStaffSchedule(queryClient),
@@ -407,7 +415,9 @@ describe("#900 去抖:trailing 400ms + maxWait 2000ms", () => {
       if (shouldRefreshStaffSchedule({ v: 1, reason: "schedule_changed" })) scheduler.trigger();
     }
     vi.advanceTimersByTime(STAFF_SCHEDULE_DEBOUNCE_MS);
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(
+      STAFF_SCHEDULE_INVALIDATE_KEYS.length,
+    );
   });
 });
 
