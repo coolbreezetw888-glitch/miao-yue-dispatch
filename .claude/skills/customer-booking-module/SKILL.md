@@ -61,6 +61,17 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 - 鈴鐺 `customer_booking_cancelled`(同交易寫,收件人規則同 `customer_booking_created`);推播 `booking_cancelled` + `skipInAppNotification`。
 - 第 5 批接點:LINE 通知客人「已取消」接在 Edge 推播旁邊。
 
+## 第 4-B 批 多位聯絡人(2026-10-09,commit 579250e,#1041)
+- 一位會員可有多個客戶帳號(聯絡人):表 `member_customer_contacts`(+ `member_contact_invites`、`member_contact_requests`、`member_contact_invite_claims`),全部 RLS 開、0 policy、只走函式。**`members.user_id / line_user_id / line_bound` 代表主要聯絡人,只能由 `private.member_sync_primary` 同步**;新增聯絡人只走 `private.member_contact_add`。
+- 「客人是哪位會員」一律 `private.customer_member_of`(已改查聯絡人表);**新增客人函式不要直接比對 `members.user_id`**。
+- 鎖順序:客戶帳號鎖(`c2_profile` 鍵)→ 會員列 `for update` → 申請/邀請列。任何會因「是不是主要」而分支的函式,鎖會員列後要**重讀身分**(QA 抓過:改自己電話與轉移主要並發)。
+- 邀請碼:24 bytes 亂數、資料庫/登入暫存只存 SHA-256、72 小時一次性、每會員最多 5 個有效;LINE 登入走 `customer-line-login` `purpose:'invite'`,登入成功伺服器把邀請保留給該帳號 30 分鐘(`internal_customer_contact_invite_claim`),**complete 不回邀請碼**;前端進頁立刻 `history.replaceState` 拿掉。peek 同 IP 10 分鐘 30 次。
+- 同電話已被別的帳號接上 ⇒ **送加入申請**(`join_pending`,取代第 2 批 phone_taken;被封鎖仍 phone_taken)。每帳號每店 1 筆待處理、每會員 5 筆,7 天過期(cron `member-contact-requests-expire-hourly` + 讀取時也判斷)。主要聯絡人或店家可同意/拒絕。
+- 移除聯絡人(主要或店家)= 封鎖(要店家「允許重新接上」);自己退出不封鎖;解除 LINE 綁定 = 清全部聯絡人並封鎖;跨店搬會員清聯絡人(`removed_via='transfer'`,不封鎖)。這三個確認窗用危險樣式。
+- 第二聯絡人電話(使用者 Q2=A):`create_member / update_member / reactivate_member` 用 `assert_phone_not_member_contact` 擋(hint `phone_is_member_contact`);`get_members_by_phone` 回 `matched_contact_phone`;會員列表另呼叫 `search_members_by_contact_phone`;`preview_booking_points` 回 `member_contact`(紅利區塊黃 ! 提示)但 **`resolve_booking_member_by_phone` / `resolve_edit_booking_member` 不認聯絡人電話,建單沒選會員就被擋**;訪客預約(`resolve_guest_member`)直接掛那位會員。
+- 會被交易內刪索引的測試(c3_submit_booking A03-38、module10_09)打到的輔助函式要寫 plpgsql,不要寫成可內聯的 SQL 函式(否則快取計畫報「could not open relation with OID」)。
+- 第 5 批接點:通知主要聯絡人「有人申請」、通知聯絡人「已被移除」,目前只有會員中心/鈴鐺看得到。
+
 ## 前端(`src/modules/public-booking/`)
 - 不套後台外殼、不需登入;已登入後台的人打開也看客人版,不帶自己商家資料。主題色依該預約頁商家,離開要還原。
 - ①~⑤ 同一網址內切換,系統「上一頁」= 上一步(history state);填的資料**不存瀏覽器**,重新整理回 ①。
