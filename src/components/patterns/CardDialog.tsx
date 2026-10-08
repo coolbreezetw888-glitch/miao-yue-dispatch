@@ -15,8 +15,9 @@
  *
  * 純確認(沒有表單)請用 CardAlertDialog.tsx;有輸入欄位的短表單用這個。
  *
- * 關閉(第 11 批 J,#995):右上角 ✕ / 取消 / Esc / 點卡片正上方 48px 空白條(第 12 批 #1000 起條上不顯示任何字)。🔴 點遮罩不會關(J-1)。
- * 有「按儲存才寫入」的欄位 ⇒ 用 useFormDirty 傳 dirty;Esc / 空白條遇到 dirty 先問「確定放棄這次輸入？」。
+ * 關閉(第 11 批 J,#995;第 21 批 #1020 拿掉上方空白條):右上角 ✕ / 取消 / Esc。🔴 點遮罩不會關(J-1)。
+ * 有「按儲存才寫入」的欄位 ⇒ 用 useFormDirty 傳 dirty;Esc 遇到 dirty 先問「確定放棄這次輸入？」。
+ * 電腦版垂直位置仍在「上 56px / 下 18px」範圍內置中(#1020 判斷:不收回,理由見 overlayClasses.ts CARD_DIALOG_CONTENT_CLASS)。
  *
  * 用法(跟 shadcn Dialog 一模一樣,只是把 Dialog* 換成 CardDialog*):
  *   <CardDialog open={open} onOpenChange={setOpen}>
@@ -46,8 +47,6 @@ import { cn } from "@/lib/utils";
 import { columnAlignAttrs, useCardColumnAlign } from "./cardDialogColumnAlign";
 import { useOverlayOpenAutoFocus } from "./overlayAutoFocus";
 import { useOverlayDirtyDismiss } from "./overlayDirtyDismiss";
-import { CARD_STRIP_MAX_HEIGHT } from "./overlayDismissLogic";
-import { OverlayDismissStrip } from "./OverlayDismissStrip";
 import {
   CARD_CLOSE_CLASS,
   CARD_DESCRIPTION_CLASS,
@@ -71,11 +70,9 @@ interface CardDialogContentProps extends Omit<
   hideClose?: boolean | undefined;
   /**
    * 有「按儲存才寫入」的欄位、而且使用者改過 ⇒ true(用 useFormDirty 算)。
-   * true 時 Esc / 點上方空白條先問「確定放棄這次輸入？」;✕ 與「取消」鈕不問(J-11)。預設 false。
+   * true 時 Esc 先問「確定放棄這次輸入？」;✕ 與「取消」鈕不問(J-11)。預設 false。
    */
   dirty?: boolean | undefined;
-  /** 預設 true:卡片正上方畫「點了關閉」的空白條。只有「必須選一個」的特殊視窗才傳 false。 */
-  dismissStrip?: boolean | undefined;
 }
 
 const CardDialogContent = React.forwardRef<
@@ -88,7 +85,6 @@ const CardDialogContent = React.forwardRef<
       hideClose = false,
       onOpenAutoFocus,
       dirty = false,
-      dismissStrip = true,
       onEscapeKeyDown,
       onPointerDownOutside,
       onInteractOutside,
@@ -100,14 +96,11 @@ const CardDialogContent = React.forwardRef<
     // SPECS-INDEX #861:開窗時不要自動聚焦第一個可聚焦元素(手機會彈鍵盤),改把焦點放在
     // 對話框容器本身。完整理由與無障礙考量見 overlayAutoFocus.ts。
     const autoFocus = useOverlayOpenAutoFocus(ref, onOpenAutoFocus);
-    // 空白條要量卡片的位置,所以自己也留一份 ref。
-    const cardRef = React.useRef<HTMLDivElement | null>(null);
     // 第 15 批 #1009:對齊底下頁面的內容欄要在卡片真的掛上去之後才量 ⇒ 另外用 state 記住節點。
     const [cardNode, setCardNode] = React.useState<HTMLDivElement | null>(null);
     const autoFocusRef = autoFocus.ref;
     const setCardRef = React.useCallback(
       (node: HTMLDivElement | null) => {
-        cardRef.current = node;
         setCardNode(node);
         autoFocusRef(node);
       },
@@ -156,14 +149,7 @@ const CardDialogContent = React.forwardRef<
           {dismiss.hiddenClose}
           {dismiss.discardConfirm}
         </DialogPrimitive.Content>
-        {/* J-4 / J-5:卡片正上方 48px 的空白條(上方不夠 16px 就不畫)。 */}
-        {dismissStrip ? (
-          <OverlayDismissStrip
-            targetRef={cardRef}
-            maxHeight={CARD_STRIP_MAX_HEIGHT}
-            onDismiss={dismiss.requestDismiss}
-          />
-        ) : null}
+        {/* 第 21 批 #1020:小卡窗不再畫上方空白條(只有全頁層有)。 */}
       </DialogPrimitive.Portal>
     );
   },

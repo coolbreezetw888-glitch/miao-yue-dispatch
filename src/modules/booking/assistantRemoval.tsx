@@ -55,9 +55,8 @@ export function AssistantRemovedPrompt({
     >
       <CardAlertDialogContent
         data-testid="assistant-removed-prompt"
+        // 必須選一個 ⇒ Esc 不能關。第 21 批 #1020 起確認窗本來就沒有上方空白條。
         onEscapeKeyDown={(e) => e.preventDefault()}
-        // 第 11 批 J(#995 J-8):必須選一個 ⇒ 不畫「點了取消」的上方空白條。
-        dismissStrip={false}
       >
         <CardAlertDialogHeader>
           <CardAlertDialogTitle>{ASSISTANT_REMOVED_TITLE}</CardAlertDialogTitle>

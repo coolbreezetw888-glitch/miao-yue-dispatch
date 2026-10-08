@@ -128,7 +128,8 @@ test("E1 從協助卡移除 → 擋流程提示關不掉 → 維持現狀:主服
   await expect(prompt).toBeVisible();
   await page.mouse.click(8, 400);
   await expect(prompt).toBeVisible();
-  // 第 11 批 J(#995 J-8):必須選一個 ⇒ 這個確認窗上方沒有「點了取消」的空白條,點它上方也關不掉。
+  // 第 11 批 J(#995 J-8):必須選一個 ⇒ 這個確認窗上方沒有「點了取消」的空白條,點它上方也關不掉
+  // (第 21 批 #1020 起全站確認窗都沒有空白條)。
   await expect(page.locator("[data-overlay-dismiss-strip]")).toHaveCount(0);
   {
     const p = await prompt.boundingBox();

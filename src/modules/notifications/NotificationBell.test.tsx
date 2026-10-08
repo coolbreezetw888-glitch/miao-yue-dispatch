@@ -555,4 +555,53 @@ describe("NotificationBell", () => {
     fireEvent.click(screen.getByTestId("notification-row"));
     expect(markReadMutateMock).toHaveBeenCalledWith(["db", "push"]);
   });
+  // -----------------------------------------------------------------------
+  // SPECS-INDEX #1019 第 21 批:已完成訂單被取消 / 還原的原因完整換行顯示
+  // -----------------------------------------------------------------------
+  it("#1019:已完成訂單被取消 / 還原的內文不截斷(換行);其他種類照舊一行截斷", () => {
+    const longReason = "客人臨時說家裡有事要改到下個月，而且這次要多加一台冷氣一起保養，所以先取消";
+    useMyNotificationsMock.mockReturnValue({
+      data: [
+        makeRow({
+          id: "c1",
+          booking_id: "b-c",
+          target_type: "admin",
+          event_type: "booking_completed_cancelled",
+          title: "已完成訂單被取消",
+          body: `管理員甲 將 2027/03/03 10:00「客戶二號」的已完成訂單取消。原因：${longReason}`,
+          created_at: "2026-10-07T10:00:00.000Z",
+        }),
+        makeRow({
+          id: "r1",
+          booking_id: "b-r",
+          target_type: "admin",
+          event_type: "booking_completed_reverted",
+          title: "已完成訂單被還原",
+          body: `管理員甲 將 2027/03/02 10:00「客戶一號」的已完成訂單還原為已確認。原因：${longReason}`,
+          created_at: "2026-10-07T09:00:00.000Z",
+        }),
+        makeRow({
+          id: "n1",
+          booking_id: "b-n",
+          target_type: "admin",
+          event_type: "booking_cancelled",
+          title: "預約已取消",
+          body: "一般取消通知的內文",
+          created_at: "2026-10-06T09:00:00.000Z",
+        }),
+      ],
+      isLoading: false,
+      isError: false,
+    });
+    render(<NotificationBell />);
+    openPanel();
+    const bodies = screen.getAllByTestId("notification-body");
+    expect(bodies).toHaveLength(3);
+    for (const body of bodies.slice(0, 2)) {
+      expect(body.textContent).toContain(longReason);
+      expect(body.className).not.toContain("truncate");
+      expect(body.className).toContain("break-words");
+    }
+    expect(bodies[2]!.className).toContain("truncate");
+  });
 });

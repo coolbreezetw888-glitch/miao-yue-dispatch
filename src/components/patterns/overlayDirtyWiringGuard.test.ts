@@ -164,8 +164,9 @@ describe("第 11 批 J:頁面不自己處理「點外面」", () => {
   });
 });
 
-describe("第 11 批 J(J-8):必須選一個的確認窗不畫上方空白條", () => {
-  it("協助人員已移除(assistantRemoval.tsx)傳 dismissStrip={false},而且 Esc 仍被擋", () => {
+describe("第 11 批 J(J-8):必須選一個的確認窗關不掉", () => {
+  // 第 21 批 #1020:確認窗全部拿掉上方空白條,dismissStrip 參數已移除;這裡只剩「Esc 仍被擋」。
+  it("協助人員已移除(assistantRemoval.tsx)Esc 仍被擋", () => {
     const text = scanSourceLines()
       .filter((l) => l.file === "src/modules/booking/assistantRemoval.tsx")
       .map((l) => l.text)
@@ -176,7 +177,7 @@ describe("第 11 批 J(J-8):必須選一個的確認窗不畫上方空白條", (
       start,
       text.indexOf('data-testid="assistant-removed-prompt"', start) + 400,
     );
-    expect(tag).toContain("dismissStrip={false}");
+    expect(tag).not.toContain("dismissStrip");
     expect(tag).toContain("onEscapeKeyDown={(e) => e.preventDefault()}");
   });
 });

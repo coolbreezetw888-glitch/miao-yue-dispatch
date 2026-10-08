@@ -75,6 +75,7 @@ import {
   updateMerchantCalendarStateStyles,
   useMerchantCalendarStateStyles,
 } from "@/modules/booking/context";
+import { staffAvailableSlotStyle } from "@/modules/booking/bookingBlockLayout";
 import {
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
@@ -513,7 +514,7 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
                 key={key}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5"
               >
-                <span className="shrink-0 text-[13px] font-semibold text-foreground sm:w-16">
+                <span className="shrink-0 text-[13px] font-semibold text-foreground sm:w-32">
                   {label}
                 </span>
                 <FieldColor
@@ -582,6 +583,13 @@ const CALENDAR_STATE_FIELDS: {
     label: "跨店佔用",
     hint: "交叉網格紋",
   },
+  // #1021 第 21 批:第 4 種。服務人員每週可預約時段裡還空著、可以預約的格子;純色底、沒有圖樣。
+  {
+    key: "staffAvailableSlot",
+    state: "staff_available_slot",
+    label: "服務人員可預約時段",
+    hint: "純色底",
+  },
 ];
 
 function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
@@ -614,14 +622,16 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>行事曆排程狀態顏色設定</CardTitle>
         <CardDescription>
-          自訂「全天休假」「時段排休」「跨店佔用」這 3 種行事曆排程狀態的底色，同時套用到商家/
-          客服端行事曆跟服務人員自己的行事曆，兩邊看到的顏色一致。每種狀態固定搭配一種圖樣
-          (不是純色塊)，方便一眼分辨是哪一種狀態，不用只靠顏色判斷。
+          {/* 用字串而不是 JSX 純文字:JSX 跨行會在中文字中間多出一個空白(第 21 批截圖看到「可以 預約」)。 */}
+          {"自訂「全天休假」「時段排休」「跨店佔用」「服務人員可預約時段」這 4 種行事曆排程狀態的底色，" +
+            "同時套用到商家/客服端行事曆跟服務人員自己的行事曆，兩邊看到的顏色一致。" +
+            "前 3 種固定搭配一種圖樣(不是純色塊)，方便一眼分辨；" +
+            "「服務人員可預約時段」是服務人員每週開放、還空著可以預約的格子，用純色底標出來。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">
         {isLoading ? (
-          <LoadingSkeleton variant="lines" rows={3} />
+          <LoadingSkeleton variant="lines" rows={4} />
         ) : (
           <>
             {CALENDAR_STATE_FIELDS.map(({ key, state, label, hint }) => (
@@ -629,7 +639,9 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
                 key={key}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2.5"
               >
-                <div className="shrink-0 sm:w-20">
+                {/* 第 21 批:手機上標題一律自己佔一整行、色塊 / 色碼 / 預覽排在下一行 ⇒ 4 列排法一致
+                    (第 4 列「服務人員可預約時段」比較長,原本會把色碼擠到第二行,跟前 3 列不一樣)。電腦照舊 w-32。 */}
+                <div className="shrink-0 basis-full sm:basis-auto sm:w-32">
                   <span className="block text-[13px] font-semibold text-foreground">{label}</span>
                   <span className="block text-[11px] text-muted-foreground">{hint}</span>
                 </div>
@@ -647,8 +659,12 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
                 {/* 即時預覽:直接套用實際渲染時用的同一支函式,商家看到的圖樣效果跟行事曆上
                     一模一樣。 */}
                 <span
-                  className="ml-auto flex h-9 w-24 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium"
-                  style={calendarStateBlockStyle(form, state)}
+                  className="ml-auto flex h-9 w-20 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium sm:w-24"
+                  style={
+                    state === "staff_available_slot"
+                      ? staffAvailableSlotStyle(form)
+                      : calendarStateBlockStyle(form, state)
+                  }
                 >
                   預覽
                 </span>

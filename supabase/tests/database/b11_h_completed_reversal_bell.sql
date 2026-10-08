@@ -198,8 +198,8 @@ select is(
 );
 select is(
   (select array_agg(distinct body) from user_notifications where booking_id = :'b2_id'::uuid),
-  array['管理員甲 將 2027/03/03 10:00「客戶二號」的已完成訂單取消。原因：' || repeat('一', 59) || '二…'],
-  '3-4 取消內文:61 字原因 ⇒ 前 60 字 + …'
+  array['管理員甲 將 2027/03/03 10:00「客戶二號」的已完成訂單取消。原因：' || repeat('一', 59) || '二三'],
+  '3-4 取消內文:61 字原因 ⇒ 完整寫入(第 21 批 #1019 起不再截到 60 字;原本是前 60 字 + …)'
 );
 select is(
   pg_temp.b11h_targets(:'b3_id'::uuid, 'booking_completed_cancelled'),

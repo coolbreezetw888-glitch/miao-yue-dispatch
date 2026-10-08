@@ -1,4 +1,5 @@
 // 第 11 批 J(#995 J-1、J-4 ~ J-8、J-16 ~ J-18):三個殼的「點外面不關」「上方空白條」與全頁層寬度。
+// 第 21 批 #1020:上方空白條只剩全頁層有(小卡窗 / 確認窗拿掉),全頁層空白條滑過不反白。
 //
 // jsdom 沒有版面引擎(getBoundingClientRect 永遠是 0 ⇒ 上方 0px ⇒ 空白條不畫),
 // 所以這裡把視窗本體的位置假裝成「上方還有 200px」(= 電腦版全頁層 / 置中小卡窗的情境)。
@@ -122,8 +123,8 @@ describe("① 全頁層(電腦):點遮罩不關、點上方空白條 = 關", () 
   });
 });
 
-describe("② 小卡窗:點遮罩不關、點卡片正上方 48px = 關", () => {
-  it("點遮罩 ⇒ 仍開;點空白條 ⇒ onOpenChange(false)", async () => {
+describe("② 小卡窗:點遮罩不關、沒有上方空白條(第 21 批 #1020)、Esc 關", () => {
+  it("點遮罩 ⇒ 仍開;沒有空白條;Esc ⇒ onOpenChange(false)", async () => {
     const onOpenChange = vi.fn();
     render(
       <CardDialog open onOpenChange={onOpenChange}>
@@ -137,21 +138,20 @@ describe("② 小卡窗:點遮罩不關、點卡片正上方 48px = 關", () => 
     await radixReady();
     await user().click(overlay());
     expect(onOpenChange).not.toHaveBeenCalled();
-    const strip = strips()[0]!;
-    expect(strip.style.height).toBe("48px");
-    await user().click(strip);
+    expect(strips()).toHaveLength(0);
+    await user().keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("卡片上方不到 48px ⇒ 用剩下的高度;不到 16px ⇒ 不畫", () => {
-    expect(computeStripRect({ top: 30, left: 0, width: 300 }, 48)?.height).toBe(30);
-    expect(computeStripRect({ top: 15, left: 0, width: 300 }, 48)).toBeNull();
-    expect(computeStripRect({ top: 300, left: 0, width: 300 }, 48)?.height).toBe(48);
+  it("空白條高度算法(全頁層用):上方不到上限 ⇒ 用剩下的高度;不到 16px ⇒ 不畫", () => {
+    expect(computeStripRect({ top: 30, left: 0, width: 300 }, 56)?.height).toBe(30);
+    expect(computeStripRect({ top: 15, left: 0, width: 300 }, 56)).toBeNull();
+    expect(computeStripRect({ top: 300, left: 0, width: 300 }, 56)?.height).toBe(56);
   });
 });
 
-describe("③ 確認窗:點空白條 = 取消(走 onOpenChange(false)),不跑「取消」鈕自己的 onClick", () => {
-  it("onOpenChange(false) 被呼叫、取消鈕 onClick 沒被呼叫", async () => {
+describe("③ 確認窗:沒有上方空白條(第 21 批 #1020);Esc = 取消(走 onOpenChange(false)),不跑「取消」鈕自己的 onClick", () => {
+  it("沒有空白條;Esc ⇒ onOpenChange(false)、取消鈕 onClick 沒被呼叫", async () => {
     const onOpenChange = vi.fn();
     const onCancelClick = vi.fn();
     render(
@@ -169,16 +169,14 @@ describe("③ 確認窗:點空白條 = 取消(走 onOpenChange(false)),不跑「
     await radixReady();
     await user().click(overlay());
     expect(onOpenChange).not.toHaveBeenCalled();
-    const strip = strips()[0]!;
-    // 第 12 批 #1000:條上不顯示任何字或圖示。
-    expect(strip.textContent).toBe("");
-    expect(strip.querySelector("svg")).toBeNull();
-    await user().click(strip);
+    expect(strips()).toHaveLength(0);
+    expect(document.querySelector("[data-overlay-hidden-close]")).toBeNull();
+    await user().keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onCancelClick).not.toHaveBeenCalled();
   });
 
-  it("開窗焦點仍落在「取消」鈕(隱藏的關閉鈕沒有搶走 Radix 的 cancelRef)", async () => {
+  it("開窗焦點仍落在「取消」鈕", async () => {
     render(
       <CardAlertDialog open onOpenChange={() => {}}>
         <CardAlertDialogContent>
@@ -197,7 +195,7 @@ describe("③ 確認窗:點空白條 = 取消(走 onOpenChange(false)),不跑「
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "返回" }));
   });
 
-  it("頁面 onEscapeKeyDown preventDefault(例:送出中)⇒ 點空白條也不關", async () => {
+  it("頁面 onEscapeKeyDown preventDefault(例:送出中 / 必須選一個)⇒ Esc 不關", async () => {
     const onOpenChange = vi.fn();
     render(
       <CardAlertDialog open onOpenChange={onOpenChange}>
@@ -208,54 +206,25 @@ describe("③ 確認窗:點空白條 = 取消(走 onOpenChange(false)),不跑「
         </CardAlertDialogContent>
       </CardAlertDialog>,
     );
-    await user().click(strips()[0]!);
+    await radixReady();
+    await user().keyboard("{Escape}");
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
 
-describe("④ dismissStrip={false} ⇒ 沒有空白條元素", () => {
-  it("確認窗", () => {
+describe("④ 空白條(全頁層)aria-hidden、不在 Tab 順序、滑過不反白", () => {
+  it("aria-hidden=true、沒有 tabindex、不是按鈕;沒有 hover 底色(#1020)", () => {
     render(
-      <CardAlertDialog open onOpenChange={() => {}}>
-        <CardAlertDialogContent dismissStrip={false}>
-          <CardAlertDialogHeader>
-            <CardAlertDialogTitle>必須選一個</CardAlertDialogTitle>
-          </CardAlertDialogHeader>
-        </CardAlertDialogContent>
-      </CardAlertDialog>,
-    );
-    expect(strips()).toHaveLength(0);
-  });
-
-  it("小卡窗", () => {
-    render(
-      <CardDialog open onOpenChange={() => {}}>
-        <CardDialogContent dismissStrip={false}>
-          <CardDialogHeader>
-            <CardDialogTitle>x</CardDialogTitle>
-          </CardDialogHeader>
-        </CardDialogContent>
-      </CardDialog>,
-    );
-    expect(strips()).toHaveLength(0);
-  });
-});
-
-describe("⑤ 空白條 aria-hidden、不在 Tab 順序", () => {
-  it("aria-hidden=true、沒有 tabindex、不是按鈕", () => {
-    render(
-      <CardDialog open onOpenChange={() => {}}>
-        <CardDialogContent>
-          <CardDialogHeader>
-            <CardDialogTitle>x</CardDialogTitle>
-          </CardDialogHeader>
-        </CardDialogContent>
-      </CardDialog>,
+      <FullPageLayer open onOpenChange={() => {}}>
+        <FullPageLayerContent title="x">內容</FullPageLayerContent>
+      </FullPageLayer>,
     );
     const strip = strips()[0]!;
     expect(strip.getAttribute("aria-hidden")).toBe("true");
     expect(strip.hasAttribute("tabindex")).toBe(false);
     expect(strip.tagName).toBe("DIV");
+    expect(strip.className).toContain("cursor-pointer");
+    expect(strip.className).not.toMatch(/hover:|transition/);
     // 隱藏的關閉鈕也不可聚焦。
     for (const hidden of document.querySelectorAll<HTMLElement>("[data-overlay-hidden-close]")) {
       expect(hidden.getAttribute("tabindex")).toBe("-1");
@@ -265,13 +234,9 @@ describe("⑤ 空白條 aria-hidden、不在 Tab 順序", () => {
 
   it("視窗大小改變會重量位置(resize)", async () => {
     render(
-      <CardDialog open onOpenChange={() => {}}>
-        <CardDialogContent>
-          <CardDialogHeader>
-            <CardDialogTitle>x</CardDialogTitle>
-          </CardDialogHeader>
-        </CardDialogContent>
-      </CardDialog>,
+      <FullPageLayer open onOpenChange={() => {}}>
+        <FullPageLayerContent title="x">內容</FullPageLayerContent>
+      </FullPageLayer>,
     );
     expect(strips()).toHaveLength(1);
     rectTop = 4;

@@ -421,11 +421,8 @@ for (const width of [1280, 1920]) {
           1,
         );
       }
-      // 不變的部分:分隔線、按鈕平均分寬、空白條寬 = 卡片寬。
-      const strip = page.locator("[data-overlay-dismiss-strip]").last();
-      const sb = await settledBox(strip);
-      expect(Math.abs(sb.width - box.width)).toBeLessThanOrEqual(1);
-      expect(Math.abs(sb.x - box.x)).toBeLessThanOrEqual(1);
+      // 第 21 批 #1020:小卡窗已沒有上方空白條(原本這裡驗「空白條寬 = 卡片寬」),改由
+      // b21-1018-1022-small-fixes.spec.ts 驗「小卡窗沒有空白條」。
       expectOnlyLocalRequests(recorder);
       await page.context().close();
     }

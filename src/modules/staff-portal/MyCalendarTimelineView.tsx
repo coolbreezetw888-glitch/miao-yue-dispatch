@@ -55,6 +55,7 @@ import {
   BOOKING_BLOCK_INSET_X_PX,
   bookingBlockVerticalBox,
   filledBookingBlockStyle,
+  staffAvailableSlotStyle,
 } from "@/modules/booking/bookingBlockLayout";
 import { DaySlotCell } from "@/modules/booking/DaySlotCell";
 import {
@@ -358,15 +359,18 @@ export function MyCalendarTimelineView({
                   resolved.finalAvailable
                     ? resolved.isOverride
                       ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
-                      : "bg-background hover:bg-brand-soft/40"
+                      : "hover:brightness-95"
                     : resolved.isOverride
                       ? "hover:opacity-80"
                       : "bg-muted/40 hover:bg-muted/60",
                 )}
+                // #1021 第 21 批:每週可預約時段內、可預約(沒有單日例外)的空格子 = 商家自訂淡色底(跟商家端同一支)。
                 cellStyle={
                   resolved.isOverride && !resolved.finalAvailable
                     ? calendarStateBlockStyle(effectiveCalendarStateStyles, "partial_leave")
-                    : undefined
+                    : resolved.finalAvailable && !resolved.isOverride
+                      ? staffAvailableSlotStyle(effectiveCalendarStateStyles)
+                      : undefined
                 }
                 ariaLabel={
                   resolved.finalAvailable ? `${slot.start} 可預約` : `${slot.start} 不可預約`

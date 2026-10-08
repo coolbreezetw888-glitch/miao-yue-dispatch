@@ -235,7 +235,11 @@ import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // SPECS-INDEX #977 第 7 批:背景格子元件與每格狀態的純函式搬到共用檔(服務人員端時間軸也用同一份)。
 import { DaySlotCell } from "./DaySlotCell";
-import { bookingBlockVerticalBox, filledBookingBlockStyle } from "./bookingBlockLayout";
+import {
+  bookingBlockVerticalBox,
+  filledBookingBlockStyle,
+  staffAvailableSlotStyle,
+} from "./bookingBlockLayout";
 import { useMerchantCalendarLiveSync } from "./useMerchantCalendarLiveSync";
 import { DayStatusCountBadges } from "./DayStatusCountBadges";
 import {
@@ -3000,7 +3004,8 @@ function CalendarPageInner() {
                   aria-label={`切換到 ${key}`}
                   onClick={() => setSelectedDate(d)}
                   className={cn(
-                    "flex min-h-11 flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs transition-colors",
+                    // #1022 第 21 批:點了會切換日期 ⇒ 手指游標。
+                    "flex min-h-11 cursor-pointer flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs transition-colors",
                     isSelected
                       ? "border-brand bg-brand-soft font-semibold text-brand"
                       : "border-border text-muted-foreground hover:border-brand/50",
@@ -3066,7 +3071,8 @@ function CalendarPageInner() {
                   data-month-date-key={key}
                   onClick={() => setSelectedDate(date)}
                   className={cn(
-                    "flex min-h-11 flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs tabular-nums transition-colors",
+                    // #1022 第 21 批:點了會切換日期 ⇒ 手指游標。
+                    "flex min-h-11 cursor-pointer flex-col items-center gap-1 rounded-md border px-1 py-2 text-xs tabular-nums transition-colors",
                     isSelected
                       ? "border-brand bg-brand-soft font-semibold text-brand"
                       : "border-border hover:border-brand/50",
@@ -3346,10 +3352,13 @@ function CalendarPageInner() {
                           // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
                           // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
                           // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
+                          // #1021 第 21 批:落在服務人員每週可預約時段內、可預約(沒有單日例外)的空格子,
+                          // 底色改讀商家自訂的「服務人員可預約時段」顏色(預設淡綠),不再是白色;
+                          // inline 底色會蓋掉 hover:bg-*,所以滑過改用 brightness 稍微變暗當回饋。
                           const cellClassName = finalAvailable
                             ? isOverride
                               ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
-                              : "bg-background hover:bg-brand-soft/40"
+                              : "hover:brightness-95"
                             : isOverride
                               ? "hover:opacity-80"
                               : "bg-muted/40 hover:bg-muted/60";
@@ -3359,7 +3368,9 @@ function CalendarPageInner() {
                                   effectiveCalendarStateStyles,
                                   "partial_leave",
                                 )
-                              : undefined;
+                              : finalAvailable && !isOverride
+                                ? staffAvailableSlotStyle(effectiveCalendarStateStyles)
+                                : undefined;
 
                           // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
                           // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。

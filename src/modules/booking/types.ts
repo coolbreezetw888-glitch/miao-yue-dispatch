@@ -289,15 +289,21 @@ export function bookingCardHoverBorderColor(
 // 兩邊套用同一套「顏色 + 固定圖樣」渲染規則,不各自維護一份。
 // ---------------------------------------------------------------------------
 
-/** 對應資料表 merchant_calendar_state_styles.state_type 的三個枚舉值。 */
-export type CalendarStateType = "full_day_leave" | "partial_leave" | "cross_store_occupied";
+/** 有固定圖樣(斜線 / 交叉網格)的三種排程狀態(#644)。 */
+export type CalendarPatternStateType = "full_day_leave" | "partial_leave" | "cross_store_occupied";
 
-/** 商家目前設定的 3 種行事曆排程狀態代表色。查無資料(還沒特別設定過)時,呼叫端一律 fallback
+/** 對應資料表 merchant_calendar_state_styles.state_type 的四個枚舉值。
+ * SPECS-INDEX #1021 第 21 批新增第 4 種 staff_available_slot(服務人員每週可預約時段的空格子底色,純色、無圖樣)。 */
+export type CalendarStateType = CalendarPatternStateType | "staff_available_slot";
+
+/** 商家目前設定的 4 種行事曆排程狀態代表色。查無資料(還沒特別設定過)時,呼叫端一律 fallback
  * 成 DEFAULT_CALENDAR_STATE_STYLES,不回傳 undefined 欄位。 */
 export interface CalendarStateStyleMap {
   fullDayLeave: string;
   partialLeave: string;
   crossStoreOccupied: string;
+  /** #1021:服務人員每週可預約時段內、可預約的空格子底色(直接當底色用,不另外調透明度)。 */
+  staffAvailableSlot: string;
 }
 
 /** 查無資料時的預設值,跟資料庫 seed 函式(20260923020100_req644_...)的預設色碼逐字一致。
@@ -307,6 +313,9 @@ export const DEFAULT_CALENDAR_STATE_STYLES: CalendarStateStyleMap = {
   fullDayLeave: "#78716c",
   partialLeave: "#a8a29e",
   crossStoreOccupied: "#c2410c",
+  // #1021 第 21 批:淡綠(tailwind green-100)。跟填色預約卡片(實色)、時段外灰格、特別開放的淡紫底紫框、
+  // 斜線 / 網格圖樣都分得開;跟資料庫 seed_default_merchant_calendar_state_styles 逐字一致。
+  staffAvailableSlot: "#dcfce7",
 };
 
 /** 依狀態值從顏色表挑出對應色碼。 */
@@ -316,6 +325,7 @@ export function getCalendarStateColor(
 ): string {
   if (state === "full_day_leave") return colors.fullDayLeave;
   if (state === "partial_leave") return colors.partialLeave;
+  if (state === "staff_available_slot") return colors.staffAvailableSlot;
   return colors.crossStoreOccupied;
 }
 
@@ -327,7 +337,7 @@ export function getCalendarStateColor(
  * 這裡沿用同一個既有函式,不另外重寫一套顏色格式判斷。 */
 export function calendarStateBlockStyle(
   colors: CalendarStateStyleMap,
-  state: CalendarStateType,
+  state: CalendarPatternStateType,
 ): { backgroundColor: string; backgroundImage: string; borderColor: string; color: string } {
   const color = getCalendarStateColor(colors, state);
   const line = hexToRgba(color, 0.55);

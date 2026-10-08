@@ -119,8 +119,8 @@ select seed_default_merchant_calendar_state_styles('c6440000-0000-4000-8000-0000
 
 select is(
   (select count(*)::int from merchant_calendar_state_styles where merchant_id = 'c6440000-0000-4000-8000-000000000021'),
-  3,
-  '重複呼叫 seed_default_merchant_calendar_state_styles 不會產生第二批(仍然是 3 列)'
+  4,
+  '重複呼叫 seed_default_merchant_calendar_state_styles 不會產生第二批(仍然是 4 列;#1021 起多一種 staff_available_slot)'
 );
 
 select is(
@@ -140,8 +140,8 @@ select pg_temp.test_clear_auth();
 
 select is(
   (select count(*)::int from merchant_calendar_state_styles where merchant_id = :'new_merchant_create_group_and_merchant'::uuid),
-  3,
-  'create_group_and_merchant 建立新商家時自動種入三筆 merchant_calendar_state_styles'
+  4,
+  'create_group_and_merchant 建立新商家時自動種入四筆 merchant_calendar_state_styles(#1021 起多一種)'
 );
 
 -- =========================================================================
@@ -150,8 +150,8 @@ select is(
 select pg_temp.test_set_auth('c6440000-0000-4000-8000-000000000001'); -- 一店管理員
 select is(
   (select count(*)::int from merchant_calendar_state_styles where merchant_id = 'c6440000-0000-4000-8000-000000000021'),
-  3,
-  '一店管理員可以 SELECT 到三筆行事曆排程狀態顏色設定'
+  4,
+  '一店管理員可以 SELECT 到四筆行事曆排程狀態顏色設定(#1021 起多一種)'
 );
 select pg_temp.test_clear_auth();
 

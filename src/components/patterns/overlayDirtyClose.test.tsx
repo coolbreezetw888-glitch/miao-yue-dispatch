@@ -80,9 +80,13 @@ function Harness({
 }
 
 function strip(): HTMLElement {
-  // 最上層那一條(放棄確認窗打開時,它自己也有一條)。
+  // 第 21 批 #1020 起只有全頁層有空白條(放棄確認窗、小卡窗都沒有)。
   const all = [...document.querySelectorAll<HTMLElement>("[data-overlay-dismiss-strip]")];
   return all[0]!;
+}
+
+function stripCount(): number {
+  return document.querySelectorAll("[data-overlay-dismiss-strip]").length;
 }
 
 describe.each<[Shell, string]>([
@@ -131,21 +135,22 @@ describe.each<[Shell, string]>([
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("點空白條:dirty ⇒ 先問;dirty=false ⇒ 直接關", async () => {
+  it("點空白條(只有全頁層有):dirty ⇒ 先問;dirty=false ⇒ 直接關", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     render(<Harness shell={shell} onOpenChange={onOpenChange} />);
+    if (shell === "card") {
+      // 第 21 批 #1020:小卡窗沒有上方空白條。
+      expect(stripCount()).toBe(0);
+      return;
+    }
     await user.type(screen.getByLabelText("客戶姓名"), "王");
     await user.click(strip());
     expect(await screen.findByText(DISCARD_CHANGES_COPY.title)).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalled();
-    // 放棄確認窗自己的上方空白條 = 繼續編輯。
-    const allStrips = [...document.querySelectorAll<HTMLElement>("[data-overlay-dismiss-strip]")];
-    // 下層視窗一條 + 放棄確認窗一條;最後一條是放棄確認窗的(第 12 批 #1000 起條上沒有字,改用數量確認)。
-    expect(allStrips).toHaveLength(2);
-    const confirmStrip = allStrips.at(-1)!;
-    expect(confirmStrip.textContent).toBe("");
-    await user.click(confirmStrip);
+    // 第 21 批 #1020:放棄確認窗(確認窗)沒有自己的空白條 ⇒ 只剩下層全頁層那一條;Esc = 繼續編輯。
+    expect(stripCount()).toBe(1);
+    await user.keyboard("{Escape}");
     await waitFor(() =>
       expect(screen.queryByText(DISCARD_CHANGES_COPY.title)).not.toBeInTheDocument(),
     );
@@ -176,9 +181,11 @@ describe.each<[Shell, string]>([
     await user.type(screen.getByLabelText("客戶姓名"), "王");
     await user.keyboard("{Escape}");
     expect(onEscapeKeyDown).toHaveBeenCalledTimes(1);
-    // 空白條走同一條路。
-    await user.click(strip());
-    expect(onEscapeKeyDown).toHaveBeenCalledTimes(2);
+    // 空白條走同一條路(只有全頁層有空白條)。
+    if (shell === "full") {
+      await user.click(strip());
+      expect(onEscapeKeyDown).toHaveBeenCalledTimes(2);
+    }
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(screen.queryByText(DISCARD_CHANGES_COPY.title)).not.toBeInTheDocument();
   });

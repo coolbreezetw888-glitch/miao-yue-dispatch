@@ -355,7 +355,8 @@ export default function MyCalendarPage() {
                 type="button"
                 data-date-key={dateKey}
                 onClick={() => setSelectedDateKey(dateKey)}
-                className={`flex h-14 flex-col items-center justify-center gap-0.5 rounded-md border text-xs transition-colors ${
+                // #1022 第 21 批:點了會切換日期 ⇒ 手指游標(cursor-pointer)。
+                className={`flex h-14 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-md border text-xs transition-colors ${
                   isSelected
                     ? "border-primary bg-primary/10 text-foreground"
                     : "border-border text-foreground hover:bg-muted"

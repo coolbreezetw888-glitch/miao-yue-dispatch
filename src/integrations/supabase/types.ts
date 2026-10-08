@@ -4840,6 +4840,7 @@ export type Database = {
           p_full_day_leave_color: string
           p_merchant_id: string
           p_partial_leave_color: string
+          p_staff_available_slot_color?: string
         }
         Returns: {
           color: string

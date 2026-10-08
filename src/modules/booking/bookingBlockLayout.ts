@@ -8,9 +8,11 @@ import type { CSSProperties } from "react";
 
 import {
   DEFAULT_BOOKING_STATUS_COLORS,
+  DEFAULT_CALENDAR_STATE_STYLES,
   getBookingStatusColor,
   type BookingStatus,
   type BookingStatusColorMap,
+  type CalendarStateStyleMap,
 } from "./types";
 
 /**
@@ -84,6 +86,22 @@ export function sanitizeHexColor(input: string | null | undefined, fallback: str
           .join("")
       : hex;
   return `#${full.toLowerCase()}`;
+}
+
+/**
+ * SPECS-INDEX #1021 第 21 批:服務人員每週可預約時段內、可預約的空格子底色(商家端時間軸、服務人員端時間軸、
+ * 設定頁預覽共用)。純色、無圖樣,商家選什麼顏色就畫什麼顏色。
+ * 🔴 資安:色碼是商家自己輸入的字串 ⇒ 一律先過 sanitizeHexColor,格式不對就退回系統預設淡綠。
+ */
+export function staffAvailableSlotStyle(colors: CalendarStateStyleMap): {
+  backgroundColor: string;
+} {
+  return {
+    backgroundColor: sanitizeHexColor(
+      colors.staffAvailableSlot,
+      DEFAULT_CALENDAR_STATE_STYLES.staffAvailableSlot,
+    ),
+  };
 }
 
 /** 左邊色條往白色調亮的比例(規格:約 40~45%;取 45%,跟使用者看過的比較圖 B 一樣)。 */

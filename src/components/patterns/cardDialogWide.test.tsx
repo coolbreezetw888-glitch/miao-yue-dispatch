@@ -60,8 +60,8 @@ function strips(): HTMLElement[] {
 const smTokens = (cls: string) => cls.split(" ").filter((c) => c.startsWith("sm:"));
 const baseTokens = (cls: string) => cls.split(" ").filter((c) => !c.includes(":"));
 
-describe("#1000 三種視窗的上方空白條都沒有字、沒有 ✕ 圖示", () => {
-  it("全頁層 / 小卡窗 / 確認窗", () => {
+describe("#1000 / #1020 上方空白條:只有全頁層有,沒有字、沒有 ✕ 圖示、滑過不反白", () => {
+  it("全頁層有一條;小卡窗 / 確認窗沒有", () => {
     render(
       <>
         <FullPageLayer open onOpenChange={() => {}}>
@@ -83,13 +83,14 @@ describe("#1000 三種視窗的上方空白條都沒有字、沒有 ✕ 圖示",
         </CardAlertDialog>
       </>,
     );
-    expect(strips()).toHaveLength(3);
+    // 第 21 批 #1020:小卡窗 / 確認窗拿掉空白條 ⇒ 三個視窗同時開只剩全頁層那一條。
+    expect(strips()).toHaveLength(1);
     for (const strip of strips()) {
       expect(strip.textContent).toBe("");
       expect(strip.children).toHaveLength(0);
-      // 手指游標 + 極淡 hover 底色保留。
+      // 手指游標保留;#1020 拿掉 hover 反白(不可有任何 hover: class)。
       expect(strip.className).toContain("cursor-pointer");
-      expect(strip.className).toContain("hover:bg-background/10");
+      expect(strip.className).not.toMatch(/hover:/);
     }
   });
 });
@@ -179,7 +180,7 @@ describe("#1001 小卡窗電腦版:拉寬、標題列 / 按鈕列固定、中間
     expect(CARD_DIALOG_FOOTER_CLASS).toContain("sm:[[data-card-dialog-header]+&]:border-t-0");
   });
 
-  it("小卡窗空白條仍是最多 48px(維持置中,不改成全頁層的 56px)", () => {
+  it("小卡窗沒有上方空白條(第 21 批 #1020;原本最多 48px)", () => {
     render(
       <CardDialog open onOpenChange={() => {}}>
         <CardDialogContent>
@@ -189,6 +190,6 @@ describe("#1001 小卡窗電腦版:拉寬、標題列 / 按鈕列固定、中間
         </CardDialogContent>
       </CardDialog>,
     );
-    expect(strips()[0]!.style.height).toBe("48px");
+    expect(strips()).toHaveLength(0);
   });
 });

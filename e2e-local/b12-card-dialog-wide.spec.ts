@@ -9,6 +9,9 @@
 //   5. 1280 全頁層(預約詳情):1112 寬(第 16 批 #1010 起 = 訂單管理內容欄;原 1152)、上緣 56(不變);空白條沒字
 //   6. 375 × 812:小卡窗 / 確認窗 / 全頁層跟改版前一樣(位置、寬度、按鈕各半;截圖)
 //
+// ※ 第 21 批 #1020:小卡窗 / 確認窗拿掉上方空白條 ⇒ 1、3、4~5 改成「沒有空白條、點上方不關、Esc 關 / 先問放棄」;
+//   全頁層空白條不變(完整驗收在 b21-1018-1022-small-fixes.spec.ts)。
+//
 // 截圖存 B12_SHOTS(預設 test-results/b12-shots/;🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
 //
 // 執行:npx playwright test --config playwright.local.config.ts b12-card-dialog-wide
@@ -205,12 +208,8 @@ async function expectWideCard(page: Page, dialog: Locator, viewportH: number) {
   expect(Math.abs(widths[0]! - widths[1]!)).toBeLessThanOrEqual(1);
   expect(widths[0]!).toBeGreaterThan(300);
 
-  const strip = page.locator(STRIP).last();
-  await expect(strip).toHaveText("");
-  const sb = await settledBox(strip);
-  expect(Math.round(sb.height)).toBe(48);
-  expect(Math.round(sb.y + sb.height)).toBe(Math.round(box.y));
-  expect(Math.abs(sb.width - box.width)).toBeLessThanOrEqual(1);
+  // 第 21 批 #1020:小卡窗沒有上方空白條。
+  await expect(page.locator(STRIP)).toHaveCount(0);
   return box;
 }
 
@@ -230,15 +229,17 @@ test("1. 編輯客服資料(1280):拉寬、高度跟內容、置中、分隔線�
   expect(Math.round(nickBox.x)).toBe(Math.round(nameBox.x));
   await page.screenshot({ path: `${SHOTS}/1280-agent-edit.png` });
 
-  // 點上方空白條 ⇒ 關(沒改過)。
+  // 第 21 批 #1020:點卡片上方不關;Esc 關(沒改過)。
   await page.mouse.click(640, box.y - 24);
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
-  // 改過 ⇒ 點空白條先問放棄。
+  // 改過 ⇒ Esc 先問放棄。
   dialog = await openAgentEdit(page);
   await dialog.locator("#agent-edit-nickname").fill("改過");
-  const b2 = await settledBox(dialog);
-  await page.mouse.click(640, b2.y - 24);
+  await settledBox(dialog);
+  await page.keyboard.press("Escape");
   await expect(page.getByText(DISCARD_TITLE)).toBeVisible();
   await page.getByTestId("discard-changes-confirm").getByRole("button", { name: "放棄" }).click();
   await expect(dialog).toHaveCount(0);
@@ -284,9 +285,8 @@ test("3. 內容比畫面長(1280 × 520):上緣 56、下緣離底 18、只有中
   const phone = (await dialog.locator("#agent-edit-phone").boundingBox())!;
   expect(phone.y + phone.height).toBeLessThanOrEqual(f2.y);
   await page.screenshot({ path: `${SHOTS}/1280x520-long-card-bottom.png` });
-  // 空白條仍在卡片正上方(上方剛好 56 ⇒ 條 48)。
-  const sb = await settledBox(page.locator(STRIP).last());
-  expect(Math.round(sb.height)).toBe(48);
+  // 第 21 批 #1020:小卡窗沒有上方空白條(上緣 56 不收回)。
+  await expect(page.locator(STRIP)).toHaveCount(0);
   await page.context().close();
 });
 
@@ -330,11 +330,16 @@ test("4~5. 確認窗(1280)仍 400 寬、按鈕靠右;全頁層 1112 寬、上緣
   expect(Math.round(ab.x + ab.width - (last.x + last.width))).toBe(21); // p-5 + 1px 邊框
   expect(first.width).toBeLessThan(300);
   const strips = page.locator(STRIP);
-  await expect(strips).toHaveCount(2);
-  for (let i = 0; i < 2; i += 1) await expect(strips.nth(i)).toHaveText("");
+  // 第 21 批 #1020:確認窗沒有空白條 ⇒ 只剩下層全頁層那一條。
+  await expect(strips).toHaveCount(1);
   await page.screenshot({ path: `${SHOTS}/1280-confirm.png` });
-  // 兩層重疊:點上方空白條只關確認窗。
+  // 兩層重疊:點確認窗上方、點下層空白條的位置都不關任何一層;Esc 只關確認窗。
   await page.mouse.click(ab.x + ab.width / 2, ab.y - 24);
+  await page.mouse.click(640, 28);
+  await expect(alert).toBeVisible();
+  // 確認窗開著時下層被設 aria-hidden ⇒ 用 CSS 選擇器確認下層還在。
+  await expect(page.locator('[role="dialog"]')).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(alert).toHaveCount(0);
   await expect(layer).toBeVisible();
   await page.context().close();
@@ -358,7 +363,8 @@ test("6. 手機 375:小卡窗 / 確認窗 / 全頁層跟改版前一樣", async 
   const w0 = (await btns.nth(0).boundingBox())!.width;
   const w1 = (await btns.nth(1).boundingBox())!.width;
   expect(Math.abs(w0 - w1)).toBeLessThanOrEqual(1);
-  await expect(page.locator(STRIP)).toHaveText("");
+  // 第 21 批 #1020:小卡窗沒有上方空白條(原本驗「空白條沒字」)。
+  await expect(page.locator(STRIP)).toHaveCount(0);
   await card.screenshot({ path: `${SHOTS}/375-agent-edit-card.png` });
   await page.screenshot({ path: `${SHOTS}/375-agent-edit.png` });
   await page.keyboard.press("Escape");

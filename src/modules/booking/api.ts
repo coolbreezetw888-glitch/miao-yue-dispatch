@@ -1624,6 +1624,8 @@ export async function fetchMerchantCalendarStateStyles(
     if (row.state_type === "full_day_leave") result.fullDayLeave = row.color;
     else if (row.state_type === "partial_leave") result.partialLeave = row.color;
     else if (row.state_type === "cross_store_occupied") result.crossStoreOccupied = row.color;
+    // #1021 第 21 批:第 4 種「服務人員可預約時段」。
+    else if (row.state_type === "staff_available_slot") result.staffAvailableSlot = row.color;
   }
   return result;
 }
@@ -1640,6 +1642,8 @@ export async function updateMerchantCalendarStateStyles(
     p_full_day_leave_color: styles.fullDayLeave,
     p_partial_leave_color: styles.partialLeave,
     p_cross_store_occupied_color: styles.crossStoreOccupied,
+    // #1021 第 21 批:第 4 種(資料庫參數有預設值 null = 不改,舊版前端照樣能呼叫)。
+    p_staff_available_slot_color: styles.staffAvailableSlot,
   });
   if (error) throw error;
 }

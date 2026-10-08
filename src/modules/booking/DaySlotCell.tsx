@@ -2,6 +2,8 @@
 // 商家端行事曆與服務人員端時間軸(MyCalendarTimelineView)共用同一份,**不要複製一份**。
 // 元件內容一字未改;手勢判斷(#641 點擊 vs 拖曳)在 daySlotGrid.ts 的 useTapVsDragOpenState。
 
+import type { CSSProperties } from "react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,9 +34,8 @@ export function DaySlotCell({
   // SPECS-INDEX #644:時段排休(單日例外關閉)這一格改讀商家自訂顏色 + 圖樣,不能只靠
   // Tailwind class(build-time 就固定,無法接受任意動態色碼),所以額外開這個可選的 inline style
   // 插槽,查無資料的其他分支繼續維持純 className,不受影響。
-  cellStyle?:
-    | { backgroundColor: string; backgroundImage: string; borderColor: string; color: string }
-    | undefined;
+  // #1021 第 21 批:服務人員可預約時段的淡色底(只有 backgroundColor)也走這個插槽。
+  cellStyle?: CSSProperties | undefined;
   ariaLabel: string;
   /** 見 daySlotGrid.ts 的 DaySlotState 說明:輸出成 data-slot-state 屬性,給 e2e 測試穩定選取用。 */
   slotState: DaySlotState;
@@ -55,6 +56,9 @@ export function DaySlotCell({
           type="button"
           className={cn(
             "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
+            // #1022 第 21 批:點了會跳選單(新增預約 / 開關時段)的格子,滑鼠移上去是手指;
+            // 沒有任何選項時維持一般箭頭(呼叫端目前不會傳這種組合,這裡是保險)。
+            showCreateOption || showOverrideOption ? "cursor-pointer" : "cursor-default",
             cellClassName,
           )}
           style={{ top, height, ...cellStyle }}

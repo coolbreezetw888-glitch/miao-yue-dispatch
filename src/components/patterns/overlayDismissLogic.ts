@@ -1,10 +1,9 @@
 // 第 11 批 J(#995):視窗上方空白條 / 放棄確認的純邏輯與常數(拆出 .tsx 是為了 react-refresh 規則:
 // 元件檔只 export 元件)。🔴 只給三個殼用,頁面不要 import。
 
-/** 全頁層(電腦)空白條上限:面板上緣 56px。 */
+/** 全頁層(電腦)空白條上限:面板上緣 56px。
+ *  第 21 批 #1020(使用者裁決):只有全頁層有空白條;小卡窗 / 確認窗的空白條(原本上限 48px)已拿掉。 */
 export const FULL_PAGE_STRIP_MAX_HEIGHT = 56;
-/** 小卡窗 / 確認窗空白條上限:卡片正上方 48px。 */
-export const CARD_STRIP_MAX_HEIGHT = 48;
 /** 上方剩不到這麼多就不畫。 */
 export const STRIP_MIN_HEIGHT = 16;
 

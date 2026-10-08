@@ -17,6 +17,8 @@
 //    完整的第 12 批驗收在 b12-card-dialog-wide.spec.ts。
 //  ※ 第 16 批 #1010:全頁層也改成對齊頁面內容欄,1 / 2 / 6 的寬度斷言跟著改;完整驗收在 b16-full-page-layer-column-align.spec.ts。
 //  ・浮出面板(日期時間選擇 Popover;服務人員表單的服務項目下拉見 6)點外面照舊收起,視窗不動
+//  ※ 第 21 批 #1020:小卡窗 / 確認窗拿掉上方空白條(7、8、9 改成「點上方不關,Esc / ✕ 關」);全頁層空白條
+//    滑過不反白(11)。完整驗收在 b21-1018-1022-small-fixes.spec.ts。
 // 截圖存 test-results/b11-j-shots/(🔴 不寫進 .project/notes/ui-ref-2026-10-01/after/)。
 //
 // 執行:npx playwright test --config playwright.local.config.ts b11-j-overlay-dismiss-and-width
@@ -259,11 +261,17 @@ test("8. 確認窗(取消預約):點上方空白 = 取消,預約沒被取消", a
   await expect(alert).toBeVisible();
   const card = await settledBox(alert);
   const strips = page.locator(STRIP);
-  // 全頁層一條 + 確認窗一條;第 12 批 #1000 起條上沒有字。
-  await expect(strips).toHaveCount(2);
-  await expect(strips.last()).toHaveText("");
+  // 第 21 批 #1020:確認窗沒有自己的空白條 ⇒ 只剩下層全頁層那一條。
+  await expect(strips).toHaveCount(1);
   await page.screenshot({ path: `${SHOTS}/1280-cancel-confirm-strip.png` });
+  // 點確認窗正上方、點下層全頁層的空白條位置(y=28)都不會關任何一層(上層遮罩蓋住下層空白條)。
   await page.mouse.click(card.x + card.width / 2, card.y - 24);
+  await page.mouse.click(640, 28);
+  await expect(alert).toBeVisible();
+  // 確認窗開著時下層被設 aria-hidden ⇒ 用 CSS 選擇器確認下層還在。
+  await expect(page.locator('[role="dialog"]')).toBeVisible();
+  // Esc = 取消(只關確認窗)。
+  await page.keyboard.press("Escape");
   await expect(alert).toHaveCount(0);
   await expect(layer).toBeVisible();
   const r = await serviceClient()
@@ -315,26 +323,29 @@ async function openNewPaymentMethod(page: Page): Promise<Locator> {
   return dialog;
 }
 
-test("7. 小卡窗(付款方式新增):點遮罩不關、點卡片正上方關;填名稱後問放棄", async ({ browser }) => {
+test("7. 小卡窗(付款方式新增):點遮罩 / 卡片正上方都不關(#1020)、Esc 關;填名稱後 Esc 問放棄", async ({
+  browser,
+}) => {
   const page = await openAsAdmin(browser, 1280, 800, "/app/payment-methods");
   let dialog = await openNewPaymentMethod(page);
   const box = await settledBox(dialog);
   // 第 12 批 #1001:電腦版小卡窗跟全頁層同寬(原本 400);第 15 批 #1009 起改成對齊頁面內容欄
   // (付款方式頁 max-w-4xl 896 − 左右內距 40 = 856)。
   expect(Math.round(box.width)).toBe(856);
-  const strip = await stripBox(page);
-  expect(Math.round(strip.height)).toBe(48);
-  expect(Math.round(strip.y + strip.height)).toBe(Math.round(box.y));
+  // 第 21 批 #1020:小卡窗沒有上方空白條。
+  await page.waitForTimeout(400);
+  await expect(page.locator(STRIP)).toHaveCount(0);
   await page.mouse.click(20, 400);
   await page.mouse.click(640, Math.min(795, box.y + box.height + 20));
-  await expect(dialog).toBeVisible();
   await page.mouse.click(box.x + box.width / 2, box.y - 24);
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
   dialog = await openNewPaymentMethod(page);
   await dialog.locator("#payment-method-name").fill("E2E第11批J轉帳");
-  const b2 = await settledBox(dialog);
-  await page.mouse.click(b2.x + b2.width / 2, b2.y - 24);
+  await settledBox(dialog);
+  await page.keyboard.press("Escape");
   await expect(page.getByTestId("discard-changes-confirm")).toBeVisible();
   await page.getByTestId("discard-changes-confirm").getByRole("button", { name: "放棄" }).click();
   await expect(dialog).toHaveCount(0);
@@ -359,7 +370,7 @@ test("浮出面板:視窗裡的日期時間選擇(Popover)點外面照舊收起,
   await page.context().close();
 });
 
-test("9~10. 手機 375:全頁層滿版沒有空白條;小卡窗點遮罩不關、點正上方關;320 不橫捲", async ({
+test("9~10. 手機 375:全頁層滿版沒有空白條;小卡窗點遮罩 / 正上方都不關、✕ 關(#1020);320 不橫捲", async ({
   browser,
 }) => {
   const page = await openAsAdmin(browser, 375, 812, "/app/manage");
@@ -381,10 +392,11 @@ test("9~10. 手機 375:全頁層滿版沒有空白條;小卡窗點遮罩不關�
   const cb = await settledBox(card);
   await page.mouse.click(8, cb.y + cb.height / 2);
   await page.mouse.click(187, Math.min(805, cb.y + cb.height + 30));
-  await expect(card).toBeVisible();
-  await stripBox(page);
+  await expect(page.locator(STRIP)).toHaveCount(0);
   await page.screenshot({ path: `${SHOTS}/375-payment-card.png` });
   await page.mouse.click(187, cb.y - 20);
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "關閉" }).click();
   await expect(card).toHaveCount(0);
   await page.context().close();
 
@@ -403,6 +415,10 @@ test("11. 深色模式:空白條沒有字(第 12 批 #1000)", async ({ browser }
   await expect(page.locator(STRIP).locator("*")).toHaveCount(0);
   expect(await page.locator(STRIP).evaluate((el) => getComputedStyle(el).cursor)).toBe("pointer");
   await page.locator(STRIP).hover();
+  // 第 21 批 #1020:滑過不反白(底色維持透明)。
+  expect(await page.locator(STRIP).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+    "rgba(0, 0, 0, 0)",
+  );
   await page.screenshot({ path: `${SHOTS}/1280-dark-strip.png` });
   await page.context().close();
 });

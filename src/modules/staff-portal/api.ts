@@ -242,6 +242,9 @@ export async function fetchMyCalendarStateStyles(staffId: string): Promise<Calen
     partialLeave: raw["partial_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.partialLeave,
     crossStoreOccupied:
       raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
+    // #1021 第 21 批:第 4 種。get_my_calendar_state_styles 本來就回傳這間商家所有列 ⇒ 函式不用改。
+    staffAvailableSlot:
+      raw["staff_available_slot"] ?? DEFAULT_CALENDAR_STATE_STYLES.staffAvailableSlot,
   };
 }
 

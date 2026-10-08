@@ -248,6 +248,20 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   booking_completed_reverted: "已完成訂單被還原時",
 };
 
+/**
+ * SPECS-INDEX #1019 第 21 批:「已完成訂單被取消 / 被還原」這兩種通知的內文(含原因)在鈴鐺清單裡**完整換行顯示**,
+ * 不再截成一行「…」。其他通知種類照舊一行截斷(排版不變)。
+ * 鈴鐺把重複的 booking_cancelled 併進 booking_completed_cancelled 時,畫面顯示的是後者的 event_type ⇒ 一樣會換行。
+ */
+const BELL_FULL_BODY_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "booking_completed_cancelled",
+  "booking_completed_reverted",
+]);
+
+export function shouldWrapNotificationBody(eventType: string): boolean {
+  return BELL_FULL_BODY_EVENT_TYPES.has(eventType);
+}
+
 /** SPECS-INDEX #977 第 4 批:服務人員視角鈴鐺頂端的待確認提醒文字。 */
 export function formatStaffPendingReminder(count: number): string {
   return `你有 ${count} 筆訂單待確認`;

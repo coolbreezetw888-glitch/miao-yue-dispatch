@@ -87,6 +87,7 @@ import {
   formatUnreadBadgeText,
   mergeNotificationRows,
   resolveNotificationLink,
+  shouldWrapNotificationBody,
 } from "./notificationLink";
 import type { MergedNotification } from "./types";
 
@@ -294,7 +295,16 @@ export function NotificationBell({
                       >
                         {item.title}
                       </span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      {/* #1019 第 21 批:已完成訂單被取消 / 還原的原因完整換行顯示(不截斷);其他種類照舊一行截斷。 */}
+                      <span
+                        data-testid="notification-body"
+                        className={cn(
+                          "block text-xs text-muted-foreground",
+                          shouldWrapNotificationBody(item.event_type)
+                            ? "whitespace-normal break-words [overflow-wrap:anywhere]"
+                            : "truncate",
+                        )}
+                      >
                         {item.body}
                       </span>
                       {identity ? (

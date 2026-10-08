@@ -1,18 +1,21 @@
 /**
  * 視窗正上方「點了關閉」的空白條 —— ui-overlay-patterns skill 三之六(第 11 批 J,#995 J-4 ~ J-7)。
  *
- * 🔴 只給三個殼(FullPageLayer / CardDialog / CardAlertDialog)用,頁面不要 import。
+ * 🔴 第 21 批 #1020 起只給全頁層殼(FullPageLayer)用,頁面不要 import。
+ *    小卡窗(CardDialog)、確認窗(CardAlertDialog)已拿掉空白條(使用者:「只有像預約詳情這種容器大小的
+ *    情況才需要,其餘的小視窗那些不用」),關閉方式剩 ✕ / 取消 / Esc。
  *
  * 規則:
  *   - 全站視窗點遮罩(左右兩側、下方)一律不關;改成視窗**正上方**留一條透明可點區,點了 = 按 Esc。
  *   - 寬度 = 視窗寬、左右對齊視窗;高度 = min(上限, 視窗上方剩下的高度);剩不到 16px 就不畫
  *     (⇒ 手機全頁層滿版、上方 0px ⇒ 自然沒有空白條)。
- *     上限:全頁層 56px(面板上緣 sm:top-14)、小卡窗 / 確認窗 48px(≥ 44px 觸控目標)。
+ *     上限:全頁層 56px(面板上緣 sm:top-14)。
  *   - 它是 Portal 裡、遮罩之後的兄弟元素(fixed、pointer-events-auto、z-50),用 ResizeObserver +
  *     resize + animationend 量視窗本體的 getBoundingClientRect() 定位。
  *   - aria-hidden、不可 Tab 聚焦(鍵盤用 Esc;螢幕閱讀器用既有 ✕ / 取消鈕)。
  *   - 第 12 批 #1000(使用者裁決):條上**不顯示任何字或 ✕ 圖示**(原本的「✕ 關閉 / 取消」會疊在後面頁面的
- *     標題上);行為完全不變。滑鼠移上去仍是手指游標 + 極淡的底色。
+ *     標題上);行為完全不變。
+ *   - 第 21 批 #1020(使用者裁決):滑鼠移上去**不再反白**(會讓人以為有隱藏功能),只保留手指游標。
  */
 
 import * as React from "react";
@@ -65,7 +68,7 @@ export function OverlayDismissStrip({ targetRef, maxHeight, onDismiss }: Overlay
     <div
       aria-hidden="true"
       data-overlay-dismiss-strip=""
-      className="pointer-events-auto fixed z-50 cursor-pointer select-none rounded-lg transition-colors hover:bg-background/10"
+      className="pointer-events-auto fixed z-50 cursor-pointer select-none"
       // pointer-events 也寫一份 inline:Radix 模態視窗開著時 body 是 pointer-events:none,空白條一定要能點。
       style={{
         top: rect.top,
