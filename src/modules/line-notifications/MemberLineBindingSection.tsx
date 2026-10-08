@@ -23,12 +23,26 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { AlertNote, HelpToggle, StatusTag } from "@/components/patterns";
+import {
+  AlertNote,
+  CardAlertDialog,
+  CardAlertDialogAction,
+  CardAlertDialogCancel,
+  CardAlertDialogContent,
+  CardAlertDialogDescription,
+  CardAlertDialogFooter,
+  CardAlertDialogHeader,
+  CardAlertDialogTitle,
+  HelpToggle,
+  StatusTag,
+} from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
+import { MemberContactsCard } from "./MemberContactsCard";
+import { memberContactsAdminQueryKey } from "./memberContactsAdminApi";
 import { MemberCustomerLoginRow } from "./MemberCustomerLoginRow";
 import { memberCustomerLoginQueryKey } from "./memberCustomerLoginApi";
 import {
@@ -82,18 +96,24 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
   }
 
   async function handleUnbind() {
+    setUnbindOpen(false);
     setUnbinding(true);
     try {
       await unbindLineAccount("member", memberId);
       toast.success("已解除這位會員的 LINE 綁定");
       setIssuedCode(null);
       await refetch();
+      await queryClient.invalidateQueries({ queryKey: memberContactsAdminQueryKey(memberId) });
     } catch (err) {
       toast.error("解除綁定失敗", { description: getErrorMessage(err) });
     } finally {
       setUnbinding(false);
     }
   }
+
+  // C4-H11(c4-contract B6-2):解除綁定 = 清掉這位會員所有聯絡人並全部封鎖 ⇒ 先確認。
+  const [unbindOpen, setUnbindOpen] = useState(false);
+  const [unbindSeq, setUnbindSeq] = useState(0);
 
   const msRemaining = issuedCode ? new Date(issuedCode.expiresAt).getTime() - now : 0;
   const codeExpired = issuedCode !== null && msRemaining <= 0;
@@ -119,6 +139,8 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
 
       {/* 客戶端第 2 批(C2-H03):客人用 LINE 登入預約頁之後,這裡顯示「已連結」。只讀。 */}
       <MemberCustomerLoginRow memberId={memberId} />
+      {/* 客戶端第 4 批 4-B(C4-K04):這位會員的每個 LINE 聯絡人(主要 / 第二)與待處理申請。 */}
+      <MemberContactsCard memberId={memberId} />
 
       {bindingStatus?.lineBound ? (
         // 🔴 可逆動作(解除後可以再產生綁定碼重綁)⇒ 不標紅,用 ② 次要。
@@ -128,7 +150,10 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
           size="card"
           className="self-start"
           disabled={unbinding}
-          onClick={handleUnbind}
+          onClick={() => {
+            setUnbindSeq((n) => n + 1);
+            setUnbindOpen(true);
+          }}
         >
           {unbinding ? "處理中⋯" : "解除綁定"}
         </Button>
@@ -158,6 +183,35 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
           ) : null}
         </div>
       )}
+      <CardAlertDialog
+        key={unbindSeq}
+        open={unbindOpen}
+        onOpenChange={(open) => {
+          if (!unbinding) setUnbindOpen(open);
+        }}
+      >
+        <CardAlertDialogContent data-testid="member-unbind-dialog">
+          <CardAlertDialogHeader>
+            <CardAlertDialogTitle>解除 LINE 綁定嗎？</CardAlertDialogTitle>
+            <CardAlertDialogDescription>
+              {
+                "會解除這位會員所有聯絡人的 LINE 登入。之後這些 LINE 帳號不能自己接回這位會員，要再接上請按「允許重新接上」。"
+              }
+            </CardAlertDialogDescription>
+          </CardAlertDialogHeader>
+          <CardAlertDialogFooter>
+            <CardAlertDialogCancel>取消</CardAlertDialogCancel>
+            {/* 主腦 10/9(QA 低-3):解除 = 清掉所有聯絡人並封鎖 ⇒ 危險樣式(白底紅字淡紅框)。 */}
+            <CardAlertDialogAction
+              tone="danger"
+              onClick={() => void handleUnbind()}
+              data-testid="member-unbind-confirm"
+            >
+              解除綁定
+            </CardAlertDialogAction>
+          </CardAlertDialogFooter>
+        </CardAlertDialogContent>
+      </CardAlertDialog>
     </div>
   );
 }

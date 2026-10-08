@@ -112,6 +112,10 @@ insert into members (id, merchant_id, name, phone, referral_code, user_id, line_
    'c4a00000-0000-4000-8000-000000000016', null, null, false, null, 0, null, null),
   ('c4a00000-0000-4000-8000-000000000044', 'c4a00000-0000-4000-8000-000000000021', '下架會員', '0912400044', 'C4MREF44',
    'c4a00000-0000-4000-8000-000000000017', null, null, false, null, 0, null, null);
+-- 第 4-B 批:接上 = 聯絡人表(members.user_id = 主要聯絡人)。直接寫 user_id 的 fixture 同步補主要聯絡人列。
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, joined_via)
+select merchant_id, id, user_id, true, 'backfill' from members
+where user_id is not null and id in ('c4a00000-0000-4000-8000-000000000041', 'c4a00000-0000-4000-8000-000000000042', 'c4a00000-0000-4000-8000-000000000043', 'c4a00000-0000-4000-8000-000000000044');
 update members set status = 'removed' where id = 'c4a00000-0000-4000-8000-000000000044';
 
 -- 訂單(會員 41):b1 即將到來已確認(含內部備註哨兵)、b2 即將到來待確認(客人線上)、b3 已完成、b4 已取消(未來)、
@@ -210,8 +214,9 @@ select is(public.customer_get_member_home('pgtap-c4m-shop') ->> 'state', 'not_li
           'A02-11 JWT 宣稱客人但 auth.users 不是客人帳號 ⇒ not_linked');
 select pg_temp.as_postgres();
 select is((select row(c.state, c.member_id, c.contact_id, c.is_primary)::text from private.customer_me_context('pgtap-c4m-shop', 'c4a00000-0000-4000-8000-000000000011') c),
-          row('ok', 'c4a00000-0000-4000-8000-000000000041'::uuid, null::uuid, true)::text,
-          'A02-12 customer_me_context 回會員 id;4-A contact_id = null、is_primary = true');
+          row('ok', 'c4a00000-0000-4000-8000-000000000041'::uuid,
+              (select id from member_customer_contacts where member_id = 'c4a00000-0000-4000-8000-000000000041' and status = 'active'), true)::text,
+          'A02-12 customer_me_context 回會員 id;第 4-B 批起 contact_id = 聯絡人列、is_primary = true');
 select is((select count(*)::integer from private.customer_member_of('c4a00000-0000-4000-8000-000000000021', null)), 0,
           'A02-13 customer_member_of(user null)⇒ 0 列');
 

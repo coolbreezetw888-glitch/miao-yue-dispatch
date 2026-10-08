@@ -306,6 +306,9 @@ export interface MemberSummary {
   /** #908 的「已完成身分驗證」時間;null = 尚未驗證。判斷一律走
    *  memberIdentityStatus.ts 的純函式,不要在畫面上自己寫 `!== null`。 */
   identityVerifiedAt: string | null;
+  /** 客戶端第 4 批 4-B(C4-K03):搜尋時因為「第二聯絡人自己的電話」才找到這位會員 ⇒ 那支聯絡人電話。
+   *  一般列出 / 用會員電話或姓名找到 ⇒ 沒有這欄(undefined)。 */
+  matchedContactPhone?: string;
 }
 
 /** §10.2.1(SPECS-INDEX #614)get_members_by_phone 回傳的一筆候選客戶。#929 之後是「前綴比對」
@@ -321,4 +324,7 @@ export interface MemberPhoneMatchCandidate {
   /** SPECS-INDEX #936:這位會員在本商家最近一筆有填地址的訂單地址(members 表沒有地址欄位);
    *  沒有就是 null ⇒ 點選候選時不動地址欄。 */
   lastBookingAddress: string | null;
+  /** 客戶端第 4 批 4-B(C4-K03,c4-contract B6-3):這筆是因為「第二聯絡人自己的電話」比對到才列出
+   *  ⇒ 那支聯絡人電話;比對到的是會員電話 ⇒ null。`phone` 仍是會員電話。 */
+  matchedContactPhone: string | null;
 }

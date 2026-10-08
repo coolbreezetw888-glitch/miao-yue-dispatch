@@ -665,6 +665,7 @@ export type Database = {
           created_at: string
           draft: Json | null
           expires_at: string
+          invite_token_hash: string | null
           ip_hash: string | null
           merchant_id: string
           nonce: string
@@ -677,6 +678,7 @@ export type Database = {
           created_at?: string
           draft?: Json | null
           expires_at: string
+          invite_token_hash?: string | null
           ip_hash?: string | null
           merchant_id: string
           nonce: string
@@ -689,6 +691,7 @@ export type Database = {
           created_at?: string
           draft?: Json | null
           expires_at?: string
+          invite_token_hash?: string | null
           ip_hash?: string | null
           merchant_id?: string
           nonce?: string
@@ -1224,6 +1227,216 @@ export type Database = {
             columns: ["related_member_id"]
             isOneToOne: false
             referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_contact_invite_claims: {
+        Row: {
+          created_at: string
+          expires_at: string
+          invite_id: string
+          merchant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          invite_id: string
+          merchant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          invite_id?: string
+          merchant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_contact_invite_claims_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "member_contact_invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_contact_invite_claims_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_contact_invites: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          expires_at: string
+          id: string
+          member_id: string
+          merchant_id: string
+          revoked_at: string | null
+          revoked_by_user_id: string | null
+          token_hash: string
+          used_at: string | null
+          used_by_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at: string
+          id?: string
+          member_id: string
+          merchant_id: string
+          revoked_at?: string | null
+          revoked_by_user_id?: string | null
+          token_hash: string
+          used_at?: string | null
+          used_by_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          expires_at?: string
+          id?: string
+          member_id?: string
+          merchant_id?: string
+          revoked_at?: string | null
+          revoked_by_user_id?: string | null
+          token_hash?: string
+          used_at?: string | null
+          used_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_contact_invites_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_contact_invites_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_contact_requests: {
+        Row: {
+          created_at: string
+          id: string
+          member_id: string
+          merchant_id: string
+          phone_normalized: string
+          resolved_at: string | null
+          resolved_by_role: string | null
+          resolved_by_user_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_id: string
+          merchant_id: string
+          phone_normalized: string
+          resolved_at?: string | null
+          resolved_by_role?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_id?: string
+          merchant_id?: string
+          phone_normalized?: string
+          resolved_at?: string | null
+          resolved_by_role?: string | null
+          resolved_by_user_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_contact_requests_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_contact_requests_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_customer_contacts: {
+        Row: {
+          contact_phone: string | null
+          created_at: string
+          id: string
+          is_primary: boolean
+          joined_via: string
+          member_id: string
+          merchant_id: string
+          removed_at: string | null
+          removed_by_user_id: string | null
+          removed_via: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          joined_via: string
+          member_id: string
+          merchant_id: string
+          removed_at?: string | null
+          removed_by_user_id?: string | null
+          removed_via?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          joined_via?: string
+          member_id?: string
+          merchant_id?: string
+          removed_at?: string | null
+          removed_by_user_id?: string | null
+          removed_via?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_customer_contacts_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_customer_contacts_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
         ]
@@ -3742,6 +3955,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      customer_accept_contact_invite: {
+        Args: {
+          p_agree_policy: boolean
+          p_phone: string | null
+          p_slug: string
+          p_token: string | null
+        }
+        Returns: Json
+      }
+      customer_cancel_contact_request: {
+        Args: { p_slug: string }
+        Returns: Json
+      }
       customer_complete_profile: {
         Args: {
           p_agree_policy: boolean
@@ -3751,12 +3977,18 @@ export type Database = {
         }
         Returns: Json
       }
+      customer_create_contact_invite: {
+        Args: { p_slug: string }
+        Returns: Json
+      }
       customer_get_member_home: { Args: { p_slug: string }; Returns: Json }
       customer_get_profile: { Args: { p_slug: string }; Returns: Json }
       customer_get_wallet: {
         Args: { p_cursor?: string; p_limit?: number; p_slug: string }
         Returns: Json
       }
+      customer_leave_member: { Args: { p_slug: string }; Returns: Json }
+      customer_list_contacts: { Args: { p_slug: string }; Returns: Json }
       customer_list_my_bookings: {
         Args: {
           p_cursor?: string
@@ -3764,6 +3996,30 @@ export type Database = {
           p_scope: string
           p_slug: string
         }
+        Returns: Json
+      }
+      customer_peek_contact_invite: {
+        Args: { p_slug: string; p_token: string }
+        Returns: Json
+      }
+      customer_remove_contact: {
+        Args: { p_contact_id: string; p_slug: string }
+        Returns: Json
+      }
+      customer_resolve_contact_request: {
+        Args: { p_approve: boolean; p_request_id: string; p_slug: string }
+        Returns: Json
+      }
+      customer_revoke_contact_invite: {
+        Args: { p_invite_id: string; p_slug: string }
+        Returns: Json
+      }
+      customer_set_my_contact_phone: {
+        Args: { p_phone: string; p_slug: string }
+        Returns: Json
+      }
+      customer_transfer_primary: {
+        Args: { p_contact_id: string; p_slug: string }
         Returns: Json
       }
       customer_update_profile: {
@@ -4214,6 +4470,10 @@ export type Database = {
         Args: { p_booking_id: string; p_slug: string; p_user_id: string }
         Returns: Json
       }
+      internal_customer_contact_invite_claim: {
+        Args: { p_merchant_id: string; p_token_hash: string; p_user_id: string }
+        Returns: Json
+      }
       internal_customer_line_identity_find: {
         Args: { p_channel_id: string; p_sub: string }
         Returns: Json
@@ -4236,6 +4496,7 @@ export type Database = {
         Args: {
           p_code_verifier: string
           p_draft: Json
+          p_invite_token_hash?: string
           p_ip_hash: string
           p_nonce: string
           p_slug: string
@@ -4291,6 +4552,7 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      list_member_contacts: { Args: { p_member_id: string }; Returns: Json }
       list_report_export_staff: {
         Args: { p_merchant_id: string }
         Returns: Json
@@ -4321,6 +4583,18 @@ export type Database = {
         Returns: number
       }
       mark_staff_login_active_if_self: { Args: never; Returns: undefined }
+      merchant_remove_member_contact: {
+        Args: { p_contact_id: string; p_new_primary_contact_id?: string }
+        Returns: Json
+      }
+      merchant_resolve_contact_request: {
+        Args: { p_approve: boolean; p_request_id: string }
+        Returns: Json
+      }
+      merchant_set_primary_contact: {
+        Args: { p_contact_id: string }
+        Returns: Json
+      }
       move_booking: {
         Args: {
           p_booking_id: string
@@ -4673,6 +4947,10 @@ export type Database = {
       run_birthday_bonus_grants: {
         Args: { p_run_date?: string }
         Returns: number
+      }
+      search_members_by_contact_phone: {
+        Args: { p_merchant_id: string; p_term: string }
+        Returns: Json
       }
       seed_default_booking_status_colors: {
         Args: { p_merchant_id: string }

@@ -56,7 +56,8 @@ function isAuthErrorCode(code: string | null | undefined): boolean {
   return code === "PGRST301" || code === "42501" || code === "28000";
 }
 
-async function callMemberRpc(
+/** 會員中心函式共用呼叫(4-B 聯絡人 API 也用,memberContactsApi.ts)。 */
+export async function callMemberRpc(
   slug: string,
   fn: string,
   args: Record<string, unknown>,

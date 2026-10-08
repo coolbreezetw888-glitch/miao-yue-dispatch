@@ -36,6 +36,8 @@ export const NOTIFICATION_TARGET_URLS: Record<NotificationTargetType, string> = 
  */
 export const EVENT_TARGET_URLS: Readonly<Record<string, string>> = {
   member_line_login_linked: "/app/members",
+  // 客戶端第 4 批 4-B(c4-contract B7):有人申請成為會員的聯絡人 ⇒ 同 member_line_login_linked 到會員列表。
+  member_contact_request: "/app/members",
 };
 
 /** §4.7 第 4 點:唯一允許的 fallback(這個路由一定存在,HomePage 本身會依角色自動導到落點)。 */
@@ -270,6 +272,8 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   // 點了跟 booking_cancelled 同一套目的地(依身份),所以**不**加進 EVENT_TARGET_URLS。
   // 推播用的是 booking_cancelled 事件(C4-D05,skipInAppNotification,不會多一列鈴鐺)。
   customer_booking_cancelled: "客人線上取消預約時",
+  // 客戶端第 4 批 4-B(C4-H04):有人用同一支電話申請成為會員的聯絡人(收件人同 member_line_login_linked,純站內)。
+  member_contact_request: "有人申請成為會員的聯絡人時",
 };
 
 /**

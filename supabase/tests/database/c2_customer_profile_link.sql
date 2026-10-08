@@ -85,6 +85,10 @@ insert into members (merchant_id, name, phone, referral_code, user_id)
 select 'c2b00000-0000-4000-8000-000000000021', 'SENTINEL_PROBE_' || i, '091217020' || i, 'C2PPRB' || i,
        ('c2b00000-0000-4000-8000-0000000000d' || (i + 1))::uuid
 from generate_series(1, 5) i;
+-- 第 4-B 批:接上 = 聯絡人表(members.user_id = 主要聯絡人)。直接寫 user_id 的 fixture 同步補主要聯絡人列。
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, joined_via)
+select merchant_id, id, user_id, true, 'backfill' from members
+where merchant_id = 'c2b00000-0000-4000-8000-000000000021' and user_id is not null;
 
 create temp table c2p_out (label text, body text);
 grant all on c2p_out to anon, authenticated;
@@ -101,8 +105,8 @@ select is(public.get_customer_session_state('pgtap-c2p-m'), '{"state": "channel_
 select pg_temp.as_customer('c2b00000-0000-4000-8000-0000000000c1');
 select is(public.get_customer_session_state('pgtap-c2p-nope'), '{"state": "line_login_unavailable"}'::jsonb, 'C05-4 代碼不存在 ⇒ line_login_unavailable');
 select is(public.get_customer_session_state('pgtap-c2p-m'),
-          '{"state": "needs_profile", "line_display_name": "LINE名c1", "line_picture_url": "https://profile.line-scdn.net/c1"}'::jsonb,
-          'C05-5 還沒接上 ⇒ needs_profile + 自己的 LINE 名稱頭像');
+          '{"state": "needs_profile", "line_display_name": "LINE名c1", "line_picture_url": "https://profile.line-scdn.net/c1", "join_request": null}'::jsonb,
+          'C05-5 還沒接上 ⇒ needs_profile + 自己的 LINE 名稱頭像(第 4-B 批多 join_request: null)');
 
 -- =========================================================================
 -- C2-C03 輸入檢查
@@ -171,10 +175,10 @@ select pg_temp.as_customer('c2b00000-0000-4000-8000-0000000000c4');
 insert into c2p_out values ('taken', public.customer_complete_profile('pgtap-c2p-m', '0912-170-142', '我', true)::text);
 insert into c2p_out values ('taken_session', public.get_customer_session_state('pgtap-c2p-m')::text);
 select pg_temp.as_postgres();
-select is((select body from c2p_out where label = 'taken'), '{"state": "phone_taken"}', 'F06-1 phone_taken 回應原文只有 state');
+select is((select body from c2p_out where label = 'taken'), '{"state": "join_pending"}', 'F06-1 已有聯絡人 ⇒ join_pending(第 4-B 批 C4-H04),回應原文只有 state');
 select is((select user_id from members where id = 'c2b00000-0000-4000-8000-000000000042'), 'c2b00000-0000-4000-8000-0000000000d1'::uuid,
           'C03-12 已被別人接上的會員不被取代');
-select is((select body::jsonb ->> 'state' from c2p_out where label = 'taken_session'), 'needs_profile', 'C03-13 phone_taken 後客人仍是 needs_profile');
+select is((select body::jsonb ->> 'state' from c2p_out where label = 'taken_session'), 'join_pending', 'C03-13 送出申請後客人是 join_pending(第 4-B 批)');
 select is((select array_agg(label) from c2p_out where body ~ 'SENTINEL_(EXISTING|TAKEN|PROBE)|c2b00000-0000-4000-8000-0000000000d1|1990-01-02'),
           null, 'F06-2 所有客戶端回應都搜不到別的會員的姓名 / 帳號 / 生日');
 
@@ -183,9 +187,9 @@ select is((select array_agg(label) from c2p_out where body ~ 'SENTINEL_(EXISTING
 -- =========================================================================
 select pg_temp.as_customer('c2b00000-0000-4000-8000-0000000000c5');
 select is((select array_agg(public.customer_complete_profile('pgtap-c2p-m', '091217020' || i, '我', true) ->> 'state' order by i) from generate_series(1, 5) i),
-          array['phone_taken', 'phone_taken', 'phone_taken', 'phone_taken', 'phone_taken'], 'F06-3 前 5 支照常判斷');
+          array['join_pending', 'join_pending', 'join_pending', 'join_pending', 'join_pending'], 'F06-3 前 5 支照常判斷(第 4-B 批:已有聯絡人 ⇒ join_pending)');
 select is(public.customer_complete_profile('pgtap-c2p-m', '0912170299', '我', true), '{"state": "too_many_attempts"}'::jsonb, 'F06-4 第 6 支不同電話 ⇒ too_many_attempts');
-select is(public.customer_complete_profile('pgtap-c2p-m', '0912-170-203', '我', true) ->> 'state', 'phone_taken', 'F06-5 重送試過的電話不算新的一支');
+select is(public.customer_complete_profile('pgtap-c2p-m', '0912-170-203', '我', true) ->> 'state', 'join_pending', 'F06-5 重送試過的電話不算新的一支');
 select pg_temp.as_postgres();
 select is((select count(*)::int from members where user_id = 'c2b00000-0000-4000-8000-0000000000c5'), 0, 'F06-6 被限制時沒有建出任何會員');
 update customer_policy_consents set consented_at = now() - interval '25 hours' where user_id = 'c2b00000-0000-4000-8000-0000000000c5';

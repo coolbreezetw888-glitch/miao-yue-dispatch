@@ -48,10 +48,13 @@ import {
 } from "./customerLoginLogic";
 import {
   CustomerProfileScreen,
+  JoinPendingScreen,
   LINE_GREEN_BUTTON_CLASS,
   type ProfileSubmitOutcome,
 } from "./CustomerLoginScreens";
 import { fetchMemberHome, memberCenterQueryKey } from "./memberCenterApi";
+import { cancelMyJoinRequest } from "./memberContactsApi";
+import { pendingRequestsTitle } from "./memberContactsLogic";
 import {
   formatMemberBookingItems,
   formatMemberBookingTime,
@@ -268,6 +271,11 @@ function MemberCenterFlow({
         agreePolicy: input.agree,
       });
       if (result.kind === "phone_taken") return "phone_taken";
+      if (result.kind === "join_pending") {
+        // C4-H04:已送出加入聯絡人申請 ⇒ 重抓登入狀態(變 join_pending)換畫面。
+        await queryClient.invalidateQueries({ queryKey: customerSessionQueryKey(slug) });
+        return "join_pending";
+      }
       arrivalHandled.current = true;
       await queryClient.invalidateQueries({ queryKey: customerSessionQueryKey(slug) });
       toast.success(memberArrivalToast(merchant.name, true));
@@ -326,9 +334,27 @@ function MemberCenterFlow({
         contacts={contacts}
         allowGuest={false}
         mode="join"
+        joinRequest={session.joinRequest ?? null}
         onSubmit={handleProfileSubmit}
         onLogout={() => void resetToLogin(null)}
         onGuest={() => undefined}
+      />
+    );
+  }
+
+  if (view === "join_pending" && session?.state === "join_pending") {
+    return (
+      <JoinPendingScreen
+        lineDisplayName={session.lineDisplayName}
+        linePictureUrl={session.linePictureUrl}
+        contacts={contacts}
+        allowGuest={false}
+        onUseOtherPhone={async () => {
+          await cancelMyJoinRequest(slug);
+          await queryClient.invalidateQueries({ queryKey: customerSessionQueryKey(slug) });
+        }}
+        onGuest={() => undefined}
+        onLogout={() => void resetToLogin(null)}
       />
     );
   }
@@ -615,7 +641,8 @@ function MemberHomeTab({ ctx, home }: { ctx: MemberCenterContext; home: MemberHo
   const navigate = useNavigate();
   const { slug } = ctx;
   const next = home.nextBooking;
-  const missingTitle = missingProfileTitle(home.missing);
+  // 第二聯絡人不能改會員資料 ⇒ 不出現「補上生日、地址和 Email」提示卡(⚠️ 乙推斷)。
+  const missingTitle = home.isPrimary ? missingProfileTitle(home.missing) : null;
   const [missingDismissed, setMissingDismissed] = useState(() => readMissingProfileDismissed(slug));
   const status = next ? memberBookingStatusView(next.status) : null;
 
@@ -669,6 +696,28 @@ function MemberHomeTab({ ctx, home }: { ctx: MemberCenterContext; home: MemberHo
           </Button>
         </div>
       )}
+
+      {home.isPrimary && home.pendingContactRequests > 0 ? (
+        // C4-C02:主要聯絡人有待處理申請 ⇒ 黃色提示卡(要你去處理的事,ui-overlay-patterns 二之四待辦)。
+        <section
+          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn/50 bg-warn-soft p-3.5"
+          data-testid="member-home-requests"
+        >
+          <p className="min-w-0 text-[15px] font-semibold text-warn-strong">
+            {pendingRequestsTitle(home.pendingContactRequests)}
+          </p>
+          <Button
+            type="button"
+            variant="neutral"
+            size="card"
+            className="shrink-0"
+            onClick={() => navigate(`${memberCenterPath(slug, "profile")}#contacts`)}
+            data-testid="member-home-requests-go"
+          >
+            去處理
+          </Button>
+        </section>
+      ) : null}
 
       {missingTitle && !missingDismissed ? (
         <section

@@ -24,8 +24,12 @@ import { formatAmount } from "./orderAmount";
 // 預覽回傳(§3.2)
 // ---------------------------------------------------------------------------
 
+/**
+ * member_contact:客戶端第 4 批 4-B(C4-K03,Q2 = A)—— 這支電話是某位會員的「第二聯絡人電話」,
+ * 送出會被後端擋下(phone_is_member_contact),要客服在上方點選那位會員(帶 member_id / name)。
+ */
 export type PointsMemberResolution =
-  "existing" | "new" | "given" | "none" | "phone_incomplete" | "ambiguous";
+  "existing" | "new" | "given" | "none" | "phone_incomplete" | "ambiguous" | "member_contact";
 
 export interface PointsBreakdownItem {
   mode: "basic" | "advanced";
@@ -101,6 +105,7 @@ const RESOLUTIONS: ReadonlySet<string> = new Set([
   "none",
   "phone_incomplete",
   "ambiguous",
+  "member_contact",
 ]);
 
 /**
@@ -118,7 +123,10 @@ export function parseBookingPointsPreview(raw: unknown): BookingPointsPreview {
     return { featureEnabled: true, error: obj["error"] };
   }
   const member = asObject(obj["member"]);
-  const resolution = asString(member?.["resolution"]);
+  // c4-contract B6-3(更新):不認得的 resolution 一律當 none(沒有連結會員)。
+  const rawResolution = asString(member?.["resolution"]);
+  const resolution =
+    rawResolution === null || RESOLUTIONS.has(rawResolution) ? rawResolution : "none";
   const autoPoints = asNumber(obj["auto_points"]);
   if (!member || !resolution || !RESOLUTIONS.has(resolution) || autoPoints === null) {
     return { featureEnabled: true, error: "紅利點數預覽回傳格式不正確" };
@@ -183,6 +191,8 @@ export type BookingPointsBlockView =
   | "phone_incomplete"
   /** none / ambiguous ⇒ 「這筆訂單沒有連結會員,不會派點」 */
   | "no_member"
+  /** C4-K03:電話是某位會員的聯絡人電話 ⇒ 常駐 ! 請客服選那位會員(不是「會新建會員」) */
+  | "member_contact"
   /** 新客戶(送出後自動建立):派點照常,不顯示折抵 */
   | "new_member"
   /** existing / given:完整內容 */
@@ -203,9 +213,16 @@ export function resolveBookingPointsBlockView(
       return "no_member";
     case "new":
       return "new_member";
+    case "member_contact":
+      return "member_contact";
     default:
       return "member";
   }
+}
+
+/** C4-K03 紅利區塊的常駐提示(主腦指定文字)。 */
+export function memberContactPointsNote(memberName: string | null): string {
+  return `這支電話是會員「${memberName ?? ""}」的聯絡人電話，請在上方選擇這位會員。`;
 }
 
 /** 這一區塊目前是否在「派點」(會送 override、要跳人工確認)的狀態。 */

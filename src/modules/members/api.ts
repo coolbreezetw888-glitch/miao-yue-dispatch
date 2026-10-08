@@ -426,6 +426,8 @@ interface RawMemberPhoneMatchCandidate {
   /** SPECS-INDEX #936(20261001010100 migration 新增)。用 `?:` 是刻意的:那支 migration 若沒有
    *  上線,回傳就不會有這個 key,下面一律當成 null,點選候選時不動地址欄,不會壞。 */
   last_booking_address?: string | null;
+  /** C4-K03(c4-contract B6-3):比對到的是第二聯絡人電話時有值。`?:` 同上:舊版函式沒有這個 key。 */
+  matched_contact_phone?: string | null;
 }
 
 export async function fetchMembersByPhone(
@@ -445,6 +447,7 @@ export async function fetchMembersByPhone(
     isBlacklisted: row.is_blacklisted,
     blacklistReason: row.blacklist_reason,
     lastBookingAddress: row.last_booking_address ?? null,
+    matchedContactPhone: row.matched_contact_phone ?? null,
   }));
 }
 
@@ -631,18 +634,83 @@ export async function fetchMerchantMembersList(
     data = rows ?? [];
   }
 
-  return data.map((row) => ({
-    id: row.id,
-    name: row.name,
-    phone: row.phone,
-    referralCode: row.referral_code,
-    pointsBalance: row.points_balance,
-    status: row.status as MemberStatus,
-    tierId: row.tier_id,
-    isBlacklisted: row.is_blacklisted,
-    // #918/#919:兩層狀態的判定欄位。`?? null` 是保險 —— 舊資料或型別上的 undefined 一律當成未驗證。
-    identityVerifiedAt: row.identity_verified_at ?? null,
-  }));
+  // 客戶端第 4 批 4-B(C4-K03,c4-contract B6-3):搜尋字有 4 碼以上數字時,另外比對「第二聯絡人自己的電話」,
+  // 把比對到、但上面沒找到的會員補進來,列上小字「聯絡人電話」。
+  // 聯絡人表沒有開放直接讀(全部走函式),所以用 search_members_by_contact_phone 拿 member_id 再補查 members。
+  // 這一段失敗(例:網路一時不穩)不擋整份名單:照舊列出用姓名 / 會員電話找到的結果。
+  let contactMatches: { memberId: string; contactPhone: string }[] = [];
+  if (search) {
+    try {
+      contactMatches = await searchMembersByContactPhone(merchantId, search);
+    } catch {
+      contactMatches = [];
+    }
+  }
+  const contactPhoneById = new Map(contactMatches.map((m) => [m.memberId, m.contactPhone]));
+  const missingIds = [...contactPhoneById.keys()].filter((id) => !data.some((r) => r.id === id));
+  if (missingIds.length > 0) {
+    const { data: extra, error } = await supabase
+      .from("members")
+      .select(
+        "id, name, phone, referral_code, points_balance, status, tier_id, is_blacklisted, identity_verified_at",
+      )
+      .eq("merchant_id", merchantId)
+      .in("id", missingIds);
+    if (error) throw error;
+    const extraRows: MembersListRow[] = extra ?? [];
+    data = [...data, ...extraRows];
+  }
+
+  return data.map((row) => {
+    const contactPhone = contactPhoneById.get(row.id);
+    return {
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      referralCode: row.referral_code,
+      pointsBalance: row.points_balance,
+      status: row.status as MemberStatus,
+      tierId: row.tier_id,
+      isBlacklisted: row.is_blacklisted,
+      // #918/#919:兩層狀態的判定欄位。`?? null` 是保險 —— 舊資料或型別上的 undefined 一律當成未驗證。
+      identityVerifiedAt: row.identity_verified_at ?? null,
+      ...(contactPhone ? { matchedContactPhone: contactPhone } : {}),
+    };
+  });
+}
+
+/** 搜尋字裡的數字有 4 碼以上才比對聯絡人電話(c4-contract B6-3)。 */
+export function contactPhoneSearchDigits(search: string): string | null {
+  const digits = search.replace(/[^0-9]/g, "");
+  return digits.length >= 4 ? digits : null;
+}
+
+/** C4-K03:第二聯絡人電話「含有」這串數字的會員(最多 50 筆)。 */
+export async function searchMembersByContactPhone(
+  merchantId: string,
+  search: string,
+): Promise<{ memberId: string; contactPhone: string }[]> {
+  const digits = contactPhoneSearchDigits(search);
+  if (!digits) return [];
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args: Record<string, unknown>,
+  ) => PromiseLike<{ data: unknown; error: unknown }>;
+  const { data, error } = await rpc("search_members_by_contact_phone", {
+    p_merchant_id: merchantId,
+    p_term: digits,
+  });
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  const out: { memberId: string; contactPhone: string }[] = [];
+  for (const r of rows) {
+    if (typeof r !== "object" || r === null) continue;
+    const rec = r as Record<string, unknown>;
+    if (typeof rec["member_id"] === "string" && typeof rec["contact_phone"] === "string") {
+      out.push({ memberId: rec["member_id"], contactPhone: rec["contact_phone"] });
+    }
+  }
+  return out;
 }
 
 export function useMerchantMembersList(

@@ -5,11 +5,14 @@
 // 兩個 action(POST JSON):
 //   start    { action:'start', slug, draft }          → 產生 LINE 授權網址(state / nonce / PKCE),草稿存伺服器 10 分鐘
 //            { action:'start', slug, purpose:'join' }  → 第 3 批 C3-B04:沒有草稿的「加入會員」(complete 回 draft: null)
+//            { action:'start', slug, purpose:'invite', invite_token } → 第 4-B 批 C4-H06:聯絡人邀請。只把邀請碼的
+//                                                       SHA-256 存進登入暫存;complete 成功後把邀請「保留給這個帳號」
+//                                                       (回 purpose:'invite'、invite:{state:'valid'|'invalid'})
 //   complete { action:'complete', state, code?, error? } → 換 token、自己驗 id_token(HS256 / Channel Secret)、
 //                                                       找或建客戶帳號、generateLink 回 token_hash(前端 verifyOtp 換登入狀態)
 //
 // 🔴 verify_jwt = false(客人還沒登入),寫在 supabase/config.toml [functions.customer-line-login]。
-// 🔴 log 永遠不印:授權碼、access / id token、Channel Secret、state 原文、token_hash。只印固定的原因代碼。
+// 🔴 log 永遠不印:授權碼、access / id token、Channel Secret、state 原文、token_hash、邀請碼(原文與雜湊)。只印固定的原因代碼。
 // 🔴 所有外部相依(資料庫 RPC、Auth admin、fetch、時間、亂數、log)都可注入,測試見 index.test.ts。
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -153,6 +156,8 @@ export interface BookingDraft {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** 第 4-B 批 C4-H03:聯絡人邀請碼(資料庫產生 24 bytes → base64url 32 碼;保留 128 碼上限)。 */
+export const INVITE_TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/;
 
 function optionalText(v: unknown, max: number): string | null | undefined {
   if (v === undefined || v === null) return null;
@@ -326,7 +331,16 @@ async function handleStart(
   // 客戶端第 3 批 C3-B04:⑦-3 訪客完成頁「用 LINE 登入加入會員」⇒ purpose:'join',可以沒有草稿
   // (complete 會原樣回 draft: null)。沒有 purpose 或其他值 ⇒ 草稿照舊必填。
   let draft: BookingDraft | null;
-  if (body.purpose === "join" && (body.draft === undefined || body.draft === null)) {
+  let inviteTokenHash: string | null = null;
+  if (body.purpose === "invite") {
+    // 第 4-B 批 C4-H06:邀請連結登入。不收草稿;邀請碼只存雜湊(原文不進資料庫、不進 log)。
+    if (body.draft !== undefined && body.draft !== null) return json({ status: "invalid_request" }, 400, cors);
+    if (typeof body.invite_token !== "string" || !INVITE_TOKEN_RE.test(body.invite_token)) {
+      return json({ status: "invalid_request" }, 400, cors);
+    }
+    draft = null;
+    inviteTokenHash = await sha256Hex(body.invite_token);
+  } else if (body.purpose === "join" && (body.draft === undefined || body.draft === null)) {
     draft = null;
   } else {
     draft = validateDraft(body.draft);
@@ -346,6 +360,7 @@ async function handleStart(
     p_code_verifier: codeVerifier,
     p_draft: draft,
     p_ip_hash: ipHash,
+    ...(inviteTokenHash ? { p_invite_token_hash: inviteTokenHash } : {}),
   });
   if (error) {
     d.log.error("[customer-line-login] start：資料庫呼叫失敗");
@@ -353,6 +368,7 @@ async function handleStart(
   }
   const r = (data ?? {}) as { status?: string; channel_id?: string };
   if (r.status === "rate_limited") return json({ status: "rate_limited" }, 200, cors);
+  if (r.status === "invalid_request") return json({ status: "invalid_request" }, 400, cors);
   if (r.status !== "ok" || !r.channel_id) return json({ status: "line_login_unavailable" }, 200, cors);
 
   const endpoints = resolveLineEndpoints(d.env, d.log);
@@ -381,6 +397,8 @@ interface AttemptRow {
   nonce?: string;
   code_verifier?: string;
   draft?: unknown;
+  purpose?: string;
+  invite_token_hash?: string;
 }
 
 async function handleComplete(
@@ -402,17 +420,24 @@ async function handleComplete(
   const attempt = (consumed.data ?? { status: "login_expired" }) as AttemptRow;
   if (attempt.status !== "ok" || !attempt.merchant_id || !attempt.channel_id || !attempt.nonce || !attempt.code_verifier) {
     // 那一列還在(過期 / 用過)時資料庫會帶 slug,讓前端顯示「回店家首頁」;偽造的 state 不會有 slug。
-    return json(typeof attempt.slug === "string" && attempt.slug ? { status: "login_expired", slug: attempt.slug } : { status: "login_expired" }, 200, cors);
+    // 第 4-B 批:邀請登入的那一列再帶 purpose:'invite'(前端顯示「請重新打開邀請連結」)。
+    const extra = attempt.purpose === "invite" ? { purpose: "invite" } : {};
+    return json(typeof attempt.slug === "string" && attempt.slug ? { status: "login_expired", slug: attempt.slug, ...extra } : { status: "login_expired" }, 200, cors);
   }
   const slug = attempt.slug ?? null;
   const draft = attempt.draft ?? null;
+  const inviteHash = typeof attempt.invite_token_hash === "string" && /^[0-9a-f]{64}$/.test(attempt.invite_token_hash)
+    ? attempt.invite_token_hash
+    : null;
+  // 邀請登入:之後每個回應都多 purpose:'invite'(沒有邀請的回應格式跟第 3 批完全相同)。
+  const inv: Record<string, unknown> = inviteHash ? { purpose: "invite" } : {};
 
   // 3. 客人在 LINE 按取消 / LINE 回錯誤。
   if (typeof body.error === "string" && body.error !== "") {
-    return json({ status: "cancelled", slug, draft }, 200, cors);
+    return json({ status: "cancelled", slug, draft, ...inv }, 200, cors);
   }
   if (typeof body.code !== "string" || body.code === "" || body.code.length > 512) {
-    return json({ status: "line_error", slug, draft }, 200, cors);
+    return json({ status: "line_error", slug, draft, ...inv }, 200, cors);
   }
 
   // 4. 取這間店目前的 Channel 設定;中途改了 Channel ID / 停用 ⇒ login_expired。
@@ -425,7 +450,7 @@ async function handleComplete(
     | { channel_id?: string; channel_secret?: string; enabled?: boolean; merchant_active?: boolean }
     | null;
   if (!c || c.channel_id !== attempt.channel_id || !c.channel_secret || c.enabled !== true || c.merchant_active !== true) {
-    return json({ status: "login_expired", slug }, 200, cors);
+    return json({ status: "login_expired", slug, ...inv }, 200, cors);
   }
   const channelSecret = c.channel_secret;
 
@@ -447,16 +472,16 @@ async function handleComplete(
     });
     if (!res.ok) {
       d.log.warn(`[customer-line-login] LINE token 端點回應 ${res.status}`);
-      return json({ status: "line_error", slug, draft }, 200, cors);
+      return json({ status: "line_error", slug, draft, ...inv }, 200, cors);
     }
     tokenJson = (await res.json()) as Record<string, unknown>;
   } catch {
     d.log.warn("[customer-line-login] LINE token 端點連線失敗");
-    return json({ status: "line_error", slug, draft }, 200, cors);
+    return json({ status: "line_error", slug, draft, ...inv }, 200, cors);
   }
   if (typeof tokenJson.id_token !== "string") {
     d.log.warn("[customer-line-login] LINE token 回應沒有 id_token");
-    return json({ status: "line_error", slug, draft }, 200, cors);
+    return json({ status: "line_error", slug, draft, ...inv }, 200, cors);
   }
 
   // 6. 自己驗 id_token。
@@ -468,7 +493,7 @@ async function handleComplete(
   });
   if (!verified.ok) {
     d.log.warn(`[customer-line-login] id_token 驗證失敗：${verified.reason}`);
-    return json({ status: "line_error", slug, draft }, 200, cors);
+    return json({ status: "line_error", slug, draft, ...inv }, 200, cors);
   }
 
   // 7. 好友 / 官方帳號連結狀態(失敗不影響登入;access token 用完即丟,不存)。
@@ -504,8 +529,24 @@ async function handleComplete(
     return json({ status: "server_error" }, 500, cors);
   }
 
+  // 第 4-B 批 C4-H06:邀請登入 ⇒ 把邀請保留給這個客戶帳號 30 分鐘(前端之後 accept 時 p_token 傳 null)。
+  if (inviteHash) {
+    let inviteState: "valid" | "invalid" = "invalid";
+    const claimed = await d.db.rpc("internal_customer_contact_invite_claim", {
+      p_merchant_id: attempt.merchant_id,
+      p_user_id: account.userId,
+      p_token_hash: inviteHash,
+    });
+    if (claimed.error) {
+      d.log.warn("[customer-line-login] 保留邀請失敗(當成無效邀請)");
+    } else if ((claimed.data as { state?: string } | null)?.state === "valid") {
+      inviteState = "valid";
+    }
+    inv.invite = { state: inviteState };
+  }
+
   // 10. 回到哪一頁由伺服器的 slug 決定(C2-F04)。
-  return json({ status: "ok", slug, draft, token_hash: tokenHash, verify_type: VERIFY_OTP_TYPE }, 200, cors);
+  return json({ status: "ok", slug, draft, ...inv, token_hash: tokenHash, verify_type: VERIFY_OTP_TYPE }, 200, cors);
 }
 
 async function findOrCreateCustomerAccount(

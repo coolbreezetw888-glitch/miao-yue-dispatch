@@ -50,6 +50,10 @@ insert into service_items (id, merchant_id, name, price, item_type, duration_min
 insert into members (id, merchant_id, name, phone, referral_code, user_id, points_balance) values
   ('c4b00000-0000-4000-8000-000000000041', 'c4b00000-0000-4000-8000-000000000021', '王小明', '0912600041', 'C4WREF41', 'c4b00000-0000-4000-8000-000000000011', 70),
   ('c4b00000-0000-4000-8000-000000000042', 'c4b00000-0000-4000-8000-000000000021', 'C4_REFERRAL_TARGET_SENTINEL', '0912600042', 'C4WREF42', 'c4b00000-0000-4000-8000-000000000012', 10);
+-- 第 4-B 批:接上 = 聯絡人表(members.user_id = 主要聯絡人)。直接寫 user_id 的 fixture 同步補主要聯絡人列。
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, joined_via)
+select merchant_id, id, user_id, true, 'backfill' from members
+where user_id is not null and id in ('c4b00000-0000-4000-8000-000000000041', 'c4b00000-0000-4000-8000-000000000042');
 insert into bookings (id, merchant_id, staff_id, start_at, end_at, customer_name, customer_phone, created_by_role, status, source, member_id) values
   ('c4b00000-0000-4000-8000-0000000000b1', 'c4b00000-0000-4000-8000-000000000021', 'c4b00000-0000-4000-8000-000000000031',
    '2026-10-01 18:30:00+00', '2026-10-01 19:30:00+00', '王小明', '0912600041', 'admin', 'completed', 'manual', 'c4b00000-0000-4000-8000-000000000041');

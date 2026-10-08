@@ -632,6 +632,12 @@ function MembersListInner() {
                       meta={
                         <>
                           {member.phone ? <span>{member.phone}</span> : null}
+                          {/* C4-K03:因為第二聯絡人的電話才搜到這位會員 ⇒ 小字標出。 */}
+                          {member.matchedContactPhone ? (
+                            <span data-testid="members-list-contact-phone">
+                              {`${member.phone ? " ・ " : ""}聯絡人電話 ${member.matchedContactPhone}`}
+                            </span>
+                          ) : null}
                           {/* #1037 第 2 輪:推薦碼跟著推薦開關一起藏(連帶分隔點)。 */}
                           {member.phone && !REFERRAL_UI_HIDDEN ? <span> ・ </span> : null}
                           {REFERRAL_UI_HIDDEN ? null : <span>推薦碼 {member.referralCode}</span>}

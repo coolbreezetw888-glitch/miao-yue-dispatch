@@ -23,6 +23,32 @@ declare
   v_src text;
 begin
   select replace(prosrc, E'\r\n', E'\n') into v_src from pg_proc where oid = pg_temp.req987_oid(p_sig);
+  -- 客戶端第 4-B 批 migration 20261010110400(主腦裁決 風險 2):preview_booking_points 多 member_contact(只改三處),先換回再比對改前指紋。
+  if p_sig like 'public.preview_booking_points(%' then
+    v_src := replace(v_src, E'    elsif v_match_count = 0 then
+      v_member_id := private.member_id_by_contact_phone(p_merchant_id, private.normalize_phone(p_customer_phone));
+      if v_member_id is not null then
+        select m.name into v_member_name from public.members m where m.id = v_member_id and m.merchant_id = p_merchant_id;
+        v_resolution := ''member_contact'';
+      else
+        v_resolution := ''new'';
+      end if;
+', E'    elsif v_match_count = 0 then
+      v_resolution := ''new'';
+');
+    v_src := replace(v_src, E'      elsif v_match_count = 0 then
+        v_member_id := private.member_id_by_contact_phone(p_merchant_id, private.normalize_phone(p_customer_phone));
+        if v_member_id is not null then
+          select m.name into v_member_name from public.members m where m.id = v_member_id and m.merchant_id = p_merchant_id;
+          v_resolution := ''member_contact'';
+        else
+          v_resolution := ''new'';
+        end if;
+', E'      elsif v_match_count = 0 then
+        v_resolution := ''new'';
+');
+    v_src := replace(v_src, E'''given'', ''member_contact'') then v_member_', E'''given'') then v_member_');
+  end if;
   -- 客戶端第 4-A 批 migration 20261010100200(主腦裁決 confirm_booking 並發修正):for update、UPDATE 加狀態條件、
   -- 沒更新到就擋(只加這三段),先拿掉再比對改前指紋。
   if p_sig = 'public.confirm_booking(p_booking_id uuid)' then

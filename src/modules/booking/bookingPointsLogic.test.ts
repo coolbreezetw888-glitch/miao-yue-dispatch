@@ -18,6 +18,7 @@ import {
   previewMemberKey,
   redeemPointsToAmount,
   resolveBookingPointsBlockView,
+  memberContactPointsNote,
   shouldResetRedeemOnMemberChange,
   validatePointsOverride,
   validateRedeemPoints,
@@ -724,5 +725,26 @@ describe("describeEarnedPoints(#844 §4.8 已入帳看淨額)", () => {
     expect(
       describeEarnedPoints({ status: "accepted", earned: 50, reversed: 55, effective: -5 }),
     ).toBe("已收回 55 點");
+  });
+});
+
+describe("客戶端第 4 批 4-B(C4-K03):電話是某位會員的聯絡人電話", () => {
+  it("resolution = member_contact ⇒ 區塊 member_contact(不派點、不是新會員)+ 常駐提示文字", () => {
+    const preview = parseBookingPointsPreview(
+      rawPreview({ member: { resolution: "member_contact", member_id: "m-co", name: "某某公司" } }),
+    );
+    const view = resolveBookingPointsBlockView(preview);
+    expect(view).toBe("member_contact");
+    expect(blockShowsPoints(view)).toBe(false);
+    expect(preview).toMatchObject({ memberId: "m-co", memberName: "某某公司" });
+    // c4-contract B6-3:不認得的 resolution 當 none
+    expect(
+      resolveBookingPointsBlockView(
+        parseBookingPointsPreview(rawPreview({ member: { resolution: "future_kind" } })),
+      ),
+    ).toBe("no_member");
+    expect(memberContactPointsNote("某某公司")).toBe(
+      "這支電話是會員「某某公司」的聯絡人電話，請在上方選擇這位會員。",
+    );
   });
 });

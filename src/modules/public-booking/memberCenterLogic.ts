@@ -55,9 +55,11 @@ export function memberCenterPath(slug: string, tab: MemberCenterTab = "home"): s
  *   loading 還在問伺服器登入狀態
  *   login   C4-B02 會員中心登入頁(沒登入 / 登入失效)
  *   profile ⑥-2 填電話「加入會員」(用 LINE 登入了、還沒接上會員)
+ *   join_pending  C4-H04 填的電話已經是別人的會員,加入聯絡人申請等主要聯絡人確認中
  *   center  會員中心本體
  */
-export type MemberCenterView = "closed" | "loading" | "login" | "profile" | "center";
+export type MemberCenterView =
+  "closed" | "loading" | "login" | "profile" | "join_pending" | "center";
 
 export function resolveMemberCenterView(input: {
   pageStatus: "ok" | "not_found" | "unavailable";
@@ -71,6 +73,8 @@ export function resolveMemberCenterView(input: {
       return "center";
     case "needs_profile":
       return "profile";
+    case "join_pending":
+      return "join_pending";
     default:
       return "login";
   }
@@ -358,6 +362,8 @@ export interface MemberHome {
   nextBooking: MemberBooking | null;
   upcomingCount: number;
   wallet: MemberWalletSummary;
+  /** C4-C01:待處理的加入聯絡人申請(只有主要聯絡人有值,第二聯絡人一律 0)。 */
+  pendingContactRequests: number;
 }
 
 /** 會員中心函式「不是 ok」的結果:登入失效 / 店家停用。 */
@@ -391,13 +397,15 @@ export function parseMemberHome(raw: unknown): MemberHome | MemberGate | null {
   if (!isRecord(raw) || raw["state"] !== "ok") return null;
   const member = isRecord(raw["member"]) ? raw["member"] : {};
   const missingRaw = Array.isArray(member["missing"]) ? member["missing"] : [];
+  const isPrimary = member["is_primary"] !== false;
   return {
     memberName: text(member["name"]) ?? "",
-    isPrimary: member["is_primary"] !== false,
+    isPrimary,
     missing: MISSING_ORDER.filter((f) => missingRaw.includes(f)),
     nextBooking: parseMemberBooking(raw["next_booking"]),
     upcomingCount: num(raw["upcoming_count"]),
     wallet: parseWalletSummary(raw["wallet"]),
+    pendingContactRequests: isPrimary ? Math.max(0, num(raw["pending_contact_requests"])) : 0,
   };
 }
 

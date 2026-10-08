@@ -37,7 +37,11 @@ export function normalizeCustomerPhone(phone: string | null | undefined): string
 export type PhoneMatchPanelState =
   | { kind: "hidden" }
   | { kind: "prefix"; candidates: MemberPhoneMatchCandidate[] }
-  | { kind: "exact"; match: MemberPhoneMatchCandidate };
+  | { kind: "exact"; match: MemberPhoneMatchCandidate }
+  /** 客戶端第 4 批 4-B(C4-K03,Q2 = A):電話完全相等某位會員的「第二聯絡人電話」。
+   *  後端不會自動連結,直接送出會被擋(phone_is_member_contact)⇒ 面板要請客服點選這位會員
+   *  (點選 = 電話換成會員電話,後端就依電話連結到他)。 */
+  | { kind: "contact"; match: MemberPhoneMatchCandidate };
 
 export function derivePhoneMatchPanelState(
   phone: string,
@@ -52,6 +56,10 @@ export function derivePhoneMatchPanelState(
     // 這裡仍用 find 找,不假設「一定是第一筆」,避免排序規則日後被改掉時面板悄悄講錯話。
     const match = list.find((c) => normalizeCustomerPhone(c.phone) === normalizedInput);
     if (match) return { kind: "exact", match };
+    const contactMatch = list.find(
+      (c) => normalizeCustomerPhone(c.matchedContactPhone) === normalizedInput,
+    );
+    if (contactMatch) return { kind: "contact", match: contactMatch };
   }
   return { kind: "prefix", candidates: [...list] };
 }
@@ -72,6 +80,8 @@ export type EditLinkedPanelState =
   | { kind: "hidden" }
   | { kind: "typing"; candidates: MemberPhoneMatchCandidate[] }
   | { kind: "relink"; match: MemberPhoneMatchCandidate }
+  /** C4-K03:新電話是某位會員的第二聯絡人電話 ⇒ 儲存會被擋,請客服點選那位會員。 */
+  | { kind: "contact"; match: MemberPhoneMatchCandidate }
   | { kind: "create" };
 
 export function deriveEditLinkedPanelState(input: {
@@ -97,7 +107,16 @@ export function deriveEditLinkedPanelState(input: {
       ? { kind: "unchanged" }
       : { kind: "relink", match };
   }
+  const contactMatch = input.candidates.find(
+    (c) => normalizeCustomerPhone(c.matchedContactPhone) === normalizedInput,
+  );
+  if (contactMatch) return { kind: "contact", match: contactMatch };
   return { kind: "create" };
+}
+
+/** C4-K03:面板 contact 狀態的常駐 `!`(同後端 phone_is_member_contact 的意思)。 */
+export function memberContactPhoneNote(memberName: string): string {
+  return `這支電話是會員「${memberName}」的聯絡人電話，請在下方點選這位會員，不要另外建立新會員。`;
 }
 
 /** #939 E2 / E4 面板下方常駐 `!` 的後果說明(有折抵 / 沒折抵兩種,文案逐字照規格書 §1.7)。 */

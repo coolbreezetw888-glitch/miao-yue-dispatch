@@ -95,6 +95,7 @@ import {
 import {
   CustomerLoginBar,
   CustomerProfileScreen,
+  JoinPendingScreen,
   GuestScreen,
   LineAvatar,
   LineLoginScreen,
@@ -102,6 +103,7 @@ import {
   type ProfileSubmitOutcome,
 } from "./CustomerLoginScreens";
 import { memberCenterPath } from "./memberCenterLogic";
+import { cancelMyJoinRequest } from "./memberContactsApi";
 import {
   addDays,
   buildPublicServiceTabs,
@@ -637,6 +639,11 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         agreePolicy: input.agree,
       });
       if (result.kind === "phone_taken") return "phone_taken";
+      if (result.kind === "join_pending") {
+        // C4-H04:這支電話已經是別人的會員 ⇒ 已送出加入聯絡人申請,重抓登入狀態換到「申請已送出」畫面。
+        await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
+        return "join_pending";
+      }
       setLinkNotice(result.existing ? "existing" : "created");
       // C3-D02:接上會員之後自動送出預約(第二段失敗時客人已經是會員,畫面依 C3-D05)。
       await runSubmit(null);
@@ -796,9 +803,26 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
           allowGuest={allowGuest}
           submitting={submitting}
           submitError={submitError}
+          joinRequest={session.joinRequest ?? null}
           onSubmit={handleProfileSubmit}
           onLogout={() => void handleLogout()}
           onGuest={() => goTo(6)}
+        />
+      );
+    }
+    if (session.state === "join_pending") {
+      return (
+        <JoinPendingScreen
+          lineDisplayName={session.lineDisplayName}
+          linePictureUrl={session.linePictureUrl}
+          contacts={contacts}
+          allowGuest={allowGuest}
+          onUseOtherPhone={async () => {
+            await cancelMyJoinRequest(slug);
+            await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
+          }}
+          onGuest={() => goTo(6)}
+          onLogout={() => void handleLogout()}
         />
       );
     }

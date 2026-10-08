@@ -28,6 +28,10 @@ begin
   -- 客戶端第 3 批 C3-E01:get_my_booking_schedule 每筆多回 source / is_guest_booking(只加這幾行),先拿掉再比對改前指紋。
   v_src := replace(v_src, E'      ''source'', bb.source,\n      ''is_guest_booking'', bb.is_guest_booking,\n', '');
   v_src := replace(v_src, E'      b.source, b.is_guest_booking,\n', '');
+  -- 客戶端第 4-B 批 C4-K03:create_member / update_member / reactivate_member 各多一行聯絡人電話檢查,先拿掉再比對改前指紋。
+  v_src := regexp_replace(v_src, E'  perform private\\.assert_phone_not_member_contact\\([^\\n]*\\);\\n\\n', '', 'g');
+  -- 客戶端第 4-B 批:transfer_members_to_merchant 多一段清聯絡人(有 [c4b begin/end] 標記),先拿掉再比對改前指紋。
+  v_src := regexp_replace(v_src, E'  -- \\[c4b begin\\].*?-- \\[c4b end\\]\\n\\n', '', 'g');
   -- 客戶端第 4-A 批 C4-A04:update_member 多 p_address(只加這幾段),先拿掉再比對改前指紋。
   if p_sig like 'public.update_member(%' then
     v_src := replace(v_src, ', p_address text DEFAULT NULL::text)', ')');

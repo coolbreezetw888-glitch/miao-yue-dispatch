@@ -45,6 +45,7 @@ import { useMembersByPhone } from "./api";
 import {
   deriveEditLinkedPanelState,
   derivePhoneMatchPanelState,
+  memberContactPhoneNote,
   normalizeCustomerPhone,
   relinkConsequenceText,
 } from "./memberPhoneMatch";
@@ -105,6 +106,15 @@ function CandidateList({
                 {c.phone ? (
                   <span className="tabular-nums text-muted-foreground">{c.phone}</span>
                 ) : null}
+                {/* C4-K03:因為第二聯絡人自己的電話才找到這位會員 ⇒ 小字標出是哪支聯絡人電話。 */}
+                {c.matchedContactPhone ? (
+                  <span
+                    className="text-xs tabular-nums text-muted-foreground"
+                    data-testid="member-phone-match-contact-phone"
+                  >
+                    {`聯絡人電話 ${c.matchedContactPhone}`}
+                  </span>
+                ) : null}
                 {c.isBlacklisted ? <StatusTag tone="danger">黑名單</StatusTag> : null}
               </span>
               <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
@@ -114,6 +124,26 @@ function CandidateList({
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * C4-K03(Q2 = A):電話是某位會員的「第二聯絡人電話」⇒ 常駐 `!` 請客服點選那位會員(後端不會自動連結,
+ * 直接送出會被擋)。點選 = 帶入那位會員的資料(電話換成會員電話),送出時後端就依電話連結到他。
+ */
+function ContactPhoneMatch({
+  match,
+  onApplyCandidate,
+}: {
+  match: MemberPhoneMatchCandidate;
+  onApplyCandidate: (candidate: MemberPhoneMatchCandidate) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2" data-testid="member-phone-match-contact">
+      {match.isBlacklisted ? <BlacklistNote reason={match.blacklistReason} /> : null}
+      <AlertNote>{memberContactPhoneNote(match.name)}</AlertNote>
+      <CandidateList candidates={[match]} onApplyCandidate={onApplyCandidate} />
     </div>
   );
 }
@@ -184,6 +214,9 @@ export function MemberPhoneMatchPanel({
         <CandidateList candidates={editState.candidates} onApplyCandidate={onApplyCandidate} />
       );
     }
+    if (editState.kind === "contact") {
+      return <ContactPhoneMatch match={editState.match} onApplyCandidate={onApplyCandidate} />;
+    }
     // E2 / E4:「按下去會發生什麼」⇒ 常駐 `!`,不可收合(skill 二)。
     const consequence = (
       <AlertNote data-testid="member-relink-consequence">
@@ -238,6 +271,10 @@ export function MemberPhoneMatchPanel({
   const state = derivePhoneMatchPanelState(trimmedPhone, candidates);
 
   if (state.kind === "hidden") return null;
+
+  if (state.kind === "contact") {
+    return <ContactPhoneMatch match={state.match} onApplyCandidate={onApplyCandidate} />;
+  }
 
   if (state.kind === "exact") {
     const { match } = state;

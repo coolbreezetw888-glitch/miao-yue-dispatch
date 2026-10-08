@@ -405,6 +405,18 @@ describe("客戶端第 2 批:會員用 LINE 登入接上的鈴鐺", () => {
   });
 });
 
+describe("客戶端第 4 批 4-B:加入聯絡人申請的鈴鐺(c4-contract B7)", () => {
+  it("有中文標籤、只在鈴鐺專用清單;點了到會員列表(不看身份)", () => {
+    expect(BELL_ONLY_EVENT_LABELS["member_contact_request"]).toBe("有人申請成為會員的聯絡人時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("member_contact_request");
+    for (const t of ["admin", "agent"]) {
+      expect(
+        resolveNotificationLink({ target_type: t, event_type: "member_contact_request" }),
+      ).toBe("/app/members");
+    }
+  });
+});
+
 describe("客戶端第 3 批:客人線上預約的鈴鐺(C3-C01)", () => {
   it("有中文標籤、只在鈴鐺專用清單;內文完整換行", () => {
     expect(BELL_ONLY_EVENT_LABELS["customer_booking_created"]).toBe("客人線上預約時");

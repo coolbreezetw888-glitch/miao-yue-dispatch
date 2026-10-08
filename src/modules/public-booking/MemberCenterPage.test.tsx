@@ -86,6 +86,35 @@ vi.mock("./memberCenterApi", async () => {
   };
 });
 
+// 4-B 聯絡人區塊(「我的資料」裡):這份測試只放「只有自己一位」;各種視角在 MemberContactsSection.test.tsx。
+vi.mock("./memberContactsApi", async () => {
+  const actual = await vi.importActual<typeof import("./memberContactsApi")>("./memberContactsApi");
+  const logic =
+    await vi.importActual<typeof import("./memberContactsLogic")>("./memberContactsLogic");
+  return {
+    ...actual,
+    fetchMemberContacts: vi.fn(async () =>
+      logic.parseMemberContacts({
+        state: "ok",
+        me: { contact_id: "c1", is_primary: true },
+        contacts: [
+          {
+            id: "c1",
+            line_display_name: "小明",
+            line_picture_url: null,
+            is_primary: true,
+            is_me: true,
+            contact_phone: null,
+            joined_at: "2026-10-01T00:00:00Z",
+          },
+        ],
+        requests: [],
+        invites: [],
+      }),
+    ),
+  };
+});
+
 const { default: MemberCenterPage } = await import("./MemberCenterPage");
 const { putPendingDraft, takePendingDraft, LINE_LOGIN_ORIGIN_STORAGE_KEY } =
   await import("./customerLoginLogic");

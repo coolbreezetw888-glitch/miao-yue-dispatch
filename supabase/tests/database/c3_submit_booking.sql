@@ -17,7 +17,7 @@
 --         (A01-5),鎖本身由程式碼審查確認(兩個交易都要先拿同一把 pg_advisory_xact_lock 才會查時段)。
 begin;
 
-select plan(68);
+select plan(72);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -158,6 +158,10 @@ insert into members (id, merchant_id, name, phone, referral_code, user_id, is_bl
   ('c3000000-0000-4000-8000-000000000041', 'c3000000-0000-4000-8000-000000000021', 'C3_MEMBER1_NAME', '0912300041', 'C3REF041', 'c3000000-0000-4000-8000-000000000011', false, null),
   ('c3000000-0000-4000-8000-000000000042', 'c3000000-0000-4000-8000-000000000021', 'C3_MEMBER2_BL', '0912300042', 'C3REF042', 'c3000000-0000-4000-8000-000000000012', true, null),
   ('c3000000-0000-4000-8000-000000000043', 'c3000000-0000-4000-8000-000000000021', 'C3_EXISTING_MEMBER_NAME', '0912300043', 'C3REF043', null, false, 'C3_MEMBER_NOTES_SENTINEL');
+-- 第 4-B 批:接上 = 聯絡人表(members.user_id = 主要聯絡人)。直接寫 user_id 的 fixture 同步補主要聯絡人列。
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, joined_via)
+select merchant_id, id, user_id, true, 'backfill' from members
+where user_id is not null and id in ('c3000000-0000-4000-8000-000000000041', 'c3000000-0000-4000-8000-000000000042', 'c3000000-0000-4000-8000-000000000043');
 
 -- 既有訂單:SA 在 d1 10:00-11:00、d6 11:00-12:00 忙(後台單,含內部備註哨兵)
 insert into bookings (merchant_id, staff_id, start_at, end_at, customer_name, customer_phone, created_by_role, status, source, notes) values
@@ -458,6 +462,31 @@ select is(
   (select array_agg(k order by k) from c3_results r, jsonb_object_keys(r.result -> '_internal') k where r.label = 'g-new'),
   array['booking_id', 'merchant_id', 'push_body', 'push_title', 'replayed'],
   'F03-4 _internal 只有 Edge 需要的 5 個鍵(Edge 會刪掉再回給客人)');
+
+-- =========================================================================
+-- 第 4-B 批 C4-H11 / K03:第二聯絡人送出(電話 = 自己的電話、掛同一位會員);訪客用聯絡人電話 ⇒ 掛那位會員
+-- =========================================================================
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, contact_phone, joined_via)
+values ('c3000000-0000-4000-8000-000000000021', 'c3000000-0000-4000-8000-000000000043', 'c3000000-0000-4000-8000-000000000014', false, '0912300099', 'invite');
+insert into auth.users (id, email, raw_app_meta_data) values
+  ('c3000000-0000-4000-8000-000000000016', 'line-c3-16@customer.miaoyue.invalid', '{"account_type":"customer"}'::jsonb);
+insert into members (id, merchant_id, name, phone, referral_code) values
+  ('c3000000-0000-4000-8000-000000000046', 'c3000000-0000-4000-8000-000000000021', 'C3B公司', '0912300097', 'C3REF046');
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, contact_phone, joined_via)
+values ('c3000000-0000-4000-8000-000000000021', 'c3000000-0000-4000-8000-000000000046', 'c3000000-0000-4000-8000-000000000016', false, '0912300096', 'invite');
+select is(public.internal_customer_submit_booking('pgtap-c3-shop', 'c3000000-0000-4000-8000-000000000014', null,
+            pg_temp.draft(pg_temp.p1(), null, 4, '15:00', '小李'), true,
+            'c3000000-0000-4000-8000-0000000000c1') ->> 'state',
+  'created', 'H11-S1 第二聯絡人可以送出');
+select is((select row(member_id, customer_phone, created_by_user_id, member_name_snapshot)::text from bookings where customer_submission_id = 'c3000000-0000-4000-8000-0000000000c1'),
+  row('c3000000-0000-4000-8000-000000000043'::uuid, '0912300099'::text, 'c3000000-0000-4000-8000-000000000014'::uuid, 'C3_EXISTING_MEMBER_NAME'::text)::text,
+  'H11-S2 掛同一位會員、客人電話 = 第二聯絡人自己的電話');
+select is(public.internal_customer_submit_booking('pgtap-c3-shop', null, '0912-300-096',
+            pg_temp.draft(pg_temp.p1(), null, 5, '15:00', '訪客小李'), true,
+            'c3000000-0000-4000-8000-0000000000c2') ->> 'state',
+  'created', 'K03-S1 訪客用聯絡人電話送出');
+select is((select member_id::text || '/' || member_auto_created from bookings where customer_submission_id = 'c3000000-0000-4000-8000-0000000000c2'),
+  'c3000000-0000-4000-8000-000000000046/false', 'K03-S2 掛到那位會員,沒有新建會員');
 
 -- =========================================================================
 -- C03 確認接單沿用既有功能;E01 服務人員端多回 source / is_guest_booking

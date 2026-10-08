@@ -19,6 +19,7 @@ function candidate(overrides: Partial<MemberPhoneMatchCandidate> = {}): MemberPh
     isBlacklisted: false,
     blacklistReason: null,
     lastBookingAddress: null,
+    matchedContactPhone: null,
     ...overrides,
   };
 }
@@ -229,5 +230,51 @@ describe("relinkConsequenceText(#939 後果 `!` 文案逐字)", () => {
     expect(relinkConsequenceText("王小明", 0)).toBe(
       "儲存後，這筆訂單的紅利改算給新的會員，派點依新會員重新計算。",
     );
+  });
+});
+
+describe("客戶端第 4 批 4-B(C4-K03,Q2 = A):第二聯絡人電話", () => {
+  const company = candidate({
+    memberId: "m-co",
+    name: "某某公司",
+    phone: "0227001234",
+    matchedContactPhone: "0933-111-222",
+  });
+
+  it("新增:電話完全相等某位會員的聯絡人電話 ⇒ contact(不是 exact,後端不會自動連結)", () => {
+    expect(derivePhoneMatchPanelState("0933111222", [company])).toEqual({
+      kind: "contact",
+      match: company,
+    });
+    // 會員電話完全相等仍然優先 exact
+    const exact = candidate({ phone: "0933111222" });
+    expect(derivePhoneMatchPanelState("0933111222", [company, exact])).toEqual({
+      kind: "exact",
+      match: exact,
+    });
+    // 只打到一半 ⇒ 照舊 prefix
+    expect(derivePhoneMatchPanelState("0933", [company]).kind).toBe("prefix");
+  });
+
+  it("編輯已連結的單:新電話是某位會員的聯絡人電話 ⇒ contact(不是「會建立新會員」)", () => {
+    expect(
+      deriveEditLinkedPanelState({
+        phone: "0933111222",
+        originalPhone: "0912345678",
+        linkedMemberId: "m-1",
+        phoneComplete: true,
+        candidates: [company],
+      }),
+    ).toEqual({ kind: "contact", match: company });
+  });
+
+  it("點選 ⇒ 電話換成會員電話(送出時後端就依電話連結到這位會員)", () => {
+    expect(
+      applyCandidatePrefill(
+        { customerPhone: "0933111222", customerName: "", customerAddress: "" },
+        company,
+        false,
+      ).customerPhone,
+    ).toBe("0227001234");
   });
 });

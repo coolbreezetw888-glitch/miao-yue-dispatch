@@ -54,6 +54,7 @@ import IndustryTransferWizardPage from "@/modules/data-tools/IndustryTransferWiz
 import PushEventSettingsPage from "@/modules/push-notifications/PushEventSettingsPage";
 import PushLogsPage from "@/modules/push-notifications/PushLogsPage";
 import PublicBookingPage from "@/modules/public-booking/PublicBookingPage";
+import ContactInvitePage from "@/modules/public-booking/ContactInvitePage";
 import LineLoginCallbackPage from "@/modules/public-booking/LineLoginCallbackPage";
 import MemberCenterPage from "@/modules/public-booking/MemberCenterPage";
 
@@ -175,6 +176,9 @@ export default function App() {
         <Route path="/booking/:slug/me/bookings" element={<MemberCenterPage tab="bookings" />} />
         <Route path="/booking/:slug/me/wallet" element={<MemberCenterPage tab="wallet" />} />
         <Route path="/booking/:slug/me/profile" element={<MemberCenterPage tab="profile" />} />
+        {/* 客戶端第 4 批 4-B(C4-H06):聯絡人邀請落地頁;邀請碼一進來就從網址列拿掉(C4-F04)。 */}
+        <Route path="/booking/:slug/invite" element={<ContactInvitePage />} />
+        <Route path="/booking/:slug/invite/:token" element={<ContactInvitePage />} />
         {/* 客戶端第 2 批(C2-B02):LINE 登入回來的頁面,所有商家共用。不套後台外殼、不需要後台登入。 */}
         <Route path="/auth/line/callback" element={<LineLoginCallbackPage />} />
         <Route path="/privacy" element={<Privacy />} />

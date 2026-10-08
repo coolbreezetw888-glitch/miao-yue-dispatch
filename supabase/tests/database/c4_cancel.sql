@@ -85,6 +85,10 @@ insert into members (id, merchant_id, name, phone, referral_code, user_id, point
   ('c4c00000-0000-4000-8000-000000000041', 'c4c00000-0000-4000-8000-000000000021', E'王小明\n', '0912500041', 'C4CREF41', 'c4c00000-0000-4000-8000-000000000011', 300),
   ('c4c00000-0000-4000-8000-000000000042', 'c4c00000-0000-4000-8000-000000000021', '別的會員', '0912500042', 'C4CREF42', 'c4c00000-0000-4000-8000-000000000012', 0),
   ('c4c00000-0000-4000-8000-000000000043', 'c4c00000-0000-4000-8000-000000000022', '別家會員', '0912500043', 'C4CREF43', null, 0);
+-- 第 4-B 批:接上 = 聯絡人表(members.user_id = 主要聯絡人)。直接寫 user_id 的 fixture 同步補主要聯絡人列。
+insert into member_customer_contacts (merchant_id, member_id, user_id, is_primary, joined_via)
+select merchant_id, id, user_id, true, 'backfill' from members
+where user_id is not null and id in ('c4c00000-0000-4000-8000-000000000041', 'c4c00000-0000-4000-8000-000000000042', 'c4c00000-0000-4000-8000-000000000043');
 
 create temp table c4c_b (k text primary key, id uuid);
 grant select on c4c_b to authenticated;

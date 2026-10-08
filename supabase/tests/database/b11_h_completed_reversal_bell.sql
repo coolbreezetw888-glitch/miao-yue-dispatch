@@ -257,6 +257,12 @@ select is((select count(*)::int from user_notifications where booking_id = :'b6_
 -- =========================================================================
 -- 7. 回滾:讓 helper 失敗(CHECK 暫時改回不含新值)⇒ 整筆回滾
 -- =========================================================================
+-- 客戶端第 4-B 批(主腦 2026-10-09):改測試前先記下目前資料庫的 CHECK 原文,測完原樣還原。
+--   原本還原時寫死 7 個舊事件,而且會重新驗證整張表 ⇒ 本機資料庫有人真的送過客人預約
+--   (customer_booking_created 等第 3、4 批新事件)時就會失敗。改成還原「目前的完整定義」,不碰任何既有資料。
+create temp table b11h_saved_check as
+  select pg_get_constraintdef(oid) as def from pg_constraint
+  where conrelid = 'public.user_notifications'::regclass and conname = 'user_notifications_event_type_check';
 alter table public.user_notifications drop constraint user_notifications_event_type_check;
 alter table public.user_notifications add constraint user_notifications_event_type_check check (
   event_type in ('booking_created', 'booking_cancelled', 'booking_updated', 'booking_reminder_next_day', 'booking_confirmed')) not valid;  -- not valid:測試前面寫的新事件列不擋,新寫入照樣擋
@@ -265,9 +271,10 @@ select throws_ok(format($$select public.revert_completed_booking(%L, '要失敗'
   '7-1 鈴鐺寫入失敗 ⇒ 還原整筆失敗');
 select pg_temp.test_clear_auth();
 alter table public.user_notifications drop constraint user_notifications_event_type_check;
-alter table public.user_notifications add constraint user_notifications_event_type_check check (
-  event_type in ('booking_created', 'booking_cancelled', 'booking_updated', 'booking_reminder_next_day', 'booking_confirmed',
-                 'booking_completed_cancelled', 'booking_completed_reverted'));
+do $$ begin
+  execute 'alter table public.user_notifications add constraint user_notifications_event_type_check '
+          || (select def from b11h_saved_check);
+end $$;
 select is((select status from bookings where id = :'b7_id'::uuid), 'completed', '7-2 回滾後訂單仍是 completed');
 select is((select count(*)::int from booking_completion_reversals where booking_id = :'b7_id'::uuid), 0, '7-3 回滾後稽核表沒有新列');
 
@@ -296,10 +303,16 @@ select is(
   array['postgres=X/postgres authenticated=X/postgres service_role=X/postgres', 'true', '{search_path=public}'],
   '8-5 cancel_completed_booking:anon 沒有、authenticated / service_role 有;security definer、search_path 不變'
 );
-select is(
-  (select pg_get_constraintdef(oid) from pg_constraint where conname = 'user_notifications_event_type_check'),
-  $c$CHECK ((event_type = ANY (ARRAY['booking_created'::text, 'booking_cancelled'::text, 'booking_updated'::text, 'booking_reminder_next_day'::text, 'booking_confirmed'::text, 'booking_completed_cancelled'::text, 'booking_completed_reverted'::text])))$c$,
-  '8-6 CHECK 剛好 7 個值(仍不收 test)'
+-- 第 4-B 批:之後的批次會在這個 CHECK 加新事件(member_line_login_linked、customer_booking_* 等),
+--   所以改成「#b11 的 7 個值都還在、不收 test、而且跟測試前原樣相同」,不再寫死整串。
+select ok(
+  (select (select bool_and(strpos(d.def, quote_literal(v) || '::text') > 0)
+           from unnest(array['booking_created', 'booking_cancelled', 'booking_updated', 'booking_reminder_next_day', 'booking_confirmed',
+                             'booking_completed_cancelled', 'booking_completed_reverted']) v)
+     and strpos(d.def, '''test''') = 0
+     and d.def = (select def from b11h_saved_check)
+   from (select pg_get_constraintdef(c.oid) as def from pg_constraint c where c.conname = 'user_notifications_event_type_check') d),
+  '8-6 CHECK 仍含 #b11 的 7 個值、不收 test、與測試前原樣相同'
 );
 
 -- =========================================================================

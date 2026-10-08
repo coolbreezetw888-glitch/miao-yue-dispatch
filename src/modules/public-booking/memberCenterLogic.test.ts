@@ -100,6 +100,31 @@ describe("會員中心狀態機(C4-B02 / B03)", () => {
     ).toBe("center");
   });
 
+  it("4-B(C4-H04):送出加入聯絡人申請、還沒處理 ⇒ join_pending", () => {
+    expect(
+      resolveMemberCenterView({
+        pageStatus: "ok",
+        lineLoginEnabled: true,
+        session: { state: "join_pending", lineDisplayName: "小李", linePictureUrl: null },
+      }),
+    ).toBe("join_pending");
+  });
+
+  it("4-B(C4-C01):待處理申請數只算主要聯絡人的", () => {
+    const raw = {
+      state: "ok",
+      member: { name: "王", is_primary: true, missing: [] },
+      next_booking: null,
+      upcoming_count: 0,
+      wallet: { points_enabled: false },
+      pending_contact_requests: 2,
+    };
+    expect(parseMemberHome(raw)).toMatchObject({ isPrimary: true, pendingContactRequests: 2 });
+    expect(
+      parseMemberHome({ ...raw, member: { name: "王", is_primary: false, missing: [] } }),
+    ).toMatchObject({ isPrimary: false, pendingContactRequests: 0 });
+  });
+
   it("登入回來的提示:再次登入 vs 這次才加入", () => {
     expect(memberArrivalToast("涼風工匠", false)).toBe("已登入「涼風工匠」會員中心");
     expect(memberArrivalToast("涼風工匠", true)).toBe("已加入「涼風工匠」會員");

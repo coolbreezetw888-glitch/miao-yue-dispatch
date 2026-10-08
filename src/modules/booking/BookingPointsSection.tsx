@@ -30,6 +30,7 @@ import {
   describeBreakdownItem,
   describeEditPointsChange,
   describeIneligibleReason,
+  memberContactPointsNote,
   POINTS_OVERRIDE_MAX,
 } from "./bookingPointsLogic";
 import { formatAmount } from "./orderAmount";
@@ -142,6 +143,20 @@ export function BookingPointsSection(props: BookingPointsSectionProps) {
     return (
       <DetailSection label={label} className="gap-3">
         <MutedLine>填好客戶電話後，這裡會顯示這筆訂單的紅利點數</MutedLine>
+      </DetailSection>
+    );
+  }
+
+  if (view === "member_contact") {
+    // C4-K03:這支電話是某位會員的聯絡人電話 ⇒ 不會新建會員(送出會被擋),請客服選那位會員。
+    const contactMember =
+      preview && preview.featureEnabled && preview.error === null ? preview.memberName : null;
+    return (
+      <DetailSection label={label} className="gap-3">
+        <AlertNote data-testid="booking-points-member-contact">
+          {memberContactPointsNote(contactMember)}
+        </AlertNote>
+        {keptRedeemLine}
       </DetailSection>
     );
   }

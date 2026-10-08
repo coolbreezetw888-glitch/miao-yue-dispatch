@@ -51,6 +51,11 @@ import {
   type TurnstileHandle,
   type TurnstileStatus,
 } from "./TurnstileWidget";
+import {
+  JOIN_EXPIRED_MESSAGE,
+  JOIN_PENDING_MESSAGE,
+  JOIN_REJECTED_MESSAGE,
+} from "./memberContactsLogic";
 import type { PublicMemberPolicy } from "./types";
 
 /** LINE 官方綠(LINE 品牌規範的按鈕色;不是我們的主題色,刻意寫死)。 */
@@ -416,7 +421,8 @@ export function LineLoginScreen({
 // ⑥-2 登入後填電話
 // =========================================================================
 
-export type ProfileSubmitOutcome = "linked" | "phone_taken" | { error: string };
+/** join_pending(C4-H04):已送出加入聯絡人申請,由上層把登入狀態重抓成 join_pending 換畫面。 */
+export type ProfileSubmitOutcome = "linked" | "phone_taken" | "join_pending" | { error: string };
 
 export function CustomerProfileScreen({
   merchantName,
@@ -428,6 +434,7 @@ export function CustomerProfileScreen({
   mode = "booking",
   submitting = false,
   submitError = null,
+  joinRequest = null,
   onSubmit,
   onLogout,
   onGuest,
@@ -447,6 +454,8 @@ export function CustomerProfileScreen({
   submitting?: boolean;
   /** 第二段送出失敗的說明(C3-D05)。 */
   submitError?: SubmitFailureView | null;
+  /** C4-H05(c4-contract B2):上一次加入聯絡人的申請被拒絕 / 過期 ⇒ 上方多一行說明。 */
+  joinRequest?: "rejected" | "expired" | null | undefined;
   onSubmit: (input: { phone: string; agree: boolean }) => Promise<ProfileSubmitOutcome>;
   onLogout: () => void;
   onGuest: () => void;
@@ -531,6 +540,15 @@ export function CustomerProfileScreen({
             已綁定 LINE
           </StatusTag>
         </div>
+
+        {joinRequest && !showTaken ? (
+          <div className="flex flex-col gap-2.5" data-testid={`customer-join-${joinRequest}`}>
+            <AlertNote>
+              {joinRequest === "rejected" ? JOIN_REJECTED_MESSAGE : JOIN_EXPIRED_MESSAGE}
+            </AlertNote>
+            <ContactButtons links={contacts} />
+          </div>
+        ) : null}
 
         {showTaken ? (
           <div
@@ -906,5 +924,113 @@ function CopyBookingUrlButton() {
         </p>
       ) : null}
     </>
+  );
+}
+
+// =========================================================================
+// C4-H04「加入聯絡人申請已送出」(join_pending)
+// =========================================================================
+
+/**
+ * 填的電話已經是別人的會員 ⇒ 伺服器送出「加入聯絡人」申請,這裡告訴客人等主要聯絡人確認。
+ *   ・「改用其他電話」= 取消申請、回 ⑥-2 重新填電話。
+ *   ・聯絡按鈕;允許不登入預約的店、而且是預約流程中 ⇒「不登入，直接預約」(送訪客單)。
+ * 🔴 畫面不帶這位會員的任何資料(C2-F06):不顯示會員姓名、主要聯絡人是誰。
+ */
+export function JoinPendingScreen({
+  lineDisplayName,
+  linePictureUrl,
+  contacts,
+  allowGuest,
+  onUseOtherPhone,
+  onGuest,
+  onLogout,
+}: {
+  lineDisplayName: string | null;
+  linePictureUrl: string | null;
+  contacts: ContactLinks;
+  /** 預約流程中、店家允許不登入預約 ⇒ 顯示「不登入，直接預約」。 */
+  allowGuest: boolean;
+  onUseOtherPhone: () => Promise<void>;
+  onGuest: () => void;
+  onLogout: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleOtherPhone() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onUseOtherPhone();
+    } catch {
+      setError("操作沒有成功，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <PublicShell
+      header={
+        <SimpleHeader title="加入聯絡人申請已送出" right={<LogoutButton onLogout={onLogout} />} />
+      }
+    >
+      <div className="flex flex-col gap-4" data-testid="customer-join-pending">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 shadow-sm">
+          <LineAvatar name={lineDisplayName} pictureUrl={linePictureUrl} />
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-[15px] font-semibold text-foreground">
+              {lineDisplayName ?? "LINE 使用者"}
+            </p>
+            <p className="text-xs text-muted-foreground">已用 LINE 登入</p>
+          </div>
+          <StatusTag tone="warning" className="shrink-0">
+            等待確認
+          </StatusTag>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+          <p
+            className="text-[15px] leading-relaxed text-foreground"
+            data-testid="customer-join-pending-message"
+          >
+            {JOIN_PENDING_MESSAGE}
+          </p>
+        </div>
+
+        {error ? (
+          <AlertNote tone="danger" data-testid="customer-join-pending-error">
+            {error}
+          </AlertNote>
+        ) : null}
+
+        <Button
+          type="button"
+          variant="neutral"
+          size="touch"
+          className="w-full"
+          disabled={busy}
+          onClick={() => void handleOtherPhone()}
+          data-testid="customer-join-pending-other-phone"
+        >
+          {busy ? "處理中⋯" : "改用其他電話"}
+        </Button>
+        <ContactButtons links={contacts} />
+        {allowGuest ? (
+          <Button
+            type="button"
+            variant="text"
+            size="touch"
+            className="self-center"
+            onClick={onGuest}
+            data-testid="customer-join-pending-guest"
+          >
+            不登入，直接預約
+          </Button>
+        ) : null}
+      </div>
+    </PublicShell>
   );
 }

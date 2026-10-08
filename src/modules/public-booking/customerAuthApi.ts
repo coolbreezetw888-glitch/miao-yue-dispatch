@@ -8,6 +8,7 @@
 // 🔴 錯誤一律只留「代碼」給畫面挑中文句子,不把伺服器原文顯示出來,也不印到 console。
 
 import { getCustomerClient, readSupabaseEnv } from "./customerClient";
+import { parseCompleteInvite } from "./memberContactsLogic";
 import {
   parseBookingDraft,
   parseCompleteProfileResult,
@@ -34,12 +35,20 @@ export class CustomerAuthError extends Error {
   readonly slug: string | null;
   /** line_error 時伺服器會把草稿還回來(客人回到 ⑤ 不用重填)。 */
   readonly draft: BookingDraft | null;
-  constructor(code: string, slug: string | null = null, draft: BookingDraft | null = null) {
+  /** C4-H06(c4-contract B4-4):從邀請落地頁出發的登入失敗時,伺服器多回 purpose:'invite'。 */
+  readonly fromInvite: boolean;
+  constructor(
+    code: string,
+    slug: string | null = null,
+    draft: BookingDraft | null = null,
+    fromInvite = false,
+  ) {
     super(`customer-auth:${code}`);
     this.name = "CustomerAuthError";
     this.code = code;
     this.slug = slug;
     this.draft = draft;
+    this.fromInvite = fromInvite;
   }
 }
 
@@ -81,6 +90,7 @@ async function callLineLoginFunction(
       status ?? "network",
       slug,
       "draft" in data ? parseBookingDraft(data["draft"]) : null,
+      data["purpose"] === "invite",
     );
   }
   return data;
@@ -105,15 +115,39 @@ export async function startLineJoin(slug: string): Promise<string> {
   return url;
 }
 
+/**
+ * C4-H06:聯絡人邀請落地頁「用 LINE 登入並加入」(`purpose: 'invite'`,c4-contract B4-4)。
+ * 伺服器只存邀請碼的雜湊;`complete` 成功時把邀請「保留給這個 LINE 帳號」並回 `invite.state`,
+ * 不回邀請碼(之後接受邀請時 p_token 傳 null)。
+ */
+export async function startLineInvite(slug: string, inviteToken: string): Promise<string> {
+  const data = await callLineLoginFunction({
+    action: "start",
+    slug,
+    purpose: "invite",
+    invite_token: inviteToken,
+  });
+  const url = data["authorize_url"];
+  if (typeof url !== "string" || url === "") throw new CustomerAuthError("invalid_response");
+  return url;
+}
+
 export type LineCompleteResult =
   | {
       status: "ok";
       slug: string;
       draft: BookingDraft | null;
+      /** C4-H06:從邀請落地頁出發的登入 ⇒ 邀請還有沒有效(c4-contract B4-4);其他 null。 */
+      invite: { valid: boolean } | null;
       tokenHash: string;
       verifyType: "email" | "magiclink";
     }
-  | { status: "cancelled"; slug: string; draft: BookingDraft | null };
+  | {
+      status: "cancelled";
+      slug: string;
+      draft: BookingDraft | null;
+      invite: { valid: boolean } | null;
+    };
 
 /** C2-B03:用 LINE 帶回來的 code / state 換登入用的 token_hash。 */
 export async function completeLineLogin(params: {
@@ -128,14 +162,15 @@ export async function completeLineLogin(params: {
   const slug = typeof data["slug"] === "string" ? data["slug"] : null;
   if (!slug) throw new CustomerAuthError("invalid_response");
   const draft = parseBookingDraft(data["draft"]);
-  if (data["status"] === "cancelled") return { status: "cancelled", slug, draft };
+  const invite = parseCompleteInvite(data);
+  if (data["status"] === "cancelled") return { status: "cancelled", slug, draft, invite };
   const tokenHash = data["token_hash"];
   if (typeof tokenHash !== "string" || tokenHash === "") {
     throw new CustomerAuthError("invalid_response", slug);
   }
   // verifyOtp 的 type 由伺服器告訴我們(目前 "email";舊稱 "magiclink"),只接受這兩種。
   const verifyType = data["verify_type"] === "magiclink" ? "magiclink" : "email";
-  return { status: "ok", slug, draft, tokenHash, verifyType };
+  return { status: "ok", slug, draft, invite, tokenHash, verifyType };
 }
 
 /** 用 token_hash 在「這間店的客戶 client」建立登入狀態。 */
@@ -185,7 +220,7 @@ export class CompleteProfileError extends Error {
   }
 }
 
-/** C2-C03(依零之二:結果只有 linked / phone_taken)。 */
+/** C2-C03(依零之二:結果 linked / phone_taken;4-B 起多 join_pending,C4-H04)。 */
 export async function completeCustomerProfile(params: {
   slug: string;
   phone: string;

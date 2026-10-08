@@ -124,6 +124,7 @@ const MEMBERS: MemberPhoneMatchCandidate[] = [
     isBlacklisted: false,
     blacklistReason: null,
     lastBookingAddress: "台北市信義路 1 號",
+    matchedContactPhone: null,
   },
   {
     memberId: "m-chen",
@@ -133,6 +134,7 @@ const MEMBERS: MemberPhoneMatchCandidate[] = [
     isBlacklisted: true,
     blacklistReason: "多次爽約",
     lastBookingAddress: null,
+    matchedContactPhone: null,
   },
 ];
 

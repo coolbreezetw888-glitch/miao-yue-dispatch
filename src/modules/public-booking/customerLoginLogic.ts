@@ -188,13 +188,25 @@ export function peekPendingDraft(slug: string): PendingDraft | null {
 
 export type CustomerSessionState =
   | { state: "anonymous" }
-  | { state: "needs_profile"; lineDisplayName: string | null; linePictureUrl: string | null }
+  | {
+      state: "needs_profile";
+      lineDisplayName: string | null;
+      linePictureUrl: string | null;
+      /**
+       * C4-H05(c4-contract B2):最近 7 天內最後一筆「加入聯絡人」申請被拒絕 / 過期 ⇒ ⑥-2 上方多一行說明。
+       */
+      joinRequest?: "rejected" | "expired" | null;
+    }
+  /** C4-H04:這支電話已經是別人的會員,已送出「加入聯絡人」申請、還沒處理。 */
+  | { state: "join_pending"; lineDisplayName: string | null; linePictureUrl: string | null }
   | {
       state: "linked";
       memberName: string;
       memberPhone: string | null;
       /** C4-E05(⚠️範圍 第 3 點):自己的會員地址;預約頁 ⑤ 地址欄空白時帶入。 */
       memberAddress: string | null;
+      /** c4-contract B2:是不是主要聯絡人(4-A 以前沒有這欄 ⇒ 當 true)。 */
+      isPrimary?: boolean;
     };
 
 /**
@@ -210,6 +222,14 @@ export function parseCustomerSessionState(raw: unknown): CustomerSessionState {
       state: "needs_profile",
       lineDisplayName: str(raw["line_display_name"]),
       linePictureUrl: safeImageUrl(raw["line_picture_url"]),
+      joinRequest: parseJoinRequestStatus(raw["join_request"]),
+    };
+  }
+  if (state === "join_pending") {
+    return {
+      state: "join_pending",
+      lineDisplayName: str(raw["line_display_name"]),
+      linePictureUrl: safeImageUrl(raw["line_picture_url"]),
     };
   }
   if (state === "linked") {
@@ -221,9 +241,16 @@ export function parseCustomerSessionState(raw: unknown): CustomerSessionState {
       memberName: str(member["name"]) ?? "",
       memberPhone: str(member["phone"]),
       memberAddress: str(member["address"]) ?? str(raw["address"]),
+      isPrimary: raw["is_primary"] !== false,
     };
   }
   return { state: "anonymous" };
+}
+
+function parseJoinRequestStatus(raw: unknown): "rejected" | "expired" | null {
+  if (!isRecord(raw)) return null;
+  const status = raw["status"];
+  return status === "rejected" || status === "expired" ? status : null;
 }
 
 /** C2-F09:頭像只接受 https:// 網址,其他(javascript:、data:、http:)一律不顯示。 */
@@ -258,6 +285,8 @@ export function lineAvatarText(name: string | null): string {
 export type CompleteProfileResult =
   | { kind: "linked"; created: boolean; existing: boolean }
   | { kind: "phone_taken" }
+  /** C4-H04:這支電話已經是別人的會員 ⇒ 已送出「加入聯絡人」申請(回應不帶會員任何資料)。 */
+  | { kind: "join_pending" }
   /** 資料庫用 state 回的「不能繼續」:too_many_attempts / line_login_unavailable / channel_mismatch。 */
   | { kind: "rejected"; hint: string };
 
@@ -272,6 +301,7 @@ export function parseCompleteProfileResult(raw: unknown): CompleteProfileResult 
   if (!isRecord(raw)) return null;
   const state = raw["state"];
   if (state === "phone_taken") return { kind: "phone_taken" };
+  if (state === "join_pending") return { kind: "join_pending" };
   if (typeof state === "string" && COMPLETE_PROFILE_REJECTED_STATES.has(state)) {
     return { kind: "rejected", hint: state };
   }

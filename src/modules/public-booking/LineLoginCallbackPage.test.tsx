@@ -31,6 +31,7 @@ const { default: LineLoginCallbackPage } = await import("./LineLoginCallbackPage
 const { CustomerAuthError } = await import("./customerAuthApi");
 const { takePendingDraft, LINE_LOGIN_SLUG_STORAGE_KEY, rememberLoginOrigin } =
   await import("./customerLoginLogic");
+const { clearPendingInvite, peekPendingInvite } = await import("./memberContactsLogic");
 
 function BookingProbe() {
   const location = useLocation();
@@ -45,6 +46,7 @@ function renderAt(url: string) {
         <Route path="/auth/line/callback" element={<LineLoginCallbackPage />} />
         <Route path="/booking/:slug" element={<BookingProbe />} />
         <Route path="/booking/:slug/me" element={<BookingProbe />} />
+        <Route path="/booking/:slug/invite" element={<BookingProbe />} />
       </Routes>
     </BrowserRouter>,
   );
@@ -173,5 +175,47 @@ describe("C2-B02 callback 頁", () => {
     cleanup();
     renderAt("/auth/line/callback?code=C&state=ONCE");
     await waitFor(() => expect(state.completeCalls).toHaveLength(1));
+  });
+});
+
+describe("C4-H06 邀請落地頁出發的登入(c4-contract B4-4)", () => {
+  it("成功 + 邀請有效 ⇒ 建立登入狀態、記下「已保留」、回邀請頁(網址不帶邀請碼)", async () => {
+    state.completeResult = {
+      status: "ok",
+      slug: "cool-shop",
+      draft: null,
+      invite: { valid: true },
+      tokenHash: "hash",
+    };
+    renderAt("/auth/line/callback?code=C&state=S-INV-1");
+    expect(await screen.findByTestId("booking-probe")).toHaveTextContent(
+      /^\/booking\/cool-shop\/invite$/,
+    );
+    expect(state.sessions).toEqual([{ slug: "cool-shop", tokenHash: "hash" }]);
+    expect(peekPendingInvite("cool-shop")).toEqual({ kind: "claimed", valid: true });
+    // 不留「登入成功」標記(否則會員中心會多跳一次「已登入」)
+    expect(takePendingDraft("cool-shop")).toBeNull();
+    clearPendingInvite("cool-shop");
+  });
+
+  it("在 LINE 按取消 ⇒「請重新打開邀請連結再試一次。」", async () => {
+    state.completeResult = {
+      status: "cancelled",
+      slug: "cool-shop",
+      draft: null,
+      invite: { valid: false },
+    };
+    renderAt("/auth/line/callback?error=access_denied&state=S-INV-2");
+    expect(await screen.findByTestId("line-callback-failed")).toHaveTextContent(
+      "請重新打開邀請連結再試一次。",
+    );
+  });
+
+  it("登入逾時(purpose:'invite')⇒ 同一句", async () => {
+    state.completeError = new CustomerAuthError("login_expired", "cool-shop", null, true);
+    renderAt("/auth/line/callback?code=C&state=S-INV-3");
+    expect(await screen.findByTestId("line-callback-failed")).toHaveTextContent(
+      "請重新打開邀請連結再試一次。",
+    );
   });
 });

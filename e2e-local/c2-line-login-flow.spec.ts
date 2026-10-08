@@ -252,7 +252,7 @@ test("C2-E01 / E03 / B02 / B04 / E04:新客人 LINE 登入 ⇒ 填新電話直�
   expect(await page.content()).not.toContain(SECRET_SENTINEL);
 });
 
-test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員詳細頁顯示客戶端已連結;別人再用同一支 ⇒ phone_taken", async ({
+test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員詳細頁顯示客戶端已連結;別人再用同一支 ⇒ 申請加入聯絡人(4-B)", async ({
   page,
   browser,
 }) => {
@@ -319,7 +319,8 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
   });
   await adminCtx.close();
 
-  // 另一位客人(另一個 LINE)填同一支電話 ⇒ phone_taken(不帶任何會員資料)。
+  // 另一位客人(另一個 LINE)填同一支電話 ⇒ 第 4 批 4-B(C4-H04)起改成送出「加入聯絡人」申請
+  // (join_pending,零之一第 6 點;不帶任何會員資料)。被封鎖的帳號才是 phone_taken(見下面「解除綁定」那條)。
   const otherCtx = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     timezoneId: "Asia/Taipei",
@@ -335,17 +336,19 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
   await other.locator("#customer-profile-phone").fill(phone);
   await other.getByTestId("customer-profile-consent").click();
   await other.getByTestId("customer-profile-submit").click();
-  const taken = other.getByTestId("customer-phone-taken");
-  await expect(taken).toContainText("這支電話已經是會員，請改用其他電話，或聯繫店家。");
+  const taken = other.getByTestId("customer-join-pending");
+  await expect(taken).toContainText("這支電話已經是會員。主要聯絡人打開會員中心時會看到你的申請", {
+    timeout: LOAD_TIMEOUT,
+  });
   await expect(taken.getByTestId("public-booking-contacts")).toBeVisible();
-  await expect(other.getByTestId("customer-phone-taken-guest")).toBeVisible();
+  await expect(other.getByTestId("customer-join-pending-guest")).toBeVisible();
   await shotBoth(other, "07_phone_taken");
   await expect
     .poll(() => otherBodies.some((b) => b.includes("customer_complete_profile")))
     .toBe(true);
   expect(otherBodies.join("\n")).not.toContain("既有會員老張");
   await expect(other.locator("body")).not.toContainText("既有會員老張");
-  // phone_taken ⇒ 沒有接上會員,也不會送出預約
+  // 申請中 ⇒ 沒有接上會員,也不會送出預約
   expect(otherSubmit.requests).toHaveLength(0);
   await otherCtx.close();
 });
@@ -386,6 +389,11 @@ test("主腦複查:店家解除綁定 ⇒ 同一位客人再填同一支電話�
   await injectSession(admin, fixture.c1.adminSession);
   await admin.goto(`/app/members/${memberId}`);
   await admin.getByRole("button", { name: "解除綁定" }).click({ timeout: LOAD_TIMEOUT });
+  // 第 4 批 4-B(C4-H11):解除綁定 = 清掉這位會員所有聯絡人 ⇒ 先跳確認窗。
+  await expect(admin.getByTestId("member-unbind-dialog")).toContainText(
+    "會解除這位會員所有聯絡人的 LINE 登入",
+  );
+  await admin.getByTestId("member-unbind-confirm").click();
   const row = admin.getByTestId("member-customer-login-row");
   await expect(row).toContainText("未連結", { timeout: LOAD_TIMEOUT });
   await expect(admin.getByTestId("member-customer-relink-button")).toBeVisible();

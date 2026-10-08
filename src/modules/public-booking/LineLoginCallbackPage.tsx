@@ -25,9 +25,11 @@ import {
   putPendingDraft,
   readLineCallbackParams,
   recallLoginSlug,
+  takePendingDraft,
   takeLoginOrigin,
   type LineCallbackParams,
 } from "./customerLoginLogic";
+import { INVITE_MISSING_MESSAGE, invitePath, putClaimedInvite } from "./memberContactsLogic";
 import { PublicShell, TitleOnlyHeader } from "./PublicBookingChrome";
 
 /**
@@ -93,6 +95,19 @@ export default function LineLoginCallbackPage() {
         } else {
           putPendingDraft(result.slug, { draft: result.draft, outcome: "cancelled" });
         }
+        // C4-H06 / H07(c4-contract B4-4):從聯絡人邀請落地頁出發
+        //   登入成功 ⇒ 伺服器已把邀請保留給這個 LINE 帳號 ⇒ 回邀請頁勾同意、填電話(選填)、按「加入」;
+        //   在 LINE 按取消 ⇒ 邀請碼已經不在伺服器,不能自動重試 ⇒「請重新打開邀請連結再試一次。」
+        if (result.invite) {
+          takePendingDraft(result.slug);
+          if (result.status === "ok") {
+            putClaimedInvite(result.slug, result.invite.valid);
+            navigate(invitePath(result.slug), { replace: true });
+          } else {
+            setView({ kind: "failed", message: INVITE_MISSING_MESSAGE, slug: result.slug });
+          }
+          return;
+        }
         // C4-B03:沒有草稿(⑦-3 加入會員 / 會員中心登入)⇒ 登入成功一律到會員中心首頁;
         //   在 LINE 按取消 ⇒ 從會員中心出發的回會員中心登入頁,其他回 ①。有草稿的流程不變(回預約頁 ⑤ / ⑥)。
         const toMemberCenter =
@@ -102,6 +117,7 @@ export default function LineLoginCallbackPage() {
         });
       } catch (err) {
         const code = err instanceof CustomerAuthError ? err.code : null;
+        const fromInvite = err instanceof CustomerAuthError && err.fromInvite;
         const serverSlug =
           err instanceof CustomerAuthError && err.slug && isValidBookingSlug(err.slug)
             ? err.slug
@@ -114,7 +130,7 @@ export default function LineLoginCallbackPage() {
         }
         setView({
           kind: "failed",
-          message: lineCompleteErrorMessage(code),
+          message: fromInvite ? INVITE_MISSING_MESSAGE : lineCompleteErrorMessage(code),
           slug: serverSlug ?? recallLoginSlug(),
         });
       }

@@ -413,6 +413,22 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     expect(await screen.findByTestId("customer-guest")).toBeInTheDocument();
   });
 
+  it("4-B(C4-H04):電話已經是別人的會員 ⇒ 申請已送出畫面 +「不登入，直接預約」(允許訪客的店)", async () => {
+    state.session = { state: "needs_profile", lineDisplayName: "小李", linePictureUrl: null };
+    state.profileResult = { kind: "join_pending" };
+    restoreLoggedIn();
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(await screen.findByLabelText(/電話/), "0912-345-678");
+    await user.click(screen.getByTestId("customer-profile-consent"));
+    state.session = { state: "join_pending", lineDisplayName: "小李", linePictureUrl: null };
+    await user.click(screen.getByTestId("customer-profile-submit"));
+    const pending = await screen.findByTestId("customer-join-pending");
+    expect(pending).toHaveTextContent("同意後你就能使用會員中心");
+    await user.click(within(pending).getByTestId("customer-join-pending-guest"));
+    expect(await screen.findByTestId("customer-guest")).toBeInTheDocument();
+  });
+
   it("接上既有會員 ⇒ 自動送出;送出沒成功(too_many_open)⇒ 確認畫面 +「已幫你接上原本的資料」;登出 ⇒ 回 ⑥-1", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };
     state.profileResult = { kind: "linked", created: false, existing: true };

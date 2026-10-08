@@ -138,13 +138,55 @@ describe("C2-C05 登入狀態", () => {
         line_display_name: "小明",
         line_picture_url: "javascript:alert(1)",
       }),
-    ).toEqual({ state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null });
+    ).toEqual({
+      state: "needs_profile",
+      lineDisplayName: "小明",
+      linePictureUrl: null,
+      joinRequest: null,
+    });
+  });
+
+  it("4-B(c4-contract B2):needs_profile 的 join_request、join_pending、linked 的 is_primary", () => {
+    expect(
+      parseCustomerSessionState({
+        state: "needs_profile",
+        line_display_name: "小李",
+        join_request: { status: "rejected", resolved_at: "2026-10-09T01:00:00Z" },
+      }),
+    ).toMatchObject({ state: "needs_profile", joinRequest: "rejected" });
+    expect(
+      parseCustomerSessionState({ state: "needs_profile", join_request: { status: "expired" } }),
+    ).toMatchObject({ joinRequest: "expired" });
+    expect(
+      parseCustomerSessionState({ state: "needs_profile", join_request: { status: "weird" } }),
+    ).toMatchObject({ joinRequest: null });
+    expect(
+      parseCustomerSessionState({
+        state: "join_pending",
+        line_display_name: "小李",
+        line_picture_url: "https://profile.line-scdn.net/b",
+        request: { id: "r1", phone: "0912345678", created_at: "2026-10-09T01:00:00Z" },
+      }),
+    ).toEqual({
+      state: "join_pending",
+      lineDisplayName: "小李",
+      linePictureUrl: "https://profile.line-scdn.net/b",
+    });
+    expect(
+      parseCustomerSessionState({ state: "linked", member: { name: "王" }, is_primary: false }),
+    ).toMatchObject({ isPrimary: false });
   });
 
   it("linked", () => {
     expect(
       parseCustomerSessionState({ state: "linked", member: { name: "王", phone: "02" } }),
-    ).toEqual({ state: "linked", memberName: "王", memberPhone: "02", memberAddress: null });
+    ).toEqual({
+      state: "linked",
+      memberName: "王",
+      memberPhone: "02",
+      memberAddress: null,
+      isPrimary: true,
+    });
     // C4-E05:第 4 批起 linked 多回會員地址(放在 member 裡或最外層都收)
     expect(
       parseCustomerSessionState({
@@ -183,6 +225,12 @@ describe("customer_complete_profile 結果(零之二)", () => {
       hint: "too_many_attempts",
     });
     expect(parseCompleteProfileResult({ state: "verification_required" })).toBeNull();
+  });
+
+  it("4-B(C4-H04):join_pending 不帶任何會員資料", () => {
+    expect(
+      parseCompleteProfileResult({ state: "join_pending", member_name: "不該用", member_id: "m1" }),
+    ).toEqual({ kind: "join_pending" });
   });
 });
 
