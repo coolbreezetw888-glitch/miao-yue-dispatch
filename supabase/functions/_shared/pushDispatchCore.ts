@@ -187,6 +187,19 @@ export interface DispatchPushForBookingParams {
    * (INTERNAL_PUSH_TARGET_TYPES)。push-notify-dispatch 在「服務人員路徑 + booking_updated」時帶 true。
    */
   internalRecipientsOnly?: boolean;
+  /**
+   * 客戶端第 3 批 C3-C02:true ⇒ 不寫站內通知(鈴鐺)。客人線上預約的鈴鐺已經由資料庫
+   * private.notify_customer_booking_created 在同一個交易寫好(事件 customer_booking_created、一定發),
+   * 這裡再寫一次同一個人會收到兩則。不帶 / false ⇒ 行為完全不變。
+   */
+  skipInAppNotification?: boolean;
+  /**
+   * 客戶端第 3 批 C3-C02:推播文字改用這組(不用商家 merchant_push_event_settings 的範本)。
+   * 商家範本是給後台建單寫的,沒有「訪客預約，請自行與客戶電話確認」的概念。
+   * 只換文字;商家總開關、個人訂閱、裝置去重、404/410 清訂閱、寫 push_notification_log 全部照舊。
+   * 管理員 / 客服的標題仍會加商家名稱前綴(buildRecipientTitle)。不帶 ⇒ 行為完全不變。
+   */
+  messageOverride?: { title: string; body: string } | null;
 }
 
 /**
@@ -346,6 +359,8 @@ export async function dispatchPushForBooking(
     onlyStaffRecipients,
     previousStaffId,
     internalRecipientsOnly,
+    skipInAppNotification,
+    messageOverride,
   } = params;
 
   // ---------------------------------------------------------------------
@@ -482,8 +497,13 @@ export async function dispatchPushForBooking(
     variables.change_summary = changeSummary;
   }
 
-  const renderedTitle = renderMessageTemplate(eventSetting.message_title, variables);
-  const renderedBody = renderMessageTemplate(eventSetting.message_body, variables);
+  // 客戶端第 3 批 C3-C02:有 messageOverride ⇒ 直接用它的文字(不套商家範本)。
+  const renderedTitle = messageOverride
+    ? messageOverride.title
+    : renderMessageTemplate(eventSetting.message_title, variables);
+  const renderedBody = messageOverride
+    ? messageOverride.body
+    : renderMessageTemplate(eventSetting.message_body, variables);
   const merchantName = variables["merchant_name"] ?? null;
 
   // #823:被換掉的那位,內文跟其他人不一樣(其他人看到的是「服務人員改為 X」之類的異動摘要;
@@ -516,7 +536,8 @@ export async function dispatchPushForBooking(
   //    它寫失敗就讓推播不發(§13.4)。這一層防護刻意寫在核心編排函式裡,而不是只依賴
   //    pushDbAdapter 自己吞錯 —— 這樣不論 deps 是誰實作的,這個保證都成立。
   // ---------------------------------------------------------------------
-  for (const recipient of recipients) {
+  // 客戶端第 3 批 C3-C02:skipInAppNotification ⇒ 鈴鐺已由資料庫寫過,這裡整段跳過。
+  for (const recipient of skipInAppNotification ? [] : recipients) {
     try {
       await deps.writeInAppNotification({
         user_id: recipient.target_user_id,

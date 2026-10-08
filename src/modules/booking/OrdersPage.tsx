@@ -84,6 +84,7 @@ import {
 } from "./context";
 import { addDays, buildTaipeiIso, isoToTaipeiDateTimeWithSeconds, toDateKey } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
+import { CustomerBookingSourceTag } from "./CustomerBookingSourceTag";
 import {
   adjustPageForPageSizeChange,
   DEFAULT_ORDERS_PAGE_SIZE,
@@ -664,12 +665,16 @@ function OrderCard({
         //    告知)。要改回去得是使用者自己再裁決一次。完整理由見 lib/statusPillStyle.ts 檔頭。
         // 🔴 四種狀態一律實心(不是只改待確認那一顆)—— 只改一顆會變成同一排卡片兩種膠囊樣式。
         // 🔴 左側那條 4px 色條維持現狀,沒有拿掉:白底卡片上它仍然有用。
-        <StatusTag
-          tone={bookingStatusTone(status)}
-          fillColor={getBookingStatusColor(statusColors, status)}
-        >
-          {BOOKING_STATUS_LABELS[status]}
-        </StatusTag>
+        <>
+          <StatusTag
+            tone={bookingStatusTone(status)}
+            fillColor={getBookingStatusColor(statusColors, status)}
+          >
+            {BOOKING_STATUS_LABELS[status]}
+          </StatusTag>
+          {/* 客戶端第 3 批(C3-E01):客人自己線上預約 ⇒「線上預約」/「訪客預約」。 */}
+          <CustomerBookingSourceTag booking={booking} />
+        </>
       }
       meta={
         <div className="flex flex-col gap-0.5">

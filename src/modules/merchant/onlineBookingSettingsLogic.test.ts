@@ -3,6 +3,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMPLETION_MESSAGE_MAX,
+  countCompletionMessageChars,
+  validateCompletionMessage,
   LINE_FRIEND_URL_FORMAT_MESSAGE,
   parseMinLeadHours,
   parseTravelBufferMinutes,
@@ -73,5 +76,24 @@ describe("C1-D01 至少提前幾小時 / 車程緩衝", () => {
       message: "請填 0～240 之間的整數（單位：分鐘）。",
     });
     expect(parseTravelBufferMinutes("-5").ok).toBe(false);
+  });
+});
+
+describe("C3-H05 完成頁自訂文字", () => {
+  it("空白 ⇒ null(用預設句);去頭尾空白;最多 200 字", () => {
+    expect(validateCompletionMessage("   ")).toEqual({ ok: true, value: null });
+    expect(validateCompletionMessage("  店家會打電話給你。\n請留意來電。 ")).toEqual({
+      ok: true,
+      value: "店家會打電話給你。\n請留意來電。",
+    });
+    expect(validateCompletionMessage("字".repeat(COMPLETION_MESSAGE_MAX)).ok).toBe(true);
+    expect(validateCompletionMessage("字".repeat(COMPLETION_MESSAGE_MAX + 1))).toEqual({
+      ok: false,
+      message: "最多 200 個字。",
+    });
+  });
+
+  it("字數用字元算(emoji 算 1 個字)", () => {
+    expect(countCompletionMessageChars(" 謝謝😀 ")).toBe(3);
   });
 });

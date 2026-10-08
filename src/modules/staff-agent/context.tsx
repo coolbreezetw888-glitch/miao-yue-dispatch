@@ -104,7 +104,12 @@ export function useMyAgentProfile(
   });
 }
 
-/** 5.3 對外介面:回傳某商家目前有效(status='active')的服務人員名單,唯讀。 */
+/**
+ * 5.3 對外介面:回傳某商家目前有效(status='active')的服務人員名單,唯讀。
+ * 客戶端第 3 批(使用者 2026-10-09 回 Q3-c):排序從「姓名」改成「順位」—— display_order,同值再 created_at、id
+ * (跟服務人員管理清單、預約頁、後台行事曆同一套)。用到這支的後台畫面(建單 / 改單表單的服務人員與助手、
+ * 行事曆、訂單管理篩選、薪資設定、員工報表、資料匯入對應、請假紀錄)下拉都跟著依順位。
+ */
 export function useMerchantStaffList(
   merchantId: string | null | undefined,
 ): UseQueryResult<MerchantStaff[]> {
@@ -116,7 +121,9 @@ export function useMerchantStaffList(
         .select("*")
         .eq("merchant_id", merchantId as string)
         .eq("status", "active")
-        .order("name", { ascending: true });
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true });
       if (error) throw error;
       return (data ?? []) as MerchantStaff[];
     },

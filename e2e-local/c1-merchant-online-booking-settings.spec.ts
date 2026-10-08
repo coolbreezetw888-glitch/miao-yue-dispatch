@@ -99,7 +99,17 @@ test("C1-D01 / D02:預設值、四個欄位改完儲存、重新整理仍是新�
   await expect(card.locator("#settings-min-lead-hours")).toHaveValue("2");
   await expect(card.locator("#settings-travel-buffer-minutes")).toHaveValue("0");
   await expect(card.getByRole("switch", { name: "允許不登入預約" })).toBeChecked();
-  await expect(card.getByText("這個設定會在登入功能推出後才生效。")).toBeVisible();
+  // 客戶端第 3 批(C3-E03):送出預約已上線 ⇒「登入功能推出後才生效」常駐提醒拿掉;
+  // C3-H05:多兩個完成頁文字欄(留空 = 預設句,當 placeholder 顯示)。
+  await expect(card.getByText("這個設定會在登入功能推出後才生效。")).toHaveCount(0);
+  await expect(card.locator("#settings-completion-message-member")).toHaveAttribute(
+    "placeholder",
+    "店家確認後會通知你。",
+  );
+  await expect(card.locator("#settings-completion-message-guest")).toHaveAttribute(
+    "placeholder",
+    "店家確認後會與你聯絡。",
+  );
   await card.scrollIntoViewIfNeeded();
   await card.screenshot({
     path: `${SHOT_DIR}/c1-06-settings-card-1280.png`,
@@ -196,9 +206,9 @@ test("C1-E01:預約網址卡片的說明文字、「開啟」另開新分頁到 
   await login(page);
   const urlCard = page.getByText("預約網址", { exact: true }).locator("xpath=../..");
   await expect(urlCard).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(urlCard).toContainText(
-    "顧客預約用的專屬連結。目前客人可以看服務、選時間，線上送出預約即將開放。",
-  );
+  // 客戶端第 3 批(C3-E03)文案。
+  await expect(urlCard).toContainText("顧客預約用的專屬連結。客人可以看服務、選時間並送出預約。");
+  await expect(urlCard).not.toContainText("即將開放");
   await expect(urlCard.getByRole("button", { name: "複製連結" })).toBeVisible();
   await urlCard.screenshot({
     path: `${SHOT_DIR}/c1-07-booking-url-card-1280.png`,

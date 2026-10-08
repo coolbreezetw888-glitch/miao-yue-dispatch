@@ -450,6 +450,7 @@ export type Database = {
           customer_name: string
           customer_notes: string | null
           customer_phone: string
+          customer_submission_id: string | null
           discount_amount_snapshot: number
           discount_enabled: boolean
           discount_mode: string | null
@@ -503,6 +504,7 @@ export type Database = {
           customer_name: string
           customer_notes?: string | null
           customer_phone: string
+          customer_submission_id?: string | null
           discount_amount_snapshot?: number
           discount_enabled?: boolean
           discount_mode?: string | null
@@ -556,6 +558,7 @@ export type Database = {
           customer_name?: string
           customer_notes?: string | null
           customer_phone?: string
+          customer_submission_id?: string | null
           discount_amount_snapshot?: number
           discount_enabled?: boolean
           discount_mode?: string | null
@@ -1644,6 +1647,8 @@ export type Database = {
       merchant_booking_settings: {
         Row: {
           allow_guest_booking: boolean
+          completion_message_guest: string | null
+          completion_message_member: string | null
           merchant_id: string
           min_lead_hours: number
           start_time_interval_minutes: number
@@ -1651,6 +1656,8 @@ export type Database = {
         }
         Insert: {
           allow_guest_booking?: boolean
+          completion_message_guest?: string | null
+          completion_message_member?: string | null
           merchant_id: string
           min_lead_hours?: number
           start_time_interval_minutes?: number
@@ -1658,6 +1665,8 @@ export type Database = {
         }
         Update: {
           allow_guest_booking?: boolean
+          completion_message_guest?: string | null
+          completion_message_member?: string | null
           merchant_id?: string
           min_lead_hours?: number
           start_time_interval_minutes?: number
@@ -2263,6 +2272,7 @@ export type Database = {
           compensation_type: string
           created_at: string
           direct_accept_after_merchant_confirm: boolean
+          display_order: number
           google_calendar_sync_enabled: boolean
           id: string
           intro: string | null
@@ -2297,6 +2307,7 @@ export type Database = {
           compensation_type?: string
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
+          display_order?: number
           google_calendar_sync_enabled?: boolean
           id?: string
           intro?: string | null
@@ -2331,6 +2342,7 @@ export type Database = {
           compensation_type?: string
           created_at?: string
           direct_accept_after_merchant_confirm?: boolean
+          display_order?: number
           google_calendar_sync_enabled?: boolean
           id?: string
           intro?: string | null
@@ -4201,9 +4213,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      internal_customer_submit_booking: {
+        Args: {
+          p_agree_policy: boolean
+          p_draft: Json
+          p_guest_phone: string | null
+          p_slug: string
+          p_submission_id: string
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
       internal_get_line_login_credentials: {
         Args: { p_merchant_id: string }
         Returns: Json
+      }
+      internal_rate_limit_hit: {
+        Args: {
+          p_bucket: string
+          p_key: string
+          p_max: number
+          p_window_seconds: number
+        }
+        Returns: boolean
       }
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
@@ -4260,6 +4292,10 @@ export type Database = {
           p_target_staff_id: string
           p_target_start_at: string
         }
+        Returns: Json
+      }
+      move_merchant_staff_order: {
+        Args: { p_direction: string; p_staff_id: string }
         Returns: Json
       }
       platform_add_merchant_admin: {

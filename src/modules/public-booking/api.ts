@@ -25,7 +25,10 @@ import type {
 } from "./types";
 
 /** 畫面只需要分這幾種,不需要知道資料庫實際說了什麼。 */
-export type PublicBookingErrorKind = "network" | "invalid_response" | "rejected";
+export type PublicBookingErrorKind = "network" | "invalid_response" | "rejected" | "rate_limited";
+
+/** 客戶端第 3 批(C3-G02):公開函式每 IP 10 分鐘 120 次,超過 ⇒ P0001 + hint rate_limited。 */
+export const PUBLIC_RATE_LIMITED_MESSAGE = "操作太頻繁，請稍後再試";
 
 export class PublicBookingError extends Error {
   readonly kind: PublicBookingErrorKind;
@@ -73,8 +76,13 @@ async function callRpc(fn: string, args: Record<string, unknown>): Promise<unkno
     const hint = typeof result.error.hint === "string" ? result.error.hint : null;
     // 資料庫函式主動擋下的(22023 參數錯、P0002 找不到 / 服務人員不可預約)= rejected,重試也沒用;
     // 其他(斷線、逾時、權限)= network,可以按「重新整理」再試。
+    // C3-G02:超過呼叫上限(P0001 + hint rate_limited)⇒ 單獨一類,畫面顯示「操作太頻繁，請稍後再試」、不自動重試。
     const kind: PublicBookingErrorKind =
-      code === "22023" || code === "P0002" ? "rejected" : "network";
+      hint === "rate_limited"
+        ? "rate_limited"
+        : code === "22023" || code === "P0002"
+          ? "rejected"
+          : "network";
     throw new PublicBookingError(kind, code, hint);
   }
   return result.data;

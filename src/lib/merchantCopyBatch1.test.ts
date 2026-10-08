@@ -300,8 +300,9 @@ describe("#977 服務人員權限功能開關", () => {
     expect(
       STAFF_BOOLEAN_PERMISSION_FIELDS.map((f) => [f.key, f.label, Boolean(f.comingSoon)]),
     ).toEqual([
-      ["no_time_slot_limit", "客戶預約無時段限制", true],
-      ["auto_accept_booking", "客戶預約自動接受", true],
+      // 客戶端第 3 批(C3-E02,2026-10-09):客戶線上預約送出上線,拿掉「即將推出」。
+      ["no_time_slot_limit", "客戶預約無時段限制", false],
+      ["auto_accept_booking", "客戶預約自動接受", false],
       ["unlimited_backend_edit", "商家後台編輯無時段限制", false],
       // #977 第 4 批(2026-10-06):這個開關已生效,拿掉「即將推出」。
       ["direct_accept_after_merchant_confirm", "商家後台確認後直接接單", false],
@@ -317,7 +318,7 @@ describe("#977 服務人員權限功能開關", () => {
     const desc = (key: string) =>
       STAFF_BOOLEAN_PERMISSION_FIELDS.find((f) => f.key === key)?.description;
     expect(desc("auto_accept_booking")).toBe(
-      "開啟後，客戶線上預約這位服務人員的訂單會直接成立，不用等確認。",
+      "開啟後，客戶線上預約這位服務人員(或「不指定」時系統排到他)的訂單會直接成立，不用他再確認。訪客預約、黑名單會員的預約仍然要確認。",
     );
     expect(desc("google_calendar_sync_enabled")).toBe(
       "開啟後，這位服務人員的行程會同步到他的 Google 日曆。",
@@ -345,13 +346,17 @@ describe("#977 服務人員權限功能開關", () => {
     }
   });
 
-  it("兩個預約天數欄位:只限制客戶線上預約,標「即將推出」", () => {
+  it("兩個預約天數欄位:只限制客戶線上預約;客戶端第 3 批(C3-E02)起不再標「即將推出」", () => {
     for (const f of STAFF_NUMBER_PERMISSION_FIELDS) {
       expect(
         f.description.startsWith("只限制客戶線上預約，商家管理員與客服在後台建單不受限。"),
       ).toBe(true);
-      expect(f.comingSoon).toBe(true);
+      expect(f.comingSoon).toBeFalsy();
     }
+    // 零之零 Q1:最遠天數留空 = 180 天(資料庫同步)。
+    expect(
+      STAFF_NUMBER_PERMISSION_FIELDS.find((f) => f.key === "booking_window_max_days")?.description,
+    ).toContain("留空時系統會用 180 天");
   });
 
   it("編輯服務人員畫面不再有「這些開關目前先存值」那條常駐提醒,改用「即將推出」標籤", () => {

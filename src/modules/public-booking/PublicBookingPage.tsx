@@ -10,12 +10,14 @@
 //   重新整理:選的東西只放在記憶體(C1-A08:不存瀏覽器),所以一律回到 ①。做法是每次載入產生一個
 //   sessionId 寫進 history state,state 裡的 sessionId 對不上(= 重新整理過)就當作 ①。
 // ・時段一律由資料庫 get_public_available_slots 算,前端不判斷任何時段規則(C1-A07)。
-// ・這批「確定預約」還不能送出:按鈕停用 +「線上預約即將開放」+ 聯絡按鈕(C1-A08)。
+// ・第 3 批(C3-D01~D07)起可以真的送出:會員(已用 LINE 登入並接上會員)與訪客(⑥-4,過 Turnstile)都走
+//   Edge Function customer-booking-submit;成功後顯示 ⑦ 完成頁(結果只在記憶體,重新整理 / 上一頁回 ①)。
 // ・客人與商家輸入的文字一律當純文字顯示(React 文字節點),不用 dangerouslySetInnerHTML(C1-F04)。
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   Check,
   ChevronLeft,
@@ -48,9 +50,24 @@ import { applyThemeColorToDocument, resolveMerchantThemeColor } from "@/modules/
 import {
   fetchPublicAvailableSlots,
   fetchPublicBookingPage,
+  PUBLIC_RATE_LIMITED_MESSAGE,
   PublicBookingError,
   rejectedSlotsMessage,
 } from "./api";
+import { BookingCompleteScreen } from "./BookingCompleteScreen";
+import {
+  BookingSubmitError,
+  submitCustomerBooking,
+  type GuestSubmitInput,
+} from "./bookingSubmitApi";
+import {
+  newSubmissionId,
+  SLOT_TAKEN_MESSAGE,
+  submitFailureView,
+  type SubmitFailureView,
+  type SubmitRejectState,
+  type SubmittedBooking,
+} from "./bookingSubmitLogic";
 import { ContactButtons, PublicShell, StepHeader, TitleOnlyHeader } from "./PublicBookingChrome";
 import {
   CompleteProfileError,
@@ -59,6 +76,7 @@ import {
   fetchCustomerSessionState,
   redirectToAuthorizeUrl,
   signOutCustomer,
+  startLineJoin,
   startLineLogin,
 } from "./customerAuthApi";
 import {
@@ -74,6 +92,7 @@ import {
   type PendingDraft,
 } from "./customerLoginLogic";
 import {
+  CustomerLoginBar,
   CustomerProfileScreen,
   GuestScreen,
   LineLoginScreen,
@@ -96,6 +115,8 @@ import {
   formatPublicPrice,
   formatSlotSummary,
   formatWeekHeading,
+  formNextStepHint,
+  step5Name,
   groupTimes,
   isNextWeekDisabled,
   merchantLogoText,
@@ -114,6 +135,7 @@ import {
   type CustomerFormValues,
   type PublicSelection,
 } from "./publicBookingLogic";
+import { resolveTurnstileSiteKey } from "./turnstile";
 import type { PublicBookingPageOk, PublicServiceItem, PublicSlotDay } from "./types";
 
 const PAGE_QUERY_KEY = "public-booking";
@@ -129,7 +151,8 @@ export default function PublicBookingPage() {
   const pageQuery = useQuery({
     queryKey: [PAGE_QUERY_KEY, "page", slug],
     queryFn: () => fetchPublicBookingPage(slug),
-    retry: 1,
+    retry: (count, err) =>
+      !(err instanceof PublicBookingError && err.kind === "rate_limited") && count < 1,
     refetchOnWindowFocus: false,
     staleTime: 60_000,
   });
@@ -169,7 +192,12 @@ export default function PublicBookingPage() {
   if (pageQuery.isError || !page) {
     return (
       <PublicShell header={<div className="h-[54px]" />}>
-        <LoadErrorState onRetry={() => void pageQuery.refetch()} />
+        <LoadErrorState
+          rateLimited={
+            pageQuery.error instanceof PublicBookingError && pageQuery.error.kind === "rate_limited"
+          }
+          onRetry={() => void pageQuery.refetch()}
+        />
       </PublicShell>
     );
   }
@@ -202,12 +230,19 @@ export default function PublicBookingPage() {
   return <BookingFlow key={slug} page={page} slug={slug} />;
 }
 
-function LoadErrorState({ onRetry }: { onRetry: () => void }) {
+function LoadErrorState({
+  onRetry,
+  rateLimited = false,
+}: {
+  onRetry: () => void;
+  /** C3-G02:超過呼叫上限。 */
+  rateLimited?: boolean;
+}) {
   return (
     <div data-testid="public-booking-error">
       <ErrorState
-        title="讀取失敗，請稍後再試"
-        reason="可能是網路不穩"
+        title={rateLimited ? PUBLIC_RATE_LIMITED_MESSAGE : "讀取失敗，請稍後再試"}
+        reason={rateLimited ? "短時間內查詢次數太多，等幾分鐘再按重新整理" : "可能是網路不穩"}
         onRetry={onRetry}
         retryLabel="重新整理"
       />
@@ -228,13 +263,15 @@ function NoticeCard({ title, body, testId }: { title: string; body: string; test
 }
 
 // =========================================================================
-// 預約流程(① ~ ⑤,C2 加上 ⑥)
+// 預約流程(① ~ ⑤,C2 加上 ⑥,C3 加上 ⑦ 完成頁)
 // =========================================================================
 
 // 0 = ① 店家首頁,1 = ② 選服務,2 = ③ 選服務人員,3 = ④ 選時間,4 = ⑤ 填資料,
-// 5 = ⑥ 會員(依登入狀態顯示 ⑥-1 LINE 登入 / ⑥-2 填電話 / 已登入確認),6 = ⑥-4 不登入預約(C2)。
-type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6;
-const LAST_STEP = 6;
+// 5 = ⑥ 會員(依登入狀態顯示 ⑥-1 LINE 登入 / ⑥-2 填電話 / 確認送出),6 = ⑥-4 不登入預約(C2),
+// 7 = ⑦ 完成頁(C3-D06;只有剛送出成功、結果還在記憶體時才有)。
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+const LAST_FORM_STEP = 6;
+const COMPLETE_STEP = 7;
 
 interface FlowHistoryState {
   c1Session?: unknown;
@@ -271,6 +308,7 @@ function draftToInitial(page: PublicBookingPageOk, pending: PendingDraft | null)
 }
 
 const SESSION_QUERY_KEY = (slug: string) => [PAGE_QUERY_KEY, "customer-session", slug] as const;
+const EMPTY_FORM: CustomerFormValues = { name: "", address: "", note: "" };
 
 function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }) {
   const navigate = useNavigate();
@@ -283,6 +321,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   const isOnSite = settings.is_on_site;
   const lineLoginEnabled = settings.line_login_enabled;
   const allowGuest = settings.allow_guest_booking;
+  const turnstileSiteKey = useMemo(() => resolveTurnstileSiteKey(), []);
 
   // C2-B04 / C2-E07:LINE 登入回來時帶著草稿(只在記憶體;重新整理就沒有 ⇒ 回到 ①)。
   const [initial] = useState(() => draftToInitial(page, peekPendingDraft(slug)));
@@ -296,9 +335,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewDate, setViewDate] = useState<string | null>(null);
   const [picked, setPicked] = useState<PickedSlot | null>(initial?.picked ?? null);
-  const [form, setForm] = useState<CustomerFormValues>(
-    () => initial?.form ?? { name: "", address: "", note: "" },
-  );
+  const [form, setForm] = useState<CustomerFormValues>(() => initial?.form ?? EMPTY_FORM);
   const [touched, setTouched] = useState<Record<keyof CustomerFormValues, boolean>>({
     name: false,
     address: false,
@@ -309,6 +346,24 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   const [returnNotice, setReturnNotice] = useState<"cancelled" | "failed" | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+
+  // ─── C3:送出預約 ───
+  // ⑥-4 的電話與勾選放這裡(C3-D05:時段被約走回 ④ 再回來時要保留)。
+  const [guestPhone, setGuestPhone] = useState("");
+  const [guestAgree, setGuestAgree] = useState(false);
+  // C3-A03 第 1 步:每次進入「確認送出」(⑥)產生一個;網路錯誤重按沿用同一個(不會變兩張單)。
+  const [submissionId, setSubmissionId] = useState(newSubmissionId);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<SubmitFailureView | null>(null);
+  const [slotTakenNotice, setSlotTakenNotice] = useState(false);
+  const [completed, setCompleted] = useState<SubmittedBooking | null>(null);
+  // 完成頁真的顯示過了沒(react-router 的換頁走 transition,可能比 setCompleted 晚一拍生效;
+  // 用這個旗標區分「還沒切到完成頁」與「從完成頁按了上一頁」)。
+  const [completeShown, setCompleteShown] = useState(false);
+  // C3-D07:⑦-3「用 LINE 登入加入會員」回來(沒有草稿)⇒ 先填電話,再回 ① 顯示登入列。
+  const [joinMode, setJoinMode] = useState(false);
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const totals = useMemo(
     () => computeSelectionTotals(selection, page.service_items),
@@ -346,11 +401,12 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     historyState?.c1Session === sessionId &&
     typeof historyState.c1Step === "number" &&
     historyState.c1Step >= 0 &&
-    historyState.c1Step <= LAST_STEP
+    historyState.c1Step <= COMPLETE_STEP
       ? (historyState.c1Step as Step)
       : 0;
   // 用「上一頁 / 下一頁」跳回來時,前面的條件可能已經不成立(例:回 ② 把主要服務取消後又按瀏覽器的下一頁)
-  // ⇒ 最多只顯示到條件還成立的那一步。⑥ 只有啟用 LINE 登入的店才有(沒啟用的店這批維持第 1 批停用按鈕)。
+  // ⇒ 最多只顯示到條件還成立的那一步。
+  // C3-D01:沒有 LINE 登入也不允許不登入的店,停在 ⑤(停用按鈕 + 聯絡店家)。
   const maxStep: Step =
     serviceBlocked !== null || page.service_items.length === 0
       ? 1
@@ -358,14 +414,27 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         ? 2
         : pickedSlot === null
           ? 3
-          : !lineLoginEnabled || !formValid
+          : !formValid || (!lineLoginEnabled && !allowGuest)
             ? 4
-            : LAST_STEP;
-  let step = Math.min(requestedStep, maxStep) as Step;
+            : LAST_FORM_STEP;
+  let step: Step =
+    completed !== null && requestedStep === COMPLETE_STEP
+      ? COMPLETE_STEP
+      : (Math.min(requestedStep, maxStep) as Step);
   if (step === 6 && !allowGuest) step = 5;
+  // 沒有 LINE 登入的店沒有 ⑥-1(C3-D01:直接到 ⑥-4)。
+  if (step === 5 && !lineLoginEnabled) step = allowGuest ? 6 : 4;
 
+  // 進入「確認送出」(⑥)時換一個新的 submission_id;換步驟時清掉上一個畫面的失敗說明。
+  const prevStepRef = useRef<Step>(step);
   useEffect(() => {
+    const prev = prevStepRef.current;
+    prevStepRef.current = step;
+    if (prev === step) return;
     window.scrollTo(0, 0);
+    setSubmitError(null);
+    if (step >= 5 && step <= LAST_FORM_STEP && prev <= 4) setSubmissionId(newSubmissionId());
+    if (step !== 3) setSlotTakenNotice(false);
   }, [step]);
 
   function goTo(next: Step, replace = false) {
@@ -377,17 +446,77 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     else goTo(0);
   }
 
+  /** 完成頁之後:選的內容全部清掉(下一張預約從頭開始)。 */
+  function resetFlow() {
+    setSelection(new Map());
+    setServiceTab(null);
+    setChosenStaffId(null);
+    setWeekOffset(0);
+    setViewDate(null);
+    setPicked(null);
+    setForm(EMPTY_FORM);
+    setTouched({ name: false, address: false, note: false });
+    setGuestPhone("");
+    setGuestAgree(false);
+    setLinkNotice(null);
+    setSubmitError(null);
+    setJoinError(null);
+    setCompleted(null);
+    setCompleteShown(false);
+  }
+
+  // C3-D06:完成頁按系統「上一頁」⇒ 回 ①,不能回到確認畫面再送一次。
+  useEffect(() => {
+    if (completed === null) return;
+    if (requestedStep === COMPLETE_STEP) {
+      if (!completeShown) setCompleteShown(true);
+      return;
+    }
+    if (completeShown) {
+      resetFlow();
+      goTo(0, true);
+    }
+  }, [completed, requestedStep, completeShown]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // C2-B04:登入回來 ⇒ 歷史紀錄排成「⑤ → ⑥」(系統上一頁回到 ⑤);在 LINE 按取消 ⇒ 停在 ⑤。
+  // C3-D07:沒有草稿而且登入成功 = ⑦-3「加入會員」回來 ⇒ 進加入會員流程。
   const restoreHandled = useRef(false);
   useEffect(() => {
     if (restoreHandled.current) return;
     restoreHandled.current = true;
     const pending = takePendingDraft(slug);
-    if (!pending || !initial) return;
+    if (!pending) return;
+    if (!initial) {
+      if (pending.outcome === "logged_in" && pending.draft === null) setJoinMode(true);
+      return;
+    }
     goTo(4, true);
     if (pending.outcome === "logged_in") goTo(5);
     else setReturnNotice(pending.outcome);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // C3-D07:加入會員回來時,已經是會員(之前就接上)⇒ 直接回 ① 跳提示;沒登入成功 ⇒ 結束加入流程。
+  useEffect(() => {
+    if (!joinMode) return;
+    if (!lineLoginEnabled) {
+      setJoinMode(false);
+      return;
+    }
+    if (sessionQuery.isPending || sessionQuery.isFetching) return;
+    if (session.state === "linked") {
+      setJoinMode(false);
+      toast.success(`已加入「${merchant.name}」會員`);
+    } else if (session.state === "anonymous") {
+      setJoinMode(false);
+    }
+  }, [
+    joinMode,
+    lineLoginEnabled,
+    session.state,
+    sessionQuery.isPending,
+    sessionQuery.isFetching,
+    merchant.name,
+  ]);
 
   function buildDraft(): BookingDraft | null {
     if (!pickedSlot) return null;
@@ -424,10 +553,78 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     }
   }
 
+  /** C3-B04:⑦-3「用 LINE 登入加入會員」(沒有草稿)。 */
+  async function handleJoin() {
+    if (joinBusy) return;
+    setJoinBusy(true);
+    setJoinError(null);
+    try {
+      const url = await startLineJoin(slug);
+      if (!isAllowedAuthorizeUrl(url, window.location.origin)) {
+        setJoinError(lineStartErrorMessage(null));
+        setJoinBusy(false);
+        return;
+      }
+      rememberLoginSlug(slug);
+      redirectToAuthorizeUrl(url);
+    } catch (err) {
+      setJoinError(lineStartErrorMessage(err instanceof CustomerAuthError ? err.code : null));
+      setJoinBusy(false);
+    }
+  }
+
   async function handleLogout() {
     await signOutCustomer(slug);
     setLinkNotice(null);
     queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
+  }
+
+  /** C3-D05:伺服器說「沒有建立訂單」時,依 state 決定畫面。 */
+  async function handleRejected(state: SubmitRejectState) {
+    const view = submitFailureView(state, { lineLoginEnabled });
+    if (state === "slot_taken") {
+      // 回 ④ 重新選時間;服務、服務人員、姓名、地址、備註、電話、勾選都保留。
+      setPicked(null);
+      setSlotTakenNotice(true);
+      await queryClient.invalidateQueries({ queryKey: [PAGE_QUERY_KEY, "slots", slug] });
+      goTo(3, true);
+      return;
+    }
+    if (state === "not_linked") {
+      // 當作沒登入,回 ⑥-1(草稿還在記憶體)。
+      await signOutCustomer(slug);
+      queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
+      setLoginError(view.message);
+      if (step === 6) goTo(5, true);
+      return;
+    }
+    setSubmitError(view);
+  }
+
+  /** 送出(會員:guest = null)。 */
+  async function runSubmit(guest: GuestSubmitInput | null): Promise<void> {
+    const draft = buildDraft();
+    if (!draft || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const outcome = await submitCustomerBooking({ slug, submissionId, draft, guest });
+      if (outcome.kind === "created") {
+        // replace:系統上一頁不會回到確認畫面(C3-D06)。
+        setCompleted(outcome.booking);
+        goTo(COMPLETE_STEP, true);
+      } else {
+        await handleRejected(outcome.state);
+      }
+    } catch (err) {
+      setSubmitError(
+        submitFailureView(err instanceof BookingSubmitError ? err.code : "network", {
+          lineLoginEnabled,
+        }),
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleProfileSubmit(input: {
@@ -438,11 +635,20 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
       const result = await completeCustomerProfile({
         slug,
         phone: input.phone,
-        name: form.name.trim(),
+        name: joinMode ? "" : form.name.trim(),
         agreePolicy: input.agree,
       });
       if (result.kind === "phone_taken") return "phone_taken";
       setLinkNotice(result.existing ? "existing" : "created");
+      if (joinMode) {
+        // C3-D07:加入會員完成 ⇒ 回 ①(登入列)+ 跳一次提示。
+        setJoinMode(false);
+        await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
+        toast.success(`已加入「${merchant.name}」會員`);
+        return "linked";
+      }
+      // C3-D02:接上會員之後自動送出預約(第二段失敗時客人已經是會員,畫面依 C3-D05)。
+      await runSubmit(null);
       await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
       return "linked";
     } catch (err) {
@@ -452,13 +658,69 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         await signOutCustomer(slug);
         queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
         setLoginError(completeProfileErrorMessage(hint));
+        if (joinMode) setJoinMode(false);
       }
       return { error: completeProfileErrorMessage(hint) };
     }
   }
 
-  if (step === 0) {
-    return <HomeStep page={page} contacts={contacts} onStart={() => goTo(1)} />;
+  function handleHome() {
+    resetFlow();
+    goTo(0, true);
+  }
+
+  const loginBar =
+    session.state === "linked" ? (
+      <CustomerLoginBar memberName={session.memberName} onLogout={() => void handleLogout()} />
+    ) : null;
+
+  // ─── C3-D07 加入會員流程(沒有草稿)───
+  if (joinMode) {
+    if (session.state === "needs_profile") {
+      return (
+        <CustomerProfileScreen
+          merchantName={merchant.name}
+          lineDisplayName={session.lineDisplayName}
+          linePictureUrl={session.linePictureUrl}
+          policy={page.member_policy}
+          contacts={contacts}
+          allowGuest={false}
+          mode="join"
+          onSubmit={handleProfileSubmit}
+          onLogout={() => {
+            setJoinMode(false);
+            void handleLogout();
+          }}
+          onGuest={() => undefined}
+        />
+      );
+    }
+    return (
+      <PublicShell header={<TitleOnlyHeader title={merchant.name} />}>
+        <div className="flex flex-col gap-3" data-testid="public-booking-join-loading">
+          <LoadingSkeleton variant="lines" rows={3} />
+        </div>
+      </PublicShell>
+    );
+  }
+
+  if (completed && (step === COMPLETE_STEP || !completeShown)) {
+    return (
+      <BookingCompleteScreen
+        booking={completed}
+        contacts={contacts}
+        isOnSite={isOnSite}
+        lineLoginEnabled={lineLoginEnabled}
+        joinBusy={joinBusy}
+        joinError={joinError}
+        onJoin={() => void handleJoin()}
+        onHome={handleHome}
+      />
+    );
+  }
+
+  if (step === 0 || completed !== null) {
+    return <HomeStep page={page} contacts={contacts} loginBar={loginBar} onStart={() => goTo(1)} />;
   }
 
   if (step === 1) {
@@ -499,6 +761,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         signature={signature}
         isOnSite={isOnSite}
         contacts={contacts}
+        notice={slotTakenNotice ? SLOT_TAKEN_MESSAGE : null}
         weekOffset={weekOffset}
         onWeekOffsetChange={(offset) => {
           setWeekOffset(offset);
@@ -507,7 +770,10 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         viewDate={viewDate}
         onViewDateChange={setViewDate}
         picked={pickedSlot}
-        onPick={(date, time) => setPicked({ signature, date, time })}
+        onPick={(date, time) => {
+          setSlotTakenNotice(false);
+          setPicked({ signature, date, time });
+        }}
         onBack={goBack}
         onNext={() => goTo(4)}
       />
@@ -525,17 +791,19 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     ? (page.staff.find((s) => s.id === staffId)?.display_name ?? "不指定（由店家安排）")
     : "不指定（由店家安排）";
   const timeText = pickedSlot ? `${formatDateWithWeekday(pickedSlot.date)}${pickedSlot.time}` : "";
+  const summaryAddress = isOnSite ? form.address.trim() : "";
+  const fullSummary = (
+    <BookingSummary
+      timeText={timeText}
+      staffName={staffName}
+      customerName={form.name.trim()}
+      itemNames={itemNames}
+      address={summaryAddress}
+      totalPrice={totals.totalPrice}
+    />
+  );
 
   if (step === 5) {
-    const summary = (
-      <BookingSummary
-        timeText={timeText}
-        staffName={staffName}
-        customerName={form.name.trim()}
-        itemNames={itemNames}
-        totalPrice={totals.totalPrice}
-      />
-    );
     if (session.state === "needs_profile") {
       return (
         <CustomerProfileScreen
@@ -545,6 +813,8 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
           policy={page.member_policy}
           contacts={contacts}
           allowGuest={allowGuest}
+          submitting={submitting}
+          submitError={submitError}
           onSubmit={handleProfileSubmit}
           onLogout={() => void handleLogout()}
           onGuest={() => goTo(6)}
@@ -557,8 +827,11 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
           merchantName={merchant.name}
           memberName={session.memberName}
           linkNotice={linkNotice}
-          summary={summary}
+          summary={fullSummary}
           contacts={contacts}
+          submitting={submitting}
+          submitError={submitError}
+          onSubmit={() => void runSubmit(null)}
           onBack={goBack}
           onLogout={() => void handleLogout()}
         />
@@ -584,35 +857,56 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         merchantName={merchant.name}
         policy={page.member_policy}
         contacts={contacts}
-        summary={
-          <BookingSummary
-            timeText={timeText}
-            staffName={staffName}
-            customerName={form.name.trim()}
-            itemNames={itemNames}
-            totalPrice={totals.totalPrice}
-          />
+        summary={fullSummary}
+        phone={guestPhone}
+        onPhoneChange={setGuestPhone}
+        agree={guestAgree}
+        onAgreeChange={setGuestAgree}
+        siteKey={turnstileSiteKey}
+        lineLoginEnabled={lineLoginEnabled}
+        submitting={submitting}
+        submitError={submitError}
+        onSubmit={({ phone, turnstileToken }) =>
+          void runSubmit({ phone: phone.trim(), agreePolicy: guestAgree, turnstileToken })
         }
+        onTurnstileError={() =>
+          setSubmitError(submitFailureView("bot_check_error", { lineLoginEnabled }))
+        }
+        onLineLogin={() => goTo(5, true)}
         onBack={goBack}
       />
     );
   }
 
   // step === 4(⑤ 填資料)
+  // C3-D01:有 LINE 登入 ⇒ ⑥-1(或已登入的確認畫面);沒有 LINE 登入但允許不登入 ⇒ 直接 ⑥-4;
+  // 兩個都沒有 ⇒ 停用按鈕 + 常駐原因 + 聯絡按鈕。
+  const canProceed = lineLoginEnabled || allowGuest;
+  const nextStepHint = formNextStepHint({
+    lineLoginEnabled,
+    allowGuest,
+    linked: session.state === "linked",
+  });
   function handleConfirm() {
     setTouched({ name: true, address: true, note: true });
     setReturnNotice(null);
     setLoginError(null);
-    if (!formValid) return;
-    goTo(5);
+    if (!formValid || !canProceed) return;
+    goTo(lineLoginEnabled ? 5 : 6);
   }
 
   return (
     <PublicShell
-      header={<StepHeader stepNumber={4} title="填寫資料" onBack={goBack} />}
+      header={
+        <StepHeader
+          stepNumber={4}
+          title="填寫資料"
+          onBack={goBack}
+          lastStepName={step5Name(session.state === "linked")}
+        />
+      }
       footer={
-        lineLoginEnabled ? (
-          // C2-E02:有啟用 LINE 登入 ⇒「確定預約」進 ⑥(依登入狀態顯示對應畫面)。
+        canProceed ? (
           <Button
             type="button"
             variant="primary"
@@ -624,8 +918,10 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
             確定預約
           </Button>
         ) : (
-          // 沒有啟用 LINE 登入:這批維持第 1 批的停用按鈕(訪客送出第 3 批才開放)。
           <>
+            <AlertNote data-testid="public-booking-not-open">
+              這家店目前不開放線上預約，請透過下方方式聯絡店家。
+            </AlertNote>
             <Button
               type="button"
               variant="primary"
@@ -634,16 +930,9 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
               disabled
               data-testid="public-booking-submit"
             >
-              線上預約即將開放
+              確定預約
             </Button>
-            {contacts.lineUrl || contacts.telHref ? (
-              <>
-                <p className="text-center text-[13px] text-muted-foreground">
-                  目前請透過下方方式聯絡店家預約
-                </p>
-                <ContactButtons links={contacts} />
-              </>
-            ) : null}
+            <ContactButtons links={contacts} />
           </>
         )
       }
@@ -663,8 +952,19 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
           staffName={staffName}
           customerName={null}
           itemNames={itemNames}
+          address=""
           totalPrice={totals.totalPrice}
         />
+
+        {/* 2026-10-09 使用者新增:姓名欄上方一行小字,先告訴客人下一步要做什麼(依店家設定與登入狀態)。 */}
+        {nextStepHint ? (
+          <p
+            className="-mb-2 text-[12.5px] leading-relaxed text-muted-foreground"
+            data-testid="public-booking-next-step-hint"
+          >
+            {nextStepHint}
+          </p>
+        ) : null}
 
         <FormField
           label="姓名"
@@ -732,12 +1032,15 @@ function BookingSummary({
   staffName,
   customerName,
   itemNames,
+  address,
   totalPrice,
 }: {
   timeText: string;
   staffName: string;
   customerName: string | null;
   itemNames: string;
+  /** C3-D03:確認送出畫面要列地址(到府店);空字串 = 不顯示。 */
+  address: string;
   totalPrice: number;
 }) {
   return (
@@ -759,6 +1062,12 @@ function BookingSummary({
         ) : null}
         <dt className="text-muted-foreground">項目</dt>
         <dd className="break-words text-foreground">{itemNames}</dd>
+        {address ? (
+          <>
+            <dt className="text-muted-foreground">地址</dt>
+            <dd className="break-words text-foreground">{address}</dd>
+          </>
+        ) : null}
         <dt className="text-muted-foreground">預估金額</dt>
         <dd className="font-semibold tabular-nums text-destructive/80">
           {formatPublicPrice(totalPrice)}
@@ -775,10 +1084,13 @@ function BookingSummary({
 function HomeStep({
   page,
   contacts,
+  loginBar,
   onStart,
 }: {
   page: PublicBookingPageOk;
   contacts: ContactLinks;
+  /** C3-D07:已用 LINE 登入並接上會員 ⇒ 顯示登入列(跟確認送出畫面同一個元件)。 */
+  loginBar: ReactNode;
   onStart: () => void;
 }) {
   const { merchant, booking_settings: settings } = page;
@@ -831,6 +1143,7 @@ function HomeStep({
       </section>
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 p-3 sm:px-4">
+        {loginBar}
         {address || hasContacts ? (
           <div className="rounded-xl border border-border bg-card shadow-sm">
             {address ? (
@@ -1251,6 +1564,7 @@ function TimeStep({
   signature,
   isOnSite,
   contacts,
+  notice,
   weekOffset,
   onWeekOffsetChange,
   viewDate,
@@ -1266,6 +1580,8 @@ function TimeStep({
   signature: string;
   isOnSite: boolean;
   contacts: ContactLinks;
+  /** C3-D05:剛剛送出時這個時段被約走了 ⇒ 常駐提示,請客人重選。 */
+  notice: string | null;
   weekOffset: number;
   onWeekOffsetChange: (offset: number) => void;
   viewDate: string | null;
@@ -1283,7 +1599,10 @@ function TimeStep({
     queryFn: () =>
       fetchPublicAvailableSlots({ slug, items, staffId, from, days: SLOT_DAYS_PER_PAGE }),
     retry: (count, err) =>
-      !(err instanceof PublicBookingError && err.kind === "rejected") && count < 1,
+      !(
+        err instanceof PublicBookingError &&
+        (err.kind === "rejected" || err.kind === "rate_limited")
+      ) && count < 1,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
@@ -1320,6 +1639,8 @@ function TimeStep({
 
   const rejected =
     slotsQuery.error instanceof PublicBookingError && slotsQuery.error.kind === "rejected";
+  const rateLimited =
+    slotsQuery.error instanceof PublicBookingError && slotsQuery.error.kind === "rate_limited";
 
   return (
     <PublicShell
@@ -1342,6 +1663,11 @@ function TimeStep({
       }
     >
       <div className="flex flex-col gap-3">
+        {notice ? (
+          <AlertNote tone="danger" data-testid="public-booking-slot-taken">
+            {notice}
+          </AlertNote>
+        ) : null}
         <div className="flex items-center justify-between gap-2">
           <span
             className="text-[15px] font-semibold text-foreground"
@@ -1394,7 +1720,7 @@ function TimeStep({
               )}
             </AlertNote>
           ) : (
-            <LoadErrorState onRetry={() => void slotsQuery.refetch()} />
+            <LoadErrorState rateLimited={rateLimited} onRetry={() => void slotsQuery.refetch()} />
           )
         ) : (
           <>

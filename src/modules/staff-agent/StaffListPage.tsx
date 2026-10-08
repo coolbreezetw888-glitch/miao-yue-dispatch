@@ -33,6 +33,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowDown, ArrowUp, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -115,6 +116,7 @@ import {
   fetchMerchantStaff,
   fetchStaffServiceItemIds,
   hardDeleteMerchantStaff,
+  moveMerchantStaffOrder,
   reactivateMerchantStaff,
   removeMerchantStaff,
   removeStaffServiceItem,
@@ -133,6 +135,8 @@ import {
   matchesStaffListFilter,
   merchantUsesStaffLogin,
   shouldMarkPendingLoginAsTodo,
+  STAFF_ORDER_HELP_TEXT,
+  staffOrderControls,
   STAFF_LIST_FILTER_TABS,
   validateStaffBookingDays,
   type StaffListFilter,
@@ -1060,6 +1064,69 @@ function StaffLoginEmailManagement({ staff }: { staff: MerchantStaff }) {
   );
 }
 
+/**
+ * C3-H03:每一列的 ↑↓(手機 375 也要好按 ⇒ 40×40)。按下立即生效;進行中這一列轉圈、其他列也先鎖住
+ * (避免兩次交換同時送出)。最上那位的 ↑、最下那位的 ↓ 停用,aria-label 講原因。
+ */
+function StaffOrderArrows({
+  name,
+  canMoveUp,
+  canMoveDown,
+  moving,
+  locked,
+  onMove,
+}: {
+  name: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  moving: boolean;
+  locked: boolean;
+  onMove: (direction: "up" | "down") => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1" data-testid="staff-order-arrows">
+      <Button
+        type="button"
+        variant="neutral"
+        size="cardIcon"
+        className="h-10 w-10"
+        disabled={!canMoveUp || locked}
+        aria-label={
+          canMoveUp ? `把「${name}」的順位往上移` : `「${name}」已經是第一位，不能再往上移`
+        }
+        title={canMoveUp ? undefined : "已經是第一位"}
+        onClick={() => onMove("up")}
+        data-testid="staff-order-up"
+      >
+        {moving ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <ArrowUp className="h-4 w-4" aria-hidden="true" />
+        )}
+      </Button>
+      <Button
+        type="button"
+        variant="neutral"
+        size="cardIcon"
+        className="h-10 w-10"
+        disabled={!canMoveDown || locked}
+        aria-label={
+          canMoveDown ? `把「${name}」的順位往下移` : `「${name}」已經是最後一位，不能再往下移`
+        }
+        title={canMoveDown ? undefined : "已經是最後一位"}
+        onClick={() => onMove("down")}
+        data-testid="staff-order-down"
+      >
+        {moving ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        ) : (
+          <ArrowDown className="h-4 w-4" aria-hidden="true" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
 function StaffListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
@@ -1101,6 +1168,13 @@ function StaffListInner() {
   //    切分頁不可以讓黃不黃的結果跟著變。
   const usesStaffLogin = useMemo(() => merchantUsesStaffLogin(staffList ?? []), [staffList]);
 
+  // 客戶端第 3 批(C3-H03):順位 ↑↓。只在「全部」顯示、只有在職的人參與;按下立即生效(不用另外存檔)。
+  const orderControls = useMemo(
+    () => staffOrderControls(staffList ?? [], listFilter),
+    [staffList, listFilter],
+  );
+  const [movingStaffId, setMovingStaffId] = useState<string | null>(null);
+
   // ui-v1-full:五個對話框的受控開關(觸發點在 ListCard 的按鈕 / ⋯ 選單裡)。編輯 / 邀請用
   // 「記住是哪一位 + 開關」兩個 state,關閉時只關開關、不清掉人,避免關閉動畫期間內容閃動。
   const [createOpen, setCreateOpen] = useState(false);
@@ -1122,6 +1196,20 @@ function StaffListInner() {
       toast.success("已移除服務人員");
     } catch (err) {
       toast.error("移除失敗", { description: getErrorMessage(err) });
+    }
+  }
+
+  async function handleMove(staffId: string, direction: "up" | "down") {
+    if (movingStaffId) return;
+    setMovingStaffId(staffId);
+    try {
+      // edge(已經在最上 / 最下)不是錯誤:重抓一次清單讓畫面跟資料庫一致即可。
+      await moveMerchantStaffOrder(staffId, direction);
+      await refetch();
+    } catch (err) {
+      toast.error("調整順位失敗", { description: getErrorMessage(err) });
+    } finally {
+      setMovingStaffId(null);
     }
   }
 
@@ -1166,6 +1254,15 @@ function StaffListInner() {
         <CardHeader>
           <CardTitle>服務人員名單</CardTitle>
           <CardDescription>包含已上架、未上架與已移除的服務人員，可用下方分類篩選</CardDescription>
+          {/* C3-H03:順位說明(一行小字,常駐)。篩選時箭頭會收起來,所以順便講怎麼調。 */}
+          <p
+            className="text-xs leading-relaxed text-muted-foreground"
+            data-testid="staff-order-help"
+          >
+            {listFilter === "all"
+              ? `${STAFF_ORDER_HELP_TEXT}用每張卡片左邊的 ↑ ↓ 調整。`
+              : `${STAFF_ORDER_HELP_TEXT}切到「全部」才能調整順位。`}
+          </p>
           {staffList && staffList.length > 0 ? (
             <Tabs
               value={listFilter}
@@ -1263,14 +1360,26 @@ function StaffListInner() {
                     <ListCard
                       state={isRemoved ? "inactive" : pendingLoginIsTodo ? "attention" : "default"}
                       leading={
-                        <Avatar className="h-10 w-10">
-                          {staff.avatar_url ? (
-                            <AvatarImage src={staff.avatar_url} alt={staff.name} />
+                        <div className="flex items-center gap-2.5">
+                          {orderControls.get(staff.id)?.show ? (
+                            <StaffOrderArrows
+                              name={staff.name}
+                              canMoveUp={orderControls.get(staff.id)?.canMoveUp ?? false}
+                              canMoveDown={orderControls.get(staff.id)?.canMoveDown ?? false}
+                              moving={movingStaffId === staff.id}
+                              locked={movingStaffId !== null}
+                              onMove={(direction) => void handleMove(staff.id, direction)}
+                            />
                           ) : null}
-                          <AvatarFallback className="bg-brand-soft text-sm font-semibold text-brand">
-                            {staff.name.slice(0, 1)}
-                          </AvatarFallback>
-                        </Avatar>
+                          <Avatar className="h-10 w-10">
+                            {staff.avatar_url ? (
+                              <AvatarImage src={staff.avatar_url} alt={staff.name} />
+                            ) : null}
+                            <AvatarFallback className="bg-brand-soft text-sm font-semibold text-brand">
+                              {staff.name.slice(0, 1)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
                       }
                       title={
                         <>

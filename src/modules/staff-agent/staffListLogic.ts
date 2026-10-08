@@ -198,3 +198,43 @@ export function validateStaffBookingDays(input: StaffBookingDaysInput): string |
 
   return null;
 }
+
+// =========================================================================
+// 客戶端第 3 批(C3-H03,2026-10-09 使用者 Q3):服務人員「順位」↑↓。
+// 資料庫 move_merchant_staff_order 只在「同店、在職(status=active)」的人裡面跟相鄰那位交換,
+// 已移除的不參與 ⇒ 畫面上的「最上 / 最下」也只算在職的人。
+// ⚠️ 只在「全部」(未篩選)時顯示箭頭:篩選後看不到的人也可能是相鄰那位,避免跟看不到的人交換。
+// =========================================================================
+
+export const STAFF_ORDER_HELP_TEXT =
+  "順位會影響：客人選「不指定」時優先排給誰、預約頁與行事曆的排列順序。";
+
+export interface StaffOrderControls {
+  /** 這一列要不要顯示 ↑↓。 */
+  show: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}
+
+/**
+ * 依「目前清單(已依順位排好)」算每一位的箭頭狀態。
+ * @param orderedStaff fetchMerchantStaff 回來的整份名單(未篩選,已依 display_order, created_at, id 排序)
+ */
+export function staffOrderControls(
+  orderedStaff: Pick<MerchantStaff, "id" | "status">[],
+  filter: StaffListFilter,
+): Map<string, StaffOrderControls> {
+  const result = new Map<string, StaffOrderControls>();
+  const active = orderedStaff.filter((s) => s.status === "active");
+  const firstId = active[0]?.id ?? null;
+  const lastId = active[active.length - 1]?.id ?? null;
+  for (const s of orderedStaff) {
+    const show = filter === "all" && s.status === "active";
+    result.set(s.id, {
+      show,
+      canMoveUp: show && s.id !== firstId,
+      canMoveDown: show && s.id !== lastId,
+    });
+  }
+  return result;
+}

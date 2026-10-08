@@ -407,3 +407,53 @@ export function resolveContactLinks(merchant: {
     telHref: telDigits.length > 0 ? `tel:${telDigits}` : null,
   };
 }
+
+/**
+ * 2026-10-09 使用者新增(客戶端第 3 批):⑤ 填資料頁姓名欄上方的小字,先講下一步要做什麼。
+ *   LINE 登入 + 允許不登入 ⇒「下一步會請你用 LINE 登入或填寫電話。」
+ *   只有 LINE 登入      ⇒「下一步會請你用 LINE 登入。」
+ *   只允許不登入        ⇒「下一步會請你填寫電話。」
+ *   已登入且接上會員 / 兩個都沒開(已有停用原因)⇒ 不顯示(null)。
+ */
+export function formNextStepHint(input: {
+  lineLoginEnabled: boolean;
+  allowGuest: boolean;
+  linked: boolean;
+}): string | null {
+  if (input.linked && input.lineLoginEnabled) return null;
+  if (input.lineLoginEnabled && input.allowGuest) return "下一步會請你用 LINE 登入或填寫電話。";
+  if (input.lineLoginEnabled) return "下一步會請你用 LINE 登入。";
+  if (input.allowGuest) return "下一步會請你填寫電話。";
+  return null;
+}
+
+// =========================================================================
+// 步驟條(⑤ 頁首與 ⑥ 系列畫面共用)
+// =========================================================================
+
+/**
+ * 2026-10-09 使用者新增(客戶端第 3 批):步驟條從 4 步改 5 步。第 5 步的名稱依登入狀態:
+ * 客人還沒登入 / 還沒接上會員 ⇒「登入／電話」;已用 LINE 登入且接上會員 ⇒「確認送出」(見 step5Name)。
+ */
+export const STEP5_NAME_LOGIN = "登入／電話";
+export const STEP5_NAME_CONFIRM = "確認送出";
+const STEP_NAMES_1_TO_4: readonly string[] = ["選服務", "選服務人員", "選時間", "填資料"];
+export const TOTAL_STEPS = 5;
+/** 「步驟 1／5」與步驟名稱之間的全形空白(同預覽圖)。寫成跳脫字元,避免原始碼裡出現看不見的特殊空白。 */
+const FULLWIDTH_SPACE = "\u3000";
+
+/** 第 5 步叫什麼:已用 LINE 登入而且接上會員 ⇒ 確認送出;其他 ⇒ 登入／電話。 */
+export function step5Name(linked: boolean): string {
+  return linked ? STEP5_NAME_CONFIRM : STEP5_NAME_LOGIN;
+}
+
+/** 步驟條文字:左邊「步驟 x／5(全形空白)這步名稱」,右邊「下一步：⋯」/ 最後一步「最後一步」。 */
+export function stepLabels(
+  stepNumber: 1 | 2 | 3 | 4 | 5,
+  lastStepName: string,
+): { current: string; next: string } {
+  const names = [...STEP_NAMES_1_TO_4, lastStepName];
+  const current = names[stepNumber - 1] ?? "";
+  const next = stepNumber < TOTAL_STEPS ? `下一步：${names[stepNumber] ?? ""}` : "最後一步";
+  return { current: `步驟 ${stepNumber}／${TOTAL_STEPS}${FULLWIDTH_SPACE}${current}`, next };
+}

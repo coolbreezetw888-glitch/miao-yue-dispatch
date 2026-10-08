@@ -87,6 +87,17 @@ export async function startLineLogin(slug: string, draft: BookingDraft): Promise
   return url;
 }
 
+/**
+ * C3-B04:訪客完成頁 ⑦-3「用 LINE 登入加入會員」—— 沒有預約草稿時啟動 LINE 登入(`purpose: 'join'`、
+ * `draft: null`)。登入回來時伺服器也會回 `draft: null`,預約頁據此走「加入會員」流程(C3-D07)。
+ */
+export async function startLineJoin(slug: string): Promise<string> {
+  const data = await callLineLoginFunction({ action: "start", slug, purpose: "join", draft: null });
+  const url = data["authorize_url"];
+  if (typeof url !== "string" || url === "") throw new CustomerAuthError("invalid_response");
+  return url;
+}
+
 export type LineCompleteResult =
   | {
       status: "ok";

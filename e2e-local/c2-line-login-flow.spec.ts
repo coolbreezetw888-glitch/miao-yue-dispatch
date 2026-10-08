@@ -3,6 +3,9 @@
 // **只在本機跑**:`npx playwright test --config playwright.local.config.ts c2-line-login-flow`
 // (Playwright 自己開獨立的 headless Chromium;只連本機 Docker 的 Supabase;LINE 端點用 page.route 攔下模擬)。
 //
+// 🔴 客戶端第 3 批起:⑥-2 按鈕是「送出預約」—— 接上會員之後**自動送出預約**(C3-D02)⇒ 成功時直接到 ⑦ 完成頁;
+//    ⑥-4 / 沒有 LINE 登入的店可以真的送出。customer-booking-submit 照 c3 fixture 的做法攔截
+//    (Node 端用本機 service role 呼叫 internal_customer_submit_booking,回給頁面前刪掉 _internal)。
 // 涵蓋:C2-E01(後台登入不被踢)、C2-E02(四種組合)、C2-E03、C2-B02(callback 清網址)、C2-B04(草稿救回)、
 //       C2-E04 + 零之二(新電話直接建會員 / 既有會員直接接上 + 鈴鐺 / phone_taken)、C2-E06、C2-E07、C2-F01、C2-H03。
 // 截圖:E2E_SHOT_DIR(預設 test-results/c2-shots),1280 與 375 各一張。
@@ -28,6 +31,7 @@ import {
   type C2Fixture,
 } from "./support/c2-line-login-fixture";
 import { serviceClient } from "./support/c1-public-booking-fixture";
+import { mockBookingSubmit, mockTurnstile } from "./support/c3-submit-fixture";
 import {
   expectOnlyLocalRequests,
   recordRequestHosts,
@@ -141,6 +145,7 @@ test("C2-E01 / E03 / B02 / B04 / E04:新客人 LINE 登入 ⇒ 填新電話直�
   await injectSession(page, fixture.c1.adminSession);
   const sub = newLineSub();
   const mock = await mockLineLogin(page, fixture, { sub, displayName: "王小明的 LINE" });
+  const submit = await mockBookingSubmit(page);
 
   await walkToForm(page, fixture.c1.slugA);
   await page.getByTestId("public-booking-submit").click();
@@ -190,12 +195,16 @@ test("C2-E01 / E03 / B02 / B04 / E04:新客人 LINE 登入 ⇒ 填新電話直�
   await page.locator("#customer-profile-phone").fill(testPhone(fixture, 1));
   await page.getByTestId("customer-profile-consent").click();
   await page.getByTestId("customer-profile-submit").click();
-  await expect(page.getByTestId("customer-linked-created")).toContainText(
-    `你現在是「${SHOP_A_NAME}」的會員`,
+  // 第 3 批(C3-D02):新電話直接成為會員 ⇒ 接著自動送出預約 ⇒ ⑦-1 完成頁(會員、待確認)。
+  await expect(page.getByTestId("booking-complete")).toHaveAttribute(
+    "data-kind",
+    "member_pending",
+    { timeout: LOAD_TIMEOUT },
   );
-  await expect(page.getByTestId("customer-linked-name")).toHaveText("王小明");
-  await expect(page.getByTestId("customer-linked-submit")).toBeDisabled();
-  await shotBoth(page, "04_linked_confirm_created");
+  await expect(page.getByTestId("booking-complete-title")).toHaveText("已送出，等待店家確認");
+  expect(submit.requests).toHaveLength(1);
+  expect(submit.requests[0]!["guest"]).toBeUndefined();
+  await shotBoth(page, "04_linked_and_submitted");
 
   // 資料庫:新會員接上這個客戶帳號、LINE 已綁定。
   const svc = serviceClient();
@@ -207,6 +216,17 @@ test("C2-E01 / E03 / B02 / B04 / E04:新客人 LINE 登入 ⇒ 填新電話直�
     .single();
   expect(m.error).toBeNull();
   expect(m.data).toMatchObject({ name: "王小明", line_bound: true, line_user_id: sub });
+  // 自動送出的那張單掛在這位新會員身上
+  const created = await svc
+    .from("bookings")
+    .select("member_id,source,customer_name")
+    .eq("customer_submission_id", String(submit.requests[0]!["submission_id"]))
+    .single();
+  expect(created.data).toEqual({
+    member_id: m.data!.id,
+    source: "customer",
+    customer_name: "王小明",
+  });
 
   // C2-E01:兩邊登入狀態分開存;後台仍是原本的管理員。
   const keys = await page.evaluate(() => Object.keys(window.localStorage));
@@ -240,18 +260,34 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
   const phone = testPhone(fixture, 2);
   const memberId = await createMemberA(fixture, "既有會員老張", phone);
   await mockLineLogin(page, fixture, { sub: newLineSub(), displayName: "張先生" });
+  const submit = await mockBookingSubmit(page);
   await walkToForm(page, fixture.c1.slugA, "張先生");
   await loginWithLine(page);
   await expect(page.getByTestId("customer-profile")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await page.locator("#customer-profile-phone").fill(phone);
   await page.getByTestId("customer-profile-consent").click();
   await page.getByTestId("customer-profile-submit").click();
-  await expect(page.getByTestId("customer-linked-existing")).toContainText(
-    `這支電話已經是「${SHOP_A_NAME}」的會員，已幫你接上原本的資料。`,
+  // 第 3 批(C3-D02):直接接上既有會員 ⇒ 自動送出 ⇒ ⑦-1。
+  await expect(page.getByTestId("booking-complete")).toHaveAttribute(
+    "data-kind",
+    "member_pending",
+    { timeout: LOAD_TIMEOUT },
   );
-  // 姓名不覆蓋(#931):畫面上是原本的會員姓名。
-  await expect(page.getByTestId("customer-linked-name")).toHaveText("既有會員老張");
-  await shotBoth(page, "05_linked_existing_member");
+  await shotBoth(page, "05_linked_existing_member_submitted");
+  // 接上的是原本那位會員;姓名不覆蓋(#931):會員姓名不變,訂單留這次填的姓名。
+  const linkedRow = await serviceClient()
+    .from("members")
+    .select("name,user_id")
+    .eq("id", memberId)
+    .single();
+  expect(linkedRow.data?.name).toBe("既有會員老張");
+  expect(linkedRow.data?.user_id).not.toBeNull();
+  const created = await serviceClient()
+    .from("bookings")
+    .select("member_id,customer_name")
+    .eq("customer_submission_id", String(submit.requests[0]!["submission_id"]))
+    .single();
+  expect(created.data).toEqual({ member_id: memberId, customer_name: "張先生" });
 
   // 店家鈴鐺(管理員)
   const svc = serviceClient();
@@ -292,6 +328,7 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
   track(other);
   const otherBodies = collectBodies(other);
   await mockLineLogin(other, fixture, { sub: newLineSub(), displayName: "陌生人" });
+  const otherSubmit = await mockBookingSubmit(other);
   await walkToForm(other, fixture.c1.slugA, "陌生人");
   await loginWithLine(other);
   await expect(other.getByTestId("customer-profile")).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -308,6 +345,8 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
     .toBe(true);
   expect(otherBodies.join("\n")).not.toContain("既有會員老張");
   await expect(other.locator("body")).not.toContainText("既有會員老張");
+  // phone_taken ⇒ 沒有接上會員,也不會送出預約
+  expect(otherSubmit.requests).toHaveLength(0);
   await otherCtx.close();
 });
 
@@ -318,13 +357,16 @@ test("主腦複查:店家解除綁定 ⇒ 同一位客人再填同一支電話�
   track(page);
   const phone = testPhone(fixture, 3);
   await mockLineLogin(page, fixture, { sub: newLineSub(), displayName: "重接測試" });
+  const submit = await mockBookingSubmit(page);
   await walkToForm(page, fixture.c1.slugA, "重接測試");
   await loginWithLine(page);
   await expect(page.getByTestId("customer-profile")).toBeVisible({ timeout: LOAD_TIMEOUT });
   await page.locator("#customer-profile-phone").fill(phone);
   await page.getByTestId("customer-profile-consent").click();
   await page.getByTestId("customer-profile-submit").click();
-  await expect(page.getByTestId("customer-linked-created")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  // 第 3 批:新會員建立後自動送出預約 ⇒ ⑦ 完成頁。
+  await expect(page.getByTestId("booking-complete")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(submit.requests).toHaveLength(1);
   const svc = serviceClient();
   const member = await svc
     .from("members")
@@ -358,6 +400,7 @@ test("主腦複查:店家解除綁定 ⇒ 同一位客人再填同一支電話�
   await page.getByTestId("customer-profile-consent").click();
   await page.getByTestId("customer-profile-submit").click();
   await expect(page.getByTestId("customer-phone-taken")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  expect(submit.requests).toHaveLength(1); // phone_taken ⇒ 不送出
 
   // 店家按「允許重新接上」(確認窗)。
   await admin.getByTestId("member-customer-relink-button").click();
@@ -370,11 +413,20 @@ test("主腦複查:店家解除綁定 ⇒ 同一位客人再填同一支電話�
   });
   await adminCtx.close();
 
-  // 客人再送一次 ⇒ 接上原本的會員。
+  // 客人再送一次 ⇒ 接上原本的會員,並送出這次的預約(第 3 批)。
   await page.getByTestId("customer-profile-submit").click();
-  await expect(page.getByTestId("customer-linked-existing")).toBeVisible({
+  await expect(page.getByTestId("booking-complete")).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
+  expect(submit.requests).toHaveLength(2);
+  const relinked = await svc.from("members").select("user_id").eq("id", memberId).single();
+  expect(relinked.data?.user_id).not.toBeNull();
+  const second = await svc
+    .from("bookings")
+    .select("member_id")
+    .eq("customer_submission_id", String(submit.requests[1]!["submission_id"]))
+    .single();
+  expect(second.data?.member_id).toBe(memberId);
 });
 
 test("C2-H01:後台 client 拿到客人帳號 ⇒ 顯示「這是客人帳號，不能進入後台」,只登出後台 client,客戶端登入不受影響", async ({
@@ -439,10 +491,12 @@ test("C2-B03:LINE 那邊沒成功(line_error)⇒ 回到 ⑤,資料都在 + 提�
   await expect(page.locator("#public-booking-name")).toHaveValue("失敗測試");
 });
 
-test("C2-E02 / E06:⑥-4 不登入預約(停用);沒有 LINE 登入的店維持停用;不允許不登入 ⇒ ⑥-1 沒有那顆", async ({
+test("C2-E02 / E06 + C3-D01 / D04:⑥-4 沒勾 / 沒填 ⇒ 停用 + 原因,填好可送出;沒有 LINE 登入的店 ⑤ 直接到 ⑥-4;不允許不登入 ⇒ ⑥-1 沒有那顆", async ({
   page,
 }) => {
   track(page);
+  // 第 3 批:⑥-4 會載 Turnstile(本機瀏覽器連不到外網 ⇒ 換成假的,行為同官方必過測試 sitekey)。
+  await mockTurnstile(page, "pass");
   // A:⑥-1 →「不登入，直接預約」→ ⑥-4
   await walkToForm(page, fixture.c1.slugA);
   await page.getByTestId("public-booking-submit").click();
@@ -450,16 +504,25 @@ test("C2-E02 / E06:⑥-4 不登入預約(停用);沒有 LINE 登入的店維持�
   await expect(page.getByTestId("customer-guest")).toContainText(
     "店家會用這支電話跟你聯絡服務細節（公司可填市話）。",
   );
+  // 沒勾同意 / 沒填電話 ⇒ 停用 + 常駐原因(C3-D04)
   await expect(page.getByTestId("customer-guest-submit")).toBeDisabled();
-  await expect(page.getByTestId("customer-guest-submit-reason")).toContainText("線上預約即將開放");
+  await expect(page.getByTestId("customer-guest-submit-reason")).toContainText(
+    "請先勾選同意會員政策與隱私權政策，才能送出預約。",
+  );
   await page.locator("#customer-guest-phone").fill("02-2345-6789");
   await page.getByTestId("customer-guest-consent").click();
-  await shotBoth(page, "08_guest_disabled");
+  // 市話也收;填好 ⇒ 可以送出,原因消失
+  await expect(page.getByTestId("customer-guest-submit")).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId("customer-guest-submit-reason")).toHaveCount(0);
+  await shotBoth(page, "08_guest_ready");
 
-  // B:沒有 LINE 登入 ⇒ ⑤ 停用 + 聯絡
+  // B:沒有 LINE 登入(允許不登入)⇒ ⑤「確定預約」可以按,直接到 ⑥-4(C3-D01)
   await walkToForm(page, fixture.c1.slugB, "王小明", ITEM_B);
-  await expect(page.getByTestId("public-booking-submit")).toBeDisabled();
-  await expect(page.getByTestId("public-booking-submit")).toHaveText("線上預約即將開放");
+  await expect(page.getByTestId("public-booking-submit")).toBeEnabled();
+  await expect(page.getByTestId("public-booking-submit")).toHaveText("確定預約");
+  await page.getByTestId("public-booking-submit").click();
+  await expect(page.getByTestId("customer-guest")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId("customer-line-login")).toHaveCount(0);
 
   // A 關掉「允許不登入」⇒ ⑥-1 只有 LINE 登入
   const svc = serviceClient();

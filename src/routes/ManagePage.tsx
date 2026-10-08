@@ -383,7 +383,7 @@ function BookingUrlCard() {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-foreground">預約網址</p>
         <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-          顧客預約用的專屬連結。目前客人可以看服務、選時間，線上送出預約即將開放。
+          顧客預約用的專屬連結。客人可以看服務、選時間並送出預約。
         </p>
       </div>
       <div className="flex shrink-0 gap-2">

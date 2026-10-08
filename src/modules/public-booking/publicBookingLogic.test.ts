@@ -8,6 +8,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formNextStepHint,
+  step5Name,
+  stepLabels,
   addDays,
   buildPublicServiceTabs,
   computeSelectionTotals,
@@ -318,5 +321,34 @@ describe("C1-A04 聯絡按鈕", () => {
     expect(
       resolveContactLinks({ line_friend_url: "http://line.me/x", phone: null }).lineUrl,
     ).toBeNull();
+  });
+});
+
+describe("2026-10-09 使用者新增:步驟條 5 步 + 填資料頁下一步提示", () => {
+  it("步驟條文字:1~4 步講下一步;第 5 步名稱依登入狀態;最後一步", () => {
+    expect(stepLabels(1, step5Name(false))).toEqual({
+      current: "步驟 1／5\u3000選服務",
+      next: "下一步：選服務人員",
+    });
+    expect(stepLabels(4, step5Name(false))).toEqual({
+      current: "步驟 4／5\u3000填資料",
+      next: "下一步：登入／電話",
+    });
+    expect(stepLabels(4, step5Name(true)).next).toBe("下一步：確認送出");
+    expect(stepLabels(5, step5Name(true))).toEqual({
+      current: "步驟 5／5\u3000確認送出",
+      next: "最後一步",
+    });
+  });
+
+  it("姓名欄上方的提示句(依店家設定與登入狀態)", () => {
+    const hint = (lineLoginEnabled: boolean, allowGuest: boolean, linked = false) =>
+      formNextStepHint({ lineLoginEnabled, allowGuest, linked });
+    expect(hint(true, true)).toBe("下一步會請你用 LINE 登入或填寫電話。");
+    expect(hint(true, false)).toBe("下一步會請你用 LINE 登入。");
+    expect(hint(false, true)).toBe("下一步會請你填寫電話。");
+    expect(hint(false, false)).toBeNull();
+    expect(hint(true, true, true)).toBeNull();
+    expect(hint(true, false, true)).toBeNull();
   });
 });

@@ -475,7 +475,8 @@ export interface BookingStatusChangeLog {
   fromStatus: BookingStatus | null;
   toStatus: BookingStatus;
   actorNameSnapshot: string;
-  actorRoleSnapshot: "merchant_admin" | "agent" | "staff" | "system";
+  /** 客戶端第 3 批(C3-A01):客人自己線上送出的單,建立那一列是 customer(姓名快照「客人 王小明」/「訪客 王小明」)。 */
+  actorRoleSnapshot: "merchant_admin" | "agent" | "staff" | "system" | "customer";
   createdAt: string;
   /** #844 §2.2/§4.6:操作備註。「還原完成」「取消已完成訂單」會帶管理員填的原因(只有原因,
    * 不含點數/餘額);其他轉換為 null。 */

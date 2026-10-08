@@ -284,7 +284,7 @@ describe("C1-A05~A09 預約流程", () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByTestId("public-booking-start"));
-    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent(/步驟 1／4\s*選服務/);
+    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent(/步驟 1／5\s*選服務/);
 
     // 只選加購 ⇒ 下一步停用 + 常駐說明
     await user.click(screen.getByRole("tab", { name: "加購項目" }));
@@ -354,15 +354,16 @@ describe("C1-A05~A09 預約流程", () => {
     await user.click(screen.getByTestId("public-booking-next"));
 
     // ⑤
-    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent(/步驟 4／4\s*填資料/);
+    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent(/步驟 4／5\s*填資料/);
     const summary = screen.getByTestId("public-booking-summary");
     expect(summary).toHaveTextContent("阿明");
     expect(summary).toHaveTextContent("抗菌塗層 ×1、室內機清洗 ×2、室外機清洗 ×1");
     expect(summary).toHaveTextContent("NT$ 6,500");
+    // 客戶端第 3 批(C3-D01):沒有 LINE 登入、允許不登入 ⇒「確定預約」可以按(直接到 ⑥-4)。
     const submit = screen.getByTestId("public-booking-submit");
-    expect(submit).toBeDisabled();
-    expect(submit).toHaveTextContent("線上預約即將開放");
-    expect(screen.getByText("目前請透過下方方式聯絡店家預約")).toBeInTheDocument();
+    expect(submit).toBeEnabled();
+    expect(submit).toHaveTextContent("確定預約");
+    expect(document.body.textContent).not.toContain("線上預約即將開放");
     expect(screen.getByLabelText(/服務地址/)).toBeInTheDocument();
     // 姓名空白離開欄位 ⇒ 中文提示
     await user.click(screen.getByLabelText(/姓名/));
@@ -425,7 +426,7 @@ describe("C1-A05~A09 預約流程", () => {
     );
     expect(screen.queryByTestId("public-booking-staff-any")).toBeNull();
     await user.click(screen.getByRole("button", { name: "上一步" }));
-    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent("步驟 1／4");
+    expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent("步驟 1／5");
   });
 
   it("時段讀取失敗 ⇒ 中文錯誤 + 重新整理,不顯示原始錯誤", async () => {

@@ -4,6 +4,7 @@
 //
 // 兩個 action(POST JSON):
 //   start    { action:'start', slug, draft }          → 產生 LINE 授權網址(state / nonce / PKCE),草稿存伺服器 10 分鐘
+//            { action:'start', slug, purpose:'join' }  → 第 3 批 C3-B04:沒有草稿的「加入會員」(complete 回 draft: null)
 //   complete { action:'complete', state, code?, error? } → 換 token、自己驗 id_token(HS256 / Channel Secret)、
 //                                                       找或建客戶帳號、generateLink 回 token_hash(前端 verifyOtp 換登入狀態)
 //
@@ -13,6 +14,8 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { clientIp } from "../_shared/clientIp.ts";
+import { isAllowedOrigin, isLocalSupabaseUrl, siteOrigin } from "../_shared/customerOrigin.ts";
 
 // =========================================================================
 // 常數
@@ -113,16 +116,8 @@ export async function pkceChallenge(verifier: string): Promise<string> {
 // =========================================================================
 // 環境:網站網址、LINE 端點(假端點只在本機生效,C2-F08)
 // =========================================================================
-const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "kong", "host.docker.internal"]);
-
-export function isLocalSupabaseUrl(url: string | undefined): boolean {
-  if (!url) return false;
-  try {
-    return LOCAL_HOSTS.has(new URL(url).hostname);
-  } catch {
-    return false;
-  }
-}
+// isLocalSupabaseUrl / siteOrigin / isAllowedOrigin:第 3 批搬到 _shared/customerOrigin.ts 共用(內容不變),這裡轉出同名 export。
+export { isAllowedOrigin, isLocalSupabaseUrl, siteOrigin };
 
 export interface LineEndpoints {
   authorizeUrl: string;
@@ -142,24 +137,6 @@ export function resolveLineEndpoints(env: (k: string) => string | undefined, log
     apiBase: (env("LINE_MOCK_API_BASE") || OFFICIAL_API_BASE).replace(/\/+$/, ""),
     mock: true,
   };
-}
-
-export function siteOrigin(env: (k: string) => string | undefined): string | null {
-  const raw = env("PUBLIC_SITE_URL");
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:" && !LOCAL_HOSTS.has(u.hostname)) return null;
-    return u.origin;
-  } catch {
-    return null;
-  }
-}
-
-export function isAllowedOrigin(origin: string | null, site: string | null): boolean {
-  if (origin === null) return true; // 非瀏覽器呼叫(沒有 Origin 標頭)不受 CORS 管
-  if (site && origin === site) return true;
-  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(origin);
 }
 
 // =========================================================================
@@ -291,25 +268,10 @@ function json(body: Record<string, unknown>, status: number, cors: Record<string
 }
 
 /**
- * 頻率限制用的來源 IP(QA 第 2 批:不能用客人自己可以偽造的那一段)。
- *   1. cf-connecting-ip:正式環境前面是 Cloudflare,這個標頭由 Cloudflare 依「實際連線的 IP」覆寫,客人改不了。
- *   2. 沒有 cf-connecting-ip(本機 Kong)時,用 X-Forwarded-For 的「最後一段」:客人自己帶的值永遠在前面,
- *      代理會把它看到的連線 IP 接在最後面(例:客人送「1.2.3.4」⇒ 收到「1.2.3.4, <真的 IP>」)。
- *   3. 都沒有 ⇒ "unknown"(所有這種請求共用同一個額度,寧可嚴不可鬆)。
- *   x-real-ip 一律不讀。
- * 出處:Supabase 社群實測(github.com/orgs/supabase/discussions/34647):偽造 XFF 時真正的 IP 被接在最後、
- * cf-connecting-ip 是真的 IP;Supabase 官方文件沒有正式寫明,部署後主腦請用 curl 偽造一次確認。
+ * 頻率限制用的來源 IP。客戶端第 3 批(C3-G03)搬到 _shared/clientIp.ts 與 customer-booking-submit 共用,
+ * 規則不變(cf-connecting-ip → X-Forwarded-For 最後一段 → "unknown");這裡用同名 export 轉出。
  */
-export function clientIp(req: Request): string {
-  const cf = req.headers.get("cf-connecting-ip")?.trim();
-  if (cf) return cf;
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) {
-    const parts = xff.split(",").map((s) => s.trim()).filter((s) => s !== "");
-    if (parts.length > 0) return parts[parts.length - 1];
-  }
-  return "unknown";
-}
+export { clientIp };
 
 export async function handleRequest(req: Request, deps?: HandleRequestDeps): Promise<Response> {
   const d = deps ?? buildDefaultDeps();
@@ -361,8 +323,15 @@ async function handleStart(
   if (typeof body.slug !== "string" || body.slug.trim() === "" || body.slug.length > 100) {
     return json({ status: "invalid_request" }, 400, cors);
   }
-  const draft = validateDraft(body.draft);
-  if (!draft) return json({ status: "invalid_draft" }, 400, cors);
+  // 客戶端第 3 批 C3-B04:⑦-3 訪客完成頁「用 LINE 登入加入會員」⇒ purpose:'join',可以沒有草稿
+  // (complete 會原樣回 draft: null)。沒有 purpose 或其他值 ⇒ 草稿照舊必填。
+  let draft: BookingDraft | null;
+  if (body.purpose === "join" && (body.draft === undefined || body.draft === null)) {
+    draft = null;
+  } else {
+    draft = validateDraft(body.draft);
+    if (!draft) return json({ status: "invalid_draft" }, 400, cors);
+  }
 
   const state = base64UrlEncode(d.randomBytes(32));
   const nonce = base64UrlEncode(d.randomBytes(32));

@@ -104,6 +104,8 @@ import { isoToTaipeiDateTimeWithSeconds, isoToTaipeiTime } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
 import { formatMaterialAmount } from "./materialCostSelection";
 import { CancelBookingConfirmButton } from "./CancelBookingConfirmButton";
+import { CustomerBookingSourceTag } from "./CustomerBookingSourceTag";
+import { customerBookingSourceKind, GUEST_BOOKING_BACKEND_HINT } from "./customerBookingSource";
 // #996 第 11 批 K:已完成訂單的「服務人員抽成」區塊 + 「重新計算抽成」按鈕。
 import { BookingCommissionSection } from "./BookingCommissionSection";
 import {
@@ -613,9 +615,13 @@ export function BookingDetailDialog({
           }
           titleExtra={
             booking && isDetailView ? (
-              <StatusTag tone={bookingStatusTone(booking.status as BookingStatus)}>
-                {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
-              </StatusTag>
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <StatusTag tone={bookingStatusTone(booking.status as BookingStatus)}>
+                  {BOOKING_STATUS_LABELS[booking.status as BookingStatus]}
+                </StatusTag>
+                {/* 客戶端第 3 批(C3-E01):客人自己線上預約的單。 */}
+                <CustomerBookingSourceTag booking={booking} />
+              </span>
             ) : null
           }
           footer={
@@ -907,6 +913,11 @@ export function BookingDetailDialog({
                     onChanged();
                   }}
                 />
+              ) : null}
+
+              {/* 客戶端第 3 批(C3-E01):訪客預約 ⇒ 常駐提醒店家自己打電話確認(第七章)。 */}
+              {customerBookingSourceKind(booking) === "guest" ? (
+                <AlertNote data-testid="guest-booking-hint">{GUEST_BOOKING_BACKEND_HINT}</AlertNote>
               ) : null}
 
               <DetailSection label="客戶">

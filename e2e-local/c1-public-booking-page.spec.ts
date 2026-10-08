@@ -182,7 +182,7 @@ test("C1-F02:瀏覽器實際收到的回應原文(頁面 + 指定 / 不指定時
   expect(all).toContain(STAFF_MING);
 });
 
-test("C1-A02~A09(1280):①~⑤ 走完,時長 / 金額、日期狀態、上一頁保留、⑤ 停用按鈕;截圖", async ({
+test("C1-A02~A09 + C3-D01(1280):①~⑤ 走完,時長 / 金額、日期狀態、上一頁保留;⑤「確定預約」可以按、直接到 ⑥-4;截圖", async ({
   page,
 }) => {
   track(page);
@@ -210,7 +210,7 @@ test("C1-A02~A09(1280):①~⑤ 走完,時長 / 金額、日期狀態、上一頁
 
   // ② 選服務
   await page.getByTestId("public-booking-start").click();
-  await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 1／4");
+  await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 1／5");
   await expect(page.getByText(SENTINELS.removedItem)).toHaveCount(0);
   await page.getByRole("tab", { name: "加購項目" }).click();
   await page.getByRole("checkbox", { name: new RegExp(ITEM_ADDON) }).click();
@@ -278,16 +278,22 @@ test("C1-A02~A09(1280):①~⑤ 走完,時長 / 金額、日期狀態、上一頁
   );
   await page.getByTestId("public-booking-next").click();
 
-  // ⑤ 填資料:停用的確定預約 + 聯絡按鈕;到府有必填地址
-  await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 4／4");
+  // ⑤ 填資料:到府有必填地址。客戶端第 3 批(C3-D01):A 店沒有 LINE 登入、允許不登入 ⇒「確定預約」可以按,
+  //   姓名 / 地址填好後直接到 ⑥-4 不登入預約(不再是第 1 批的「線上預約即將開放」停用按鈕)。
+  // 2026-10-09 使用者新增:步驟條 5 步;A 店沒有 LINE 登入、允許不登入 ⇒ 下一步「登入／電話」+ 姓名上方提示句。
+  await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 4／5");
+  await expect(page.getByTestId("public-booking-step-label")).toContainText("下一步：登入／電話");
+  await expect(page.getByTestId("public-booking-next-step-hint")).toHaveText(
+    "下一步會請你填寫電話。",
+  );
   const summary = page.getByTestId("public-booking-summary");
   await expect(summary).toContainText(STAFF_MING);
   await expect(summary).toContainText(`${ITEM_INDOOR} ×2、${ITEM_OUTDOOR} ×1`);
   await expect(summary).toContainText("NT$ 6,200");
   const submit = page.getByTestId("public-booking-submit");
-  await expect(submit).toBeDisabled();
-  await expect(submit).toHaveText("線上預約即將開放");
-  await expect(page.getByText("目前請透過下方方式聯絡店家預約")).toBeVisible();
+  await expect(submit).toBeEnabled();
+  await expect(submit).toHaveText("確定預約");
+  await expect(page.getByText("線上預約即將開放")).toHaveCount(0);
   const address = page.locator("#public-booking-address");
   await expect(address).toBeVisible();
   await expect(address).toHaveAttribute("aria-required", "true");
@@ -300,9 +306,14 @@ test("C1-A02~A09(1280):①~⑤ 走完,時長 / 金額、日期狀態、上一頁
   });
   await submit.scrollIntoViewIfNeeded();
   await page.screenshot({
-    path: `${SHOT_DIR}/c1-05-submit-disabled-1280.png`,
+    path: `${SHOT_DIR}/c1-05-submit-1280.png`,
     animations: "disabled",
   });
+  // C3-D01:沒有 LINE 登入的店 ⇒ 直接到 ⑥-4(沒有 ⑥-1 LINE 登入畫面)
+  await submit.click();
+  await expect(page.getByTestId("customer-guest")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page.getByTestId("customer-line-login")).toHaveCount(0);
+  await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 5／5");
 
   // 重新整理 ⇒ 回到 ①(不存瀏覽器)
   await page.reload();
@@ -386,7 +397,9 @@ test.describe("375 寬", () => {
     await page.getByTestId(`public-booking-day-${day}`).click();
     await page.locator('[data-testid^="public-booking-time-"]').first().click();
     await page.getByTestId("public-booking-next").click();
-    await expect(page.getByTestId("public-booking-submit")).toBeDisabled();
+    // 客戶端第 3 批(C3-D01):B 店沒有 LINE 登入、允許不登入 ⇒「確定預約」可以按(不再是停用按鈕)。
+    await expect(page.getByTestId("public-booking-submit")).toBeEnabled();
+    await expect(page.getByTestId("public-booking-submit")).toHaveText("確定預約");
     await expect(page.locator("#public-booking-address")).toHaveCount(0);
     await expect(page.getByText("服務地址")).toHaveCount(0);
     await expectNoHorizontalScroll(page, "到店 ⑤");

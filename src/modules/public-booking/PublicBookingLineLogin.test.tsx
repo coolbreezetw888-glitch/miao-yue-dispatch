@@ -57,6 +57,36 @@ vi.mock("./customerAuthApi", async () => {
   };
 });
 
+// 客戶端第 3 批:⑥-2 完成會員資料後會自動送出預約 ⇒ 送出也換成假的(預設回 too_many_open,畫面停在確認頁)。
+vi.mock("./bookingSubmitApi", async () => {
+  const actual = await vi.importActual<typeof import("./bookingSubmitApi")>("./bookingSubmitApi");
+  return {
+    ...actual,
+    submitCustomerBooking: vi.fn(async () => ({ kind: "rejected", state: "too_many_open" })),
+  };
+});
+// Turnstile 腳本不載真的:render 回一個 id,execute 直接給 token。
+vi.mock("./turnstile", async () => {
+  const actual = await vi.importActual<typeof import("./turnstile")>("./turnstile");
+  return {
+    ...actual,
+    loadTurnstile: vi.fn(async () => ({
+      render: (_el: HTMLElement, opts: Record<string, unknown>) => {
+        (globalThis as Record<string, unknown>)["__tsOpts"] = opts;
+        return "w1";
+      },
+      execute: () => {
+        const opts = (globalThis as Record<string, unknown>)["__tsOpts"] as {
+          callback: (t: string) => void;
+        };
+        setTimeout(() => opts.callback("TOKEN"), 0);
+      },
+      reset: () => undefined,
+      remove: () => undefined,
+    })),
+  };
+});
+
 const { default: PublicBookingPageView } = await import("./PublicBookingPage");
 const { CustomerAuthError, CompleteProfileError } = await import("./customerAuthApi");
 const { putPendingDraft, takePendingDraft } = await import("./customerLoginLogic");
@@ -200,18 +230,35 @@ describe("C2-E02 ⑤「確定預約」依商家設定", () => {
     expect(screen.queryByTestId("customer-guest-button")).toBeNull();
   });
 
-  it.each([
-    ["允許不登入", true],
-    ["不允許不登入", false],
-  ])("沒有 LINE 登入(%s)⇒ 維持第 1 批的停用按鈕 + 聯絡方式", async (_label, allowGuest) => {
-    state.page = makePage({ line_login_enabled: false, allow_guest_booking: allowGuest });
+  it("C3-D01 沒有 LINE 登入 + 允許不登入 ⇒「確定預約」直接到 ⑥-4", async () => {
+    state.page = makePage({ line_login_enabled: false, allow_guest_booking: true });
+    const user = userEvent.setup();
+    renderPage();
+    await walkToForm(user);
+    await user.type(screen.getByLabelText(/姓名/), "王小明");
+    const submit = screen.getByTestId("public-booking-submit");
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    expect(await screen.findByTestId("customer-guest")).toBeInTheDocument();
+    expect(screen.queryByTestId("customer-line-login")).toBeNull();
+    // 系統上一頁 = 回 ⑤
+    await user.click(screen.getByRole("button", { name: "回上一步" }));
+    expect(screen.getByLabelText(/姓名/)).toHaveValue("王小明");
+  });
+
+  it("C3-D01 沒有 LINE 登入 + 不允許不登入 ⇒ 停用按鈕 + 常駐原因 + 聯絡方式", async () => {
+    state.page = makePage({ line_login_enabled: false, allow_guest_booking: false });
     const user = userEvent.setup();
     renderPage();
     await walkToForm(user);
     const submit = screen.getByTestId("public-booking-submit");
     expect(submit).toBeDisabled();
-    expect(submit).toHaveTextContent("線上預約即將開放");
+    expect(submit).toHaveTextContent("確定預約");
+    expect(screen.getByTestId("public-booking-not-open")).toHaveTextContent(
+      "這家店目前不開放線上預約，請透過下方方式聯絡店家。",
+    );
     expect(screen.getByTestId("public-booking-contacts")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("即將開放");
   });
 });
 
@@ -272,8 +319,8 @@ describe("C2-E03 ⑥-1 用 LINE 登入", () => {
   });
 });
 
-describe("C2-E06 ⑥-4 不登入預約(這批送出鈕停用)", () => {
-  it("摘要、電話(收市話)、同意框、藍色說明、停用按鈕 + 常駐原因 + 聯絡按鈕", async () => {
+describe("C2-E06 / C3-D04 ⑥-4 不登入預約", () => {
+  it("摘要、電話(收市話)、同意框、藍色說明;沒勾同意 / 電話錯 ⇒ 停用 + 常駐原因", async () => {
     const user = userEvent.setup();
     renderPage();
     await walkToForm(user);
@@ -284,11 +331,18 @@ describe("C2-E06 ⑥-4 不登入預約(這批送出鈕停用)", () => {
     expect(within(guest).getByTestId("public-booking-summary")).toHaveTextContent("王小明");
     expect(guest).toHaveTextContent("店家會用這支電話跟你聯絡服務細節（公司可填市話）。");
     expect(screen.getByTestId("customer-guest-note")).toHaveTextContent(
-      "不登入的預約都要等店家確認。",
+      "不登入的預約都要等店家確認。之後想加入會員，隨時可以用 LINE 登入，下次預約不用再填電話。",
     );
+    // 2026-10-09:不承諾第 4、5 批才有的事(查看預約、收到通知)
+    expect(screen.getByTestId("customer-guest-note")).not.toHaveTextContent("通知");
     expect(screen.getByTestId("customer-guest-submit")).toBeDisabled();
+    expect(screen.getByTestId("customer-guest-submit")).toHaveTextContent("送出預約");
     expect(screen.getByTestId("customer-guest-submit-reason")).toHaveTextContent(
-      "線上預約即將開放",
+      "請先勾選同意會員政策與隱私權政策，才能送出預約。",
+    );
+    await user.click(screen.getByTestId("customer-guest-consent"));
+    expect(screen.getByTestId("customer-guest-submit-reason")).toHaveTextContent(
+      "請先填寫電話，才能送出預約。",
     );
     // 市話可以
     const phone = screen.getByLabelText(/電話/);
@@ -332,10 +386,10 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     expect(screen.getByTestId("customer-line-name")).toHaveTextContent("<script>alert(1)</script>");
     expect(document.querySelector("script")).toBeNull();
     const submit = screen.getByTestId("customer-profile-submit");
-    expect(submit).toHaveTextContent("完成登入");
+    expect(submit).toHaveTextContent("送出預約");
     expect(submit).toBeDisabled();
     expect(screen.getByTestId("customer-profile-blocked")).toHaveTextContent(
-      "請先勾選同意會員政策與隱私權政策，才能完成登入。",
+      "請先勾選同意會員政策與隱私權政策，才能送出預約。",
     );
 
     await user.type(screen.getByLabelText(/電話/), "0912-345-678");
@@ -358,7 +412,7 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     expect(await screen.findByTestId("customer-guest")).toBeInTheDocument();
   });
 
-  it("接上既有會員 ⇒「已幫你接上原本的資料」+ 已登入確認畫面;登出 ⇒ 回 ⑥-1", async () => {
+  it("接上既有會員 ⇒ 自動送出;送出沒成功(too_many_open)⇒ 確認畫面 +「已幫你接上原本的資料」;登出 ⇒ 回 ⑥-1", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };
     state.profileResult = { kind: "linked", created: false, existing: true };
     restoreLoggedIn();
@@ -372,7 +426,10 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
       "這支電話已經是「涼風工匠」的會員，已幫你接上原本的資料。",
     );
     expect(screen.getByTestId("customer-linked-name")).toHaveTextContent("王大明");
-    expect(screen.getByTestId("customer-linked-submit")).toBeDisabled();
+    expect(screen.getByTestId("customer-submit-error-message")).toHaveTextContent(
+      "你目前已有 3 筆尚未完成的預約",
+    );
+    expect(screen.getByTestId("customer-linked-submit")).toBeEnabled();
     expect(screen.getByTestId("public-booking-summary")).toHaveTextContent("單色凝膠 ×1");
 
     await user.click(screen.getByTestId("customer-logout"));
@@ -413,7 +470,7 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     expect(screen.queryByTestId("customer-profile-consent-member-policy")).toBeNull();
     expect(screen.getByRole("link", { name: "隱私權政策" })).toHaveAttribute("href", "/privacy");
     expect(screen.getByTestId("customer-profile-blocked")).toHaveTextContent(
-      "請先勾選同意隱私權政策，才能完成登入。",
+      "請先勾選同意隱私權政策，才能送出預約。",
     );
   });
 });

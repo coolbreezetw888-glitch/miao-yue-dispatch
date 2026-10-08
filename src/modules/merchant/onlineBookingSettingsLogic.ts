@@ -87,3 +87,31 @@ export function parseTravelBufferMinutes(raw: string): IntegerFieldCheck {
     unit: "分鐘",
   });
 }
+
+// =========================================================================
+// 客戶端第 3 批(C3-H05,零之零 Q7):店家自訂完成頁文字(會員 / 訪客各一段)。
+// 資料庫:merchant_booking_settings.completion_message_member / completion_message_guest,
+// 去頭尾空白後空字串存 null、各最多 200 字(check)。留空 ⇒ 客人看到預設句。
+// =========================================================================
+
+export const COMPLETION_MESSAGE_MAX = 200;
+/** 留空時客人看到的預設句(跟伺服器 coalesce 的預設一致;畫面當 placeholder)。 */
+export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知你。";
+export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與你聯絡。";
+
+/** 字數(用字元算,跟資料庫 char_length 一致;emoji 算 1 個字)。 */
+export function countCompletionMessageChars(raw: string): number {
+  return [...raw.trim()].length;
+}
+
+export type CompletionMessageCheck =
+  { ok: true; value: string | null } | { ok: false; message: string };
+
+export function validateCompletionMessage(raw: string): CompletionMessageCheck {
+  const value = raw.trim();
+  if (value === "") return { ok: true, value: null };
+  if ([...value].length > COMPLETION_MESSAGE_MAX) {
+    return { ok: false, message: `最多 ${COMPLETION_MESSAGE_MAX} 個字。` };
+  }
+  return { ok: true, value };
+}

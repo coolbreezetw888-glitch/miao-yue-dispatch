@@ -25,6 +25,9 @@ begin
   select replace(prosrc, E'\r\n', E'\n') into v_src from pg_proc where oid = pg_temp.req987_oid(p_sig);
   -- 第 22 批 #1023:set_staff_day_override 多了一段「時段外不能開放」(有標記),先拿掉再換回舊訊息比對改前指紋。
   v_src := regexp_replace(v_src, '  -- \[req1023-batch22 begin\].*?-- \[req1023-batch22 end\]\n\n', '', 'g');
+  -- 客戶端第 3 批 C3-E01:get_my_booking_schedule 每筆多回 source / is_guest_booking(只加這幾行),先拿掉再比對改前指紋。
+  v_src := replace(v_src, E'      ''source'', bb.source,\n      ''is_guest_booking'', bb.is_guest_booking,\n', '');
+  v_src := replace(v_src, E'      b.source, b.is_guest_booking,\n', '');
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;

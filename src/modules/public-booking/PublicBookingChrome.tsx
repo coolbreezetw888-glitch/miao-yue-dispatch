@@ -10,7 +10,7 @@ import { ChevronLeft, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import type { ContactLinks } from "./publicBookingLogic";
+import { STEP5_NAME_LOGIN, stepLabels, TOTAL_STEPS, type ContactLinks } from "./publicBookingLogic";
 
 export function PublicShell({
   header,
@@ -90,54 +90,60 @@ export function SimpleHeader({
   );
 }
 
-const STEP_NAMES: readonly string[] = ["選服務", "選服務人員", "選時間", "填資料"];
-/** 「步驟 1／4」與步驟名稱之間的全形空白(同預覽圖)。寫成跳脫字元,避免原始碼裡出現看不見的特殊空白。 */
-const FULLWIDTH_SPACE = "\u3000";
-
 /**
- * ②~⑤ 的頁首:返回箭頭 + 標題 +「步驟 x／4(全形空白)這步名稱 / 下一步：⋯」+ 四段進度條。
- * @param stepNumber 1~4
+ * ②~⑥ 的頁首:返回箭頭(可省略)+ 標題 + 右側動作(登出,可省略)
+ * +「步驟 x／5(全形空白)這步名稱 / 下一步：⋯」+ 五段進度條。
+ * @param stepNumber 1~5(5 = ⑥-1 / ⑥-2 / ⑥-4 / 確認送出)
+ * @param lastStepName 第 5 步的名稱(step5Name)。
  */
 export function StepHeader({
   stepNumber,
   title,
   onBack,
+  right,
+  lastStepName = STEP5_NAME_LOGIN,
   children,
 }: {
-  stepNumber: 1 | 2 | 3 | 4;
+  stepNumber: 1 | 2 | 3 | 4 | 5;
   title: string;
-  onBack: () => void;
+  onBack?: (() => void) | undefined;
+  right?: ReactNode;
+  lastStepName?: string;
   /** 標題下方的額外內容(② 的分類頁籤)。 */
   children?: ReactNode;
 }) {
-  const current = STEP_NAMES[stepNumber - 1] ?? "";
-  const next = stepNumber < 4 ? `下一步：${STEP_NAMES[stepNumber] ?? ""}` : "最後確認";
+  const { current, next } = stepLabels(stepNumber, lastStepName);
   return (
     <>
-      <div className="relative flex h-[54px] items-center px-2 sm:px-3">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="回上一步"
-          className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-foreground">
-            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-          </span>
-        </button>
-        <h1 className="pointer-events-none absolute inset-x-14 truncate text-center text-base font-bold text-foreground">
+      <div className="relative flex h-[54px] items-center justify-between px-2 sm:px-3">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="回上一步"
+            className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-foreground">
+              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+            </span>
+          </button>
+        ) : (
+          <span className="h-11 w-11 shrink-0" aria-hidden="true" />
+        )}
+        <h1 className="pointer-events-none absolute inset-x-[72px] truncate text-center text-base font-bold text-foreground">
           {title}
         </h1>
+        <div className="flex min-w-11 shrink-0 justify-end">{right}</div>
       </div>
       <div
         className="flex justify-between gap-3 px-4 pb-2 text-xs text-muted-foreground"
         data-testid="public-booking-step-label"
       >
-        <span>{`步驟 ${stepNumber}／4${FULLWIDTH_SPACE}${current}`}</span>
+        <span>{current}</span>
         <span>{next}</span>
       </div>
       <div className="flex gap-1.5 px-4 pb-2.5" aria-hidden="true">
-        {[1, 2, 3, 4].map((n) => (
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((n) => (
           <div
             key={n}
             className={cn("h-1 flex-1 rounded-full", n <= stepNumber ? "bg-brand" : "bg-border")}

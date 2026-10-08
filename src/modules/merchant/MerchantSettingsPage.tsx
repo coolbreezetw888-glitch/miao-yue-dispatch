@@ -51,7 +51,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  AlertNote,
   ErrorState,
   FieldColor,
   FieldInput,
@@ -98,6 +97,11 @@ import { LogoUploader } from "./LogoUploader";
 import { MerchantAdminList } from "./MerchantAdminList";
 import { ThemePresetPicker } from "./ThemePresetPicker";
 import {
+  COMPLETION_MESSAGE_MAX,
+  countCompletionMessageChars,
+  DEFAULT_GUEST_COMPLETION_MESSAGE,
+  DEFAULT_MEMBER_COMPLETION_MESSAGE,
+  validateCompletionMessage,
   parseMinLeadHours,
   parseTravelBufferMinutes,
   validateLineFriendUrl,
@@ -138,6 +142,9 @@ function MerchantSettingsPageInner() {
   const [minLeadHours, setMinLeadHours] = useState("");
   const [travelBufferMinutes, setTravelBufferMinutes] = useState("");
   const [allowGuestBooking, setAllowGuestBooking] = useState(true);
+  // 客戶端第 3 批(C3-H05):完成頁的店家自訂文字(會員 / 訪客分開)。
+  const [completionMessageMember, setCompletionMessageMember] = useState("");
+  const [completionMessageGuest, setCompletionMessageGuest] = useState("");
   const [onlineSettingsLoadedFor, setOnlineSettingsLoadedFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
@@ -177,6 +184,8 @@ function MerchantSettingsPageInner() {
     setMinLeadHours(String(data.minLeadHours));
     setTravelBufferMinutes(String(data.travelBufferMinutes));
     setAllowGuestBooking(data.allowGuestBooking);
+    setCompletionMessageMember(data.completionMessageMember ?? "");
+    setCompletionMessageGuest(data.completionMessageGuest ?? "");
     setOnlineSettingsLoadedFor(merchant.id);
   }, [merchant, onlineSettingsQuery.data, onlineSettingsQuery.isFetching, onlineSettingsLoadedFor]);
 
@@ -184,11 +193,15 @@ function MerchantSettingsPageInner() {
   const lineFriendUrlCheck = validateLineFriendUrl(lineFriendUrl);
   const minLeadHoursCheck = parseMinLeadHours(minLeadHours);
   const travelBufferCheck = parseTravelBufferMinutes(travelBufferMinutes);
+  const memberMessageCheck = validateCompletionMessage(completionMessageMember);
+  const guestMessageCheck = validateCompletionMessage(completionMessageGuest);
   const onlineSettingsDirty = onlineSettings
     ? minLeadHours.trim() !== String(onlineSettings.minLeadHours) ||
       (isOnSiteIndustry &&
         travelBufferMinutes.trim() !== String(onlineSettings.travelBufferMinutes)) ||
-      allowGuestBooking !== onlineSettings.allowGuestBooking
+      allowGuestBooking !== onlineSettings.allowGuestBooking ||
+      completionMessageMember.trim() !== (onlineSettings.completionMessageMember ?? "").trim() ||
+      completionMessageGuest.trim() !== (onlineSettings.completionMessageGuest ?? "").trim()
     : false;
 
   // 使用者回報(2026-09-24):「儲存變更」按鈕在頁面最下方(要捲過地址/電話/主題色/公告/管理員
@@ -263,7 +276,10 @@ function MerchantSettingsPageInner() {
     const onlineFieldsInvalid =
       !lineFriendUrlCheck.ok ||
       (onlineSettings !== null &&
-        (!minLeadHoursCheck.ok || (isOnSiteIndustry && !travelBufferCheck.ok)));
+        (!minLeadHoursCheck.ok ||
+          (isOnSiteIndustry && !travelBufferCheck.ok) ||
+          !memberMessageCheck.ok ||
+          !guestMessageCheck.ok));
     if (onlineFieldsInvalid) {
       toast.error("「線上預約」有欄位填錯了，請先修正標紅的欄位");
       return;
@@ -292,6 +308,12 @@ function MerchantSettingsPageInner() {
               ? travelBufferCheck.value
               : onlineSettings.travelBufferMinutes,
           allowGuestBooking,
+          completionMessageMember: memberMessageCheck.ok
+            ? memberMessageCheck.value
+            : onlineSettings.completionMessageMember,
+          completionMessageGuest: guestMessageCheck.ok
+            ? guestMessageCheck.value
+            : onlineSettings.completionMessageGuest,
         });
         await queryClient.invalidateQueries({
           queryKey: [ONLINE_BOOKING_SETTINGS_QUERY_KEY, merchant!.id],
@@ -411,7 +433,7 @@ function MerchantSettingsPageInner() {
 
             <FormField
               label="預約網址"
-              help="這組網址代碼由系統自動產生，目前不開放自行修改。客人打開這個網址就能看服務、選時間，線上送出預約即將開放。"
+              help="顧客預約用的專屬連結。客人可以看服務、選時間並送出預約。網址代碼由系統自動產生，目前不開放自行修改。"
               helpLabel="說明：預約網址是什麼、可以改嗎"
             >
               {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
@@ -536,15 +558,52 @@ function MerchantSettingsPageInner() {
                 <SwitchRow
                   id="settings-allow-guest-booking"
                   title="允許不登入預約"
-                  description="關閉後，客人一定要用 LINE 登入才能預約。"
+                  description="關閉後，客人一定要用 LINE 登入才能預約。沒有設定 LINE 登入的店關閉這個開關，客人就無法線上預約。"
                   descriptionMode="popover"
                   helpLabel="說明：允許不登入預約是什麼意思"
                   checked={allowGuestBooking}
                   onCheckedChange={setAllowGuestBooking}
+                />
+
+                {/* C3-H05(零之零 Q7):客人送出預約後完成頁的說明,會員 / 訪客分開。留空 = 預設句(placeholder)。 */}
+                <FormField
+                  label="會員預約完成後顯示的文字"
+                  htmlFor="settings-completion-message-member"
+                  help="客人送出預約後在完成頁看到的說明。留空會顯示預設文字。"
+                  helpLabel="說明：會員預約完成後顯示的文字是什麼"
+                  counter={{
+                    value: countCompletionMessageChars(completionMessageMember),
+                    max: COMPLETION_MESSAGE_MAX,
+                  }}
+                  error={memberMessageCheck.ok ? null : memberMessageCheck.message}
                 >
-                  {/* 「現在的狀態跟你以為的不一樣」⇒ 常駐黃色提醒,不收進問號(ui-overlay-patterns 二)。 */}
-                  <AlertNote className="mt-2.5">這個設定會在登入功能推出後才生效。</AlertNote>
-                </SwitchRow>
+                  <FieldTextarea
+                    id="settings-completion-message-member"
+                    rows={2}
+                    placeholder={DEFAULT_MEMBER_COMPLETION_MESSAGE}
+                    value={completionMessageMember}
+                    onChange={(e) => setCompletionMessageMember(e.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  label="訪客預約完成後顯示的文字"
+                  htmlFor="settings-completion-message-guest"
+                  help="客人送出預約後在完成頁看到的說明。留空會顯示預設文字。"
+                  helpLabel="說明：訪客預約完成後顯示的文字是什麼"
+                  counter={{
+                    value: countCompletionMessageChars(completionMessageGuest),
+                    max: COMPLETION_MESSAGE_MAX,
+                  }}
+                  error={guestMessageCheck.ok ? null : guestMessageCheck.message}
+                >
+                  <FieldTextarea
+                    id="settings-completion-message-guest"
+                    rows={2}
+                    placeholder={DEFAULT_GUEST_COMPLETION_MESSAGE}
+                    value={completionMessageGuest}
+                    onChange={(e) => setCompletionMessageGuest(e.target.value)}
+                  />
+                </FormField>
               </>
             )}
 

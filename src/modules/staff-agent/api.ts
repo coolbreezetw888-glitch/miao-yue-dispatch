@@ -97,15 +97,46 @@ export interface UpsertMerchantStaffInput {
   compensationType?: "monthly_salary" | "piece_rate";
 }
 
-/** 3.4:回傳某商家的服務人員清單(含已移除,4.2 畫面自行依 status 篩選/標示)。 */
+/**
+ * 3.4:回傳某商家的服務人員清單(含已移除,4.2 畫面自行依 status 篩選/標示)。
+ * 客戶端第 3 批(C3-H03,2026-10-09):排序改成「順位」—— display_order,同值再 created_at、id
+ * (跟資料庫 get_public_booking_page / 後台行事曆同一套排序)。用這支清單的畫面(服務人員管理、
+ * 服務人員權限頁)一起變成依順位。
+ */
 export async function fetchMerchantStaff(merchantId: string): Promise<MerchantStaff[]> {
   const { data, error } = await supabase
     .from("merchant_staff")
     .select("*")
     .eq("merchant_id", merchantId)
-    .order("created_at", { ascending: true });
+    .order("display_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
   if (error) throw error;
   return (data ?? []) as MerchantStaff[];
+}
+
+/** C3-H02:`public.move_merchant_staff_order` 的結果。edge = 已經在最上 / 最下(不是錯誤)。 */
+export type MoveStaffOrderResult = "moved" | "edge";
+
+/**
+ * C3-H02 / H03:服務人員順位往上 / 往下移一格(跟同店、在職的相鄰那一位交換)。
+ * 權限(管理員或有服務人員管理權限的客服)、同店鎖都在資料庫函式裡。
+ * 錯誤:42501(沒權限)、22023 staff_not_active / invalid_direction(c3-contract 第 4 節)。
+ */
+export async function moveMerchantStaffOrder(
+  staffId: string,
+  direction: "up" | "down",
+): Promise<MoveStaffOrderResult> {
+  const { data, error } = await supabase.rpc("move_merchant_staff_order", {
+    p_staff_id: staffId,
+    p_direction: direction,
+  });
+  if (error) throw error;
+  const state =
+    typeof data === "object" && data !== null && "state" in data
+      ? (data as { state: unknown }).state
+      : null;
+  return state === "edge" ? "edge" : "moved";
 }
 
 /** 3.4:新增一筆服務人員(規則 2.2,這次不涉及帳號查找,單純資料寫入)。 */

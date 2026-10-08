@@ -61,6 +61,12 @@ export interface MyBookingScheduleItem {
   is_member: boolean | null;
   member_name: string | null;
   member_points_balance: number | null;
+  /**
+   * 客戶端第 3 批(C3-E01):get_my_booking_schedule 多回這兩欄(工程師甲擴充,不改其他欄位與遮蔽規則)。
+   * 寫成可選:舊版函式沒有這兩欄時當作一般訂單。
+   */
+  source?: string | null;
+  is_guest_booking?: boolean | null;
 }
 
 // =========================================================================

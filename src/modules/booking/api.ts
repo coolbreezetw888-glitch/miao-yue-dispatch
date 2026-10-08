@@ -15,6 +15,10 @@ import { dispatchPushNotification } from "@/modules/push-notifications/api";
 import { computeBookingChangeSummary } from "@/modules/push-notifications/changeSummary";
 import type { MoveBookingInput, MoveBookingResult } from "./bookingDragMove";
 import { isoToTaipeiDateKey, isoToTaipeiTime } from "./dateUtils";
+import {
+  customerBookingCreatorLabel,
+  type CustomerBookingSourceInput,
+} from "./customerBookingSource";
 import type {
   AmountAdjustmentMode,
   Booking,
@@ -846,12 +850,17 @@ export interface OnlineBookingSettings {
   minLeadHours: number;
   travelBufferMinutes: number;
   allowGuestBooking: boolean;
+  /** 客戶端第 3 批(C3-H05):會員 / 訪客預約完成頁的店家自訂文字;null = 用預設句。 */
+  completionMessageMember: string | null;
+  completionMessageGuest: string | null;
 }
 
 export const DEFAULT_ONLINE_BOOKING_SETTINGS: OnlineBookingSettings = {
   minLeadHours: 2,
   travelBufferMinutes: 0,
   allowGuestBooking: true,
+  completionMessageMember: null,
+  completionMessageGuest: null,
 };
 
 // ⚠️ 三個欄位是客戶端第 1 批的 migration 新增的;src/integrations/supabase/types.ts 由 engineer A 更新。
@@ -860,6 +869,12 @@ interface OnlineBookingSettingsRow {
   min_lead_hours?: unknown;
   travel_buffer_minutes?: unknown;
   allow_guest_booking?: unknown;
+  completion_message_member?: unknown;
+  completion_message_guest?: unknown;
+}
+
+function nullableText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
 /** 讀商家的線上預約設定(商家設定頁用;只有管理員進得來,RLS 把關)。 */
@@ -868,7 +883,10 @@ export async function fetchOnlineBookingSettings(
 ): Promise<OnlineBookingSettings> {
   const { data, error } = await supabase
     .from("merchant_booking_settings")
-    .select("min_lead_hours, travel_buffer_minutes, allow_guest_booking")
+    // C3-H05 兩欄由工程師甲的 migration 新增(types.ts 也由甲更新);讀取結果自己檢查型別。
+    .select(
+      "min_lead_hours, travel_buffer_minutes, allow_guest_booking, completion_message_member, completion_message_guest",
+    )
     .eq("merchant_id", merchantId)
     .maybeSingle();
   if (error) throw error;
@@ -882,6 +900,8 @@ export async function fetchOnlineBookingSettings(
         : d.travelBufferMinutes,
     allowGuestBooking:
       typeof row?.allow_guest_booking === "boolean" ? row.allow_guest_booking : d.allowGuestBooking,
+    completionMessageMember: nullableText(row?.completion_message_member),
+    completionMessageGuest: nullableText(row?.completion_message_guest),
   };
 }
 
@@ -896,6 +916,9 @@ export async function saveOnlineBookingSettings(
     min_lead_hours: settings.minLeadHours,
     travel_buffer_minutes: settings.travelBufferMinutes,
     allow_guest_booking: settings.allowGuestBooking,
+    // C3-H05:去頭尾空白後空字串存 null(資料庫也有同樣的 check / 正規化當最後一道)。
+    completion_message_member: settings.completionMessageMember?.trim() || null,
+    completion_message_guest: settings.completionMessageGuest?.trim() || null,
   };
   const { error } = await supabase
     .from("merchant_booking_settings")
@@ -1132,14 +1155,20 @@ async function fetchBookingServiceItemRows(bookingIds: string[]): Promise<Bookin
 
 export async function fetchBookingCardExtras(
   merchantId: string,
-  bookings: Pick<Booking, "id" | "created_by_user_id">[],
+  bookings: (Pick<Booking, "id" | "created_by_user_id"> & CustomerBookingSourceInput)[],
 ): Promise<Map<string, BookingCardExtra>> {
   const result = new Map<string, BookingCardExtra>();
   if (bookings.length === 0) return result;
 
   const bookingIds = bookings.map((b) => b.id);
   const actorIds = Array.from(
-    new Set(bookings.map((b) => b.created_by_user_id).filter((id): id is string => Boolean(id))),
+    new Set(
+      bookings
+        // 客戶端第 3 批:客人送出的單建單人是客人帳號,不是客服 ⇒ 不用查名字(見下方 creatorLabel)。
+        .filter((b) => customerBookingCreatorLabel(b) === null)
+        .map((b) => b.created_by_user_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
   );
 
   const [serviceItemRows, actorNamesRes] = await Promise.all([
@@ -1166,9 +1195,11 @@ export async function fetchBookingCardExtras(
   for (const b of bookings) {
     result.set(b.id, {
       serviceItemNames: namesByBookingId.get(b.id) ?? [],
-      createdByName: b.created_by_user_id
-        ? (actorNameById.get(b.created_by_user_id) ?? "(已移除的人員)")
-        : "(已移除的人員)",
+      createdByName:
+        customerBookingCreatorLabel(b) ??
+        (b.created_by_user_id
+          ? (actorNameById.get(b.created_by_user_id) ?? "(已移除的人員)")
+          : "(已移除的人員)"),
     });
   }
   return result;
@@ -1282,9 +1313,13 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
     // 預約詳情資訊擴充與建單備註分類第三節 3.2:createdByUserId 理論上一定查得到姓名
     // (get_booking_actor_names 兩邊都查不到時 fallback「(已移除的人員)」,不會是 undefined),
     // 這裡仍保留一個保底文字,避免防禦性過濾把它排除掉的極端情況下畫面顯示空白。
-    createdByName: createdByUserId
-      ? (actorNameById.get(createdByUserId) ?? "(已移除的人員)")
-      : "(已移除的人員)",
+    // 客戶端第 3 批(C3-E01):客人自己線上送出的單 ⇒「客人(線上預約)」/「訪客(線上預約)」,
+    // 不能顯示成「(已移除的人員)」。
+    createdByName:
+      customerBookingCreatorLabel(booking as Booking) ??
+      (createdByUserId
+        ? (actorNameById.get(createdByUserId) ?? "(已移除的人員)")
+        : "(已移除的人員)"),
     // 3.3:last_modified_by_user_id 是 null 時(從未被 confirm/update/cancel/complete 異動過)
     // 回傳 null,前端據此判斷「這一列不顯示」。
     lastModifiedByName: lastModifiedByUserId

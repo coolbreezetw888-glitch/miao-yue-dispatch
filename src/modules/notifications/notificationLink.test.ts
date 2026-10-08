@@ -19,6 +19,7 @@ import {
   mergeNotificationRows,
   NOTIFICATION_TARGET_URLS,
   resolveNotificationLink,
+  shouldWrapNotificationBody,
 } from "./notificationLink";
 import { NOTIFICATION_TARGET_TYPES, type UserNotification } from "./types";
 
@@ -401,5 +402,27 @@ describe("客戶端第 2 批:會員用 LINE 登入接上的鈴鐺", () => {
     expect(resolveNotificationLink({ target_type: "admin", event_type: "booking_created" })).toBe(
       NOTIFICATION_TARGET_URLS.admin,
     );
+  });
+});
+
+describe("客戶端第 3 批:客人線上預約的鈴鐺(C3-C01)", () => {
+  it("有中文標籤、只在鈴鐺專用清單;內文完整換行", () => {
+    expect(BELL_ONLY_EVENT_LABELS["customer_booking_created"]).toBe("客人線上預約時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("customer_booking_created");
+    expect(shouldWrapNotificationBody("customer_booking_created")).toBe(true);
+  });
+
+  it("點擊目的地跟 booking_created 同一套(依身份)", () => {
+    for (const t of ["admin", "agent", "staff"] as const) {
+      expect(
+        resolveNotificationLink({ target_type: t, event_type: "customer_booking_created" }),
+      ).toBe(resolveNotificationLink({ target_type: t, event_type: "booking_created" }));
+    }
+    expect(
+      resolveNotificationLink({ target_type: "staff", event_type: "customer_booking_created" }),
+    ).toBe("/app/calendar");
+    expect(
+      resolveNotificationLink({ target_type: "agent", event_type: "customer_booking_created" }),
+    ).toBe("/app/orders");
   });
 });

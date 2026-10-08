@@ -5,7 +5,7 @@
 --        最遠不限、車程 0)客戶版與後台 list_staff_bookable_start_times 回傳完全相同;
 --        6 種情境:單日例外開、單日例外關、請假、既有訂單、助手訂單、同集團他店重疊;另加工時 90 分、間隔 15 分
 --        差異:unlimited_backend_edit 對客戶端無效;strict_conflict_check 關掉時客戶端仍擋重疊
---   B02  最少提前天數 / 最遠可預約天數(空值 = 60)
+--   B02  最少提前天數 / 最遠可預約天數(空值 = 180;第 3 批 C3-E04 由 60 改 180)
 --   B03  no_time_slot_limit:跳過每週時段、營業時間照守、請假照擋
 --   B04  至少提前幾小時(固定「現在時間」用 private.public_available_slots_at)
 --   B05  未上架 / 已移除 / 別家店的服務人員 ⇒ 同一個錯誤代碼與訊息
@@ -307,10 +307,10 @@ select ok(cardinality(pg_temp.cust('pgtap-c1s-win', pg_temp.items1('c1500000-000
           'B02-3 最遠 7 天:第 7 天有時段');
 select is(pg_temp.cust_state('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000042', 8, pg_temp.ts(0, '10:00')),
           'out_of_range', 'B02-4 最遠 7 天:第 8 天範圍外');
-select ok(cardinality(pg_temp.cust('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000043', 60, pg_temp.ts(0, '10:00'))) > 0,
-          'B02-5 空值 = 60 天:第 60 天有時段');
-select is(pg_temp.cust_state('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000043', 61, pg_temp.ts(0, '10:00')),
-          'out_of_range', 'B02-6 空值 = 60 天:第 61 天範圍外');
+select ok(cardinality(pg_temp.cust('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000043', 180, pg_temp.ts(0, '10:00'))) > 0,
+          'B02-5 空值 = 180 天(第 3 批 C3-E04 / Q1 由 60 改 180):第 180 天有時段');
+select is(pg_temp.cust_state('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000043', 181, pg_temp.ts(0, '10:00')),
+          'out_of_range', 'B02-6 空值 = 180 天:第 181 天範圍外');
 select is(pg_temp.cust_state('pgtap-c1s-win', pg_temp.items1('c1500000-0000-4000-8000-000000000083'), 'c1500000-0000-4000-8000-000000000043', -1, pg_temp.ts(0, '10:00')),
           'out_of_range', 'B02-7 早於今天的日期 = 範圍外');
 

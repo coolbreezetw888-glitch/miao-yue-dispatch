@@ -262,6 +262,10 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   booking_completed_reverted: "已完成訂單被還原時",
   // 客戶端第 2 批(零之二第 1 點):客人用 LINE 登入接上「既有」會員時,資料庫寫給管理員與有會員權限的客服(純站內)。
   member_line_login_linked: "會員用 LINE 登入接上時",
+  // 客戶端第 3 批(C3-C01):客人線上預約(會員或訪客)送出時,資料庫一定寫給管理員、有訂單權限的客服、
+  // 被排到的服務人員。點了跟 booking_created 同一套目的地(依身份:管理員 / 客服 ⇒ 訂單管理,
+  // 服務人員 ⇒ 我的行事曆),所以**不**加進 EVENT_TARGET_URLS。推播用的是 booking_created 事件(C3-C02)。
+  customer_booking_created: "客人線上預約時",
 };
 
 /**
@@ -272,6 +276,9 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
 const BELL_FULL_BODY_EVENT_TYPES: ReadonlySet<string> = new Set([
   "booking_completed_cancelled",
   "booking_completed_reverted",
+  // 客戶端第 3 批:內文最後一句是「訪客預約（未登入），請自行與客戶電話確認。」/「請確認接單。」,
+  // 截成一行會剛好看不到要店家做的事 ⇒ 完整換行顯示。
+  "customer_booking_created",
 ]);
 
 export function shouldWrapNotificationBody(eventType: string): boolean {

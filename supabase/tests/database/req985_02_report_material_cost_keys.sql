@@ -775,6 +775,13 @@ create temp table r985n on commit drop as select
 create function pg_temp.strip_bill(j jsonb) returns jsonb language sql as $$
   select j - 'material_cost_affects_commission_now' - 'commission_orders_material_deducted_count' - 'commission_orders_material_not_deducted_count';
 $$;
+-- 客戶端第 3 批(主腦裁決):帳單報表 per_staff_breakdown 改依服務人員順位排序(改前複製品依姓名)⇒
+--   比對前兩邊都依 staff_name、staff_id 重新排序,只比內容不比順序(順序由 c3_staff_order H04-5/6 另外測)。
+create function pg_temp.norm_bill(j jsonb) returns jsonb language sql as $$
+  select case when jsonb_typeof(j -> 'per_staff_breakdown') = 'array' then jsonb_set(j, '{per_staff_breakdown}', coalesce((
+    select jsonb_agg(e order by e ->> 'staff_name', e ->> 'staff_id')
+    from jsonb_array_elements(j -> 'per_staff_breakdown') e), '[]'::jsonb)) else j end;
+$$;
 create function pg_temp.strip_staff(j jsonb) returns jsonb language sql as $$
   select jsonb_set(j, '{details}', coalesce((
     select jsonb_agg(e - 'material_cost_deducted' order by ord)
@@ -790,9 +797,9 @@ select is((select br ->> 'commission_orders_material_deducted_count' || '/' || (
   '3/2', '② 區間版:同一個月 ⇒ 3 / 2');
 select is((select (bm ->> 'material_cost_affects_commission_now') || '/' || (br ->> 'material_cost_affects_commission_now') from r985n),
   'false/false', '③ 目前設定 = 關閉(兩支都回)');
-select is((select pg_temp.strip_bill(bm) = obm from r985n), true, '④ 月份版:既有鍵與改前複製品逐鍵相等(含月薪制人員)');
-select is((select pg_temp.strip_bill(br) = obr from r985n), true, '⑤ 區間版(完整月份):既有鍵與改前複製品逐鍵相等');
-select is((select (pg_temp.strip_bill(bp) = obp)::text || '/' || coalesce(bp ->> 'estimated_net_margin', 'null') || '/' || (bp ->> 'salary_applicable') from r985n),
+select is((select pg_temp.norm_bill(pg_temp.strip_bill(bm)) = pg_temp.norm_bill(obm) from r985n), true, '④ 月份版:既有鍵與改前複製品逐鍵相等(含月薪制人員)');
+select is((select pg_temp.norm_bill(pg_temp.strip_bill(br)) = pg_temp.norm_bill(obr) from r985n), true, '⑤ 區間版(完整月份):既有鍵與改前複製品逐鍵相等');
+select is((select (pg_temp.norm_bill(pg_temp.strip_bill(bp)) = pg_temp.norm_bill(obp))::text || '/' || coalesce(bp ->> 'estimated_net_margin', 'null') || '/' || (bp ->> 'salary_applicable') from r985n),
   'true/null/false', '⑥ 區間版(非完整月份):既有鍵相等、淨利照舊是 null');
 
 select is((select count(*)::int from r985n, jsonb_array_elements(bm -> 'per_staff_breakdown') e

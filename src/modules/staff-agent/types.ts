@@ -79,15 +79,16 @@ export interface StaffPermissionFieldDef {
 
 // 🔴 SPECS-INDEX #977(2026-10-06,第 1 批):改名、排序、改說明、加「即將推出」標籤。
 // **只改文字與順序** —— key(資料庫欄位)、判斷邏輯一律不動。陣列順序 = 編輯服務人員畫面上的顯示順序。
-// 「即將推出」= 對應的功能還沒正式上線(客戶線上預約頁、Google 日曆、服務人員建單、施工照片
-// 都是之後的模組);沒標的三項(商家後台編輯無時段限制、商家後台確認後直接接單、服務人員是否顯示會員資料)是目前就有作用的。
+// 「即將推出」= 對應的功能還沒正式上線(Google 日曆、施工照片);客戶預約相關的 4 項(客戶預約無時段限制、
+// 客戶預約自動接受、最少提前天數、最遠可預約天數)客戶端第 3 批(C3-E02)送出預約上線時已拿掉。沒標的三項(商家後台編輯無時段限制、商家後台確認後直接接單、服務人員是否顯示會員資料)是目前就有作用的。
 // 📌 第 4 項「商家後台確認後直接接單」:#977 第 4 批(2026-10-06)起生效 —— 後台建單時主要服務人員開著這個開關,
 //    新訂單直接是「已確認」(create_booking,migration 20261006140100);關閉時是「待確認」,由服務人員在自己的
 //    行事曆按「確認接單」(staff_confirm_booking)。編輯訂單換主要服務人員時狀態不變。
 // 📌 第 5 項「服務人員是否顯示會員資料」:說明是使用者 2026-10-02 裁決 H-13 定義的**正確行為**
 //    (關閉 = 只看得到客戶姓名)。第 3 批(2026-10-06)已修:關閉時 get_my_booking_schedule 在後端就不回傳
 //    客戶電話、地址(migration 20261006130300)。
-// 📌 第 1 項「客戶預約無時段限制」(no_time_slot_limit):裁決 H-7 定義成「只管客戶線上預約」,所以標「即將推出」。
+// 📌 第 1 項「客戶預約無時段限制」(no_time_slot_limit):裁決 H-7 定義成「只管客戶線上預約」;
+//    客戶端第 1 批的時段函式(private.check_customer_booking_slot)已在讀,第 3 批送出上線後拿掉「即將推出」。
 //    第 3 批(2026-10-06)起後台一律不看這個欄位(建單 / 改單 / 時間清單 / 行事曆 / 排班一覽,
 //    migration 20261006130200);後台要放寬只看「商家後台編輯無時段限制」。
 export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
@@ -96,14 +97,15 @@ export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
     label: "客戶預約無時段限制",
     description: "開啟後，客戶線上預約這位服務人員時，可以選到他可預約時段以外的時間。",
     type: "boolean",
-    comingSoon: true,
   },
   {
     key: "auto_accept_booking",
     label: "客戶預約自動接受",
-    description: "開啟後，客戶線上預約這位服務人員的訂單會直接成立，不用等確認。",
+    // 客戶端第 3 批(C3-E02,2026-10-09):客戶線上預約上線,拿掉「即將推出」,說明照實際行為
+    // (private.customer_booking_initial_status:訪客、黑名單會員一律待確認)。
+    description:
+      "開啟後，客戶線上預約這位服務人員(或「不指定」時系統排到他)的訂單會直接成立，不用他再確認。訪客預約、黑名單會員的預約仍然要確認。",
     type: "boolean",
-    comingSoon: true,
   },
   {
     key: "unlimited_backend_edit",
@@ -165,9 +167,8 @@ export const STAFF_BOOLEAN_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
 //     前端(api.ts 的 UpsertMerchantStaffInput、StaffListPage.tsx 的表單狀態)也已一併清空,
 //     不要再加回來。
 //  3. booking_window_max_days 沿用,改成承載「最遠可以預約到幾天後」。
-// ⚠️ 這兩個欄位到目前為止仍然是「只存值、後端沒有任何邏輯在讀」的狀態(使用者已知),所以
-//    這兩欄在畫面上標「即將推出」(comingSoon,SPECS-INDEX #977;原本區塊上方那句「這些開關目前先存值」
-//    常駐提醒已改成逐項標示)。
+// ✅ 客戶端第 1 批起,客戶版時段函式 private.check_customer_booking_slot 已在讀這兩欄(只限制客戶線上預約);
+//    第 3 批(C3-E02)送出預約上線後拿掉「即將推出」。最遠天數留空 = 180 天(零之零 Q1,資料庫同步改成 180)。
 // ✅ 資料庫端的配合已經完成(2026-09-24,由負責 supabase/ 的工程師實作):
 //    booking_window_max_days 原本帶著 20260916100000_staff_agent_schema.sql 留下的
 //    `check (... between 3 and 180)` 約束,會把使用者自己舉例的「填 365」直接擋下,現在已經
@@ -218,7 +219,6 @@ export const STAFF_NUMBER_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
     description:
       "只限制客戶線上預約，商家管理員與客服在後台建單不受限。客戶至少要提前幾天才能預約這位服務人員。填 0 代表不需要提前，當天預約、當天服務也可以；填 3 代表至少要提前 3 天才能預約。留空時系統會用 0 天，也就是不需要提前。",
     type: "number",
-    comingSoon: true,
   },
   {
     key: "booking_window_max_days",
@@ -227,15 +227,14 @@ export const STAFF_NUMBER_PERMISSION_FIELDS: StaffPermissionFieldDef[] = [
     description:
       "只限制客戶線上預約，商家管理員與客服在後台建單不受限。客戶最遠可以預約到幾天後，從當天往後推算。填 0 代表最遠只能約到今天，也就是只接受當天預約、當天服務；填 1 代表最遠只能約到明天，後天就約不到了；填 365 代表最遠可以約到一年後。留空時系統會用 180 天，也就是最遠可以約到半年後。最多可以填 3650 天(大約 10 年)。注意這一欄的 0 跟上面「最少要提前幾天預約」的 0 意思不一樣：上面填 0 是「不需要提前」，這裡填 0 是「只能約今天」。",
     type: "number",
-    comingSoon: true,
   },
 ];
 
 // =========================================================================
 // 「預約天數」兩個欄位留空時各自要套用的預設值。
 //
-// 為什麼要把這兩個數字放成具名常數,而不是只寫在說明文字裡:這兩個欄位目前還是「只存值、後端
-// 沒有任何邏輯在讀」的狀態,真正實作「擋掉超出範圍的預約」那段邏輯的人(未來的 booking 模組)
+// 為什麼要把這兩個數字放成具名常數,而不是只寫在說明文字裡:真正實作「擋掉超出範圍的預約」那段邏輯的人
+// (客戶端時段函式 private.check_customer_booking_slot,資料庫端)
 // 必須知道 null 各自要換算成什麼,否則很可能自己另外挑一個數字、或誤把 null 當成「不限制」,
 // 那就違背使用者的裁決了。所以這裡先把契約用程式碼寫下來,而不是只留在註解/UI 文案裡。
 //

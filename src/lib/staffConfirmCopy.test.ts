@@ -47,10 +47,10 @@ describe("#977 第 4 批 文案", () => {
     expect(field?.description).not.toMatch(/模組|規格書|accepted|pending|師傅/);
   });
 
-  it("「客戶預約自動接受」維持即將推出", () => {
+  it("「客戶預約自動接受」:客戶端第 3 批(C3-E02)起生效,拿掉即將推出", () => {
     expect(
       STAFF_BOOLEAN_PERMISSION_FIELDS.find((f) => f.key === "auto_accept_booking")?.comingSoon,
-    ).toBe(true);
+    ).toBeFalsy();
   });
 
   it("報表匯出中心訂單狀態篩選:「已確認」,不再有「已接受」", () => {

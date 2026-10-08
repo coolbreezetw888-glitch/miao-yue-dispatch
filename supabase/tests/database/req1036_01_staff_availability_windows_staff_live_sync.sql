@@ -288,13 +288,17 @@ select is(
   array['id', 'reason', 'v'],
   'E1 🔴 本檔所有服務人員頻道訊號 payload 的 key 只有 id / reason / v'
 );
+-- 客戶端第 3 批(2026-10-09 主腦裁決)修正:只算「本檔測試資料」的頻道(e1036000- 開頭的服務人員 / 商家)。
+--   原本用 topic like 'staff:%' 會把資料庫裡先前 e2e 留下的舊訊號也算進來;乾淨資料庫上本檔實際只產生
+--   B1、B2、B4、B5、D1 共 5 則服務人員訊號,所以門檻改成 >= 5(= 本檔每一則都必須真的發出)。檢查內容不變。
 select ok(
-  (select count(*) from sig_log where topic like 'staff:%') >= 6
+  (select count(*) from sig_log where topic like 'staff:e1036000-%') >= 5
   and not exists (select 1 from sig_log
-                  where payload::text like '%祕密%' or payload::text like '%0900103%'
+                  where (topic like 'staff:e1036000-%' or topic like 'merchant:e1036000-%')
+                    and (payload::text like '%祕密%' or payload::text like '%0900103%'
                      or payload::text like '%e1036000%' or payload::text like '%:00%'
                      or payload::text like '%day_of_week%' or private is not true or extension <> 'broadcast'
-                     or (topic like 'staff:%' and (event <> 'schedule_changed' or payload->>'reason' <> 'schedule_changed'))),
+                     or (topic like 'staff:%' and (event <> 'schedule_changed' or payload->>'reason' <> 'schedule_changed')))),
   'E2 🔴 訊號原文搜不到時間 / 星期 / 姓名 / 電話 / id;事件與 reason 沿用 schedule_changed'
 );
 

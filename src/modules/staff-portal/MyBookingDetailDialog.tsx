@@ -81,6 +81,11 @@ import { isoToTaipeiTime } from "@/modules/booking/dateUtils";
 import { CancelBookingConfirmButton } from "@/modules/booking/CancelBookingConfirmButton";
 import { AGENT_CANNOT_REVERSE_NOTE } from "@/modules/booking/completedBookingReversal";
 import { formatAmount } from "@/modules/booking/orderAmount";
+import { CustomerBookingSourceTag } from "@/modules/booking/CustomerBookingSourceTag";
+import {
+  customerBookingSourceKind,
+  guestBookingStaffHint,
+} from "@/modules/booking/customerBookingSource";
 
 import type { MyBookingScheduleItem } from "./api";
 import { useStaffCancelBooking, useStaffCompleteBooking, useStaffConfirmBooking } from "./context";
@@ -139,12 +144,16 @@ export function MyBookingDetailDialog({
       <FullPageLayerContent
         title="預約詳情"
         titleExtra={
-          <StatusTag
-            tone={bookingStatusTone(status)}
-            fillColor={getBookingStatusColor(statusColors, status)}
-          >
-            {BOOKING_STATUS_LABELS[status] ?? booking.status}
-          </StatusTag>
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            <StatusTag
+              tone={bookingStatusTone(status)}
+              fillColor={getBookingStatusColor(statusColors, status)}
+            >
+              {BOOKING_STATUS_LABELS[status] ?? booking.status}
+            </StatusTag>
+            {/* 客戶端第 3 批(C3-E01):客人自己線上預約的單。 */}
+            <CustomerBookingSourceTag booking={booking} />
+          </span>
         }
         footer={
           showOrderActions ? (
@@ -245,6 +254,13 @@ export function MyBookingDetailDialog({
               {formatAmount(booking.final_amount_snapshot)}
             </DetailRow>
           </DetailSection>
+
+          {/* 客戶端第 3 批(C3-E01):訪客預約 ⇒ 常駐提醒。看不到電話(關了「顯示會員資料」)時改「請與店家確認」。 */}
+          {customerBookingSourceKind(booking) === "guest" ? (
+            <AlertNote data-testid="guest-booking-hint">
+              {guestBookingStaffHint(Boolean(booking.customer_phone))}
+            </AlertNote>
+          ) : null}
 
           <DetailSection label="客戶">
             <p className="min-w-0 break-words text-base font-semibold text-foreground">

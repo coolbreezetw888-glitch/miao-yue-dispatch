@@ -221,6 +221,11 @@ verify_jwt = false
 [functions.customer-line-login]
 verify_jwt = false
 
+# 客戶端第 3 批 C3-B:訪客沒有登入狀態也要能送出預約。
+# 會員由函式自己用 service role 驗 token(app_metadata.account_type = customer);訪客靠 Turnstile + 頻率限制,不是靠 JWT。
+[functions.customer-booking-submit]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327
