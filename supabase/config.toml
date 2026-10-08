@@ -231,6 +231,11 @@ verify_jwt = false
 [functions.customer-booking-cancel]
 verify_jwt = false
 
+# 客戶端第 5-A 批 C5-S05:由 pg_cron 每分鐘呼叫(只有 X-Cron-Secret、沒有 JWT)。部署時必須 verify_jwt = false
+# (權限衛生規則 7);密鑰 Edge secret CUSTOMER_LINE_CRON_SECRET 沒設 ⇒ 一律 401、什麼都不發。
+[functions.customer-line-notify-dispatch]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

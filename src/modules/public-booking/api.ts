@@ -225,6 +225,8 @@ export function parsePublicBookingPage(data: unknown): PublicBookingPage {
       customer_cancel_deadline_hours: normalizeCancelDeadlineHours(
         settings["customer_cancel_deadline_hours"],
       ),
+      // C5-M04:沒回傳(舊版函式)或不是 true ⇒ false(不承諾 LINE 通知)。
+      line_notify_available: bool(settings["line_notify_available"], false),
     },
     member_policy: parseMemberPolicy(settings["member_policy"]),
     categories: arr(data["categories"]).map(parseCategory),

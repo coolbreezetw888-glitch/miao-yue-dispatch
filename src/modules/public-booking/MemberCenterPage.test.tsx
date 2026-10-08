@@ -87,6 +87,19 @@ vi.mock("./memberCenterApi", async () => {
 });
 
 // 4-B 聯絡人區塊(「我的資料」裡):這份測試只放「只有自己一位」;各種視角在 MemberContactsSection.test.tsx。
+// 第 5 批 C5-M02:我的資料多「LINE 通知」區塊;這份測試不測它(店家不能用 LINE 通知 ⇒ 不顯示),
+// 各種情況在 MemberLineNotify.test.tsx。
+vi.mock("./lineNotifyApi", async () => {
+  const actual = await vi.importActual<typeof import("./lineNotifyApi")>("./lineNotifyApi");
+  const logic = await vi.importActual<typeof import("./lineNotifyLogic")>("./lineNotifyLogic");
+  const unavailable = logic.parseMemberNotifyPrefs({ state: "ok", available: false });
+  return {
+    ...actual,
+    fetchMyNotifyPrefs: vi.fn(async () => unavailable),
+    setMyNotifyPrefs: vi.fn(async () => unavailable),
+  };
+});
+
 vi.mock("./memberContactsApi", async () => {
   const actual = await vi.importActual<typeof import("./memberContactsApi")>("./memberContactsApi");
   const logic =

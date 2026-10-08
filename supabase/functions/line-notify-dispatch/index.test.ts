@@ -235,8 +235,9 @@ Deno.test(
 );
 
 Deno.test("shouldWriteAnyLogRow: 已連線且事件開啟,有實際目標時要寫入記錄", () => {
+  // 客戶端第 5 批 C5-K01:resolve_line_notification_targets 不再回會員對象(pgTAP K01 守門),範例對象改成管理員。
   const result = makeResult({
-    targets: [{ type: "member", id: "m1", name: "會員甲", line_user_id: "Uabc" }],
+    targets: [{ type: "admin", id: "a1", name: "管理員甲", line_user_id: "Uabc" }],
   });
   assertEquals(shouldWriteAnyLogRow(result), true);
 });
@@ -276,7 +277,7 @@ const FAKE_BOOKINGS: Record<string, string> = {
 const FAKE_LEAVES: Record<string, string> = { "leave-A": "staff-A", "leave-B": "staff-B" };
 const FAKE_STAFF: Record<string, string> = { "staff-A": "merchant-A", "staff-B": "merchant-B" };
 
-function makeFakeLineAdminClient(options: { failLookup?: boolean } = {}) {
+function makeFakeLineAdminClient(options: { failLookup?: boolean; resolveResult?: unknown } = {}) {
   const rpcCalls: string[] = [];
   const inserts: { table: string; row: Record<string, unknown> }[] = [];
   const selects: { table: string; filters: Record<string, unknown> }[] = [];
@@ -339,6 +340,9 @@ function makeFakeLineAdminClient(options: { failLookup?: boolean } = {}) {
     },
     rpc(fn: string, _args: Record<string, unknown>) {
       rpcCalls.push(fn);
+      if (fn === "resolve_line_notification_targets" && options.resolveResult !== undefined) {
+        return Promise.resolve({ data: options.resolveResult, error: null });
+      }
       if (fn === "resolve_line_notification_targets") {
         // 同商家時:已連線、事件開啟,只有一個未綁定的服務人員 → 只寫一列 skipped,不打 LINE API。
         return Promise.resolve({
@@ -755,3 +759,45 @@ Deno.test(
     );
   },
 );
+
+// =========================================================================
+// 客戶端第 5 批 C5-K01(QA L1):resolve 結果混入 type:'member' ⇒ 不發送、不寫記錄(Edge 再擋一層)。
+// =========================================================================
+Deno.test("C5-K01:resolve 混入會員對象(targets / skipped)⇒ 會員不發送也不寫記錄,店家這邊照舊", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient({
+    resolveResult: {
+      connected: true,
+      event_enabled: true,
+      targets: [{ type: "member", id: "member-A", name: "會員甲", line_user_id: "Umember" }],
+      skipped: [
+        { type: "member", id: null, reason: "no_target" },
+        { type: "staff", id: "staff-A", reason: "target_not_bound" },
+      ],
+    },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { dispatched: false, skippedCount: 1 });
+  assertEquals(inserts.map((i) => `${i.table}:${i.row.target_type}`), ["line_notification_log:staff"]);
+  assertEquals(rpcCalls.includes("render_booking_notification_variables"), false);
+});
+
+Deno.test("C5-K01:resolve 只有會員對象 ⇒ 完全不寫記錄、不發送", async () => {
+  const { adminClient, inserts } = makeFakeLineAdminClient({
+    resolveResult: {
+      connected: true,
+      event_enabled: true,
+      targets: [{ type: "member", id: "member-A", name: "會員甲", line_user_id: "Umember" }],
+      skipped: [{ type: "member", id: "member-B", reason: "target_not_bound" }],
+    },
+  });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(inserts, []);
+});

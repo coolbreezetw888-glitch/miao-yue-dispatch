@@ -608,7 +608,13 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const outcome = await submitCustomerBooking({ slug, submissionId, draft, guest });
+      const outcome = await submitCustomerBooking({
+        slug,
+        submissionId,
+        draft,
+        guest,
+        lineNotifyAvailable: settings.line_notify_available === true,
+      });
       if (outcome.kind === "created") {
         // replace:系統上一頁不會回到確認畫面(C3-D06)。
         setCompleted(outcome.booking);

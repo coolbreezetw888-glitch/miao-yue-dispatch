@@ -50,12 +50,61 @@ export const LINE_LOG_SKIP_REASON_LABELS: Record<string, string> = {
   staff_inactive: "服務人員已離職或停用",
   // SPECS-INDEX #876/#962:管理員關掉這位服務人員的「行事曆檢視」,就不寄會帶出客戶資料的訂單 LINE。
   staff_calendar_view_off: "服務人員未開放「行事曆檢視」，不寄訂單通知",
+  // 客戶端第 5 批 C5-K03:通知客人的略過原因。
+  customer_opted_out: "客人關閉通知",
+  not_friend: "客人沒加好友",
+  monthly_cap: "已達本月上限",
+  quota_exhausted: "LINE 額度用完",
+  stale: "狀態已變更",
+  superseded: "時間已改回",
 };
+
+/** 客戶端第 5 批 C5-K03:通知客人的事件中文(5-B 的也先放,發送記錄裡出現時才看得懂)。 */
+export const CUSTOMER_LINE_LOG_EVENT_LABELS: Record<string, string> = {
+  customer_submitted: "通知客人：收到線上預約",
+  customer_scheduled_by_store: "通知客人：店家建了預約",
+  customer_confirmed: "通知客人：店家確認",
+  customer_rescheduled: "通知客人：改時間",
+  customer_cancelled_by_store: "通知客人：店家取消",
+  customer_cancelled_by_customer: "通知客人：其他聯絡人取消",
+  customer_reminder: "通知客人：服務前提醒",
+  customer_completed: "通知客人：服務完成",
+  customer_contact_request: "通知客人：聯絡人申請",
+  customer_contact_removed: "通知客人：聯絡人被移除",
+  customer_contact_request_resolved: "通知客人：聯絡人申請結果",
+};
+
+/** 發送記錄頁「通知客人」分類篩選(c5-contract 2-5 p_category = 'customer')。 */
+export const LINE_LOG_CUSTOMER_CATEGORY_FILTER = "category:customer";
 
 export const LINE_LOG_EVENT_TYPE_LABELS: Record<string, string> = {
   ...LINE_NOTIFICATION_EVENT_LABELS,
   marketing_manual: "再行銷通知",
 };
+
+/** 發送記錄每一列顯示的事件中文(篩選下拉仍只列 LINE_LOG_EVENT_TYPE_LABELS + 「通知客人」分類)。 */
+export function lineLogEventLabel(eventType: string): string {
+  return (
+    LINE_LOG_EVENT_TYPE_LABELS[eventType] ?? CUSTOMER_LINE_LOG_EVENT_LABELS[eventType] ?? eventType
+  );
+}
+
+/**
+ * C5-K03 對象欄:會員的列顯示「會員〇〇(聯絡人：LINE 顯示名)」;沒有顯示名只寫「會員〇〇」;
+ * 其他照舊顯示對象種類。
+ */
+export function lineLogTargetLabel(row: {
+  target_type: string;
+  target_member_name?: string | null;
+  target_contact_display_name?: string | null;
+}): string {
+  const typeLabel = LINE_TARGET_TYPE_LABELS[row.target_type] ?? row.target_type;
+  if (row.target_type !== "member") return typeLabel;
+  const name = row.target_member_name?.trim();
+  if (!name) return typeLabel;
+  const contact = row.target_contact_display_name?.trim();
+  return contact ? `會員${name}（聯絡人：${contact}）` : `會員${name}`;
+}
 
 export const LINE_TARGET_TYPE_LABELS: Record<string, string> = {
   admin: "商家管理員",

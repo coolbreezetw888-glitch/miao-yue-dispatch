@@ -38,6 +38,9 @@ export const EVENT_TARGET_URLS: Readonly<Record<string, string>> = {
   member_line_login_linked: "/app/members",
   // 客戶端第 4 批 4-B(c4-contract B7):有人申請成為會員的聯絡人 ⇒ 同 member_line_login_linked 到會員列表。
   member_contact_request: "/app/members",
+  // 客戶端第 5 批(c5-contract 2-7):LINE 官方帳號本月額度用完 / 用到 80%(5-B)⇒ 「LINE 通知事件」頁。
+  line_quota_exhausted: "/app/line-events",
+  line_quota_warning: "/app/line-events",
 };
 
 /** §4.7 第 4 點:唯一允許的 fallback(這個路由一定存在,HomePage 本身會依角色自動導到落點)。 */
@@ -274,6 +277,9 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   customer_booking_cancelled: "客人線上取消預約時",
   // 客戶端第 4 批 4-B(C4-H04):有人用同一支電話申請成為會員的聯絡人(收件人同 member_line_login_linked,純站內)。
   member_contact_request: "有人申請成為會員的聯絡人時",
+  // 客戶端第 5 批(c5-contract 2-7):資料庫寫給該店管理員(純站內,同月一則)。
+  line_quota_exhausted: "LINE 訊息額度用完時",
+  line_quota_warning: "LINE 訊息額度用到 80% 時",
 };
 
 /**
@@ -289,6 +295,9 @@ const BELL_FULL_BODY_EVENT_TYPES: ReadonlySet<string> = new Set([
   "customer_booking_created",
   // 客戶端第 4 批:「客人「王小明」取消了 10/13（二）10:00 的預約，服務人員：阿明。」截成一行會看不到是哪一張。
   "customer_booking_cancelled",
+  // 客戶端第 5 批:「…這個月的 LINE 通知(包含員工通知)都會發送失敗，下個月 1 日自動恢復。」截掉會看不到何時恢復。
+  "line_quota_exhausted",
+  "line_quota_warning",
 ]);
 
 export function shouldWrapNotificationBody(eventType: string): boolean {

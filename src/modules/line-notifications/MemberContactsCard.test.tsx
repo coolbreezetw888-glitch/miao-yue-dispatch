@@ -45,6 +45,7 @@ vi.mock("@/modules/staff-agent/context", () => ({
 }));
 
 const { MemberContactsCard } = await import("./MemberContactsCard");
+const { PROMO_SWITCH_VISIBLE } = await import("@/lib/customerLinePromo");
 
 const TWO = {
   contacts: [
@@ -182,5 +183,82 @@ describe("C4-K04 會員詳細頁聯絡人卡", () => {
     await screen.findAllByTestId("member-contacts-card-row");
     expect(screen.queryByTestId("member-contacts-card-remove")).toBeNull();
     expect(screen.queryByTestId("member-contacts-card-approve")).toBeNull();
+  });
+});
+
+describe("C5-F03 聯絡人卡多「LINE 好友 / 預約通知 / 優惠通知」(唯讀)", () => {
+  it("每位聯絡人顯示三個欄位;沒回 ⇒ 不確定 / 開(預設)", async () => {
+    state.data = {
+      ...TWO,
+      contacts: [
+        {
+          ...TWO.contacts[0],
+          line_friend_status: "not_friend",
+          notify_booking: false,
+          notify_promo: true,
+        },
+        {
+          ...TWO.contacts[1],
+          line_friend_status: "friend",
+          notify_booking: true,
+          notify_promo: false,
+        },
+      ],
+    };
+    renderCard();
+    const rows = await screen.findAllByTestId("member-contacts-card-row");
+    expect(within(rows[0]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
+      "LINE 好友：已加入・預約通知：開",
+    );
+    expect(within(rows[1]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
+      "LINE 好友：未加入・預約通知：關",
+    );
+    // 唯讀:沒有任何開關;「優惠通知」5-A 不顯示(跟客人端 PROMO_SWITCH_VISIBLE 連動)。
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(PROMO_SWITCH_VISIBLE).toBe(false);
+    expect(screen.getByTestId("member-contacts-card")).not.toHaveTextContent("優惠通知");
+  });
+
+  it("舊版回傳(沒有這三個欄位)⇒ 不確定 / 開", async () => {
+    renderCard();
+    const rows = await screen.findAllByTestId("member-contacts-card-row");
+    expect(within(rows[0]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
+      "LINE 好友：不確定・預約通知：開",
+    );
+  });
+
+  it("沒有聯絡人、用舊綁定碼綁過 LINE ⇒ 顯示 LINE 好友狀態", async () => {
+    state.data = {
+      contacts: [],
+      requests: [],
+      relink_blocked: false,
+      legacy_line: { friend_status: "friend" },
+    };
+    renderCard();
+    expect(await screen.findByTestId("member-contacts-card-legacy-friend")).toHaveTextContent(
+      "LINE 好友：已加入",
+    );
+  });
+
+  it("沒有聯絡人但有待處理申請 + 舊綁定碼 ⇒ 好友狀態跟申請列表各自顯示", async () => {
+    state.data = {
+      contacts: [],
+      requests: TWO.requests,
+      relink_blocked: false,
+      legacy_line: { friend_status: "not_friend" },
+    };
+    renderCard();
+    expect(await screen.findByTestId("member-contacts-card-legacy-friend")).toHaveTextContent(
+      "LINE 好友：未加入",
+    );
+    expect(screen.getByTestId("member-contacts-card-requests")).toHaveTextContent("阿華");
+    expect(screen.queryByTestId("member-contacts-card-empty")).toBeNull();
+  });
+
+  it("沒有聯絡人也沒綁過 ⇒ 不顯示好友狀態", async () => {
+    state.data = { contacts: [], requests: [], relink_blocked: false, legacy_line: null };
+    renderCard();
+    await screen.findByTestId("member-contacts-card-empty");
+    expect(screen.queryByTestId("member-contacts-card-legacy-friend")).toBeNull();
   });
 });

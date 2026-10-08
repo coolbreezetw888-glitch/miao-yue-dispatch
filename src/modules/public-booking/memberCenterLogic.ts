@@ -13,6 +13,7 @@ import type { StatusTone } from "@/components/patterns";
 
 import { formatSubmittedItems, formatSubmittedStart } from "./bookingSubmitLogic";
 import type { CustomerSessionState } from "./customerLoginLogic";
+import { parseMemberLineNotify, type MemberLineNotify } from "./lineNotifyLogic";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -364,6 +365,8 @@ export interface MemberHome {
   wallet: MemberWalletSummary;
   /** C4-C01:待處理的加入聯絡人申請(只有主要聯絡人有值,第二聯絡人一律 0)。 */
   pendingContactRequests: number;
+  /** C5-M03:這位聯絡人的 LINE 通知狀態(沒回 ⇒ available = false,首頁不顯示加好友卡)。 */
+  lineNotify: MemberLineNotify;
 }
 
 /** 會員中心函式「不是 ok」的結果:登入失效 / 店家停用。 */
@@ -406,6 +409,7 @@ export function parseMemberHome(raw: unknown): MemberHome | MemberGate | null {
     upcomingCount: num(raw["upcoming_count"]),
     wallet: parseWalletSummary(raw["wallet"]),
     pendingContactRequests: isPrimary ? Math.max(0, num(raw["pending_contact_requests"])) : 0,
+    lineNotify: parseMemberLineNotify(raw["line_notify"]),
   };
 }
 

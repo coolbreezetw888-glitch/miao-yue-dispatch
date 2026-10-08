@@ -17,6 +17,9 @@
 //
 // **只動外觀,不動行為**:查詢參數(篩選 / 分頁 / PAGE_SIZE)、換篩選時回到第一頁、
 // 下一頁的停用條件(不足一頁就是最後一頁)全部照舊。
+//
+// 客戶端第 5 批 C5-K03:篩選多「通知客人」分類(p_category = 'customer');每列事件名稱認得 customer_*;
+// 對象欄是會員時顯示「會員〇〇（聯絡人：LINE 顯示名）」;新的略過原因中文在 types.ts。
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -42,10 +45,12 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useLineNotificationLog } from "./api";
 import { RequireLineNotificationAccess } from "./RequireLineNotificationAccess";
 import {
+  LINE_LOG_CUSTOMER_CATEGORY_FILTER,
   LINE_LOG_EVENT_TYPE_LABELS,
   LINE_LOG_SKIP_REASON_LABELS,
   LINE_LOG_STATUS_LABELS,
-  LINE_TARGET_TYPE_LABELS,
+  lineLogEventLabel,
+  lineLogTargetLabel,
 } from "./types";
 
 const PAGE_SIZE = 20;
@@ -107,11 +112,15 @@ function LineLogsPageInner() {
             value={eventFilter}
             onValueChange={guardPhantomEmptyChange(
               handleFilterChange,
-              (v) => v === "all" || v in LINE_LOG_EVENT_TYPE_LABELS,
+              (v) =>
+                v === "all" ||
+                v === LINE_LOG_CUSTOMER_CATEGORY_FILTER ||
+                v in LINE_LOG_EVENT_TYPE_LABELS,
             )}
             placeholder="篩選事件類型"
             options={[
               { value: "all", label: "全部事件" },
+              { value: LINE_LOG_CUSTOMER_CATEGORY_FILTER, label: "通知客人（全部）" },
               ...Object.entries(LINE_LOG_EVENT_TYPE_LABELS).map(([value, label]) => ({
                 value,
                 label,
@@ -156,8 +165,7 @@ function LineLogsPageInner() {
                       }
                       meta={
                         <>
-                          {LINE_LOG_EVENT_TYPE_LABELS[log.event_type] ?? log.event_type} ・{" "}
-                          {LINE_TARGET_TYPE_LABELS[log.target_type] ?? log.target_type}
+                          {lineLogEventLabel(log.event_type)} ・ {lineLogTargetLabel(log)}
                         </>
                       }
                       primaryAction={

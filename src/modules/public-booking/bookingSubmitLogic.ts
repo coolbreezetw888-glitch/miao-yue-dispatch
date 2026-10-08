@@ -79,6 +79,8 @@ export type SubmitOutcome =
 
 /** 零之零 C3-A05 / c3-contract 1-2:店家沒填時的預設句(由伺服器決定;這裡只是伺服器沒給時的保底)。 */
 export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知你。";
+/** 第 5 批 C5-M04:店家能用 LINE 通知客人時的會員待確認預設句(伺服器沒給時的保底)。 */
+export const DEFAULT_MEMBER_COMPLETION_MESSAGE_LINE = "店家確認後會用 LINE 通知你。";
 export const DEFAULT_MEMBER_ACCEPTED_COMPLETION_MESSAGE = "服務前店家可能會再跟你聯絡確認。";
 export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與你聯絡。";
 
@@ -94,7 +96,16 @@ function nonEmptyString(value: unknown): string | null {
  * Edge Function 的回應 → 前端結果。看不懂的一律回 null(呼叫端當「伺服器錯」處理,畫面保留、可以重按)。
  * `completion_message` 在**最外層**(跟 state 同層;c3-contract 1-2,主腦 10/9 定案),預設句由伺服器決定。
  */
-export function parseSubmitResponse(raw: unknown): SubmitOutcome | null {
+export function parseSubmitResponse(
+  raw: unknown,
+  options: {
+    /**
+     * C5-M04:預約頁 booking_settings.line_notify_available。只影響「伺服器沒給 completion_message」時的
+     * 前端保底句;正式的句子(含「店家確認」通知有沒有開)由伺服器決定。
+     */
+    lineNotifyAvailable?: boolean;
+  } = {},
+): SubmitOutcome | null {
   if (!isRecord(raw)) return null;
   const state = raw["state"];
   if (typeof state !== "string") return null;
@@ -144,7 +155,9 @@ export function parseSubmitResponse(raw: unknown): SubmitOutcome | null {
           ? DEFAULT_GUEST_COMPLETION_MESSAGE
           : status === "accepted"
             ? DEFAULT_MEMBER_ACCEPTED_COMPLETION_MESSAGE
-            : DEFAULT_MEMBER_COMPLETION_MESSAGE),
+            : options.lineNotifyAvailable === true
+              ? DEFAULT_MEMBER_COMPLETION_MESSAGE_LINE
+              : DEFAULT_MEMBER_COMPLETION_MESSAGE),
     },
   };
 }

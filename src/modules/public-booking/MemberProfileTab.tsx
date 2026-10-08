@@ -4,7 +4,8 @@
 // ・Q3 = A:生日第一次可以自己填,填了之後唯讀,要改請店家在後台改(防止反覆改生日領生日禮)。
 // ・沒改任何東西時「儲存」停用,上方常駐黃色 !「還沒有修改任何資料」(ui-overlay-patterns 二之三)。
 // ・第二聯絡人(4-B 才會出現)看得到但不能改:can_edit = false ⇒ 全部唯讀 + 一行說明。
-// ・「LINE 帳號：王小明 已綁定」唯讀一行;🔴 LINE 通知開關是第 5 批,這裡不放。
+// ・「LINE 帳號：王小明 已綁定」唯讀一行;第 5 批 5-A(C5-M02)在它下面放「LINE 通知」區塊
+//   (MemberLineNotify.tsx;店家不能用 LINE 通知客人時整塊不顯示)。
 // ・4-B(#1041):LINE 帳號那一行下面是「聯絡人」區塊(MemberContactsSection.tsx,C4-H09)。
 // ・最下面:會員政策(店家有開才出現,小卡窗純文字)、隱私權政策、登出(只登出這間店的客戶 client)。
 // ・這是一般頁面(不是彈窗),不需要 dirty 放棄確認;會員政策小卡窗放在 MemberPolicyDialog.tsx(檢視型)。
@@ -55,6 +56,7 @@ import {
   type ProfileFormValues,
 } from "./memberCenterLogic";
 import { MemberContactsSection } from "./MemberContactsSection";
+import { MemberLineNotifySection } from "./MemberLineNotify";
 import { MemberPolicyDialog } from "./MemberPolicyDialog";
 import { taipeiToday } from "./publicBookingLogic";
 
@@ -138,6 +140,8 @@ export function MemberProfileTab({ ctx }: { ctx: MemberCenterContext }) {
           </StatusTag>
         </section>
       ) : null}
+
+      {profile ? <MemberLineNotifySection slug={slug} onSessionLost={onSessionLost} /> : null}
 
       {profile ? <MemberContactsSection ctx={ctx} memberName={profile.member.name} /> : null}
 

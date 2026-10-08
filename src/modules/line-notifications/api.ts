@@ -19,6 +19,7 @@ import type {
   MerchantLineEventSetting,
   PendingLineNotificationPreview,
 } from "./types";
+import { LINE_LOG_CUSTOMER_CATEGORY_FILTER } from "./types";
 
 // =========================================================================
 // 3.1~3.3:LINE 官方帳號串接憑證管理(規則 2.1,僅商家管理員)。
@@ -416,20 +417,31 @@ export async function updateLineEventSetting(
 // =========================================================================
 // 3.18:發送記錄查詢(4.3 發送記錄頁)。
 // =========================================================================
+/**
+ * 客戶端第 5 批 C5-K03(c5-contract 2-5):每列多 target_member_name / target_contact_display_name。
+ * 篩選值 `category:customer` ⇒ 送 p_category = 'customer'(所有通知客人的事件)。
+ */
+export interface LineNotificationLogListRow extends LineNotificationLogRow {
+  target_member_name?: string | null;
+  target_contact_display_name?: string | null;
+}
+
 export async function fetchLineNotificationLog(
   merchantId: string,
   eventType: string | null,
   limit: number,
   offset: number,
-): Promise<LineNotificationLogRow[]> {
+): Promise<LineNotificationLogListRow[]> {
+  const category = eventType === LINE_LOG_CUSTOMER_CATEGORY_FILTER ? "customer" : null;
   const { data, error } = await supabase.rpc("get_line_notification_log", {
     p_merchant_id: merchantId,
-    ...(eventType ? { p_event_type: eventType } : {}),
+    ...(eventType && !category ? { p_event_type: eventType } : {}),
+    ...(category ? { p_category: category } : {}),
     p_limit: limit,
     p_offset: offset,
-  });
+  } as never);
   if (error) throw error;
-  return (data ?? []) as LineNotificationLogRow[];
+  return (data ?? []) as unknown as LineNotificationLogListRow[];
 }
 
 export function useLineNotificationLog(
@@ -437,7 +449,7 @@ export function useLineNotificationLog(
   eventType: string | null,
   page: number,
   pageSize = 20,
-): UseQueryResult<LineNotificationLogRow[]> {
+): UseQueryResult<LineNotificationLogListRow[]> {
   return useQuery({
     queryKey: [
       "line-notifications-module",
@@ -608,12 +620,18 @@ export async function fetchPendingLineNotificationPreview(
   });
   if (error) throw error;
   const raw = data as unknown as RawPendingLineNotificationPreview;
-  return {
-    hasAnyTarget: raw.has_any_target,
-    targets: (raw.targets ?? []).map((t) => ({
+  // 客戶端第 5 批 C5-K01(零之一第 4 點):彈窗只列店家這邊的對象(管理員 / 客服 / 服務人員)。
+  // 資料庫的 resolve 已不回會員;這裡再擋一次,舊版函式或萬一回了會員也不會出現在彈窗、
+  // 也不會因為「只有會員」而跳出彈窗(客人那邊照「通知客人」設定自動發,跟這顆彈窗無關)。
+  const targets = (raw.targets ?? [])
+    .filter((t) => t.type === "admin" || t.type === "agent" || t.type === "staff")
+    .map((t) => ({
       type: t.type as PendingLineNotificationPreview["targets"][number]["type"],
       name: t.name,
-    })),
+    }));
+  return {
+    hasAnyTarget: raw.has_any_target === true && targets.length > 0,
+    targets,
   };
 }
 

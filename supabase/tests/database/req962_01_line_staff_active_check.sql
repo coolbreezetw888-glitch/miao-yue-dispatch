@@ -189,8 +189,8 @@ select ok(not exists (
 -- 其他角色不受影響
 select is(
   (select array_agg(t->>'type' order by t->>'type') from jsonb_array_elements(:'off_r'::jsonb->'targets') t),
-  array['admin', 'agent', 'member'],
-  '#962:其他角色不受影響 —— 商家管理員、客服、會員(客戶)照收');
+  array['admin', 'agent'],
+  '#962:其他角色不受影響 —— 商家管理員、客服照收(客戶端第 5 批 C5-K01 起會員不再是模組 11 的對象)');
 select ok(exists (select 1 from jsonb_array_elements(:'off_r'::jsonb->'targets') t
                   where t->>'type' = 'admin' and t->>'line_user_id' = 'UadminJia962'),
   '#962:商家管理員的 LINE 收件資訊不變');

@@ -309,16 +309,16 @@ select pg_temp.test_clear_auth();
 
 select is(
   jsonb_array_length(:'mixed_r'::jsonb->'targets'),
-  2,
-  '2.4 第 3 點:已綁定的管理員/會員正常進入 targets(服務人員/客服此時尚未綁定,不影響這兩位)'
+  1,
+  '2.4 第 3 點:已綁定的管理員正常進入 targets(服務人員/客服此時尚未綁定;客戶端第 5 批 C5-K01 起會員不再是模組 11 的對象)'
 );
 select ok(
   exists (select 1 from jsonb_array_elements(:'mixed_r'::jsonb->'targets') t where t->>'type' = 'admin'),
   '2.4 第 3 點:已綁定的管理員確實出現在 targets'
 );
 select ok(
-  exists (select 1 from jsonb_array_elements(:'mixed_r'::jsonb->'targets') t where t->>'type' = 'member'),
-  '2.4 第 3 點:已綁定的會員確實出現在 targets'
+  not exists (select 1 from jsonb_array_elements(:'mixed_r'::jsonb->'targets') t where t->>'type' = 'member'),
+  '2.4 第 3 點 → C5-K01:已綁定的會員、notify_member 打開也不再出現在 targets(客人通知改走 customer_line_outbox)'
 );
 select ok(
   exists (select 1 from jsonb_array_elements(:'mixed_r'::jsonb->'skipped') s where s->>'type' = 'staff' and s->>'reason' = 'target_not_bound'),
@@ -346,8 +346,8 @@ select pg_temp.test_clear_auth();
 
 select is(
   jsonb_array_length(:'bound_r'::jsonb->'targets'),
-  4,
-  '規則 2.4 第 3 點:重新綁定服務人員跟客服後,四種對象全部進入 targets,彼此判斷互不影響'
+  3,
+  '規則 2.4 第 3 點:重新綁定服務人員跟客服後,三種店家對象全部進入 targets,彼此判斷互不影響(C5-K01:會員不再是對象)'
 );
 select ok(
   exists (select 1 from jsonb_array_elements(:'bound_r'::jsonb->'targets') t where t->>'type' = 'staff' and t->>'line_user_id' = 'UstaffRebound001'),

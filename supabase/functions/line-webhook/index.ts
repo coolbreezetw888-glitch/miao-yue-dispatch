@@ -14,12 +14,15 @@
 //      文字訊息 + 6 碼數字格式 → 呼叫 consume_line_binding_code(service role),
 //      成功用 replyToken 呼叫 LINE Reply API 回覆確認訊息;失敗一樣可以選擇性回覆錯誤訊息。
 //      其他事件類型 → 只記錄 line_webhook_events,不做其他處理(判斷 7)。
+//
+// 客戶端第 5-A 批 C5-F01(2026-10-09):
+//   ・follow / unfollow ⇒ 呼叫 internal_set_line_friendship 記「這個 LINE userId 是不是這間店官方帳號的好友」
+//     (用事件的 timestamp 判斷先後,比現有紀錄舊的事件不覆蓋 ⇒ LINE 重送 / 亂序不會蓋掉新狀態)。不回覆任何訊息。
+//   ・handleRequest 改成 handleRequest(req, deps) 可注入(比照 #972),環境變數改在執行當下讀。綁定碼處理不變。
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 // =========================================================================
 // 規則 2.2:簽章驗證。純函式,注入 crypto 相依方便測試(用已知密鑰+已知內容獨立算一組
@@ -84,6 +87,8 @@ export function isSixDigitBindingCode(text: string): boolean {
 export interface LineWebhookEvent {
   type: string;
   webhookEventId: string;
+  /** 事件發生時間(毫秒)。C5-F01 用來判斷 follow / unfollow 的先後。 */
+  timestamp?: number;
   deliveryContext?: { isRedelivery?: boolean };
   replyToken?: string;
   message?: { type: string; text?: string };
@@ -124,17 +129,42 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function handleRequest(req: Request): Promise<Response> {
+/** C5-F01:follow / unfollow 事件 ⇒ 好友狀態;其他事件 null。 */
+export function friendshipChangeFromEvent(
+  event: LineWebhookEvent,
+): { lineUserId: string; isFriend: boolean; changedAt: string } | null {
+  if (event.type !== "follow" && event.type !== "unfollow") return null;
+  const lineUserId = event.source?.userId;
+  if (!lineUserId) return null;
+  const ms = typeof event.timestamp === "number" && Number.isFinite(event.timestamp) ? event.timestamp : Date.now();
+  return { lineUserId, isFriend: event.type === "follow", changedAt: new Date(ms).toISOString() };
+}
+
+// deno-lint-ignore no-explicit-any
+type AnyAdminClient = any;
+
+/** 可注入的相依(Deno 測試傳假的 client / fetch)。 */
+export interface HandleRequestDeps {
+  env?: (k: string) => string | undefined;
+  createAdminClient?: () => AnyAdminClient;
+  fetchImpl?: typeof fetch;
+}
+
+export async function handleRequest(req: Request, deps?: HandleRequestDeps): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
   if (req.method !== "POST") {
     return new Response("只接受 POST 請求", { status: 405 });
   }
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  const env = deps?.env ?? ((k: string) => Deno.env.get(k));
+  const SUPABASE_URL = env("SUPABASE_URL") ?? "";
+  const SUPABASE_SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!deps?.createAdminClient && (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)) {
     console.error("[line-webhook] 缺少必要的環境變數");
     return new Response("伺服器設定不完整", { status: 500 });
   }
+  const fetchImpl = deps?.fetchImpl ?? fetch;
 
   // 規則 2.2 第 1 點:讀取原始位元組,不能先 JSON.parse 再重新字串化。
   const rawBody = new Uint8Array(await req.arrayBuffer());
@@ -147,9 +177,11 @@ async function handleRequest(req: Request): Promise<Response> {
     return new Response("OK", { status: 200 });
   }
 
-  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
+  const adminClient = deps?.createAdminClient
+    ? deps.createAdminClient()
+    : createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
   // 規則 8:靠 destination 反查商家。
   const { data: config, error: configError } = await adminClient
@@ -211,6 +243,20 @@ async function handleRequest(req: Request): Promise<Response> {
       continue;
     }
 
+    // C5-F01:加好友 / 封鎖 ⇒ 記好友狀態(失敗只記 log,不影響其他事件;不印 LINE userId)。
+    const friendship = friendshipChangeFromEvent(event);
+    if (friendship) {
+      const { error: friendError } = await adminClient.rpc("internal_set_line_friendship", {
+        p_merchant_id: merchantId,
+        p_line_user_id: friendship.lineUserId,
+        p_is_friend: friendship.isFriend,
+        p_changed_at: friendship.changedAt,
+        p_source: "webhook",
+      });
+      if (friendError) console.error("[line-webhook] 記錄好友狀態失敗(不影響其他事件)");
+      continue;
+    }
+
     // 判斷 7:只處理「文字訊息且為 6 碼數字格式」,其他事件類型只記錄冪等紀錄,不做其他處理。
     if (
       event.type === "message" &&
@@ -238,15 +284,15 @@ async function handleRequest(req: Request): Promise<Response> {
         const replyText = success
           ? "綁定成功，之後這個 LINE 帳號會收到通知。"
           : "代碼無效或已過期，請重新產生。";
-        await replyLineMessage(fetch, channelAccessToken, event.replyToken, replyText);
+        await replyLineMessage(fetchImpl, channelAccessToken, event.replyToken, replyText);
       }
     }
-    // 其他事件類型(follow/unfollow/非綁定碼格式的文字訊息):只記錄冪等紀錄,不做其他處理。
+    // 其他事件類型(非綁定碼格式的文字訊息等):只記錄冪等紀錄,不做其他處理。
   }
 
   return new Response("OK", { status: 200 });
 }
 
 if (import.meta.main) {
-  Deno.serve(handleRequest);
+  Deno.serve((req) => handleRequest(req));
 }

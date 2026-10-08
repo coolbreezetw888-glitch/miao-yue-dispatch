@@ -460,3 +460,17 @@ describe("客戶端第 4 批:客人線上取消預約的鈴鐺(C4-D04)", () => {
     ).toBe("/app/orders");
   });
 });
+
+describe("客戶端第 5 批:LINE 訊息額度鈴鐺(c5-contract 2-7)", () => {
+  it("有中文標籤、內文完整換行、只在鈴鐺專用清單;點了到「LINE 通知事件」頁(不看身份)", () => {
+    expect(BELL_ONLY_EVENT_LABELS["line_quota_exhausted"]).toBe("LINE 訊息額度用完時");
+    expect(BELL_ONLY_EVENT_LABELS["line_quota_warning"]).toBe("LINE 訊息額度用到 80% 時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("line_quota_exhausted");
+    expect(shouldWrapNotificationBody("line_quota_exhausted")).toBe(true);
+    for (const e of ["line_quota_exhausted", "line_quota_warning"]) {
+      expect(resolveNotificationLink({ target_type: "admin", event_type: e })).toBe(
+        "/app/line-events",
+      );
+    }
+  });
+});

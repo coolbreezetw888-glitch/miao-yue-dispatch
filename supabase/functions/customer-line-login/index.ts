@@ -498,6 +498,8 @@ async function handleComplete(
 
   // 7. 好友 / 官方帳號連結狀態(失敗不影響登入;access token 用完即丟,不存)。
   let linkedOaStatus: "ok" | "not_linked" | "unknown" = "unknown";
+  // 客戶端第 5-A 批 C5-F02:成功時順便讀回應的 friendFlag(這個人是不是官方帳號好友);拿不到 = 不確定(不寫)。
+  let friendFlag: boolean | null = null;
   if (typeof tokenJson.access_token === "string") {
     try {
       const fr = await d.fetch(`${endpoints.apiBase}/friendship/v1/status`, {
@@ -505,6 +507,10 @@ async function handleComplete(
         headers: { Authorization: `Bearer ${tokenJson.access_token}` },
       });
       linkedOaStatus = fr.ok ? "ok" : fr.status === 400 || fr.status === 403 ? "not_linked" : "unknown";
+      if (fr.ok) {
+        const fj = (await fr.json().catch(() => null)) as { friendFlag?: unknown } | null;
+        if (typeof fj?.friendFlag === "boolean") friendFlag = fj.friendFlag;
+      }
     } catch {
       linkedOaStatus = "unknown";
     }
@@ -520,6 +526,18 @@ async function handleComplete(
     p_linked_oa_status: linkedOaStatus,
   });
   if (succeeded.error) d.log.warn("[customer-line-login] 記錄最近成功登入失敗(不影響登入)");
+
+  // C5-F02:記好友狀態(失敗不影響登入;不印 LINE userId)。
+  if (friendFlag !== null) {
+    const fs = await d.db.rpc("internal_set_line_friendship", {
+      p_merchant_id: attempt.merchant_id,
+      p_line_user_id: verified.claims.sub,
+      p_is_friend: friendFlag,
+      p_changed_at: new Date(d.now()).toISOString(),
+      p_source: "login",
+    });
+    if (fs.error) d.log.warn("[customer-line-login] 記錄好友狀態失敗(不影響登入)");
+  }
 
   // 9. generateLink 只產生 hashed_token,不寄信。
   const link = await d.authAdmin.generateLink({ type: "magiclink", email: account.email });

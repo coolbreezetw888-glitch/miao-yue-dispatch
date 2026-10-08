@@ -59,6 +59,8 @@ export async function submitCustomerBooking(params: {
   submissionId: string;
   draft: BookingDraft;
   guest: GuestSubmitInput | null;
+  /** C5-M04:預約頁的 booking_settings.line_notify_available(完成頁保底句用)。 */
+  lineNotifyAvailable?: boolean;
 }): Promise<SubmitOutcome> {
   const { key } = readSupabaseEnv();
   const headers: Record<string, string> = { "Content-Type": "application/json", apikey: key };
@@ -105,7 +107,9 @@ export async function submitCustomerBooking(params: {
     throw new BookingSubmitError(toSubmitInvalidHint(hint));
   }
   if (!res.ok) throw new BookingSubmitError("server_error");
-  const outcome = parseSubmitResponse(data);
+  const outcome = parseSubmitResponse(data, {
+    lineNotifyAvailable: params.lineNotifyAvailable === true,
+  });
   if (!outcome) throw new BookingSubmitError("server_error");
   return outcome;
 }

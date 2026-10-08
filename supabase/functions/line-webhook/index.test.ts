@@ -131,3 +131,121 @@ Deno.test("冪等處理:不同的 webhookEventId 正常各自處理", () => {
   store.handleEvent("event-c");
   assertEquals(store.processCount, 3);
 });
+
+// =========================================================================
+// 客戶端第 5-A 批 C5-F01:follow / unfollow ⇒ 好友狀態(handleRequest 可注入後的整段流程)
+// =========================================================================
+import { computeLineSignature as sign, friendshipChangeFromEvent, handleRequest } from "./index.ts";
+
+const C5_SECRET = "c5-channel-secret";
+const C5_USER = "U0123456789abcdef0123456789abcdef";
+
+function c5FakeClient() {
+  const rec = {
+    rpcs: [] as { fn: string; args: Record<string, unknown> }[],
+    events: new Set<string>(),
+    replies: 0,
+  };
+  const client = {
+    from(table: string) {
+      const filters: Record<string, unknown> = {};
+      const builder = {
+        select() {
+          return builder;
+        },
+        eq(col: string, val: unknown) {
+          filters[col] = val;
+          return builder;
+        },
+        maybeSingle() {
+          if (table === "merchant_line_configs") {
+            return Promise.resolve({
+              data: filters.line_bot_user_id === "Ubot"
+                ? { merchant_id: "m-1", channel_secret: C5_SECRET, channel_access_token: "TOKEN" }
+                : null,
+              error: null,
+            });
+          }
+          if (table === "line_webhook_events") {
+            return Promise.resolve({ data: rec.events.has(String(filters.webhook_event_id)) ? { webhook_event_id: "x" } : null, error: null });
+          }
+          return Promise.resolve({ data: null, error: null });
+        },
+        insert(row: Record<string, unknown>) {
+          if (table === "line_webhook_events") rec.events.add(String(row.webhook_event_id));
+          return Promise.resolve({ error: null });
+        },
+      };
+      return builder;
+    },
+    rpc(fn: string, args: Record<string, unknown>) {
+      rec.rpcs.push({ fn, args });
+      return Promise.resolve({ data: { success: true }, error: null });
+    },
+  };
+  return { client, rec };
+}
+
+async function c5Request(events: unknown[], signature?: string) {
+  const body = JSON.stringify({ destination: "Ubot", events });
+  const sig = signature ?? await sign(new TextEncoder().encode(body), C5_SECRET);
+  return new Request("https://x.supabase.co/functions/v1/line-webhook", {
+    method: "POST",
+    headers: { "x-line-signature": sig },
+    body,
+  });
+}
+
+function c5Deps(client: unknown) {
+  return {
+    env: () => undefined,
+    createAdminClient: () => client,
+    fetchImpl: (() => Promise.resolve(new Response("{}"))) as unknown as typeof fetch,
+  };
+}
+
+Deno.test("C5-F01-1 follow ⇒ is_friend true;unfollow ⇒ false;用事件 timestamp;不回覆", async () => {
+  const { client, rec } = c5FakeClient();
+  const res = await handleRequest(await c5Request([
+    { type: "follow", webhookEventId: "e1", timestamp: 1760000000000, replyToken: "r", source: { type: "user", userId: C5_USER } },
+    { type: "unfollow", webhookEventId: "e2", timestamp: 1760000100000, source: { type: "user", userId: C5_USER } },
+  ]), c5Deps(client));
+  assertEquals(res.status, 200);
+  assertEquals(rec.rpcs, [
+    { fn: "internal_set_line_friendship", args: { p_merchant_id: "m-1", p_line_user_id: C5_USER, p_is_friend: true, p_changed_at: new Date(1760000000000).toISOString(), p_source: "webhook" } },
+    { fn: "internal_set_line_friendship", args: { p_merchant_id: "m-1", p_line_user_id: C5_USER, p_is_friend: false, p_changed_at: new Date(1760000100000).toISOString(), p_source: "webhook" } },
+  ]);
+});
+
+Deno.test("C5-F01-2 同一個事件重送(同 webhookEventId)只記一次;亂序由資料庫用 timestamp 判斷", async () => {
+  const { client, rec } = c5FakeClient();
+  const ev = { type: "follow", webhookEventId: "dup", timestamp: 1760000000000, source: { userId: C5_USER } };
+  await handleRequest(await c5Request([ev]), c5Deps(client));
+  await handleRequest(await c5Request([{ ...ev, deliveryContext: { isRedelivery: true } }]), c5Deps(client));
+  assertEquals(rec.rpcs.length, 1);
+});
+
+Deno.test("C5-F01-3 驗簽失敗 ⇒ 401,完全不寫好友狀態", async () => {
+  const { client, rec } = c5FakeClient();
+  const res = await handleRequest(await c5Request([{ type: "follow", webhookEventId: "e9", source: { userId: C5_USER } }], "forged=="), c5Deps(client));
+  assertEquals(res.status, 401);
+  assertEquals(rec.rpcs.length, 0);
+});
+
+Deno.test("C5-F01-4 不明 destination ⇒ 安靜 200、不寫;綁定碼訊息照舊走 consume_line_binding_code", async () => {
+  const { client, rec } = c5FakeClient();
+  const body = JSON.stringify({ destination: "Unknown", events: [{ type: "follow", webhookEventId: "e3", source: { userId: C5_USER } }] });
+  const res = await handleRequest(new Request("https://x/", { method: "POST", headers: { "x-line-signature": "x" }, body }), c5Deps(client));
+  assertEquals(res.status, 200);
+  assertEquals(rec.rpcs.length, 0);
+
+  await handleRequest(await c5Request([
+    { type: "message", webhookEventId: "e4", replyToken: "r", message: { type: "text", text: "123456" }, source: { userId: C5_USER } },
+  ]), c5Deps(client));
+  assertEquals(rec.rpcs.map((r) => r.fn), ["consume_line_binding_code"]);
+});
+
+Deno.test("C5-F01-5 friendshipChangeFromEvent:沒有 userId / 其他事件 ⇒ null", () => {
+  assertEquals(friendshipChangeFromEvent({ type: "follow", webhookEventId: "a" }), null);
+  assertEquals(friendshipChangeFromEvent({ type: "message", webhookEventId: "a", source: { userId: C5_USER } }), null);
+});

@@ -16,6 +16,11 @@
 //
 // **只動外觀,不動行為**:儲存送出的欄位、事件類型清單、哪些事件隱藏服務人員/會員選項、
 // toast 文案全部照舊。
+//
+// 客戶端第 5 批 5-A(C5-K01 / K02):
+//   - 最上方新增「通知客人」卡(CustomerLineSettingsCard.tsx);下面 5 張是「通知店家這邊」的事件。
+//   - 5 種事件不再顯示「會員」勾選(Q6:客人通知一律走「通知客人」設定,避免重複發)。
+//     notify_member 欄位不刪,儲存時照原值送回(不影響既有資料,日後體檢再清)。
 
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -38,10 +43,11 @@ import { useCurrentMerchant } from "@/modules/merchant/context";
 import { updateLineEventSetting, useMerchantLineEventSettings } from "./api";
 import { RequireLineNotificationAccess } from "./RequireLineNotificationAccess";
 import { TemplateVariablePreview } from "./TemplateVariablePreview";
+import { CustomerLineSettingsCard } from "./CustomerLineSettingsCard";
+import { CUSTOMER_SETTINGS_POINTER } from "./customerLineSettingsLogic";
 import {
   LINE_NOTIFICATION_EVENT_LABELS,
   LINE_NOTIFICATION_EVENT_TYPES,
-  eventSupportsMemberTarget,
   eventSupportsStaffTarget,
   type LineNotificationEventType,
   type MerchantLineEventSetting,
@@ -117,17 +123,16 @@ function EventSettingCard({
   }
 
   const showStaffOption = eventSupportsStaffTarget(eventType);
-  const showMemberOption = eventSupportsMemberTarget(eventType);
   const templateFieldId = `line-event-template-${eventType}`;
 
   // 通知對象可以同時選好幾個 ⇒ ChoiceChip(多選,aria-pressed),不是 ChoiceChipGroup(單選)。
-  // staff_leave_created 沒有服務人員 / 會員這兩個對象(§1.2 邊界情況),清單就不放那兩顆。
-  type TargetKey = "notifyAdmin" | "notifyAgent" | "notifyStaff" | "notifyMember";
+  // staff_leave_created 沒有服務人員這個對象(§1.2 邊界情況),清單就不放那顆。
+  // C5-K01:「會員」不再出現(客人通知改由上方「通知客人」卡設定)。
+  type TargetKey = "notifyAdmin" | "notifyAgent" | "notifyStaff";
   const targetOptions: { key: TargetKey; label: string }[] = [
     { key: "notifyAdmin", label: "商家管理員" },
     { key: "notifyAgent", label: "客服" },
     ...(showStaffOption ? [{ key: "notifyStaff" as const, label: "服務人員" }] : []),
-    ...(showMemberOption ? [{ key: "notifyMember" as const, label: "會員" }] : []),
   ];
 
   return (
@@ -220,6 +225,21 @@ function LineEventSettingsPageInner() {
         title="LINE 通知設定"
         description="設定每一類事件要不要透過 LINE 通知、通知誰、文案內容。"
       />
+
+      <CustomerLineSettingsCard
+        merchantId={merchantId}
+        merchantName={merchant!.name}
+        merchantPhone={merchant!.phone}
+        bookingSlug={merchant!.booking_slug}
+        isOnSite={merchant!.industry_type === "on_site_dispatch"}
+      />
+
+      <div>
+        <h2 className="text-base font-bold text-foreground">通知店家這邊</h2>
+        <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+          {CUSTOMER_SETTINGS_POINTER}
+        </p>
+      </div>
 
       {isLoading ? (
         <LoadingSkeleton variant="cards" rows={3} />

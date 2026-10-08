@@ -236,7 +236,7 @@ select is((select body -> 'wallet' from c4m_out where label = 'home'),
           '{"points_enabled": true, "points_balance": 320, "stored_value": null}'::jsonb, 'C01-4 沒有紅利設定列 ⇒ 預設開啟 + 餘額');
 select is((select (body ->> 'pending_contact_requests')::integer from c4m_out where label = 'home'), 0, 'C01-5 4-A 申請數固定 0');
 select is((select array_agg(k order by k) from c4m_out, jsonb_object_keys(body) k where label = 'home'),
-          array['member', 'next_booking', 'pending_contact_requests', 'state', 'upcoming_count', 'wallet'], 'C01-6 最上層 key 白名單');
+          array['line_notify', 'member', 'next_booking', 'pending_contact_requests', 'state', 'upcoming_count', 'wallet'], 'C01-6 最上層 key 白名單(第 5 批加 line_notify)');
 insert into merchant_member_settings (merchant_id, points_feature_enabled) values ('c4a00000-0000-4000-8000-000000000021', false);
 select pg_temp.as_customer('c4a00000-0000-4000-8000-000000000011');
 select is(public.customer_get_member_home('pgtap-c4m-shop') -> 'wallet',

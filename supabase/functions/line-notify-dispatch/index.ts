@@ -342,7 +342,14 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return jsonResponse({ error: "判斷通知對象時發生錯誤" }, 500);
   }
 
-  const result = resolved as ResolveTargetsResult;
+  // 客戶端第 5 批 C5-K01:客人通知改走 customer-line-notify-dispatch(待發清單)。資料庫的 resolve 已不回會員;
+  // 這裡再擋一層:就算混入 type:'member' 也不發、不寫記錄,避免兩套重複通知客人。
+  const rawResult = resolved as ResolveTargetsResult;
+  const result: ResolveTargetsResult = {
+    ...rawResult,
+    targets: (rawResult.targets ?? []).filter((t) => t.type !== "member"),
+    skipped: (rawResult.skipped ?? []).filter((s) => s.type !== "member"),
+  };
 
   // 步驟 3:沒有任何目標(not_configured/event_disabled)→ 直接回 200,不寫入任何記錄。
   if (!shouldWriteAnyLogRow(result)) {

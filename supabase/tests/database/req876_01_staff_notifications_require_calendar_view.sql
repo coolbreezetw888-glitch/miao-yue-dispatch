@@ -201,8 +201,8 @@ select ok(exists (select 1 from jsonb_array_elements(:'lineoff_r'::jsonb->'skipp
   '#876/#962 LINE:列入跳過清單,原因是「未開放行事曆檢視」,不寫「未綁定」的假原因誤導商家');
 select is(
   (select array_agg(t->>'type' order by t->>'type') from jsonb_array_elements(:'lineoff_r'::jsonb->'targets') t),
-  array['admin', 'agent', 'member'],
-  '#876 LINE:其他角色不受影響 —— 管理員、客服、會員(客戶)照收');
+  array['admin', 'agent'],
+  '#876 LINE:其他角色不受影響 —— 管理員、客服照收(客戶端第 5 批 C5-K01 起會員不再是模組 11 的對象)');
 
 -- 前端「確認訂單前預覽會通知誰」走同一支判斷,要跟實際發送一致
 select pg_temp.test_set_auth('e8760000-0000-4000-8000-000000000001');
@@ -230,8 +230,8 @@ select resolve_line_notification_targets('e8760000-0000-4000-8000-000000000021',
 select ok(exists (select 1 from jsonb_array_elements(:'lineon_r'::jsonb->'targets') t
                   where t->>'type' = 'staff' and t->>'id' = 'e8760000-0000-4000-8000-000000000051' and t->>'line_user_id' = 'UstaffBing'),
   '#876 LINE:重新打開 → 丙恢復為 LINE 收件人');
-select is(jsonb_array_length(:'lineon_r'::jsonb->'targets'), 4,
-  '#876 LINE:重新打開後四種對象都在(數量對照,證明關掉時少的就是丙那一位)');
+select is(jsonb_array_length(:'lineon_r'::jsonb->'targets'), 3,
+  '#876 LINE:重新打開後三種店家對象都在(數量對照,證明關掉時少的就是丙那一位;C5-K01 起沒有會員)');
 
 -- =========================================================================
 -- ⑥ 關掉之前就已經存在的訂單:之後才發生的通知一樣被擋(沒有「已排隊」漏網)

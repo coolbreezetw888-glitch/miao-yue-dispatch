@@ -386,7 +386,31 @@ select is(
 select is(
   md5(pg_temp.req987_swap_back($m$public.resolve_line_notification_targets(p_merchant_id uuid, p_event_type text, p_booking_id uuid, p_staff_leave_record_id uuid)$m$, array[
     $m$'找不到這筆預約，或它不屬於這個商家'$m$, $m$'找不到這筆預約,或它不屬於這個商家'$m$,
-    $m$'找不到這筆請假紀錄，或它不屬於這個商家'$m$, $m$'找不到這筆請假紀錄,或它不屬於這個商家'$m$
+    $m$'找不到這筆請假紀錄，或它不屬於這個商家'$m$, $m$'找不到這筆請假紀錄,或它不屬於這個商家'$m$,
+    -- 客戶端第 5 批 C5-K01:notify_member 那一段換成一行註解(其他段逐字不變),這裡換回去再比對改前指紋。
+    $m$  -- 客戶端第 5 批 C5-K01:模組 11 的「通知會員」(notify_member)已拿掉,客人通知改走 customer_line_outbox。
+$m$, $m$  if v_settings.notify_member and v_booking.id is not null then
+    if v_booking.member_id is null then
+      v_skipped := v_skipped || jsonb_build_array(
+        jsonb_build_object('type', 'member', 'id', null, 'reason', 'no_target')
+      );
+    else
+      select name, line_bound into v_member_name, v_member_bound
+      from public.members where id = v_booking.member_id and merchant_id = p_merchant_id;
+
+      if coalesce(v_member_bound, false) then
+        v_targets := v_targets || jsonb_build_array(jsonb_build_object(
+          'type', 'member', 'id', v_booking.member_id, 'name', v_member_name,
+          'line_user_id', (select line_user_id from public.members where id = v_booking.member_id and merchant_id = p_merchant_id)
+        ));
+      else
+        v_skipped := v_skipped || jsonb_build_array(
+          jsonb_build_object('type', 'member', 'id', v_booking.member_id, 'reason', 'target_not_bound')
+        );
+      end if;
+    end if;
+  end if;
+$m$
   ])),
   $m$9b66ca4aea0df7d482a76a5aef99e175$m$,
   $m$public.resolve_line_notification_targets(p_merchant_id uuid, p_event_type text, p_booking_id uuid, p_staff_leave_record_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);

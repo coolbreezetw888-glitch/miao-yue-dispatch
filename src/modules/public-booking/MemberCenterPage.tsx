@@ -10,7 +10,8 @@
 // ・任何會員中心函式回 not_linked(登入失效 / 被移除)⇒ 登出這間店的客戶 client、回 C4-B02(C4-B05)。
 // ・分頁之間是一般網址切換(系統「上一頁」可以回上一個分頁),不用預約頁那套 history state(C4-B05)。
 // ・讀取中用灰色骨架、失敗用 ErrorState,不顯示資料庫原文(鐵律 4)。
-// ・🔴 不顯示「接收 LINE 通知」卡片與 LINE 通知開關(第 5 批才有,不承諾還沒做的功能)。
+// ・第 5 批 5-A(C5-M01):首頁「加入店家 LINE 好友」提示卡(MemberLineNotify.tsx),
+//   只有店家能用 LINE 通知客人時才出現(不承諾還沒做的功能)。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
@@ -72,6 +73,7 @@ import {
   type MemberHome,
 } from "./memberCenterLogic";
 import { MemberBookingsTab } from "./MemberBookingsTab";
+import { MemberAddFriendCard } from "./MemberLineNotify";
 import { MemberProfileTab } from "./MemberProfileTab";
 import { MemberWalletTab } from "./MemberWalletTab";
 import { ContactButtons, LineIcon, PublicShell, TitleOnlyHeader } from "./PublicBookingChrome";
@@ -755,6 +757,12 @@ function MemberHomeTab({ ctx, home }: { ctx: MemberCenterContext; home: MemberHo
           </div>
         </section>
       ) : null}
+
+      <MemberAddFriendCard
+        slug={slug}
+        merchantName={ctx.page.merchant.name}
+        lineNotify={home.lineNotify}
+      />
 
       {next ? (
         <Button asChild variant="primary" size="touch" className="w-full">

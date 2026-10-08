@@ -8,6 +8,8 @@
 //   待處理申請「同意 / 拒絕」(⚠️範圍 第 4 點)。
 // ・移除 = 封鎖(之後要再加入要按「允許重新接上」),可以回頭 ⇒ 不標紅(ui-overlay-patterns 二之三)。
 // 🔴 LINE 顯示名、電話一律純文字;不顯示 LINE userId(後端也不回)。
+// 客戶端第 5 批 C5-F03:每位聯絡人多「LINE 好友 / 預約通知 / 優惠通知」(唯讀,店家不能替客人改);
+//   沒有聯絡人但用舊綁定碼綁過 LINE 的會員,顯示一行「LINE 好友：…」。
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,6 +30,7 @@ import {
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PROMO_SWITCH_VISIBLE } from "@/lib/customerLinePromo";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
@@ -41,7 +44,9 @@ import {
   adminContactActionMessage,
   fetchAdminMemberContacts,
   joinedViaLabel,
+  lineFriendStatusLabel,
   memberContactsAdminQueryKey,
+  onOffLabel,
   merchantRemoveMemberContact,
   merchantResolveContactRequest,
   merchantSetPrimaryContact,
@@ -173,6 +178,19 @@ export function MemberContactsCard({ memberId }: { memberId: string }) {
                   .filter(Boolean)
                   .join("・")}
               </p>
+              <p
+                className="text-xs leading-relaxed text-foreground"
+                data-testid="member-contacts-card-notify"
+              >
+                {[
+                  `LINE 好友：${lineFriendStatusLabel(c.lineFriendStatus)}`,
+                  `預約通知：${onOffLabel(c.notifyBooking)}`,
+                  // 5-A 先不顯示(客人端也還不能改、發送也還不看這個開關),5-B 跟客人端一起出現。
+                  PROMO_SWITCH_VISIBLE ? `優惠通知：${onOffLabel(c.notifyPromo)}` : null,
+                ]
+                  .filter(Boolean)
+                  .join("・")}
+              </p>
               {mayManage ? (
                 <div className="flex flex-wrap gap-2">
                   {!c.isPrimary ? (
@@ -203,6 +221,13 @@ export function MemberContactsCard({ memberId }: { memberId: string }) {
           ))}
         </ul>
       )}
+
+      {/* C5-F03:舊綁定碼會員(沒有聯絡人)的好友狀態。只看 legacy_line 有沒有值,跟「待處理申請」各自獨立顯示。 */}
+      {!isLoading && !isError && data?.legacyLine ? (
+        <p className="text-xs text-foreground" data-testid="member-contacts-card-legacy-friend">
+          {`LINE 好友：${lineFriendStatusLabel(data.legacyLine.friendStatus)}`}
+        </p>
+      ) : null}
 
       {data && data.requests.length > 0 ? (
         <div className="flex flex-col gap-2" data-testid="member-contacts-card-requests">

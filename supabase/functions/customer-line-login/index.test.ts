@@ -177,6 +177,8 @@ function makeDeps(w: World): HandleRequestDeps {
           case "internal_customer_line_login_succeeded":
             w.succeeded.push({ merchant_id: String(args.p_merchant_id), channel_id: String(args.p_channel_id), status: String(args.p_linked_oa_status) });
             return { data: null, error: null };
+          case "internal_set_line_friendship":
+            return { data: true, error: null };
         }
         return { data: null, error: { message: `unexpected rpc ${fn}` } };
       },
@@ -501,6 +503,49 @@ Deno.test("B03-7 好友狀態:403 ⇒ not_linked;連線失敗 ⇒ unknown;都不
     assertEquals((await call(w, { action: "complete", state, code: CODE })).json.status, "ok");
     assertEquals(w.succeeded[0].status, expected);
   }
+});
+
+Deno.test("C5-F02 登入時讀 friendFlag:true / false 寫好友狀態;缺欄位 / 403 / 連線失敗不寫;都不影響登入", async () => {
+  for (const [make, expected] of [
+    [() => new Response(JSON.stringify({ friendFlag: true }), { status: 200 }), true],
+    [() => new Response(JSON.stringify({ friendFlag: false }), { status: 200 }), false],
+    [() => new Response(JSON.stringify({}), { status: 200 }), null],
+    [() => new Response("not json", { status: 200 }), null],
+    [() => new Response("{}", { status: 403 }), null],
+    [() => { throw new Error("x"); }, null],
+  ] as [() => Response, boolean | null][]) {
+    const w = newWorld();
+    const { state, attempt } = await startFlow(w);
+    w.tokenResponse = tokenOk(() => signIdToken(goodClaims(attempt.nonce)));
+    w.friendship = make;
+    assertEquals((await call(w, { action: "complete", state, code: CODE })).json.status, "ok");
+    const calls = w.rpcCalls.filter((c) => c.fn === "internal_set_line_friendship");
+    if (expected === null) {
+      assertEquals(calls.length, 0);
+    } else {
+      assertEquals(calls.length, 1);
+      assertEquals(calls[0].args.p_is_friend, expected);
+      assertEquals(calls[0].args.p_merchant_id, MERCHANT);
+      assertEquals(calls[0].args.p_line_user_id, "U0123456789abcdefSENTINELSUB");
+      assertEquals(calls[0].args.p_source, "login");
+      assertEquals(calls[0].args.p_changed_at, new Date(NOW_MS).toISOString());
+    }
+  }
+});
+
+Deno.test("C5-F02-2 記好友狀態失敗 ⇒ 登入照樣成功", async () => {
+  const w = newWorld();
+  const { state, attempt } = await startFlow(w);
+  w.tokenResponse = tokenOk(() => signIdToken(goodClaims(attempt.nonce)));
+  const d = makeDeps(w);
+  const orig = d.db.rpc;
+  d.db.rpc = (fn, args) => fn === "internal_set_line_friendship" ? Promise.resolve({ data: null, error: { message: "boom" } }) : orig(fn, args);
+  const req = new Request("http://localhost/functions/v1/customer-line-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-forwarded-for": "203.0.113.9" },
+    body: JSON.stringify({ action: "complete", state, code: CODE }),
+  });
+  assertEquals((await (await handleRequest(req, d)).json()).status, "ok");
 });
 
 Deno.test("B03-8 頭像只收 https:非 https 的 picture 不寫進資料庫", async () => {

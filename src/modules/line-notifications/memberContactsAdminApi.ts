@@ -17,7 +17,13 @@ export interface AdminMemberContact {
   joinedVia: ContactJoinedVia | null;
   joinedAt: string | null;
   lastLoginAt: string | null;
+  /** C5-F03(c5-contract 2-4):唯讀,店家不能替客人改。 */
+  lineFriendStatus: LineFriendStatus;
+  notifyBooking: boolean;
+  notifyPromo: boolean;
 }
+
+export type LineFriendStatus = "friend" | "not_friend" | "unknown";
 
 export interface AdminContactRequest {
   id: string;
@@ -30,6 +36,23 @@ export interface AdminMemberContacts {
   contacts: AdminMemberContact[];
   requests: AdminContactRequest[];
   relinkBlocked: boolean;
+  /** C5-F03:沒有聯絡人、但用舊綁定碼綁過 LINE 的會員才有值。 */
+  legacyLine: { friendStatus: LineFriendStatus } | null;
+}
+
+function friendStatus(value: unknown): LineFriendStatus {
+  return value === "friend" || value === "not_friend" ? value : "unknown";
+}
+
+/** C5-F03 好友狀態中文。 */
+export function lineFriendStatusLabel(status: LineFriendStatus): string {
+  if (status === "friend") return "已加入";
+  if (status === "not_friend") return "未加入";
+  return "不確定";
+}
+
+export function onOffLabel(on: boolean): string {
+  return on ? "開" : "關";
 }
 
 type UntypedRpc = (
@@ -88,6 +111,9 @@ export function parseAdminMemberContacts(raw: unknown): AdminMemberContacts {
           : null,
       joinedAt: str(c["joined_at"]),
       lastLoginAt: str(c["last_login_at"]),
+      lineFriendStatus: friendStatus(c["line_friend_status"]),
+      notifyBooking: c["notify_booking"] !== false,
+      notifyPromo: c["notify_promo"] !== false,
     });
   }
   contacts.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
@@ -103,7 +129,13 @@ export function parseAdminMemberContacts(raw: unknown): AdminMemberContacts {
       createdAt: str(q["created_at"]),
     });
   }
-  return { contacts, requests, relinkBlocked: r["relink_blocked"] === true };
+  const legacy = r["legacy_line"];
+  return {
+    contacts,
+    requests,
+    relinkBlocked: r["relink_blocked"] === true,
+    legacyLine: isRecord(legacy) ? { friendStatus: friendStatus(legacy["friend_status"]) } : null,
+  };
 }
 
 /** c4-contract B6-1 加入方式中文。 */

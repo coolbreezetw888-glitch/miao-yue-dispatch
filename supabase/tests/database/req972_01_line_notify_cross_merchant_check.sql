@@ -215,8 +215,8 @@ select throws_ok(
 select public.resolve_line_notification_targets('e9720000-0000-4000-8000-000000000021', 'booking_confirmed', :'bkA_id'::uuid, null) as r \gset okA_
 select is(
   (select array_agg(t->>'line_user_id' order by t->>'line_user_id') from jsonb_array_elements(:'okA_r'::jsonb->'targets') t),
-  array['UadminA972', 'UmemberA972', 'UstaffA972'],
-  '⑬ #972 正向對照:同商家訂單照常算出管理員/服務人員/會員三位收件人(行為不變)');
+  array['UadminA972', 'UstaffA972'],
+  '⑬ #972 正向對照:同商家訂單照常算出管理員/服務人員兩位收件人(客戶端第 5 批 C5-K01 起會員不再是模組 11 的對象)');
 
 select public.resolve_line_notification_targets('e9720000-0000-4000-8000-000000000021', 'staff_leave_created', null, 'e9720000-0000-4000-8000-000000000091'::uuid) as r \gset okLv_
 select is((:'okLv_r'::jsonb->>'event_enabled')::boolean, true,
@@ -282,9 +282,8 @@ select ok(
   '⑱ #972 縱深:訂單的服務人員指到別家 → 不算收件人,記為 staff_inactive(視同找不到)');
 select ok(
   not exists (select 1 from jsonb_array_elements(:'bad_r'::jsonb->'targets') t where t->>'line_user_id' = 'UmemberB972')
-  and exists (select 1 from jsonb_array_elements(:'bad_r'::jsonb->'skipped') s
-              where s->>'type' = 'member' and s->>'reason' = 'target_not_bound'),
-  '⑲ #972 縱深:訂單的會員指到別家 → 不算收件人,記為 target_not_bound');
+  and not exists (select 1 from jsonb_array_elements(:'bad_r'::jsonb->'skipped') s where s->>'type' = 'member'),
+  '⑲ #972 縱深:訂單的會員指到別家 → 不算收件人(C5-K01 起模組 11 完全不處理會員,targets / skipped 都沒有 member)');
 
 -- =========================================================================
 -- ⑳ ㉑ ㉒ 前端預覽 preview_line_notification_targets(內部以訂單自己的商家呼叫 resolve)行為不變

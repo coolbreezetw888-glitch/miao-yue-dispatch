@@ -36,6 +36,11 @@ export interface PublicBookingSettings {
    * ⑦-1 / ⑦-2 的取消說明、我的預約「不能線上取消」那句用。
    */
   customer_cancel_deadline_hours: number;
+  /**
+   * C5-M04:這間店能用 LINE 通知客人(已接上官方帳號且至少一種預約通知開著)。沒回傳(舊版函式)= false。
+   * 選填只是為了不用改既有測試資料;parsePublicBookingPage 一律會給值。
+   */
+  line_notify_available?: boolean;
 }
 
 /**

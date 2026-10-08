@@ -19,6 +19,9 @@
 //
 // **只動外觀,不動行為**:open / busy / onOpenChange / onChoice 的語意與呼叫時機完全照舊,
 // 兩顆按鈕各自呼叫 onChoice(false) / onChoice(true) 也照舊。
+//
+// 客戶端第 5 批 C5-K01(零之一第 4 點):只列店家這邊的對象(會員在 api.ts 就濾掉);
+// 客人那邊照「通知客人」設定由系統自動發,不受這顆彈窗的選擇影響 ⇒ 加一行灰字說明。
 
 import {
   AlertNote,
@@ -49,6 +52,7 @@ export function ConfirmBookingLineDialog({
   onChoice: (shouldNotify: boolean) => void;
 }) {
   const targetSummary = targets
+    .filter((t) => t.type !== "member")
     .map((t) => `${LINE_TARGET_TYPE_LABELS[t.type] ?? t.type} ${t.name}(LINE)`)
     .join("、");
 
@@ -66,6 +70,12 @@ export function ConfirmBookingLineDialog({
           不論選「是」或「否」，<strong>這筆訂單都會照常確認</strong>
           。這裡只決定要不要額外發送這一次的 LINE 通知，不會更改長期的通知設定。
         </AlertNote>
+        <p
+          className="text-[13px] leading-relaxed text-muted-foreground"
+          data-testid="confirm-line-customer-note"
+        >
+          客人那邊會依「LINE 通知事件」頁的「通知客人」設定通知，跟這裡選是或否無關。
+        </p>
         <CardAlertDialogFooter>
           <CardAlertDialogCancel disabled={busy} onClick={() => onChoice(false)}>
             否，只確認不通知
