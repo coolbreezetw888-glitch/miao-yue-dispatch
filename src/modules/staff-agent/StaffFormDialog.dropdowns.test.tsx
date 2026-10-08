@@ -22,6 +22,17 @@ const m = vi.hoisted(() => ({
   removeStaffServiceItem: vi.fn(),
 }));
 
+// #1024 第 22 批:可預約時段清單(預設空;「直接調時間 × 填過資料」那幾條才放一組)。
+const w = vi.hoisted(() => ({
+  windows: [] as {
+    id: string;
+    staff_id: string;
+    day_of_week: number;
+    start_time: string;
+    end_time: string;
+  }[],
+}));
+
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("./api", () => ({
   updateMerchantStaff: m.updateMerchantStaff,
@@ -43,7 +54,7 @@ vi.mock("@/modules/service-items/context", () => ({
   useMerchantServiceCategories: () => ({ data: [] }),
 }));
 vi.mock("@/modules/booking/context", () => ({
-  useStaffAvailabilityWindows: () => ({ data: [], isLoading: false }),
+  useStaffAvailabilityWindows: () => ({ data: w.windows, isLoading: false }),
 }));
 vi.mock("@/modules/line-notifications/StaffLineBindingSection", () => ({
   StaffLineBindingSection: () => null,
@@ -225,5 +236,77 @@ describe("第 11 批 J:編輯服務人員 × 填過資料才問放棄", () => {
     await user.keyboard("{Escape}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByText("確定放棄這次輸入？")).toBeNull();
+  });
+});
+
+describe("#1024 第 22 批:編輯服務人員 × 可預約時段直接調時間也算填過資料", () => {
+  afterEach(() => {
+    w.windows = [];
+  });
+
+  function renderWithSpy(onOpenChange: (o: boolean) => void) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <StaffFormDialog
+            merchantId="merchant-1"
+            staff={STAFF}
+            open
+            onOpenChange={onOpenChange}
+            onSaved={() => undefined}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("改了某一組的開始時間還沒按「儲存」⇒ Esc 先問放棄;按「還原」後 Esc 直接關", async () => {
+    w.windows = [
+      {
+        id: "w-1",
+        staff_id: STAFF.id,
+        day_of_week: 1,
+        start_time: "09:00:00",
+        end_time: "12:00:00",
+      },
+    ];
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderWithSpy(onOpenChange);
+    const start = await screen.findByLabelText("星期一 09:00 - 12:00的開始時間");
+    // 原生時間欄位:用 change 事件直接給新值(jsdom 不支援逐字輸入 time)。
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(start, { target: { value: "10:00" } });
+    expect(screen.getByRole("button", { name: "儲存星期一 09:00 - 12:00" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(await screen.findByText("確定放棄這次輸入？")).toBeInTheDocument();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "繼續編輯" }));
+    await waitFor(() => expect(screen.queryByText("確定放棄這次輸入？")).toBeNull());
+    await user.click(screen.getByRole("button", { name: "還原星期一 09:00 - 12:00" }));
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("主腦裁決:新增一組跟同一天重疊的時段 ⇒ 擋在畫面上(訊息跟編輯一致),不送出", async () => {
+    w.windows = [
+      {
+        id: "w-1",
+        staff_id: STAFF.id,
+        day_of_week: 1,
+        start_time: "09:00:00",
+        end_time: "12:00:00",
+      },
+    ];
+    const { toast } = await import("sonner");
+    const user = userEvent.setup();
+    renderWithSpy(vi.fn());
+    await screen.findByLabelText("星期一 09:00 - 12:00的開始時間");
+    // 新增列預設是星期一 09:00–18:00 ⇒ 跟 09:00–12:00 重疊
+    await user.click(screen.getByRole("button", { name: "新增時段" }));
+    expect(toast.error).toHaveBeenCalledWith(
+      "這個時段跟同一天已設定的「09:00–12:00」重疊，請調整時間。",
+    );
   });
 });

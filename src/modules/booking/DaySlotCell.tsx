@@ -49,6 +49,25 @@ export function DaySlotCell({
   const { open, onOpenChange, onPointerDown, onPointerMove, onPointerUp, onPointerCancel } =
     useTapVsDragOpenState();
 
+  // #1023 第 22 批:選單一個選項都沒有(例:每週可預約時段外的灰格,拿掉「開啟時段」之後)⇒ 格子不可點、
+  // 不掛選單(否則點了會跳一個空白小框),游標一般箭頭(#1022)。外觀(底色 / 斜線 / data-slot-state)照舊;
+  // 呼叫端這時不要傳 hover 樣式(點了沒反應的格子不該有滑過回饋)。
+  if (!showCreateOption && !showOverrideOption) {
+    return (
+      <div
+        className={cn(
+          "absolute inset-x-0 cursor-default border-b border-border p-1 text-left text-[9px] leading-tight",
+          cellClassName,
+        )}
+        style={{ top, height, ...cellStyle }}
+        aria-label={ariaLabel}
+        data-slot-state={slotState}
+      >
+        {badgeText}
+      </div>
+    );
+  }
+
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -56,9 +75,9 @@ export function DaySlotCell({
           type="button"
           className={cn(
             "absolute inset-x-0 border-b border-border p-1 text-left text-[9px] leading-tight",
-            // #1022 第 21 批:點了會跳選單(新增預約 / 開關時段)的格子,滑鼠移上去是手指;
-            // 沒有任何選項時維持一般箭頭(呼叫端目前不會傳這種組合,這裡是保險)。
-            showCreateOption || showOverrideOption ? "cursor-pointer" : "cursor-default",
+            // #1022 第 21 批:點了會跳選單(新增預約 / 開關時段)的格子,滑鼠移上去是手指
+            // (沒有任何選項的格子在上面就改畫成不可點的 div 了)。
+            "cursor-pointer",
             cellClassName,
           )}
           style={{ top, height, ...cellStyle }}

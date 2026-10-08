@@ -159,11 +159,26 @@ select is(
 );
 
 -- ④ 被授權 business_hours 的客服:可以寫入 staff_availability_windows。
+-- 第 22 批 #1024(主腦裁決):同一天時段新增也不能重疊。檔頭墊片替這位服務人員補的星期三 00:00–24:00 會跟
+-- 這裡新增的 09:00–12:00 重疊 ⇒ 驗之前以 postgres 暫時拿掉星期三那一列墊片,驗完刪掉新增的列、把墊片補回
+-- (後面的測試狀態不變;驗的仍是「有 business_hours 權限的客服可以新增」)。
+select pg_temp.test_clear_auth();
+delete from staff_availability_windows
+ where staff_id = 'b4000000-0000-4000-8000-000000000040' and day_of_week = 3
+   and start_time = '00:00'::time and end_time = '24:00'::time;
+select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000003');
 select lives_ok(
   $$insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
     values ('b4000000-0000-4000-8000-000000000040', 3, '09:00', '12:00')$$,
   '規則 2.12:被授權 business_hours 的客服可以新增 staff_availability_windows'
 );
+select pg_temp.test_clear_auth();
+delete from staff_availability_windows
+ where staff_id = 'b4000000-0000-4000-8000-000000000040' and day_of_week = 3
+   and start_time = '09:00'::time and end_time = '12:00'::time;
+insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+values ('b4000000-0000-4000-8000-000000000040', 3, '00:00', '24:00');
+select pg_temp.test_set_auth('b4000000-0000-4000-8000-000000000003');
 
 -- ⑤ 被授權 business_hours 的客服:可以修改 merchant_feature_flags 的 strict_conflict_check
 --    (1.4/規則 2.4:寫入權限歸在 business_hours 底下;這筆列已在 fixture 階段以 postgres

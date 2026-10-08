@@ -198,11 +198,12 @@ test("10.3.2 + SPECS-INDEX 編號 485(核心必測,品管打回重做修正):整
   // 在每一格輸出 data-slot-state(見該檔案 DaySlotState 的說明),因為斜線圖樣是商家可自訂的
   // 動態 inline style(SPECS-INDEX #644),沒有穩定的 class 可以選取。
   await expect(staffColumn.locator('[data-slot-state="override-closed"]')).toHaveCount(18);
-  // 對照組:商家管理員視角完全看不到「新增預約」這個選項——打開其中一格的下拉選單確認。
-  await staffColumn.getByRole("button", { name: "不可預約" }).first().click();
-  await expect(adminPage.getByRole("menuitem", { name: "新增預約" })).toHaveCount(0);
-  await expect(adminPage.getByRole("menuitem", { name: "開啟時段" })).toBeVisible();
-  await adminPage.keyboard.press("Escape");
+  // 對照組:商家管理員視角完全看不到「新增預約」這個選項。
+  // 第 22 批 #1023:這位服務人員沒有設定每週可預約時段 ⇒ 這 18 格都在時段外,也不再有「開啟時段」
+  // ⇒ 格子不可點(不是按鈕、沒有選單);原本是點開選單確認只有「開啟時段」。
+  await expect(staffColumn.getByRole("button", { name: "不可預約" })).toHaveCount(0);
+  await staffColumn.locator('[data-slot-state="override-closed"]').first().click({ force: true });
+  await expect(adminPage.getByRole("menuitem")).toHaveCount(0);
 
   await adminContext.close();
 

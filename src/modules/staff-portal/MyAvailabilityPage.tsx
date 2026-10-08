@@ -20,6 +20,8 @@ import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 // 導致實際上時段已經寫進資料庫,畫面卻永遠顯示「尚未設定任何可預約時段」),已用 Playwright
 // e2e 測試抓到並修正。
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { AvailabilityWindowEditList } from "@/modules/booking/AvailabilityWindowEditList";
+import { validateNewAvailabilityWindow } from "@/modules/booking/availabilityWindowEdit";
 
 import {
   upsertMyAvailabilityWindow,
@@ -45,8 +47,15 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
   }
 
   async function handleAdd() {
-    if (startTime >= endTime) {
-      toast.error("開始時間必須早於結束時間");
+    // 第 22 批(主腦裁決):新增也檢查「同一天不能重疊」,訊息跟直接調時間一字不差(資料庫也擋)。
+    const problem = validateNewAvailabilityWindow(
+      windows ?? [],
+      Number(dayOfWeek),
+      startTime,
+      endTime,
+    );
+    if (problem) {
+      toast.error(problem);
       return;
     }
     setSaving(true);
@@ -92,27 +101,13 @@ function WeeklyWindowsSection({ staffId }: { staffId: string }) {
             尚未設定任何可預約時段
           </p>
         ) : (
-          <ul className="space-y-1.5">
-            {windows.map((w) => (
-              <li
-                key={w.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm"
-              >
-                <span>
-                  星期{DAY_OF_WEEK_LABELS[w.day_of_week]} {w.start_time.slice(0, 5)} -{" "}
-                  {w.end_time.slice(0, 5)}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleRemove(w.id)}
-                >
-                  刪除
-                </Button>
-              </li>
-            ))}
-          </ul>
+          // #1024 第 22 批:每一組可以直接調開始 / 結束時間(跟商家端編輯服務人員共用同一份清單元件)。
+          // 這裡是一般頁面(不是視窗),沒有 Esc / 空白條,所以不用接 onDirtyChange。
+          <AvailabilityWindowEditList
+            windows={windows}
+            onChanged={refetch}
+            onRemove={(windowId) => void handleRemove(windowId)}
+          />
         )}
 
         {/* 🔴 這三個原生控制項的字級一定是「手機 16px / 桌機 text-sm」,**不可以改回單一 text-sm**

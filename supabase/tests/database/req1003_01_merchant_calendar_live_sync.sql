@@ -283,6 +283,16 @@ select ok(
 -- =========================================================================
 -- B. #1003 每週固定可預約時段 / 單日例外
 -- =========================================================================
+-- 第 22 批 #1024(主腦裁決):同一天的時段新增 / 修改都不能重疊。檔頭墊片替 Y1、X2 補的 00:00–24:00 會跟這一段
+-- 新增的 09:00–12:00 重疊 ⇒ 這一段開始前先暫時拿掉那兩天的墊片列(這兩列刪除也會發訊號,所以放在
+-- 第一個 reset_sig 之前),這一段結束後補回(補回放在下一段的 reset_sig 之前)。驗的訊號 / 去重 / 不跨店都不變。
+create temp table b22_shim_rows on commit drop as
+  select staff_id, day_of_week, start_time, end_time from public.staff_availability_windows
+   where ((staff_id = :Y1 and day_of_week = 1) or (staff_id = :X2 and day_of_week = 2))
+     and start_time = '00:00'::time and end_time = '24:00'::time;
+delete from public.staff_availability_windows w using b22_shim_rows r
+ where w.staff_id = r.staff_id and w.day_of_week = r.day_of_week
+   and w.start_time = r.start_time and w.end_time = r.end_time;
 select pg_temp.reset_sig();
 insert into public.staff_availability_windows (staff_id, day_of_week, start_time, end_time)
 values (:Y1, 1, '09:00', '12:00');
@@ -329,6 +339,13 @@ select is(
   array[1, 0],
   'B5 每週時段不跨店:二店那一列 X2 改時段 → 只有二店收到,同一個人的一店 0 則'
 );
+
+-- 第 22 批:補回 B 段開始前拿掉的墊片列(B5 新增的 X2 星期二 09:00–12:00 先刪掉,只有原本有墊片列時才需要)。
+delete from public.staff_availability_windows
+ where staff_id = :X2 and day_of_week = 2 and start_time = '09:00'::time and end_time = '12:00'::time
+   and exists (select 1 from b22_shim_rows r where r.staff_id = :X2);
+insert into public.staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+select staff_id, day_of_week, start_time, end_time from b22_shim_rows;
 
 -- =========================================================================
 -- C. #1006 訂單變動跨店

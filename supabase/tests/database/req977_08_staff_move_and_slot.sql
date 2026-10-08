@@ -10,7 +10,7 @@
 --            別人的 staff id、沒有排班自助、顯示會員資料關、未登入擋
 begin;
 
-select plan(21);
+select plan(22);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -246,6 +246,12 @@ select is(
   public.staff_set_my_slot('f9777000-0000-4000-8000-000000000041', '2036-06-03', '14:00', '14:30', true),
   0,
   '⑯ 再開啟 ⇒ 0'
+);
+-- 第 22 批 #1023:營業時間(08:00–22:00)外 = 每週可預約時段外 ⇒ 服務人員自己也不能「開放」(staff_set_my_slot 內部走同一支)。
+select throws_ok(
+  $$select public.staff_set_my_slot('f9777000-0000-4000-8000-000000000041', '2036-06-03', '06:00', '06:30', true)$$,
+  'P0001', '這段時間不在這位服務人員的每週可預約時段內，無法開放。需要在時段外排單時，請由商家開啟「商家後台編輯無時段限制」。',
+  '⑯b #1023:時段外開放 ⇒ 擋(服務人員端直接呼叫 RPC 也擋)'
 );
 select is(
   public.staff_set_my_slot('f9777000-0000-4000-8000-000000000041', '2036-06-01', '11:00', '11:30', false),

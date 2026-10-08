@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildStaffDayAvailableWindows,
+  canToggleDayOverride,
   countBookingsInSlot,
   daySlotState,
   planDayOverrideToggle,
@@ -295,5 +296,44 @@ describe("countBookingsInSlot(#1004 刪例外時自己算衝突筆數)", () => {
       },
     ];
     expect(countBookingsInSlot(list, "2036-03-12", "23:30", "24:00")).toBe(1);
+  });
+});
+
+describe("canToggleDayOverride(#1023 第 22 批:時段外不給開關)", () => {
+  it("時段內:可預約 / 排休都可以開關", () => {
+    expect(
+      canToggleDayOverride({ isOverride: false, templateAvailable: true, finalAvailable: true }),
+    ).toBe(true);
+    expect(
+      canToggleDayOverride({ isOverride: true, templateAvailable: true, finalAvailable: false }),
+    ).toBe(true);
+  });
+  it("時段外的灰格 ⇒ 不給(唯一的方向是時段外開放)", () => {
+    expect(
+      canToggleDayOverride({ isOverride: false, templateAvailable: false, finalAvailable: false }),
+    ).toBe(false);
+  });
+  it("時段外的排休斜線(例:整天休假)⇒ 不給", () => {
+    expect(
+      canToggleDayOverride({ isOverride: true, templateAvailable: false, finalAvailable: false }),
+    ).toBe(false);
+  });
+  it("時段外的舊資料「例外開啟」(淡紫框)⇒ 給「關閉時段」,而且關閉 = 刪例外回到灰格", () => {
+    const slot = { isOverride: true, templateAvailable: false, finalAvailable: true };
+    expect(canToggleDayOverride(slot)).toBe(true);
+    expect(planDayOverrideToggle(slot)).toEqual({ kind: "clear" });
+  });
+  it("所有會被允許的組合,planDayOverrideToggle 都不會產生「時段外寫 is_available=true」(資料庫會擋的那種)", () => {
+    for (const isOverride of [false, true]) {
+      for (const templateAvailable of [false, true]) {
+        for (const finalAvailable of [false, true]) {
+          if (!isOverride && finalAvailable !== templateAvailable) continue; // 沒有例外時兩者一定相同
+          const slot = { isOverride, templateAvailable, finalAvailable };
+          if (!canToggleDayOverride(slot)) continue;
+          const action = planDayOverrideToggle(slot);
+          if (action.kind === "set" && action.isAvailable) expect(templateAvailable).toBe(true);
+        }
+      }
+    }
   });
 });

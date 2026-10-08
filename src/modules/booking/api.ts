@@ -122,6 +122,29 @@ export async function addStaffAvailabilityWindow(
   return data as StaffAvailabilityWindow;
 }
 
+/**
+ * SPECS-INDEX #1024(第 22 批):直接改一組既有時段的開始 / 結束時間(同一列,不是刪掉再新增)。
+ * 權限走既有的 staff_availability_windows_update RLS(商家管理員 / 有營業時間權限的客服 / 按件計酬自助);
+ * 資料庫 trigger 另外擋「開始 >= 結束」「跟同一天另一組重疊」,繞過畫面也擋。
+ * 沒有任何一列被改到(例:RLS 擋下、那一組已被別人刪掉)⇒ 丟錯,不要假裝成功。
+ */
+export async function updateStaffAvailabilityWindow(
+  windowId: string,
+  input: { startTime: string; endTime: string },
+): Promise<StaffAvailabilityWindow> {
+  const { data, error } = await supabase
+    .from("staff_availability_windows")
+    .update({ start_time: input.startTime, end_time: input.endTime })
+    .eq("id", windowId)
+    .select("*");
+  if (error) throw error;
+  const row = (data ?? [])[0];
+  if (!row) {
+    throw new Error("找不到這組時段，可能已經被刪除，請重新整理後再試。");
+  }
+  return row as StaffAvailabilityWindow;
+}
+
 export async function removeStaffAvailabilityWindow(windowId: string): Promise<void> {
   const { error } = await supabase.from("staff_availability_windows").delete().eq("id", windowId);
   if (error) throw error;

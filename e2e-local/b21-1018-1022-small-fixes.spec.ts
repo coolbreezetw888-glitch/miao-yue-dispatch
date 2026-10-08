@@ -454,10 +454,11 @@ test("R4 #1021 + #1022 商家端時間軸:每週可預約時段淡綠、可點�
     console.log(`[R4 ${width}]`, JSON.stringify({ a0900, a1130, a1300, b1600 }));
     expect(a0900).toMatchObject({ state: "available", bg: GREEN, cursor: "pointer" });
     expect(a1130).toMatchObject({ state: "available", bg: GREEN, cursor: "pointer" });
-    // 時段外灰格:外觀不變(不是淡綠);管理員有開關時段權限 ⇒ 點了會跳選單 ⇒ 也是手指。
+    // 時段外灰格:外觀不變(不是淡綠);第 22 批 #1023 起時段外沒有「開啟時段」⇒ 點了沒反應 ⇒ 一般箭頭、不是按鈕。
     expect(a1300.state).toBe("unavailable");
     expect(a1300.bg).not.toBe(GREEN);
-    expect(a1300.cursor).toBe("pointer");
+    expect(a1300.cursor).not.toBe("pointer");
+    expect(a1300.tag).toBe("DIV");
     // B 後台無時段限制 ⇒ 整段營業時間都是可預約 ⇒ 淡綠
     expect(b1600).toMatchObject({ state: "available", bg: GREEN });
     // 週曆日期格可點 ⇒ 手指
@@ -552,8 +553,9 @@ test("R6 #1021 + #1022 服務人員端時間軸:可預約時段同色、可點�
     expect(s0900).toMatchObject({ state: "available", cursor: "pointer", tag: "BUTTON" });
     expect(s1300.state).toBe("unavailable");
     expect(s1300.bg).not.toBe(NEW_COLOR);
-    // A 有排班自助 ⇒ 時段外灰格點了可以「開啟時段」⇒ 手指
-    expect(s1300.cursor).toBe("pointer");
+    // 第 22 批 #1023:時段外灰格不再有「開啟時段」(原本 A 有排班自助 ⇒ 手指)⇒ 點了沒反應 ⇒ 一般箭頭、不是按鈕
+    expect(s1300.cursor).not.toBe("pointer");
+    expect(s1300.tag).toBe("DIV");
     const day = p.locator(`[data-date-key="${fixture.dateKey}"]`);
     if ((await day.count()) > 0) {
       expect(await day.first().evaluate((el) => getComputedStyle(el).cursor)).toBe("pointer");

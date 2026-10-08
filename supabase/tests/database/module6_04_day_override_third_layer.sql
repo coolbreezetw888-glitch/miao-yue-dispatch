@@ -220,7 +220,12 @@ select throws_ok(
 
 -- B1(開啟例外):服務人員F,08:00-08:30 原本超出商家營業時間(09:00 開始)也超出服務人員時段
 --    (10:00-11:30),先開啟這個時段的例外,應該讓原本不可預約的格子變成可預約。
-select set_staff_day_override('c4000000-0000-4000-8000-000000000045', '2026-09-22', '08:00', '08:30', true);
+-- SPECS-INDEX #1023(第 22 批)起 set_staff_day_override 不准在每週可預約時段外「開放」⇒ 這裡改成直接寫入
+-- 一筆 is_available=true 的例外(模擬 #1023 之前留下的既有資料),驗的仍是「第三層開啟會覆蓋前兩層」。
+select pg_temp.test_clear_auth();
+insert into staff_availability_overrides (staff_id, override_date, slot_start_time, is_available)
+values ('c4000000-0000-4000-8000-000000000045', '2026-09-22', '08:00', true);
+select pg_temp.test_set_auth('c4000000-0000-4000-8000-000000000001');
 
 select lives_ok(
   $$select create_booking(
@@ -297,7 +302,11 @@ select ok(
 -- B5(開啟例外讓多格子預約超出原本窗口範圍成功):服務人員I,90 分鐘服務從 10:30 開始
 --    (10:30-12:00),原本窗口只到 11:30,最後一格(11:30-12:00)超出窗口。先開啟 11:30-12:00
 --    這個時段的例外,應該讓整筆(3 格全部合格)建立成功。
-select set_staff_day_override('c4000000-0000-4000-8000-000000000048', '2026-09-22', '11:30', '12:00', true);
+-- #1023:同 B1,時段外的開啟改成直接寫入既有資料。
+select pg_temp.test_clear_auth();
+insert into staff_availability_overrides (staff_id, override_date, slot_start_time, is_available)
+values ('c4000000-0000-4000-8000-000000000048', '2026-09-22', '11:30', true);
+select pg_temp.test_set_auth('c4000000-0000-4000-8000-000000000001');
 
 select lives_ok(
   $$select create_booking(

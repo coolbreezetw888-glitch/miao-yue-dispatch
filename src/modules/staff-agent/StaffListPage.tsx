@@ -96,6 +96,8 @@ import {
 import { UNCATEGORIZED_LABEL, type ServiceItem } from "@/modules/service-items/types";
 import { addStaffAvailabilityWindow, removeStaffAvailabilityWindow } from "@/modules/booking/api";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
+import { AvailabilityWindowEditList } from "@/modules/booking/AvailabilityWindowEditList";
+import { validateNewAvailabilityWindow } from "@/modules/booking/availabilityWindowEdit";
 import { DAY_OF_WEEK_LABELS } from "@/modules/booking/types";
 import { StaffLineBindingSection } from "@/modules/line-notifications/StaffLineBindingSection";
 // 模組 15(服務人員推播通知)§7.5(選配):服務人員詳情頁疊加顯示已開通推播裝置數,比照上面
@@ -244,9 +246,12 @@ function FormPlaceholder({ children }: { children: React.ReactNode }) {
 function AvailabilityWindowsEditor({
   staffId,
   unlimitedBackendEdit,
+  onDirtyChange,
 }: {
   staffId: string;
   unlimitedBackendEdit: boolean;
+  /** #1024:有時段改了時間還沒儲存 ⇒ 全頁層 Esc / 上方空白條先問放棄(三之六)。 */
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const windowsQueryKey = ["booking-module", "staff-availability-windows", staffId] as const;
@@ -262,8 +267,15 @@ function AvailabilityWindowsEditor({
   }
 
   async function handleAdd() {
-    if (startTime >= endTime) {
-      toast.error("開始時間必須早於結束時間");
+    // 第 22 批(主腦裁決):新增也檢查「同一天不能重疊」,訊息跟直接調時間一字不差(資料庫也擋)。
+    const problem = validateNewAvailabilityWindow(
+      windows ?? [],
+      Number(dayOfWeek),
+      startTime,
+      endTime,
+    );
+    if (problem) {
+      toast.error(problem);
       return;
     }
     setAdding(true);
@@ -311,40 +323,13 @@ function AvailabilityWindowsEditor({
       ) : !windows || windows.length === 0 ? (
         <FormPlaceholder>尚未設定任何可預約時段</FormPlaceholder>
       ) : (
-        <ul className="flex flex-col gap-2">
-          {windows.map((w) => {
-            const rangeLabel = `星期${DAY_OF_WEEK_LABELS[w.day_of_week]} ${w.start_time.slice(
-              0,
-              5,
-            )} - ${w.end_time.slice(0, 5)}`;
-            return (
-              <li key={w.id}>
-                <ListCard
-                  title={<span className="text-sm font-medium tabular-nums">{rangeLabel}</span>}
-                  // SPECS-INDEX #870(2026-09-30 使用者回報):⋯ 選單裡唯一的項目就是「刪除」,
-                  // 要先點開才看得到,多一個步驟反而更不方便 ⇒ 改用 ListCard 既有的 primaryAction
-                  // 槽位直接放一顆刪除鈕(ListCard 元件本身不動)。
-                  // 🔴 不標紅(variant="neutral"):一組時段只是 staff_availability_windows 的一列,
-                  //    刪錯下面馬上就能重新新增,沒有連帶資料 ⇒ 依 ui-overlay-patterns 的「可逆的動作
-                  //    不標紅」,紅色要留給真正不可逆的刪除。
-                  // aria-label 帶上是哪一組時段 —— 同一份清單會有好幾顆「刪除」,只寫「刪除」的話
-                  // 螢幕閱讀器使用者聽不出刪的是哪一組。
-                  primaryAction={
-                    <Button
-                      type="button"
-                      variant="neutral"
-                      size="card"
-                      aria-label={`刪除${rangeLabel}`}
-                      onClick={() => void handleRemove(w.id)}
-                    >
-                      刪除
-                    </Button>
-                  }
-                />
-              </li>
-            );
-          })}
-        </ul>
+        // #1024 第 22 批:每一組可以直接調開始 / 結束時間(跟服務人員端休假設定共用同一份清單元件)。
+        <AvailabilityWindowEditList
+          windows={windows}
+          onChanged={refetch}
+          onRemove={(windowId) => void handleRemove(windowId)}
+          onDirtyChange={onDirtyChange}
+        />
       )}
 
       {/* skill 二之七:原生 select / time 用共用的 FieldNativeSelect / FieldTime(高度 / 圓角 / 字級由元件
@@ -502,6 +487,8 @@ export function StaffFormDialog({
   // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
   const formDirty = useFormDirty(staffFormDirtyValue(form, isEdit));
   const markFormClean = formDirty.markClean;
+  // #1024 第 22 批:可預約時段直接調時間,改了還沒按那一組的「儲存」也算填過資料。
+  const [windowsDirty, setWindowsDirty] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -577,7 +564,7 @@ export function StaffFormDialog({
       {/* size="wide":第 11 批 J 起已不分寬度(全頁層電腦版一律隨瀏覽器寬度伸縮、最寬 1152px),
           留著只是不想在這批動到這行;下次動到這個檔時順手刪。手機無差(照樣滿版)。 */}
       <FullPageLayerContent
-        dirty={formDirty.dirty}
+        dirty={formDirty.dirty || windowsDirty}
         title={isEdit ? "編輯服務人員" : "新增服務人員"}
         size="wide"
         footer={
@@ -743,6 +730,7 @@ export function StaffFormDialog({
             <AvailabilityWindowsEditor
               staffId={staff.id}
               unlimitedBackendEdit={form.unlimitedBackendEdit ?? false}
+              onDirtyChange={setWindowsDirty}
             />
           ) : (
             <div className="flex flex-col gap-2">

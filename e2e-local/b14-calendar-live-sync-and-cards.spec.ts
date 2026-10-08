@@ -4,6 +4,7 @@
 //   L1 #1003 商家端開著行事曆(不重整),服務人員本人用自己的帳號新增「每週固定可預約時段」⇒ 5 秒內格子自己變成可預約;
 //      商家行事曆頻道收到的訊號 payload 只有 {id, reason, v},WebSocket 原文搜不到客戶資料
 //   L2 #1004 商家端點格子「關閉時段 → 開啟時段」⇒ 回到 available(白色),資料庫不留例外紀錄;重整後一樣
+//   L2b(第 22 批 #1023 改寫)時段外灰格沒有「開啟時段」;舊資料留下的時段外「例外開啟」可以「關閉」⇒ 回到灰色
 //   L3 #1006 同集團二店替同一個人建單 / 拖拉改時間(move_booking)⇒ 一店**商家端**與**服務人員端**時間軸
 //      的灰色「外店預約中」5 秒內自己出現 / 跟著移動
 //   L4 #1005 卡片:一小時「時間 / 虛線 / 名字」、半小時一行;商家端與服務人員端 1280 / 375 截圖
@@ -436,7 +437,7 @@ test("L2 🔴 #1004 點格子「關閉時段 → 開啟時段」⇒ 回到白色
   await expect(cell()).toHaveAttribute("data-slot-state", "available", { timeout: LOAD_TIMEOUT });
 });
 
-test("L2b 🔴 #1004 反方向:每週時段外的灰格「開啟 → 關閉」⇒ 回到原本灰色(unavailable),不留例外;衝突筆數照樣提醒", async ({
+test("L2b 🔴 #1004 反方向(#1023 起改寫):時段外灰格不能開;舊資料留下的「例外開啟」可以「關閉」⇒ 回到灰色、不留例外;衝突筆數照樣提醒", async ({
   browser,
 }) => {
   const page = await newPage(browser);
@@ -447,12 +448,19 @@ test("L2b 🔴 #1004 反方向:每週時段外的灰格「開啟 → 關閉」�
   const neighbourClass = await merchantSlot(page, fixture.staffB.staffId, "15:30").getAttribute(
     "class",
   );
+  // 第 22 批 #1023:時段外的灰格點了沒有「開啟時段」(不是按鈕、沒有選單)
+  expect(await cell().evaluate((el) => el.tagName)).toBe("DIV");
+  await cell().click({ force: true });
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
 
-  await cell().click();
-  await page.getByRole("menuitem", { name: "開啟時段" }).click();
-  await expect(cell()).toHaveAttribute("data-slot-state", "override-open", {
-    timeout: LOAD_TIMEOUT,
+  // 改用「#1023 之前留下的既有資料」模擬淡紫框:直接寫一筆 15:00 的例外開啟(畫面已經開不出來)
+  const seeded = await serviceClient().from("staff_availability_overrides").insert({
+    staff_id: fixture.staffB.staffId,
+    override_date: fixture.dateKey,
+    slot_start_time: "15:00",
+    is_available: true,
   });
+  expect(seeded.error).toBeNull();
   // 開著的時候約一張單(15:00–15:30),關閉時要照樣提醒「還有 1 筆既有預約」
   const booked = await adminCreateBooking(fixture, fixture.m1, {
     staffId: fixture.staffB.staffId,

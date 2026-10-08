@@ -36,6 +36,10 @@ values ('c5000000-0000-4000-8000-000000000020', 2, false, '09:00', '18:00');
 
 insert into merchant_staff (id, merchant_id, name, phone, no_time_slot_limit)
 values ('c5000000-0000-4000-8000-000000000040', 'c5000000-0000-4000-8000-000000000020', '測試師傅', '0901000101', true);
+-- SPECS-INDEX #1023(第 22 批):set_staff_day_override 只能在每週可預約時段內「開放」⇒ 布置一整段營業時間的每週時段
+-- (這支測的是 availability_overrides 合併邏輯,不是時段規則)。
+insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+values ('c5000000-0000-4000-8000-000000000040', 2, '09:00', '18:00');
 
 select pg_temp.test_set_auth('c5000000-0000-4000-8000-000000000001');
 

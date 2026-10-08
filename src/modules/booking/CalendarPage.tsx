@@ -247,6 +247,7 @@ import {
   countMerchantDayStatusBadges,
 } from "./merchantMonthBadges";
 import {
+  canToggleDayOverride,
   countBookingsInSlot,
   daySlotState,
   planDayOverrideToggle,
@@ -3347,6 +3348,12 @@ function CalendarPageInner() {
                             );
                           }
 
+                          // #1023 第 22 批:每週可預約時段外、目前不可預約的格子不給「開啟時段」(資料庫也擋)。
+                          // 這一格最後一個選項都沒有 ⇒ DaySlotCell 畫成不可點的格子(外觀照舊、沒有滑過回饋)。
+                          const showOverrideOption =
+                            canManageDayOverride && canToggleDayOverride(resolvedSlot);
+                          const slotInteractive = finalAvailable || showOverrideOption;
+
                           // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
                           // 管理員一眼看出這是臨時調整過的,不是預設狀態。
                           // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
@@ -3360,8 +3367,12 @@ function CalendarPageInner() {
                               ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
                               : "hover:brightness-95"
                             : isOverride
-                              ? "hover:opacity-80"
-                              : "bg-muted/40 hover:bg-muted/60";
+                              ? slotInteractive
+                                ? "hover:opacity-80"
+                                : ""
+                              : slotInteractive
+                                ? "bg-muted/40 hover:bg-muted/60"
+                                : "bg-muted/40";
                           const cellStyle =
                             isOverride && !finalAvailable
                               ? calendarStateBlockStyle(
@@ -3405,7 +3416,7 @@ function CalendarPageInner() {
                               // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
                               // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
                               // 不再跳對話框選時間範圍。
-                              showOverrideOption={canManageDayOverride}
+                              showOverrideOption={showOverrideOption}
                               overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
                               onToggleOverride={() =>
                                 handleToggleDayOverride(

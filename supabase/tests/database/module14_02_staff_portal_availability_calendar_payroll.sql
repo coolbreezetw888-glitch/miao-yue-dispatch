@@ -170,6 +170,15 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 -- 3.13:staff_availability_windows 四政策疊加。
 -- =========================================================================
+-- 第 22 批 #1024(主腦裁決):同一天的時段新增 / 修改都不能重疊。檔頭墊片替 X、Y 補的 00:00–24:00 會跟這一段
+-- 要新增的 09:00–18:00 重疊 ⇒ 這一段開始前先暫時拿掉「這一段會用到的那幾天」的墊片列(X 星期一、Y 星期二),
+-- 這一段結束後刪掉這一段新增的列、把墊片列原樣補回,後面的測試看到的狀態跟改前一模一樣。驗的仍是四政策疊加(誰能新增)。
+-- Z、Y 星期一被 RLS 擋的那兩條不用動:沒有權限的人不做重疊檢查、直接由 RLS 擋(42501),見 migration 20261008140000。
+delete from staff_availability_windows
+ where (staff_id, day_of_week) in (('e1420000-0000-4000-8000-000000000040'::uuid, 1::smallint),
+                                   ('e1420000-0000-4000-8000-000000000041'::uuid, 2::smallint))
+   and start_time = '00:00'::time and end_time = '24:00'::time;
+
 select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002'); -- X(按件計酬)
 
 select lives_ok(
@@ -214,6 +223,15 @@ select lives_ok(
   '3.13:既有商家管理員行為不受疊加影響,仍能新增任一服務人員的時段'
 );
 select pg_temp.test_clear_auth();
+
+-- 第 22 批:還原這一段開始前的狀態(刪掉這一段新增的兩列、補回墊片列)。
+delete from staff_availability_windows
+ where (staff_id, day_of_week) in (('e1420000-0000-4000-8000-000000000040'::uuid, 1::smallint),
+                                   ('e1420000-0000-4000-8000-000000000041'::uuid, 2::smallint))
+   and start_time = '09:00'::time and end_time = '18:00'::time;
+insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time) values
+  ('e1420000-0000-4000-8000-000000000040', 1, '00:00', '24:00'),
+  ('e1420000-0000-4000-8000-000000000041', 2, '00:00', '24:00');
 
 -- =========================================================================
 -- 3.14:staff_availability_overrides SELECT 疊加 + set_staff_day_override/clear_staff_day_override

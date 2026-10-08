@@ -222,6 +222,24 @@ export function planDayOverrideToggle(slot: {
 }
 
 /**
+ * SPECS-INDEX #1023(第 22 批):這一格的選單要不要有「開啟 / 關閉時段」(權限另外判斷,這裡只看格子本身)。
+ *
+ * 使用者回報:每週可預約時段外的灰格也能「開啟」,但開了還是不能約 ⇒ 時段外的格子不給開關;
+ * 要在時段外排單,走既有的「商家後台編輯無時段限制」。資料庫 set_staff_day_override 也擋「時段外開放」。
+ *   ・時段內(templateAvailable)⇒ 照舊可以關閉 / 再開。
+ *   ・時段外、目前不可預約(灰格,或時段外的「時段排休」斜線)⇒ 唯一的方向是「開啟」= 時段外開放 ⇒ 不給。
+ *   ・時段外、但有舊資料留下的「例外開啟」(淡紫框)⇒ 給「關閉時段」(planDayOverrideToggle 會刪掉那筆例外,
+ *     回到原本的灰格);關閉方向資料庫不擋。畫面顯示照舊。
+ */
+export function canToggleDayOverride(slot: {
+  isOverride: boolean;
+  templateAvailable: boolean;
+  finalAvailable: boolean;
+}): boolean {
+  return slot.templateAvailable || (slot.isOverride && slot.finalAvailable);
+}
+
+/**
  * SPECS-INDEX #1004:關閉方向改成刪例外時,clear_staff_day_override 不會回報衝突筆數 ⇒ 用畫面上已載入的
  * 這位服務人員當天的訂單自己算。條件跟 set_staff_day_override 的計數一致:不含已取消、時間有重疊、
  * 同一張單(主要 + 協助都算到他)只算一次。時間用完整時間戳比,跨午夜的單也不會算錯。

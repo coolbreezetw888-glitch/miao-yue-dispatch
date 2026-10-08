@@ -1,7 +1,8 @@
 // SPECS-INDEX #977 第 7 批(2026-10-07):服務人員端時間軸「點空白格子」選單(裁決 1 / 2,方案 B2)。
 //   ・開關沒生效(orderActions = null)⇒ 完全維持唯讀,沒有任何可點的格子
-//   ・生效 ⇒ 可預約的格子選單有「新增預約」(+ B2 的人才有「關閉時段」);不可預約的格子只有「開啟時段」
+//   ・生效 ⇒ 可預約的格子選單有「新增預約」(+ B2 的人才有「關閉時段」);每週時段內被排休的格子只有「開啟時段」
 //     (B2 以外的人不可預約的格子連選單都沒有)
+//   ・#1023 第 22 批:每週可預約時段外的灰格 / 斜線,B2 的人也沒有「開啟時段」⇒ 不是按鈕(不可點、一般箭頭)
 //   ・按下去移動超過 10px(= 捲動)不開選單(#641 同一套判斷)
 //   ・選單「關閉時段」⇒ staffSetMySlot(只能動自己,staffId 固定)
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const staffSetMySlotMock = vi.fn(async () => 0);
+const clearMyDayOverrideMock = vi.fn(async () => {});
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({}), rpc: () => ({}), channel: () => ({}) },
@@ -34,8 +36,9 @@ vi.mock("./context", () => ({
   useMyDayScheduleState: () => ({
     data: {
       on_leave: null,
-      // 10:30 這一格被排休(單日例外關閉)
+      // 09:30 這一格(每週時段內)、10:30 這一格(每週時段外)被排休(單日例外關閉)
       availability_overrides: [
+        { start_time: "09:30:00", end_time: "10:00:00", is_available: false },
         { start_time: "10:30:00", end_time: "11:00:00", is_available: false },
       ],
       foreign_bookings: [],
@@ -43,6 +46,7 @@ vi.mock("./context", () => ({
   }),
   useMyCalendarStateStyles: () => ({ data: undefined }),
   useMyBookingStatusColors: () => ({ data: undefined }),
+  clearMyDayOverride: (...args: unknown[]) => clearMyDayOverrideMock(...(args as [])),
 }));
 
 vi.mock("@/modules/booking/context", () => ({
@@ -81,6 +85,7 @@ function tap(el: HTMLElement, move = 0) {
 
 beforeEach(() => {
   staffSetMySlotMock.mockClear();
+  clearMyDayOverrideMock.mockClear();
   const proto = Element.prototype as unknown as Record<string, unknown>;
   if (!proto["hasPointerCapture"]) proto["hasPointerCapture"] = () => false;
   if (!proto["releasePointerCapture"]) proto["releasePointerCapture"] = () => {};
@@ -95,7 +100,7 @@ describe("服務人員時間軸點格子(#977 第 7 批)", () => {
     expect(screen.getByTestId("my-timeline-grid").getAttribute("data-interactive")).toBeNull();
   });
 
-  it("生效 + B2(可開關時段):可預約格子有「新增預約」+「關閉時段」,排休的格子只有「開啟時段」", async () => {
+  it("生效 + B2(可開關時段):可預約格子有「新增預約」+「關閉時段」,時段內排休的格子只有「開啟時段」", async () => {
     const onCreateBooking = vi.fn();
     renderView({ unlimitedBackendEdit: false, canToggleSlots: true, onCreateBooking });
 
@@ -107,7 +112,7 @@ describe("服務人員時間軸點格子(#977 第 7 批)", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "新增預約" }));
     expect(onCreateBooking).toHaveBeenCalledWith("2036-03-12", "09:00");
 
-    const closed = screen.getByRole("button", { name: "10:30 不可預約" });
+    const closed = screen.getByRole("button", { name: "09:30 不可預約" });
     expect(closed.getAttribute("data-slot-state")).toBe("override-closed");
     tap(closed);
     expect(await screen.findByRole("menuitem", { name: "開啟時段" })).toBeTruthy();
@@ -115,13 +120,28 @@ describe("服務人員時間軸點格子(#977 第 7 批)", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "開啟時段" }));
     });
-    expect(staffSetMySlotMock).toHaveBeenCalledWith({
-      staffId: STAFF_ID,
-      date: "2036-03-12",
-      startTime: "10:30",
-      endTime: "11:00",
-      isAvailable: true,
-    });
+    // #1004:時段內再開啟 = 刪掉例外(回到原本的樣子),不是寫一筆「例外開啟」
+    expect(clearMyDayOverrideMock).toHaveBeenCalledWith(STAFF_ID, "2036-03-12", "09:30", "10:00");
+    expect(staffSetMySlotMock).not.toHaveBeenCalled();
+  });
+
+  it("#1023 生效 + B2:每週時段外的灰格、時段外的排休格都沒有「開啟時段」⇒ 不是按鈕", () => {
+    renderView({ unlimitedBackendEdit: false, canToggleSlots: true, onCreateBooking: vi.fn() });
+    expect(screen.queryByRole("button", { name: /10:00/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /10:30/ })).toBeNull();
+    const grid = screen.getByTestId("my-timeline-grid");
+    const gray = grid.querySelector<HTMLElement>('[data-slot-state="unavailable"]');
+    expect(gray?.tagName).toBe("DIV");
+    expect(gray?.className).not.toMatch(/cursor-pointer/);
+    expect(gray?.getAttribute("aria-label")).toBe("不可預約");
+    // 外觀照舊:時段外的排休格仍是 override-closed(斜線)
+    expect(grid.querySelectorAll('[data-slot-state="override-closed"]')).toHaveLength(2);
+  });
+
+  it("「商家後台編輯無時段限制」⇒ 整段營業時間都算時段內,排休的格子可以「開啟時段」", async () => {
+    renderView({ unlimitedBackendEdit: true, canToggleSlots: true, onCreateBooking: vi.fn() });
+    tap(screen.getByRole("button", { name: "10:30 不可預約" }));
+    expect(await screen.findByRole("menuitem", { name: "開啟時段" })).toBeTruthy();
   });
 
   it("生效但不是 B2(月薪制 / 沒排班自助):只有「新增預約」,不可預約的格子沒有選單", async () => {

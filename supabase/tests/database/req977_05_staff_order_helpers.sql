@@ -173,7 +173,10 @@ create temp table r977g_fp on commit drop as
     p.provolatile::text || '/' || p.prosecdef::text || '/' || array_to_string(p.proacl, ',') as attrs,
     md5(
       replace(replace(replace(
-        regexp_replace(pg_temp.req987_revert(replace(p.prosrc, E'\r\n', E'\n')),
+        regexp_replace(pg_temp.req987_revert(
+          -- 第 22 批 #1023:set_staff_day_override 多了一段「時段外不能開放」(有標記),拿掉後比對改前指紋。
+          regexp_replace(replace(p.prosrc, E'\r\n', E'\n'),
+            '  -- \[req1023-batch22 begin\].*?-- \[req1023-batch22 end\]\n\n', '', 'g')),
           '  -- \[req977-batch7 begin\].*?-- \[req977-batch7 end\]\n', '', 'g'),
         E'    )\n    ;\n', E'    );\n'),
         E'agent_match.agent_name,\n      ''(已移除的人員)'')', E'agent_match.agent_name, ''(已移除的人員)'')'),

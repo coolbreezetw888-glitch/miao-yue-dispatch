@@ -60,6 +60,7 @@ import {
 import { DaySlotCell } from "@/modules/booking/DaySlotCell";
 import {
   buildStaffDayAvailableWindows,
+  canToggleDayOverride,
   countBookingsInSlot,
   planDayOverrideToggle,
   resolveDaySlot,
@@ -326,7 +327,9 @@ export function MyCalendarTimelineView({
                   ? "・時段排休"
                   : ""
             }`;
-            const showOverride = orderActions?.canToggleSlots === true;
+            // #1023 第 22 批:每週可預約時段外、目前不可預約的格子不給「開啟時段」(跟商家端同一支 canToggleDayOverride)。
+            const showOverride =
+              orderActions?.canToggleSlots === true && canToggleDayOverride(resolved);
             // 跨店佔用、或這一格沒有任何可用操作(不可預約又不能開關時段)⇒ 純顯示,不包選單(比照商家端)。
             if (resolved.foreignBusy || (!resolved.finalAvailable && !showOverride)) {
               const plainStyle = resolved.foreignBusy

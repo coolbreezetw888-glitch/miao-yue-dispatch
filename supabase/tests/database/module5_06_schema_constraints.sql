@@ -4,7 +4,7 @@
 -- 就算有人繞過應用層邏輯直接寫 SQL,也要被擋下來。
 begin;
 
-select plan(17);
+select plan(18);
 
 insert into groups (id) values ('b6000000-0000-4000-8000-000000000010');
 
@@ -51,11 +51,22 @@ select throws_ok(
 );
 
 -- ④ 1.2:end_time <= start_time,應該被擋下。
+-- 第 22 批 #1024:前面多了一道 BEFORE trigger(staff_availability_windows_validate)先用白話訊息擋;
+-- 這裡要驗的是「CHECK 約束本身」這道最後防線 ⇒ 在本交易內暫時停用那個 trigger 再驗,驗完立刻開回。
+alter table staff_availability_windows disable trigger staff_availability_windows_validate;
 select throws_ok(
   $$insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
     values ('b6000000-0000-4000-8000-000000000040', 1, '18:00', '09:00')$$,
   '23514', NULL,
   '規格書 1.2:end_time 早於等於 start_time,被 CHECK 約束擋下'
+);
+alter table staff_availability_windows enable trigger staff_availability_windows_validate;
+-- ④b 第 22 批:trigger 開著時,同樣的寫入先被白話訊息擋下(畫面看到的是這一句,不是英文約束名)。
+select throws_ok(
+  $$insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
+    values ('b6000000-0000-4000-8000-000000000040', 1, '18:00', '09:00')$$,
+  'P0001', '開始時間必須早於結束時間',
+  '第 22 批 #1024:end_time 早於等於 start_time ⇒ 先被 trigger 用白話訊息擋下'
 );
 
 -- ⑤ 1.2:允許同一天多組時段(跟 1.1 刻意不同)。
