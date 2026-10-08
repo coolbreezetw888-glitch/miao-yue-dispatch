@@ -353,6 +353,12 @@ export interface UpdateMemberInput {
   notes?: string | null;
   /** #615(SPECS-INDEX):選填,重新指派會員等級,傳 null 清空成未分級。 */
   tierId?: string | null;
+  /**
+   * 客戶端第 4 批(C4-A04,c4-contract 7-1):會員地址。
+   * undefined = 不送(地址不變);"" = 清掉;有字 = 存入(資料庫去頭尾空白、最多 200 字)。
+   * 後台「編輯會員資料」視窗一律帶(使用者清空時送 "")。
+   */
+  address?: string | undefined;
 }
 
 export async function updateMember(memberId: string, input: UpdateMemberInput): Promise<Member> {
@@ -370,6 +376,7 @@ export async function updateMember(memberId: string, input: UpdateMemberInput): 
     p_notes: (input.notes ?? null) as string,
     // 同上,p_tier_id 一樣接受 null(清空成未分級),型別產生工具的已知落差,見上方註解。
     p_tier_id: (input.tierId ?? null) as string,
+    ...(input.address !== undefined ? { p_address: input.address } : {}),
   });
   if (error) throw error;
   return data as Member;
@@ -673,7 +680,7 @@ export function useMerchantMembersList(
  *        也沒有任何寫入路徑(欄位暫留,恆為 false)。`types.ts` 的 `MemberDetail` 同步拿掉。
  */
 const MEMBER_DETAIL_COLUMNS =
-  "id, merchant_id, name, phone, email, birthday, notes, status, tier_id, points_balance, referral_code, is_blacklisted, blacklist_reason, identity_verified_at, identity_first_verified_at";
+  "id, merchant_id, name, phone, email, birthday, address, notes, status, tier_id, points_balance, referral_code, is_blacklisted, blacklist_reason, identity_verified_at, identity_first_verified_at";
 
 export async function fetchMember(memberId: string): Promise<MemberDetail | null> {
   const { data, error } = await supabase

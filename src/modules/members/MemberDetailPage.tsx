@@ -83,6 +83,7 @@ import {
   CardDialogHeader,
   CardDialogTitle,
   CardDialogTrigger,
+  DetailAddressRow,
   DetailPhoneRow,
   DetailRow,
   DetailSection,
@@ -138,6 +139,8 @@ const UNASSIGNED_TIER_VALUE = "__unassigned__";
 
 /** 全頁層 / 小卡窗的按鈕列在 form 外面(位置由殼決定),送出鈕用 form= 指回來。 */
 const EDIT_MEMBER_FORM_ID = "edit-member-form";
+/** C4-A04:會員地址上限(同資料庫 check)。 */
+const MEMBER_ADDRESS_MAX = 200;
 const BLACKLIST_FORM_ID = "blacklist-member-form";
 
 function formatDateTime(iso: string | null): string {
@@ -155,11 +158,13 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
   const [phone, setPhone] = useState(member.phone ?? "");
   const [email, setEmail] = useState(member.email ?? "");
   const [birthday, setBirthday] = useState(member.birthday ?? "");
+  // C4-A04:會員地址(會員也能在會員中心「我的資料」自己改)。
+  const [address, setAddress] = useState(member.address ?? "");
   const [notes, setNotes] = useState(member.notes ?? "");
   const [tierId, setTierId] = useState(member.tier_id ?? UNASSIGNED_TIER_VALUE);
   const [saving, setSaving] = useState(false);
   // 第 11 批 J(#995):填過資料(跟打開時不同)⇒ Esc / 上方空白先問放棄。
-  const formDirty = useFormDirty({ name, phone, email, birthday, notes, tierId });
+  const formDirty = useFormDirty({ name, phone, email, birthday, address, notes, tierId });
   const markFormClean = formDirty.markClean;
 
   useEffect(() => {
@@ -169,6 +174,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
         phone: member.phone ?? "",
         email: member.email ?? "",
         birthday: member.birthday ?? "",
+        address: member.address ?? "",
         notes: member.notes ?? "",
         tierId: member.tier_id ?? UNASSIGNED_TIER_VALUE,
       };
@@ -176,6 +182,7 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
       setPhone(initial.phone);
       setEmail(initial.email);
       setBirthday(initial.birthday);
+      setAddress(initial.address);
       setNotes(initial.notes);
       setTierId(initial.tierId);
       markFormClean(initial);
@@ -194,6 +201,10 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
       toast.error(TW_PHONE_ERROR_MESSAGE);
       return;
     }
+    if ([...address.trim()].length > MEMBER_ADDRESS_MAX) {
+      toast.error(`地址最多 ${MEMBER_ADDRESS_MAX} 字。`);
+      return;
+    }
     setSaving(true);
     try {
       await updateMember(member.id, {
@@ -203,6 +214,8 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
         birthday: birthday.trim() ? birthday.trim() : null,
         notes: notes.trim() ? notes.trim() : null,
         tierId: tierId === UNASSIGNED_TIER_VALUE ? null : tierId,
+        // c4-contract 7-1:一律帶;清空送 ""(資料庫存 null)。
+        address: address.trim(),
       });
       toast.success("已更新會員資料");
       setOpen(false);
@@ -291,6 +304,19 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
               id="edit-member-birthday"
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
+            />
+          </FormField>
+          {/* C4-A04:會員地址,選填。會員用 LINE 登入後在會員中心「我的資料」也能自己改。 */}
+          <FormField
+            label="地址"
+            htmlFor="edit-member-address"
+            counter={{ value: [...address.trim()].length, max: MEMBER_ADDRESS_MAX }}
+          >
+            <FieldInput
+              id="edit-member-address"
+              autoComplete="off"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
             />
           </FormField>
           {/* #615(SPECS-INDEX):會員等級,選填,可隨時重新指派。 */}
@@ -556,6 +582,12 @@ function MemberDetailInner() {
             )}
             <DetailRow label="Email">{member.email ?? "未填寫"}</DetailRow>
             <DetailRow label="生日">{member.birthday ?? "未填寫"}</DetailRow>
+            {/* C4-A04:地址做成可點擊(開地圖,skill 二之六)。 */}
+            {member.address ? (
+              <DetailAddressRow address={member.address} />
+            ) : (
+              <DetailRow label="地址">未填寫</DetailRow>
+            )}
           </DetailSection>
 
           <DetailSection label="會員資訊">

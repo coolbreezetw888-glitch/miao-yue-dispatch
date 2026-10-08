@@ -23,6 +23,25 @@ declare
   v_src text;
 begin
   select replace(prosrc, E'\r\n', E'\n') into v_src from pg_proc where oid = pg_temp.req987_oid(p_sig);
+  -- 客戶端第 4-A 批 migration 20261010100200(主腦裁決 confirm_booking 並發修正):for update、UPDATE 加狀態條件、
+  -- 沒更新到就擋(只加這三段),先拿掉再比對改前指紋。
+  if p_sig = 'public.confirm_booking(p_booking_id uuid)' then
+    v_src := replace(v_src, E'  where id = p_booking_id\n  for update;\n\n  if not found then', E'  where id = p_booking_id;\n\n  if not found then');
+    v_src := replace(v_src, E'    and status = ''pending_confirmation''\n  returning * into v_result;\n', E'  returning * into v_result;\n');
+    v_src := regexp_replace(v_src, E'\\n  if not found then\\n    raise exception ''[^\\n]*'', \\(select status from public\\.bookings where id = p_booking_id\\);\\n  end if;\\n', '');
+  end if;
+  -- 客戶端第 4-A 批 migration 20261010100300(主腦裁決 move_booking 並發修正):for update、兩個 UPDATE 加狀態條件
+  -- 與沒更新到就擋(只加這幾段),先拿掉再比對改前指紋。
+  if p_sig like 'public.move_booking(%' then
+    v_src := replace(v_src, E'  where id = p_booking_id\n  for update;\n\n  if not found then', E'  where id = p_booking_id;\n\n  if not found then');
+    v_src := replace(v_src, E'    where id = p_booking_id\n      and status in (''pending_confirmation'', ''accepted'');\n\n    if not found then\n      raise exception ''已完成或已取消的預約不能移動'';\n    end if;\n', E'    where id = p_booking_id;\n');
+  end if;
+  -- 同一支 migration 20261010100300:update_booking_payment_method 的 for update、UPDATE 狀態條件、沒更新到就擋。
+  if p_sig = 'public.update_booking_payment_method(p_booking_id uuid, p_payment_method_id uuid)' then
+    v_src := replace(v_src, E'  where id = p_booking_id\n  for update;\n\n  if not found then', E'  where id = p_booking_id;\n\n  if not found then');
+    v_src := replace(v_src, E'    and status in (''pending_confirmation'', ''accepted'')\n  returning * into v_result;\n', E'  returning * into v_result;\n');
+    v_src := regexp_replace(v_src, E'\\n  if not found then\\n    raise exception ''[^\\n]*'', \\(select status from public\\.bookings where id = p_booking_id\\);\\n  end if;\\n', '');
+  end if;
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;

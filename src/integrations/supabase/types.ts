@@ -1230,6 +1230,7 @@ export type Database = {
       }
       members: {
         Row: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -1261,6 +1262,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          address?: string | null
           birthday?: string | null
           blacklist_reason?: string | null
           blacklisted_at?: string | null
@@ -1292,6 +1294,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          address?: string | null
           birthday?: string | null
           blacklist_reason?: string | null
           blacklisted_at?: string | null
@@ -1649,6 +1652,7 @@ export type Database = {
           allow_guest_booking: boolean
           completion_message_guest: string | null
           completion_message_member: string | null
+          customer_cancel_deadline_hours: number
           merchant_id: string
           min_lead_hours: number
           start_time_interval_minutes: number
@@ -1658,6 +1662,7 @@ export type Database = {
           allow_guest_booking?: boolean
           completion_message_guest?: string | null
           completion_message_member?: string | null
+          customer_cancel_deadline_hours?: number
           merchant_id: string
           min_lead_hours?: number
           start_time_interval_minutes?: number
@@ -1667,6 +1672,7 @@ export type Database = {
           allow_guest_booking?: boolean
           completion_message_guest?: string | null
           completion_message_member?: string | null
+          customer_cancel_deadline_hours?: number
           merchant_id?: string
           min_lead_hours?: number
           start_time_interval_minutes?: number
@@ -3220,6 +3226,7 @@ export type Database = {
       adjust_member_points: {
         Args: { p_member_id: string; p_note: string; p_points_delta: number }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -3656,6 +3663,7 @@ export type Database = {
           p_tier_id?: string
         }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -3743,9 +3751,35 @@ export type Database = {
         }
         Returns: Json
       }
+      customer_get_member_home: { Args: { p_slug: string }; Returns: Json }
+      customer_get_profile: { Args: { p_slug: string }; Returns: Json }
+      customer_get_wallet: {
+        Args: { p_cursor?: string; p_limit?: number; p_slug: string }
+        Returns: Json
+      }
+      customer_list_my_bookings: {
+        Args: {
+          p_cursor?: string
+          p_limit?: number
+          p_scope: string
+          p_slug: string
+        }
+        Returns: Json
+      }
+      customer_update_profile: {
+        Args: {
+          p_address: string
+          p_birthday: string
+          p_email: string
+          p_name: string
+          p_slug: string
+        }
+        Returns: Json
+      }
       deactivate_member: {
         Args: { p_member_id: string }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -4176,6 +4210,10 @@ export type Database = {
         Args: { p_merchant_id: string; p_rows: Json; p_write_mode: string }
         Returns: string
       }
+      internal_customer_cancel_booking: {
+        Args: { p_booking_id: string; p_slug: string; p_user_id: string }
+        Returns: Json
+      }
       internal_customer_line_identity_find: {
         Args: { p_channel_id: string; p_sub: string }
         Returns: Json
@@ -4421,6 +4459,7 @@ export type Database = {
       reactivate_member: {
         Args: { p_member_id: string }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -4506,6 +4545,7 @@ export type Database = {
       redeem_member_points: {
         Args: { p_member_id: string; p_note: string; p_points: number }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -4693,6 +4733,7 @@ export type Database = {
           p_reason?: string
         }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null
@@ -5087,6 +5128,7 @@ export type Database = {
       }
       update_member: {
         Args: {
+          p_address?: string
           p_birthday: string
           p_email: string
           p_member_id: string
@@ -5096,6 +5138,7 @@ export type Database = {
           p_tier_id?: string
         }
         Returns: {
+          address: string | null
           birthday: string | null
           blacklist_reason: string | null
           blacklisted_at: string | null

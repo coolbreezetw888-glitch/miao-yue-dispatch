@@ -52,6 +52,7 @@ export type MemberDetail = Pick<
   | "phone"
   | "email"
   | "birthday"
+  | "address"
   | "notes"
   | "status"
   | "tier_id"

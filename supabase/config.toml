@@ -226,6 +226,11 @@ verify_jwt = false
 [functions.customer-booking-submit]
 verify_jwt = false
 
+# 客戶端第 4-A 批 C4-D03:客人自己取消預約。沒帶 / 帶錯 token 要回函式自己的 { state:'not_linked' }
+# (前端回會員中心登入頁),不能被閘道器擋成 401;token 由函式用 service role 驗(app_metadata.account_type = customer)。
+[functions.customer-booking-cancel]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

@@ -46,6 +46,7 @@ function makeMember(overrides: Partial<MemberDetail> = {}): MemberDetail {
     phone: "0912345678",
     email: null,
     birthday: null,
+    address: null,
     notes: null,
     status: "active",
     tier_id: null,

@@ -136,6 +136,7 @@ function makePage(
       allow_guest_booking: true,
       is_on_site: true,
       line_login_enabled: true,
+      customer_cancel_deadline_hours: 24,
       ...settings,
     },
     member_policy: { enabled: false, content: null },
@@ -216,6 +217,7 @@ function renderPage(path = "/booking/cool-shop") {
               </>
             }
           />
+          <Route path="/booking/:slug/me" element={<div data-testid="member-center-probe" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -305,13 +307,15 @@ describe("C3-D03 已登入確認送出 → ⑦-1 / ⑦-2", () => {
     expect(screen.getByTestId("booking-complete-staff")).toHaveTextContent("阿明");
     expect(screen.getByTestId("booking-complete-time")).toHaveTextContent("10月13日（二）10:00");
     expect(screen.getByTestId("booking-complete-onsite-note")).toBeInTheDocument();
-    expect(screen.getByTestId("booking-complete-contact")).toHaveTextContent(
-      "要取消或改時間請聯絡店家",
+    // C4-B04:⑦-1 會員 ⇒ 取消說明改成會員中心自己取消(N = 店家設定,預設 24)+「前往會員中心」主要按鈕
+    expect(screen.getByTestId("booking-complete-cancel-text")).toHaveTextContent(
+      "要取消可以在服務前 24 小時以前到會員中心操作；要改時間請取消後重新預約，或聯絡店家。",
     );
     expect(
       within(screen.getByTestId("booking-complete-contact")).getByTestId("public-booking-contacts"),
     ).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain("前往會員中心");
+    expect(screen.getByTestId("booking-complete-member-center")).toHaveTextContent("前往會員中心");
+    expect(screen.getByTestId("booking-complete-home")).toHaveTextContent("回店家首頁");
     expect(screen.queryByTestId("booking-complete-join")).toBeNull();
 
     expect(state.submitCalls).toHaveLength(1);
@@ -449,6 +453,15 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
     );
     expect(screen.getByTestId("booking-complete-phone")).toHaveTextContent("0912-345-678");
     expect(screen.getByTestId("booking-complete-join")).toBeInTheDocument();
+    // C4-B04:⑦-3 加入會員說明 / 取消說明(逐字);訪客沒有「前往會員中心」
+    expect(screen.getByTestId("booking-complete-join-text")).toHaveTextContent(
+      "用 LINE 登入加入會員後，可以在會員中心查看和取消這筆預約。",
+    );
+    expect(screen.getByTestId("booking-complete-cancel-text")).toHaveTextContent(
+      "要取消或改時間請直接聯絡店家",
+    );
+    expect(document.body.textContent).not.toContain("即將推出");
+    expect(screen.queryByTestId("booking-complete-member-center")).toBeNull();
     expect(state.submitCalls[0]).toMatchObject({
       draft: DRAFT,
       guest: { phone: "0912-345-678", agreePolicy: true, turnstileToken: "TOKEN-1" },
@@ -589,33 +602,34 @@ describe("C3-D06 完成頁上一頁 / C3-D07 加入會員", () => {
     expect(state.submitCalls).toHaveLength(1);
   });
 
-  it("⑦-3 加入會員回來(沒有草稿)⇒ 填電話「加入會員」⇒ ① 登入列 + 提示一次", async () => {
+  it("C4-B03:加入會員回來(沒有草稿)的標記留在預約頁 ⇒ 轉到會員中心 /me(標記留給會員中心拿)", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };
     putPendingDraft("cool-shop", { outcome: "logged_in", draft: null });
-    const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByTestId("customer-profile")).toBeInTheDocument();
-    expect(screen.getByTestId("customer-profile-submit")).toHaveTextContent("加入會員");
-    expect(screen.queryByTestId("customer-phone-taken-guest")).toBeNull();
-    await user.type(screen.getByLabelText(/電話/), "0912345678");
-    await user.click(screen.getByTestId("customer-profile-consent"));
-    state.session = { state: "linked", memberName: "王小明", memberPhone: "0912345678" };
-    await user.click(screen.getByTestId("customer-profile-submit"));
-    expect(await screen.findByTestId("customer-login-bar")).toHaveTextContent("王小明");
-    expect(screen.getByTestId("public-booking-start")).toBeInTheDocument();
-    expect(state.toasts).toEqual(["已加入「涼風工匠」會員"]);
-    expect(state.profileCalls).toEqual([
-      { slug: "cool-shop", phone: "0912345678", name: "", agreePolicy: true },
-    ]);
-    expect(state.submitCalls).toHaveLength(0);
+    expect(await screen.findByTestId("member-center-probe")).toBeInTheDocument();
+    expect(screen.queryByTestId("customer-profile")).toBeNull();
+    expect(state.toasts).toEqual([]);
+    // 標記沒有被預約頁拿走(會員中心要用它決定跳哪一句提示)
+    expect(takePendingDraft("cool-shop")).toEqual({ outcome: "logged_in", draft: null });
   });
 
-  it("加入會員回來時本來就是會員 ⇒ 直接 ① + 提示", async () => {
-    state.session = { state: "linked", memberName: "王小明", memberPhone: "0912345678" };
-    putPendingDraft("cool-shop", { outcome: "logged_in", draft: null });
+  it("C4-B03:在 LINE 按取消回來(沒有草稿)⇒ 停在 ①,不轉會員中心", async () => {
+    putPendingDraft("cool-shop", { outcome: "cancelled", draft: null });
     renderPage();
-    expect(await screen.findByTestId("customer-login-bar")).toBeInTheDocument();
-    await waitFor(() => expect(state.toasts).toEqual(["已加入「涼風工匠」會員"]));
+    expect(await screen.findByTestId("public-booking-start")).toBeInTheDocument();
+    expect(screen.queryByTestId("member-center-probe")).toBeNull();
+  });
+
+  it("C4-B04:完成頁「前往會員中心」⇒ /me", async () => {
+    state.session = { state: "linked", memberName: "王小明", memberPhone: "0912345678" };
+    state.submitResults = [createdResult()];
+    const user = userEvent.setup();
+    renderPage();
+    await walkToForm(user);
+    await user.click(screen.getByTestId("public-booking-submit"));
+    await user.click(await screen.findByTestId("customer-linked-submit"));
+    await user.click(await screen.findByTestId("booking-complete-member-center"));
+    expect(await screen.findByTestId("member-center-probe")).toBeInTheDocument();
   });
 });
 
@@ -674,16 +688,42 @@ describe("2026-10-09 使用者新增:步驟條 5 步、填資料頁下一步提�
     }
   });
 
-  it("⑥-2 填電話:步驟 5／5;⑦-3 加入會員回來的 ⑥-2 沒有步驟條", async () => {
+  it("⑥-2 填電話:步驟 5／5(⑦-3 加入會員回來的 ⑥-2 改在會員中心,見 MemberCenterPage.test)", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };
     putPendingDraft("cool-shop", { outcome: "logged_in", draft: DRAFT });
     renderPage();
     await screen.findByTestId("customer-profile");
     expect(screen.getByTestId("public-booking-step-label")).toHaveTextContent("步驟 5／5");
-    cleanup();
-    putPendingDraft("cool-shop", { outcome: "logged_in", draft: null });
+  });
+});
+
+describe("C4-E05 已登入會員預約時自動帶地址", () => {
+  it("地址欄空白 ⇒ 帶入會員地址,可以改", async () => {
+    state.session = {
+      state: "linked",
+      memberName: "王小明",
+      memberPhone: "0912345678",
+      memberAddress: "台北市信義區松仁路 58 號 12 樓",
+    };
+    const user = userEvent.setup();
     renderPage();
-    await screen.findByTestId("customer-profile");
-    expect(screen.queryByTestId("public-booking-step-label")).toBeNull();
+    await user.click(await screen.findByTestId("public-booking-start"));
+    await user.click(screen.getByRole("checkbox", { name: /室內機清洗/ }));
+    await user.click(screen.getByTestId("public-booking-next"));
+    await user.click(screen.getByTestId("public-booking-next"));
+    await user.click(await screen.findByTestId("public-booking-time-14:00"));
+    await user.click(screen.getByTestId("public-booking-next"));
+    const address = screen.getByLabelText(/服務地址/);
+    await waitFor(() => expect(address).toHaveValue("台北市信義區松仁路 58 號 12 樓"));
+    await user.clear(address);
+    await user.type(address, "新北市板橋區");
+    expect(address).toHaveValue("新北市板橋區");
+  });
+
+  it("沒登入 ⇒ 不帶", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await walkToForm(user);
+    expect(screen.getByLabelText(/服務地址/)).toHaveValue("台北市信義區松仁路 58 號");
   });
 });

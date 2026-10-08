@@ -76,7 +76,7 @@ async function fillGuest(page: Page, phone: string): Promise<void> {
 
 const GUEST_NAME = "林訪客";
 
-test("C3-D04 / D06 ⑦-3 / D07:A 店訪客送出 ⇒ 完成頁;再用 LINE 登入加入會員 ⇒ ① 登入列", async ({
+test("C3-D04 / D06 ⑦-3 / C4-B03:A 店訪客送出 ⇒ 完成頁;再用 LINE 登入加入會員 ⇒ 會員中心首頁", async ({
   page,
 }) => {
   track(page);
@@ -157,9 +157,11 @@ test("C3-D04 / D06 ⑦-3 / D07:A 店訪客送出 ⇒ 完成頁;再用 LINE 登�
   await page.getByTestId("customer-profile-consent").click();
   await shotBoth(page, "guest-03-join-profile");
   await page.getByTestId("customer-profile-submit").click();
-  await expect(page.getByTestId("customer-login-bar")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByTestId("public-booking-start")).toBeVisible();
+  // 第 4 批(C4-B03 取代 C3-D07):加入會員完成 ⇒ 會員中心首頁 + 提示;訪客時期的單已經在會員中心
+  await expect(page.getByTestId("member-home-greeting")).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(page).toHaveURL(new RegExp(`/booking/${fixture.c2.c1.slugA}/me$`));
   await expect(page.getByText(`已加入「${SHOP_A_NAME}」會員`)).toBeVisible();
+  await expect(page.getByTestId("member-home-next")).toBeVisible();
   await shotBoth(page, "guest-04-joined-home");
   const linked = await svc.from("members").select("user_id").eq("id", memberId).single();
   expect(linked.data?.user_id).toBe(login.userIds[0]);

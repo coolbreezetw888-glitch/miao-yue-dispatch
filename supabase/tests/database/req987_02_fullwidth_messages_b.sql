@@ -28,6 +28,24 @@ begin
   -- 客戶端第 3 批 C3-E01:get_my_booking_schedule 每筆多回 source / is_guest_booking(只加這幾行),先拿掉再比對改前指紋。
   v_src := replace(v_src, E'      ''source'', bb.source,\n      ''is_guest_booking'', bb.is_guest_booking,\n', '');
   v_src := replace(v_src, E'      b.source, b.is_guest_booking,\n', '');
+  -- 客戶端第 4-A 批 C4-A04:update_member 多 p_address(只加這幾段),先拿掉再比對改前指紋。
+  if p_sig like 'public.update_member(%' then
+    v_src := replace(v_src, ', p_address text DEFAULT NULL::text)', ')');
+    v_src := replace(v_src, E'  v_address text;
+', '');
+    v_src := replace(v_src, E'  if p_address is not null then
+    v_address := nullif(btrim(p_address), '''');
+    if char_length(coalesce(v_address, '''')) > 200 then
+      raise exception ''地址最多 200 字。'' using errcode = ''22023'', hint = ''invalid_address'';
+    end if;
+  end if;
+
+', '');
+    v_src := replace(v_src, E'    tier_id = p_tier_id,
+    address = case when p_address is null then address else v_address end
+', E'    tier_id = p_tier_id
+');
+  end if;
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;
@@ -381,23 +399,23 @@ select is(
   array[]::text[],
   $m$public.transfer_members_to_merchant(p_source_merchant_id uuid, p_target_merchant_id uuid, p_member_ids uuid[]) ③ 觸發器綁定不變$m$);
 
--- ----- public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid) -----
+-- ----- public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text) -----
 select is(
-  md5(pg_temp.req987_swap_back($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid)$m$, array[
+  md5(pg_temp.req987_swap_back($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text)$m$, array[
     $m$'會員電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678)；市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456)，有分機的話用 # 接在後面(例如 02-1234-5678#123)；不填也可以'$m$, $m$'會員電話格式不正確。手機請填 09 開頭共 10 碼(例如 0912345678);市話請連同區碼一起填、共 9~10 碼(例如 02-1234-5678 或 037-123456),有分機的話用 # 接在後面(例如 02-1234-5678#123);不填也可以'$m$,
     $m$'這支電話已經有會員：%。同一間商家底下，一支電話只能有一位會員 —— 如果是同一位客戶，請直接使用那一筆；如果真的是不同的人，請改填另一支電話'$m$, $m$'這支電話已經有會員:%。同一間商家底下,一支電話只能有一位會員 —— 如果是同一位客戶,請直接使用那一筆;如果真的是不同的人,請改填另一支電話'$m$,
     $m$'找不到指定的會員等級，或不屬於這間商家/已下架'$m$, $m$'找不到指定的會員等級,或不屬於這間商家/已下架'$m$
   ])),
   $m$d0e3666bedd28a93e8e273e08b798663$m$,
-  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
+  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
-  pg_temp.req987_attrs($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}$m$, $m$模組 10 §3.4(SPECS-INDEX #615/#618 疊加):編輯會員基本資料。#618 移除電話必填檢查。#615 新增 p_tier_id(選填,重新指派會員等級,傳 null 代表清空成未分級)。不接受修改 referred_by_member_id(既有規則不變)。權限維持只檢查 can_manage_members。SPECS-INDEX #931(2026-09-30 使用者裁決):改電話時先比對同商家**其他** active 會員(m.id <> p_member_id 這個排除條件缺一不可,否則只改姓名錯字也會被自己那一列擋下),撞到就 raise「這支電話已經有會員:某某某」。已下架的同號紀錄不擋。⚠️ 關於 CSV 匯入(2026-10-01 品管實測後修正的說明):這支函式確實是 import_members_batch 在 upsert_by_phone 模式下的更新路徑,所以 #827 的電話格式檢查在那條路徑上是真的會生效;但 #931 的唯一性檢查在那條路徑上**實務上不會觸發** —— 匯入是先用電話找到那一位既有會員、再拿同一支電話去更新他本人,而唯一性檢查本來就排除自己(m.id <> p_member_id)。至於 insert_only 模式下的重複電話,完全不會走到這支函式(它在呼叫 create_member 之前就被短路成 skipped 了),那條路徑的指名訊息是 20260930040500 補的。【SPECS-INDEX #827,2026-09-30 使用者裁決 Q5 = (A)】同時補上會員電話的格式檢查(排在唯一性檢查前面,理由同 create_member)。既有的髒電話依使用者裁決不主動清,但客服一進來編輯就會被要求先改正確(跟 update_booking 對舊訂單的既有處理方式一致);正式庫目前不合格 0 筆,實際上沒有人會遇到。$m$],
-  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid) ② security definer / volatility / search_path / ACL / comment 不變$m$);
+  pg_temp.req987_attrs($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text)$m$),
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}$m$, $m$模組 10 §3.4(SPECS-INDEX #615/#618 疊加):編輯會員基本資料。#618 移除電話必填檢查。#615 新增 p_tier_id(選填,重新指派會員等級,傳 null 代表清空成未分級)。不接受修改 referred_by_member_id(既有規則不變)。權限維持只檢查 can_manage_members。SPECS-INDEX #931(2026-09-30 使用者裁決):改電話時先比對同商家**其他** active 會員(m.id <> p_member_id 這個排除條件缺一不可,否則只改姓名錯字也會被自己那一列擋下),撞到就 raise「這支電話已經有會員:某某某」。已下架的同號紀錄不擋。⚠️ 關於 CSV 匯入(2026-10-01 品管實測後修正的說明):這支函式確實是 import_members_batch 在 upsert_by_phone 模式下的更新路徑,所以 #827 的電話格式檢查在那條路徑上是真的會生效;但 #931 的唯一性檢查在那條路徑上**實務上不會觸發** —— 匯入是先用電話找到那一位既有會員、再拿同一支電話去更新他本人,而唯一性檢查本來就排除自己(m.id <> p_member_id)。至於 insert_only 模式下的重複電話,完全不會走到這支函式(它在呼叫 create_member 之前就被短路成 skipped 了),那條路徑的指名訊息是 20260930040500 補的。【SPECS-INDEX #827,2026-09-30 使用者裁決 Q5 = (A)】同時補上會員電話的格式檢查(排在唯一性檢查前面,理由同 create_member)。既有的髒電話依使用者裁決不主動清,但客服一進來編輯就會被要求先改正確(跟 update_booking 對舊訂單的既有處理方式一致);正式庫目前不合格 0 筆,實際上沒有人會遇到。【客戶端第 4-A 批 C4-A04】新增第 8 個參數 p_address(default null):null(不帶)= 地址不變(匯入 import_members_batch、復原 rollback_bulk_operation 用 7 個參數呼叫,不會清掉地址);空字串 / 只有空白 = 清掉;超過 200 字 ⇒ 22023 invalid_address。$m$],
+  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
-  pg_temp.req987_triggers($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid)$m$),
+  pg_temp.req987_triggers($m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text)$m$),
   array[]::text[],
-  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid) ③ 觸發器綁定不變$m$);
+  $m$public.update_member(p_member_id uuid, p_name text, p_phone text, p_email text, p_birthday date, p_notes text, p_tier_id uuid, p_address text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.update_merchant_agent(p_agent_id uuid, p_name text, p_nickname text, p_phone text, p_job_title text) -----
 select is(

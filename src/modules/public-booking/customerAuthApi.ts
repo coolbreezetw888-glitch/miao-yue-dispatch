@@ -20,6 +20,13 @@ import {
 
 export const CUSTOMER_LINE_LOGIN_FUNCTION = "customer-line-login";
 
+/**
+ * 這間店的客人登入狀態(get_customer_session_state)在 react-query 的 key。
+ * 預約頁與會員中心(C4)共用同一份快取:在其中一邊登出 / 接上會員,另一邊馬上跟著變。
+ */
+export const customerSessionQueryKey = (slug: string) =>
+  ["public-booking", "customer-session", slug] as const;
+
 export class CustomerAuthError extends Error {
   /** 伺服器回的錯誤代碼(例:login_expired、line_login_unavailable);斷線 = "network"。 */
   readonly code: string;

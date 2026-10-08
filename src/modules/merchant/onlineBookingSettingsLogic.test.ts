@@ -7,6 +7,7 @@ import {
   countCompletionMessageChars,
   validateCompletionMessage,
   LINE_FRIEND_URL_FORMAT_MESSAGE,
+  parseCustomerCancelDeadlineHours,
   parseMinLeadHours,
   parseTravelBufferMinutes,
   validateLineFriendUrl,
@@ -95,5 +96,25 @@ describe("C3-H05 完成頁自訂文字", () => {
 
   it("字數用字元算(emoji 算 1 個字)", () => {
     expect(countCompletionMessageChars(" 謝謝😀 ")).toBe(3);
+  });
+});
+
+describe("C4-K01 客人自己取消的期限(0~168 小時)", () => {
+  it("0、24、168 都收;全形數字也收", () => {
+    expect(parseCustomerCancelDeadlineHours("0")).toEqual({ ok: true, value: 0 });
+    expect(parseCustomerCancelDeadlineHours("24")).toEqual({ ok: true, value: 24 });
+    expect(parseCustomerCancelDeadlineHours("１６８")).toEqual({ ok: true, value: 168 });
+  });
+  it("空白、負數、小數、超過 168 ⇒ 中文提示", () => {
+    expect(parseCustomerCancelDeadlineHours("")).toEqual({
+      ok: false,
+      message: "請填寫取消期限。",
+    });
+    for (const raw of ["-1", "1.5", "169", "abc"]) {
+      expect(parseCustomerCancelDeadlineHours(raw)).toEqual({
+        ok: false,
+        message: "請填 0～168 之間的整數（單位：小時）。",
+      });
+    }
   });
 });

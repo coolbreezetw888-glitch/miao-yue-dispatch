@@ -31,6 +31,11 @@ export interface PublicBookingSettings {
   is_on_site: boolean;
   /** C2-C01:有設定 LINE 登入而且已啟用。沒回傳(舊版函式)= false。 */
   line_login_enabled: boolean;
+  /**
+   * C4-K02:客人在會員中心自己取消的期限(服務開始前 N 小時,0~168;店家沒設 = 24)。
+   * ⑦-1 / ⑦-2 的取消說明、我的預約「不能線上取消」那句用。
+   */
+  customer_cancel_deadline_hours: number;
 }
 
 /**

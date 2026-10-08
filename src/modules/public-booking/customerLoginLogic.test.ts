@@ -144,7 +144,17 @@ describe("C2-C05 登入狀態", () => {
   it("linked", () => {
     expect(
       parseCustomerSessionState({ state: "linked", member: { name: "王", phone: "02" } }),
-    ).toEqual({ state: "linked", memberName: "王", memberPhone: "02" });
+    ).toEqual({ state: "linked", memberName: "王", memberPhone: "02", memberAddress: null });
+    // C4-E05:第 4 批起 linked 多回會員地址(放在 member 裡或最外層都收)
+    expect(
+      parseCustomerSessionState({
+        state: "linked",
+        member: { name: "王", phone: "02", address: "台北市松仁路 58 號" },
+      }),
+    ).toMatchObject({ memberAddress: "台北市松仁路 58 號" });
+    expect(
+      parseCustomerSessionState({ state: "linked", member: { name: "王" }, address: "新北市" }),
+    ).toMatchObject({ memberAddress: "新北市" });
   });
 
   it("C2-F09 頭像網址", () => {

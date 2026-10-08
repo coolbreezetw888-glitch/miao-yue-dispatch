@@ -426,3 +426,25 @@ describe("客戶端第 3 批:客人線上預約的鈴鐺(C3-C01)", () => {
     ).toBe("/app/orders");
   });
 });
+
+describe("客戶端第 4 批:客人線上取消預約的鈴鐺(C4-D04)", () => {
+  it("有中文標籤、只在鈴鐺專用清單;內文完整換行", () => {
+    expect(BELL_ONLY_EVENT_LABELS["customer_booking_cancelled"]).toBe("客人線上取消預約時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("customer_booking_cancelled");
+    expect(shouldWrapNotificationBody("customer_booking_cancelled")).toBe(true);
+  });
+
+  it("點擊目的地跟 booking_cancelled 同一套(管理員 / 客服 ⇒ 訂單管理;服務人員 ⇒ 行事曆)", () => {
+    for (const t of ["admin", "agent", "staff"] as const) {
+      expect(
+        resolveNotificationLink({ target_type: t, event_type: "customer_booking_cancelled" }),
+      ).toBe(resolveNotificationLink({ target_type: t, event_type: "booking_cancelled" }));
+    }
+    expect(
+      resolveNotificationLink({ target_type: "staff", event_type: "customer_booking_cancelled" }),
+    ).toBe("/app/calendar");
+    expect(
+      resolveNotificationLink({ target_type: "admin", event_type: "customer_booking_cancelled" }),
+    ).toBe("/app/orders");
+  });
+});

@@ -21,6 +21,10 @@ export const TRAVEL_BUFFER_MINUTES_MIN = 0;
 export const TRAVEL_BUFFER_MINUTES_MAX = 240;
 export const DEFAULT_TRAVEL_BUFFER_MINUTES = 0;
 export const DEFAULT_ALLOW_GUEST_BOOKING = true;
+/** 客戶端第 4 批(C4-A01 / K01):客人自己取消的期限(服務開始前幾小時),0 = 服務開始前都可以;最多 7 天。 */
+export const CUSTOMER_CANCEL_DEADLINE_HOURS_MIN = 0;
+export const CUSTOMER_CANCEL_DEADLINE_HOURS_MAX = 168;
+export const DEFAULT_CUSTOMER_CANCEL_DEADLINE_HOURS = 24;
 
 export type LineFriendUrlCheck =
   { ok: true; value: string | null } | { ok: false; message: string };
@@ -75,6 +79,15 @@ export function parseMinLeadHours(raw: string): IntegerFieldCheck {
     min: MIN_LEAD_HOURS_MIN,
     max: MIN_LEAD_HOURS_MAX,
     noun: "提前時數",
+    unit: "小時",
+  });
+}
+
+export function parseCustomerCancelDeadlineHours(raw: string): IntegerFieldCheck {
+  return parseIntegerInRange(raw, {
+    min: CUSTOMER_CANCEL_DEADLINE_HOURS_MIN,
+    max: CUSTOMER_CANCEL_DEADLINE_HOURS_MAX,
+    noun: "取消期限",
     unit: "小時",
   });
 }

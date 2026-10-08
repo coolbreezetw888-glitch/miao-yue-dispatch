@@ -16,7 +16,9 @@ import { computeBookingChangeSummary } from "@/modules/push-notifications/change
 import type { MoveBookingInput, MoveBookingResult } from "./bookingDragMove";
 import { isoToTaipeiDateKey, isoToTaipeiTime } from "./dateUtils";
 import {
+  bookingActorLabel,
   customerBookingCreatorLabel,
+  REMOVED_ACTOR_LABEL,
   type CustomerBookingSourceInput,
 } from "./customerBookingSource";
 import type {
@@ -853,6 +855,8 @@ export interface OnlineBookingSettings {
   /** 客戶端第 3 批(C3-H05):會員 / 訪客預約完成頁的店家自訂文字;null = 用預設句。 */
   completionMessageMember: string | null;
   completionMessageGuest: string | null;
+  /** 客戶端第 4 批(C4-K01):客人在會員中心自己取消的期限(服務開始前 N 小時,0~168,預設 24)。 */
+  customerCancelDeadlineHours: number;
 }
 
 export const DEFAULT_ONLINE_BOOKING_SETTINGS: OnlineBookingSettings = {
@@ -861,6 +865,7 @@ export const DEFAULT_ONLINE_BOOKING_SETTINGS: OnlineBookingSettings = {
   allowGuestBooking: true,
   completionMessageMember: null,
   completionMessageGuest: null,
+  customerCancelDeadlineHours: 24,
 };
 
 // ⚠️ 三個欄位是客戶端第 1 批的 migration 新增的;src/integrations/supabase/types.ts 由 engineer A 更新。
@@ -871,6 +876,7 @@ interface OnlineBookingSettingsRow {
   allow_guest_booking?: unknown;
   completion_message_member?: unknown;
   completion_message_guest?: unknown;
+  customer_cancel_deadline_hours?: unknown;
 }
 
 function nullableText(value: unknown): string | null {
@@ -885,7 +891,7 @@ export async function fetchOnlineBookingSettings(
     .from("merchant_booking_settings")
     // C3-H05 兩欄由工程師甲的 migration 新增(types.ts 也由甲更新);讀取結果自己檢查型別。
     .select(
-      "min_lead_hours, travel_buffer_minutes, allow_guest_booking, completion_message_member, completion_message_guest",
+      "min_lead_hours, travel_buffer_minutes, allow_guest_booking, completion_message_member, completion_message_guest, customer_cancel_deadline_hours",
     )
     .eq("merchant_id", merchantId)
     .maybeSingle();
@@ -902,6 +908,10 @@ export async function fetchOnlineBookingSettings(
       typeof row?.allow_guest_booking === "boolean" ? row.allow_guest_booking : d.allowGuestBooking,
     completionMessageMember: nullableText(row?.completion_message_member),
     completionMessageGuest: nullableText(row?.completion_message_guest),
+    customerCancelDeadlineHours:
+      typeof row?.customer_cancel_deadline_hours === "number"
+        ? row.customer_cancel_deadline_hours
+        : d.customerCancelDeadlineHours,
   };
 }
 
@@ -919,6 +929,8 @@ export async function saveOnlineBookingSettings(
     // C3-H05:去頭尾空白後空字串存 null(資料庫也有同樣的 check / 正規化當最後一道)。
     completion_message_member: settings.completionMessageMember?.trim() || null,
     completion_message_guest: settings.completionMessageGuest?.trim() || null,
+    // C4-K01:只有管理員能改(保護 trigger protect_merchant_booking_settings_online_columns)。
+    customer_cancel_deadline_hours: settings.customerCancelDeadlineHours,
   };
   const { error } = await supabase
     .from("merchant_booking_settings")
@@ -1272,6 +1284,27 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
   const createdByUserId = (booking as Booking).created_by_user_id;
   const lastModifiedByUserId = (booking as Booking).last_modified_by_user_id;
 
+  // 客戶端第 4 批(主腦 2026-10-09 裁決):查不到員工名字的操作人,再看這張單的操作紀錄裡,同一個帳號有沒有
+  // actor_role_snapshot = 'customer' 的紀錄(客人自己送出 / 自己取消都會寫)。有 ⇒ 顯示「客人」;
+  // 沒有 ⇒ 照舊「(已移除的人員)」。只多查查不到名字的那幾個帳號;讀不到(沒有訂單權限)就當沒有。
+  // 🔴 get_booking_actor_names 查不到時回的是「(已移除的人員)」字樣(不是不回),所以兩種都算查不到。
+  const unresolvedActorIds = actorIds.filter((uid) => {
+    const name = actorNameById.get(uid);
+    return !name || name === REMOVED_ACTOR_LABEL;
+  });
+  const customerActorIds = new Set<string>();
+  if (unresolvedActorIds.length > 0) {
+    const { data: customerLogs } = await supabase
+      .from("booking_status_change_logs")
+      .select("actor_user_id")
+      .eq("booking_id", id)
+      .eq("actor_role_snapshot", "customer")
+      .in("actor_user_id", unresolvedActorIds);
+    for (const row of customerLogs ?? []) {
+      if (row.actor_user_id) customerActorIds.add(row.actor_user_id);
+    }
+  }
+
   type ServiceItemJoinRow = {
     service_item_id: string;
     quantity: number;
@@ -1322,8 +1355,9 @@ export async function getBooking(id: string): Promise<BookingDetail | null> {
         : "(已移除的人員)"),
     // 3.3:last_modified_by_user_id 是 null 時(從未被 confirm/update/cancel/complete 異動過)
     // 回傳 null,前端據此判斷「這一列不顯示」。
+    // C4:客人帳號(操作紀錄證明)⇒「客人」;真的被移除的人員仍是「(已移除的人員)」。
     lastModifiedByName: lastModifiedByUserId
-      ? (actorNameById.get(lastModifiedByUserId) ?? "(已移除的人員)")
+      ? bookingActorLabel(lastModifiedByUserId, actorNameById, customerActorIds)
       : null,
   };
 }

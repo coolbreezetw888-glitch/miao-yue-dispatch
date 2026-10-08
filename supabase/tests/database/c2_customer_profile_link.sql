@@ -137,8 +137,8 @@ select is((select member_policy_enabled || '/' || member_policy_hash || '/' || p
           'true/' || md5('會員政策內容') || '/2026-10-08/line_login/0223456789/true', 'C06-1 同意紀錄:政策開啟、內容 md5、版本、電話');
 
 select pg_temp.as_customer('c2b00000-0000-4000-8000-0000000000c1');
-select is(public.get_customer_session_state('pgtap-c2p-m') -> 'member', '{"name": "LINE名c1", "phone": "0223456789"}'::jsonb,
-          'C05-6 接上後 ⇒ linked + 自己的會員姓名電話');
+select is(public.get_customer_session_state('pgtap-c2p-m') -> 'member', '{"name": "LINE名c1", "phone": "0223456789", "address": null}'::jsonb,
+          'C05-6 接上後 ⇒ linked + 自己的會員姓名電話(第 4 批 C4-E05 多 address)');
 select is(public.customer_complete_profile('pgtap-c2p-m', '0912999999', '別的名字', true), '{"state": "linked"}'::jsonb,
           'C03-10 已接上再送一次 ⇒ linked,不建新的、不改電話');
 select pg_temp.as_postgres();

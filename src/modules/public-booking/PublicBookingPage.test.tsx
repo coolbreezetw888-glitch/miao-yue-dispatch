@@ -63,6 +63,7 @@ function makePage(
       allow_guest_booking: true,
       is_on_site: (overrides.industry_type ?? "on_site_dispatch") === "on_site_dispatch",
       line_login_enabled: false,
+      customer_cancel_deadline_hours: 24,
     },
     member_policy: { enabled: false, content: null },
     categories: [{ id: "split", name: "分離式冷氣" }],

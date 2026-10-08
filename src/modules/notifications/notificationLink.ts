@@ -266,6 +266,10 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   // 被排到的服務人員。點了跟 booking_created 同一套目的地(依身份:管理員 / 客服 ⇒ 訂單管理,
   // 服務人員 ⇒ 我的行事曆),所以**不**加進 EVENT_TARGET_URLS。推播用的是 booking_created 事件(C3-C02)。
   customer_booking_created: "客人線上預約時",
+  // 客戶端第 4 批(C4-D04):客人在會員中心自己取消預約時,資料庫一定寫(收件人同 customer_booking_created)。
+  // 點了跟 booking_cancelled 同一套目的地(依身份),所以**不**加進 EVENT_TARGET_URLS。
+  // 推播用的是 booking_cancelled 事件(C4-D05,skipInAppNotification,不會多一列鈴鐺)。
+  customer_booking_cancelled: "客人線上取消預約時",
 };
 
 /**
@@ -279,6 +283,8 @@ const BELL_FULL_BODY_EVENT_TYPES: ReadonlySet<string> = new Set([
   // 客戶端第 3 批:內文最後一句是「訪客預約（未登入），請自行與客戶電話確認。」/「請確認接單。」,
   // 截成一行會剛好看不到要店家做的事 ⇒ 完整換行顯示。
   "customer_booking_created",
+  // 客戶端第 4 批:「客人「王小明」取消了 10/13（二）10:00 的預約，服務人員：阿明。」截成一行會看不到是哪一張。
+  "customer_booking_cancelled",
 ]);
 
 export function shouldWrapNotificationBody(eventType: string): boolean {

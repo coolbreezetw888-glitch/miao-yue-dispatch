@@ -77,6 +77,7 @@ import {
   revertCompletedBooking,
 } from "./api";
 import type { AssistantRemovedInfo } from "./assistantRemovalLogic";
+import { cancelReasonText } from "./cancelReasonDisplay";
 // #844 批次 4:已完成訂單的「還原完成 / 取消訂單」確認子畫面(§五 5.1~5.4)。
 import {
   AGENT_CANNOT_REVERSE_NOTE,
@@ -808,6 +809,15 @@ export function BookingDetailDialog({
                   </p>
                 ) : null}
               </div>
+              {/* C4-D07:已取消的單顯示取消原因(有填才顯示;純文字、長文字換行)。 */}
+              {cancelReasonText(booking) ? (
+                <p
+                  className="whitespace-pre-line break-words text-[13.5px] leading-relaxed text-muted-foreground"
+                  data-testid="booking-cancel-reason"
+                >
+                  {cancelReasonText(booking)}
+                </p>
+              ) : null}
 
               <DetailDivider />
 

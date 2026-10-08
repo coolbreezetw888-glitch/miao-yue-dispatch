@@ -140,10 +140,11 @@ test("C3-D02 / D06:新客人 LINE 登入 ⇒ ⑥-2「送出預約」⇒ 接上�
   await expect(page.getByTestId("booking-complete-message")).toHaveText("店家確認後會通知你。");
   // 零之零 Q5:不指定也顯示被排到的那位(顯示名)
   await expect(page.getByTestId("booking-complete-staff")).not.toHaveText("由店家安排");
+  // 第 4 批(C4-B04)起:會員完成頁的取消說明改成會員中心自己取消 +「前往會員中心」主要按鈕
   await expect(page.getByTestId("booking-complete-contact")).toContainText(
-    "要取消或改時間請聯絡店家",
+    "要取消可以在服務前 24 小時以前到會員中心操作",
   );
-  await expect(page.getByText("前往會員中心")).toHaveCount(0);
+  await expect(page.getByTestId("booking-complete-member-center")).toHaveText("前往會員中心");
   await shotBoth(page, "member-02-complete-pending");
 
   // 資料庫

@@ -29,7 +29,8 @@ vi.mock("./customerAuthApi", async () => {
 
 const { default: LineLoginCallbackPage } = await import("./LineLoginCallbackPage");
 const { CustomerAuthError } = await import("./customerAuthApi");
-const { takePendingDraft, LINE_LOGIN_SLUG_STORAGE_KEY } = await import("./customerLoginLogic");
+const { takePendingDraft, LINE_LOGIN_SLUG_STORAGE_KEY, rememberLoginOrigin } =
+  await import("./customerLoginLogic");
 
 function BookingProbe() {
   const location = useLocation();
@@ -43,6 +44,7 @@ function renderAt(url: string) {
       <Routes>
         <Route path="/auth/line/callback" element={<LineLoginCallbackPage />} />
         <Route path="/booking/:slug" element={<BookingProbe />} />
+        <Route path="/booking/:slug/me" element={<BookingProbe />} />
       </Routes>
     </BrowserRouter>,
   );
@@ -142,6 +144,26 @@ describe("C2-B02 callback 頁", () => {
     renderAt("/auth/line/callback?code=C&state=S4");
     expect(await screen.findByTestId("booking-probe")).toHaveTextContent("/booking/cool-shop");
     expect(takePendingDraft("cool-shop")).toEqual({ outcome: "failed", draft: DRAFT });
+  });
+
+  it("C4-B03:沒有草稿(加入會員 / 會員中心登入)登入成功 ⇒ 到會員中心 /me,標記交給會員中心", async () => {
+    state.completeResult = { status: "ok", slug: "cool-shop", draft: null, tokenHash: "h" };
+    renderAt("/auth/line/callback?code=C&state=JOIN1");
+    expect(await screen.findByTestId("booking-probe")).toHaveTextContent("/booking/cool-shop/me");
+    expect(takePendingDraft("cool-shop")).toEqual({ outcome: "logged_in", draft: null });
+  });
+
+  it("C4-B03:沒有草稿、在 LINE 按取消 ⇒ 從會員中心出發的回 /me,其他回 ①", async () => {
+    state.completeResult = { status: "cancelled", slug: "cool-shop", draft: null };
+    rememberLoginOrigin("member_center");
+    renderAt("/auth/line/callback?error=ACCESS_DENIED&state=JOIN2");
+    expect(await screen.findByTestId("booking-probe")).toHaveTextContent("/booking/cool-shop/me");
+    cleanup();
+    takePendingDraft("cool-shop");
+    renderAt("/auth/line/callback?error=ACCESS_DENIED&state=JOIN3");
+    await waitFor(() =>
+      expect(screen.getByTestId("booking-probe").textContent).toBe("/booking/cool-shop"),
+    );
   });
 
   it("同一個 state 只送一次", async () => {

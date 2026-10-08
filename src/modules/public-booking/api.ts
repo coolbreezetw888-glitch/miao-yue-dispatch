@@ -11,6 +11,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
+import { normalizeCancelDeadlineHours } from "./memberCenterLogic";
 import type {
   PublicAvailableSlots,
   PublicBookingPage,
@@ -220,6 +221,10 @@ export function parsePublicBookingPage(data: unknown): PublicBookingPage {
       allow_guest_booking: bool(settings["allow_guest_booking"], true),
       is_on_site: bool(settings["is_on_site"], industry === "on_site_dispatch"),
       line_login_enabled: bool(settings["line_login_enabled"], false),
+      // C4-K02:沒回傳(舊版函式)或值不合法 ⇒ 預設 24。
+      customer_cancel_deadline_hours: normalizeCancelDeadlineHours(
+        settings["customer_cancel_deadline_hours"],
+      ),
     },
     member_policy: parseMemberPolicy(settings["member_policy"]),
     categories: arr(data["categories"]).map(parseCategory),

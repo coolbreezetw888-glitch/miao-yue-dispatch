@@ -7,9 +7,13 @@
 // 零之零:
 //   ・副標 = 伺服器回的 completion_message(店家自訂,會員 / 訪客分開;沒填 = 預設句)。純文字、保留換行,
 //     🔴 不用 dangerouslySetInnerHTML。
-//   ・「要取消或改時間請聯絡店家」+ 聯絡按鈕是**固定一行**,不在店家自訂文字裡(第 4 批有自助取消再調整)。
+//   ・取消說明 + 聯絡按鈕是**固定一行**,不在店家自訂文字裡。
 //   ・服務人員欄一律顯示 staff_display(被排到的那位);萬一伺服器沒給才顯示「由店家安排」。
-//   ・「前往會員中心」這批不顯示(第 4 批)。
+// 第 4 批(C4-B04):
+//   ・⑦-1 / ⑦-2(會員):底部主要按鈕「前往會員中心」,「回店家首頁」改次要;取消說明改成
+//     「要取消可以在服務前 N 小時以前到會員中心操作；⋯」(N = 店家設定,0 = 服務開始前都可以)。
+//   ・⑦-3(訪客):加入會員區塊說明改成「用 LINE 登入加入會員後，可以在會員中心查看和取消這筆預約。」;
+//     取消說明維持請客人直接聯絡店家。
 // 結果只放在記憶體:重新整理 / 系統上一頁都回 ①(由 PublicBookingPage 處理)。
 
 import { CalendarCheck, Check, Clock } from "lucide-react";
@@ -25,27 +29,36 @@ import {
 } from "./bookingSubmitLogic";
 import { LINE_GREEN_BUTTON_CLASS } from "./CustomerLoginScreens";
 import { ContactButtons, LineIcon, PublicShell, TitleOnlyHeader } from "./PublicBookingChrome";
+import {
+  GUEST_CANCEL_OR_RESCHEDULE_TEXT,
+  GUEST_JOIN_MEMBER_TEXT,
+  memberCompletionCancelText,
+} from "./memberCenterLogic";
 import { formatPublicPrice, type ContactLinks } from "./publicBookingLogic";
-
-export const CANCEL_OR_RESCHEDULE_TEXT = "要取消或改時間請聯絡店家";
 
 export function BookingCompleteScreen({
   booking,
   contacts,
   isOnSite,
   lineLoginEnabled,
+  cancelDeadlineHours,
   joinBusy,
   joinError,
   onJoin,
+  onMemberCenter,
   onHome,
 }: {
   booking: SubmittedBooking;
   contacts: ContactLinks;
   isOnSite: boolean;
   lineLoginEnabled: boolean;
+  /** C4-K02:客人自己取消的期限(服務開始前 N 小時)。 */
+  cancelDeadlineHours: number;
   joinBusy: boolean;
   joinError: string | null;
   onJoin: () => void;
+  /** C4-B04:⑦-1 / ⑦-2「前往會員中心」。 */
+  onMemberCenter: () => void;
   onHome: () => void;
 }) {
   const kind = completionKind(booking);
@@ -53,21 +66,39 @@ export function BookingCompleteScreen({
   const title = accepted ? "預約成功" : "已送出，等待店家確認";
   const headerTitle = accepted ? "預約成功" : "預約已送出";
   const hasContacts = Boolean(contacts.lineUrl || contacts.telHref);
+  const isMember = !booking.isGuest;
+  const cancelText = isMember
+    ? memberCompletionCancelText(cancelDeadlineHours)
+    : GUEST_CANCEL_OR_RESCHEDULE_TEXT;
 
   return (
     <PublicShell
       header={<TitleOnlyHeader title={headerTitle} />}
       footer={
-        <Button
-          type="button"
-          variant="neutral"
-          size="touch"
-          className="w-full"
-          onClick={onHome}
-          data-testid="booking-complete-home"
-        >
-          回店家首頁
-        </Button>
+        <>
+          {isMember ? (
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="w-full"
+              onClick={onMemberCenter}
+              data-testid="booking-complete-member-center"
+            >
+              前往會員中心
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="neutral"
+            size="touch"
+            className="w-full"
+            onClick={onHome}
+            data-testid="booking-complete-home"
+          >
+            回店家首頁
+          </Button>
+        </>
       }
     >
       <div className="flex flex-col gap-4 py-2" data-testid="booking-complete" data-kind={kind}>
@@ -156,9 +187,11 @@ export function BookingCompleteScreen({
           >
             <div>
               <p className="text-[15px] font-semibold text-foreground">加入會員，下次預約更快</p>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">
-                用 LINE
-                登入加入會員，下次預約不用再填電話；這筆預約之後會出現在會員中心（即將推出）。
+              <p
+                className="mt-0.5 text-[13px] text-muted-foreground"
+                data-testid="booking-complete-join-text"
+              >
+                {GUEST_JOIN_MEMBER_TEXT}
               </p>
             </div>
             {joinError ? (
@@ -183,9 +216,12 @@ export function BookingCompleteScreen({
           className="flex flex-col gap-2.5 rounded-xl border border-border bg-card p-3.5 shadow-sm"
           data-testid="booking-complete-contact"
         >
-          <p className="flex items-center gap-1.5 text-[13.5px] text-muted-foreground">
-            <CalendarCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {CANCEL_OR_RESCHEDULE_TEXT}
+          <p
+            className="flex items-start gap-1.5 text-[13.5px] leading-relaxed text-muted-foreground"
+            data-testid="booking-complete-cancel-text"
+          >
+            <CalendarCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0">{cancelText}</span>
           </p>
           {hasContacts ? <ContactButtons links={contacts} /> : null}
         </section>

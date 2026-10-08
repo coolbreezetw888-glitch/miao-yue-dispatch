@@ -95,6 +95,7 @@ import { updateMerchantSettings, uploadMerchantLogo } from "./api";
 import { useCurrentMerchant, useRefetchAccessibleMerchants } from "./context";
 import { LogoUploader } from "./LogoUploader";
 import { MerchantAdminList } from "./MerchantAdminList";
+import { useMerchantLineLoginStatus } from "@/modules/line-notifications/lineLoginApi";
 import { ThemePresetPicker } from "./ThemePresetPicker";
 import {
   COMPLETION_MESSAGE_MAX,
@@ -102,6 +103,7 @@ import {
   DEFAULT_GUEST_COMPLETION_MESSAGE,
   DEFAULT_MEMBER_COMPLETION_MESSAGE,
   validateCompletionMessage,
+  parseCustomerCancelDeadlineHours,
   parseMinLeadHours,
   parseTravelBufferMinutes,
   validateLineFriendUrl,
@@ -142,6 +144,8 @@ function MerchantSettingsPageInner() {
   const [minLeadHours, setMinLeadHours] = useState("");
   const [travelBufferMinutes, setTravelBufferMinutes] = useState("");
   const [allowGuestBooking, setAllowGuestBooking] = useState(true);
+  // 客戶端第 4 批(C4-K01):客人在會員中心自己取消的期限(服務開始前幾小時)。
+  const [customerCancelDeadlineHours, setCustomerCancelDeadlineHours] = useState("");
   // 客戶端第 3 批(C3-H05):完成頁的店家自訂文字(會員 / 訪客分開)。
   const [completionMessageMember, setCompletionMessageMember] = useState("");
   const [completionMessageGuest, setCompletionMessageGuest] = useState("");
@@ -184,6 +188,7 @@ function MerchantSettingsPageInner() {
     setMinLeadHours(String(data.minLeadHours));
     setTravelBufferMinutes(String(data.travelBufferMinutes));
     setAllowGuestBooking(data.allowGuestBooking);
+    setCustomerCancelDeadlineHours(String(data.customerCancelDeadlineHours));
     setCompletionMessageMember(data.completionMessageMember ?? "");
     setCompletionMessageGuest(data.completionMessageGuest ?? "");
     setOnlineSettingsLoadedFor(merchant.id);
@@ -193,6 +198,12 @@ function MerchantSettingsPageInner() {
   const lineFriendUrlCheck = validateLineFriendUrl(lineFriendUrl);
   const minLeadHoursCheck = parseMinLeadHours(minLeadHours);
   const travelBufferCheck = parseTravelBufferMinutes(travelBufferMinutes);
+  const cancelDeadlineCheck = parseCustomerCancelDeadlineHours(customerCancelDeadlineHours);
+  // C4-K01:沒有啟用 LINE 登入的店也顯示這一欄,但加一行灰字「啟用 LINE 登入後才會生效」。
+  const lineLoginStatusQuery = useMerchantLineLoginStatus(merchant?.id);
+  const lineLoginActive = lineLoginStatusQuery.data
+    ? lineLoginStatusQuery.data.configured && lineLoginStatusQuery.data.enabled
+    : null;
   const memberMessageCheck = validateCompletionMessage(completionMessageMember);
   const guestMessageCheck = validateCompletionMessage(completionMessageGuest);
   const onlineSettingsDirty = onlineSettings
@@ -200,6 +211,7 @@ function MerchantSettingsPageInner() {
       (isOnSiteIndustry &&
         travelBufferMinutes.trim() !== String(onlineSettings.travelBufferMinutes)) ||
       allowGuestBooking !== onlineSettings.allowGuestBooking ||
+      customerCancelDeadlineHours.trim() !== String(onlineSettings.customerCancelDeadlineHours) ||
       completionMessageMember.trim() !== (onlineSettings.completionMessageMember ?? "").trim() ||
       completionMessageGuest.trim() !== (onlineSettings.completionMessageGuest ?? "").trim()
     : false;
@@ -278,6 +290,7 @@ function MerchantSettingsPageInner() {
       (onlineSettings !== null &&
         (!minLeadHoursCheck.ok ||
           (isOnSiteIndustry && !travelBufferCheck.ok) ||
+          !cancelDeadlineCheck.ok ||
           !memberMessageCheck.ok ||
           !guestMessageCheck.ok));
     if (onlineFieldsInvalid) {
@@ -314,6 +327,9 @@ function MerchantSettingsPageInner() {
           completionMessageGuest: guestMessageCheck.ok
             ? guestMessageCheck.value
             : onlineSettings.completionMessageGuest,
+          customerCancelDeadlineHours: cancelDeadlineCheck.ok
+            ? cancelDeadlineCheck.value
+            : onlineSettings.customerCancelDeadlineHours,
         });
         await queryClient.invalidateQueries({
           queryKey: [ONLINE_BOOKING_SETTINGS_QUERY_KEY, merchant!.id],
@@ -564,6 +580,35 @@ function MerchantSettingsPageInner() {
                   checked={allowGuestBooking}
                   onCheckedChange={setAllowGuestBooking}
                 />
+
+                {/* C4-K01:客人在會員中心自己取消的期限。只有管理員能改(資料庫保護 trigger)。 */}
+                <FormField
+                  label="客人自己取消的期限（小時）"
+                  htmlFor="settings-customer-cancel-deadline-hours"
+                  help="超過這個時間，客人只能聯絡店家取消。填 0 表示服務開始前都可以自己取消。訪客（沒有登入）的預約不能線上取消。"
+                  helpLabel="說明：客人自己取消的期限是什麼意思"
+                  error={cancelDeadlineCheck.ok ? null : cancelDeadlineCheck.message}
+                >
+                  <div className="flex items-center gap-2 text-sm text-foreground">
+                    <span className="shrink-0">服務開始前</span>
+                    <FieldInput
+                      id="settings-customer-cancel-deadline-hours"
+                      inputMode="numeric"
+                      className="w-24 tabular-nums"
+                      value={customerCancelDeadlineHours}
+                      onChange={(e) => setCustomerCancelDeadlineHours(e.target.value)}
+                    />
+                    <span className="min-w-0">小時以前，客人可以在會員中心自己取消</span>
+                  </div>
+                  {lineLoginActive === false ? (
+                    <p
+                      className="text-[12.5px] text-muted-foreground"
+                      data-testid="settings-cancel-deadline-line-hint"
+                    >
+                      啟用 LINE 登入後才會生效
+                    </p>
+                  ) : null}
+                </FormField>
 
                 {/* C3-H05(零之零 Q7):客人送出預約後完成頁的說明,會員 / 訪客分開。留空 = 預設句(placeholder)。 */}
                 <FormField

@@ -116,6 +116,7 @@ function makePage(
       allow_guest_booking: true,
       is_on_site: false,
       line_login_enabled: true,
+      customer_cancel_deadline_hours: 24,
       ...settings,
     },
     member_policy: { enabled: true, content: "會員點數一年內有效。" },

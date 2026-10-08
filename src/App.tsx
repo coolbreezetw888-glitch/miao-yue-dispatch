@@ -55,6 +55,7 @@ import PushEventSettingsPage from "@/modules/push-notifications/PushEventSetting
 import PushLogsPage from "@/modules/push-notifications/PushLogsPage";
 import PublicBookingPage from "@/modules/public-booking/PublicBookingPage";
 import LineLoginCallbackPage from "@/modules/public-booking/LineLoginCallbackPage";
+import MemberCenterPage from "@/modules/public-booking/MemberCenterPage";
 
 function NotFound() {
   return (
@@ -169,6 +170,11 @@ export default function App() {
         {/* 客戶端第 1 批(C1-A01):公開預約頁。不需要登入、不套後台外殼(AppLayout);
             已登入後台的人打開也是客人版畫面,不讀目前操作中的商家。 */}
         <Route path="/booking/:slug" element={<PublicBookingPage />} />
+        {/* 客戶端第 4 批(C4-B05):會員中心。分頁之間是一般網址切換。 */}
+        <Route path="/booking/:slug/me" element={<MemberCenterPage tab="home" />} />
+        <Route path="/booking/:slug/me/bookings" element={<MemberCenterPage tab="bookings" />} />
+        <Route path="/booking/:slug/me/wallet" element={<MemberCenterPage tab="wallet" />} />
+        <Route path="/booking/:slug/me/profile" element={<MemberCenterPage tab="profile" />} />
         {/* 客戶端第 2 批(C2-B02):LINE 登入回來的頁面,所有商家共用。不套後台外殼、不需要後台登入。 */}
         <Route path="/auth/line/callback" element={<LineLoginCallbackPage />} />
         <Route path="/privacy" element={<Privacy />} />

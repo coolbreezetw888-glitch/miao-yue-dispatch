@@ -127,8 +127,8 @@ select is((select array_agg(k order by k) from c1_page, jsonb_object_keys(r -> '
                 'theme_custom_color', 'theme_preset'],
           'C01-6 merchant 物件 key');
 select is((select array_agg(k order by k) from c1_page, jsonb_object_keys(r -> 'booking_settings') k),
-          array['allow_guest_booking', 'is_on_site', 'line_login_enabled', 'member_policy'],
-          'C01-7 booking_settings 只有四個 key(第 2 批加 line_login_enabled / member_policy;不回傳 min_lead_hours / travel_buffer / 間隔 / Channel ID)');
+          array['allow_guest_booking', 'customer_cancel_deadline_hours', 'is_on_site', 'line_login_enabled', 'member_policy'],
+          'C01-7 booking_settings 只有五個 key(第 2 批加 line_login_enabled / member_policy;第 4 批加 customer_cancel_deadline_hours;不回傳 min_lead_hours / travel_buffer / 間隔 / Channel ID)');
 select is((select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'service_items') e, jsonb_object_keys(e) k)
           || (select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'staff') e, jsonb_object_keys(e) k)
           || (select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'categories') e, jsonb_object_keys(e) k),
@@ -152,7 +152,7 @@ select is((select jsonb_agg(e -> 'primary_service_item_ids' order by ord) from c
           '[["c1b00000-0000-4000-8000-000000000051", "c1b00000-0000-4000-8000-000000000052"], null, ["c1b00000-0000-4000-8000-000000000051"]]'::jsonb,
           'C01-13 primary_service_item_ids:只列上架中的主要項目;沒有任何對應 = null');
 select is((select r -> 'booking_settings' from c1_page),
-          '{"is_on_site": true, "allow_guest_booking": true, "line_login_enabled": true, "member_policy": null}'::jsonb,
+          '{"is_on_site": true, "allow_guest_booking": true, "line_login_enabled": true, "member_policy": null, "customer_cancel_deadline_hours": 24}'::jsonb,
           'C01-14 到府 + 允許不登入預約預設 true + LINE 登入已啟用 + 會員政策關閉 ⇒ null');
 
 -- 公告開啟才給內容

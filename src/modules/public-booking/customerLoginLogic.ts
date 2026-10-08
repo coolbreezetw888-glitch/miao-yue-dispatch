@@ -152,6 +152,31 @@ export function recallLoginSlug(): string | null {
   }
 }
 
+// ─── C4-B02:從會員中心登入頁出發的 LINE 登入,在 LINE 按「取消」回來時要回到會員中心(不是 ①) ───
+// 只記「這次是從會員中心出發」這一件事(不是個資、不是網址),只在這個分頁的 sessionStorage。
+
+export const LINE_LOGIN_ORIGIN_STORAGE_KEY = "miaoyue-line-login-origin";
+
+export function rememberLoginOrigin(origin: "member_center" | null): void {
+  try {
+    if (origin) window.sessionStorage.setItem(LINE_LOGIN_ORIGIN_STORAGE_KEY, origin);
+    else window.sessionStorage.removeItem(LINE_LOGIN_ORIGIN_STORAGE_KEY);
+  } catch {
+    // 不讓存:取消登入時回 ①,可以接受。
+  }
+}
+
+/** 拿一次就清掉。 */
+export function takeLoginOrigin(): "member_center" | null {
+  try {
+    const v = window.sessionStorage.getItem(LINE_LOGIN_ORIGIN_STORAGE_KEY);
+    window.sessionStorage.removeItem(LINE_LOGIN_ORIGIN_STORAGE_KEY);
+    return v === "member_center" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 只看不拿(預約頁第一次 render 決定初始值時用;真正拿走在 effect 裡)。 */
 export function peekPendingDraft(slug: string): PendingDraft | null {
   return pendingDrafts.get(slug) ?? null;
@@ -164,7 +189,13 @@ export function peekPendingDraft(slug: string): PendingDraft | null {
 export type CustomerSessionState =
   | { state: "anonymous" }
   | { state: "needs_profile"; lineDisplayName: string | null; linePictureUrl: string | null }
-  | { state: "linked"; memberName: string; memberPhone: string | null };
+  | {
+      state: "linked";
+      memberName: string;
+      memberPhone: string | null;
+      /** C4-E05(⚠️範圍 第 3 點):自己的會員地址;預約頁 ⑤ 地址欄空白時帶入。 */
+      memberAddress: string | null;
+    };
 
 /**
  * get_customer_session_state 的回傳 → 畫面要的狀態。
@@ -182,12 +213,14 @@ export function parseCustomerSessionState(raw: unknown): CustomerSessionState {
     };
   }
   if (state === "linked") {
-    // 資料庫回 member: { name, phone }(只有自己的會員資料)。
+    // 資料庫回 member: { name, phone }(只有自己的會員資料);第 4 批起多 address(C4-E05)。
+    // address 放在 member 裡或最外層都收(以 c4-contract 為準)。
     const member = isRecord(raw["member"]) ? raw["member"] : {};
     return {
       state: "linked",
       memberName: str(member["name"]) ?? "",
       memberPhone: str(member["phone"]),
+      memberAddress: str(member["address"]) ?? str(raw["address"]),
     };
   }
   return { state: "anonymous" };

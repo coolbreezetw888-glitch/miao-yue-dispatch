@@ -17,7 +17,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   Check,
   ChevronLeft,
@@ -73,6 +72,7 @@ import {
   CompleteProfileError,
   completeCustomerProfile,
   CustomerAuthError,
+  customerSessionQueryKey,
   fetchCustomerSessionState,
   redirectToAuthorizeUrl,
   signOutCustomer,
@@ -85,6 +85,7 @@ import {
   isSessionInvalidHint,
   lineStartErrorMessage,
   peekPendingDraft,
+  rememberLoginOrigin,
   rememberLoginSlug,
   takePendingDraft,
   type BookingDraft,
@@ -95,10 +96,12 @@ import {
   CustomerLoginBar,
   CustomerProfileScreen,
   GuestScreen,
+  LineAvatar,
   LineLoginScreen,
   LinkedConfirmScreen,
   type ProfileSubmitOutcome,
 } from "./CustomerLoginScreens";
+import { memberCenterPath } from "./memberCenterLogic";
 import {
   addDays,
   buildPublicServiceTabs,
@@ -307,7 +310,7 @@ function draftToInitial(page: PublicBookingPageOk, pending: PendingDraft | null)
   };
 }
 
-const SESSION_QUERY_KEY = (slug: string) => [PAGE_QUERY_KEY, "customer-session", slug] as const;
+const SESSION_QUERY_KEY = customerSessionQueryKey;
 const EMPTY_FORM: CustomerFormValues = { name: "", address: "", note: "" };
 
 function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }) {
@@ -360,8 +363,8 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   // 完成頁真的顯示過了沒(react-router 的換頁走 transition,可能比 setCompleted 晚一拍生效;
   // 用這個旗標區分「還沒切到完成頁」與「從完成頁按了上一頁」)。
   const [completeShown, setCompleteShown] = useState(false);
-  // C3-D07:⑦-3「用 LINE 登入加入會員」回來(沒有草稿)⇒ 先填電話,再回 ① 顯示登入列。
-  const [joinMode, setJoinMode] = useState(false);
+  // C3-B04:⑦-3「用 LINE 登入加入會員」按下去之後(跳 LINE 前)的狀態。
+  // C4-B03:登入回來(沒有草稿)一律到會員中心 /me,由會員中心處理 ⑥-2「加入會員」與提示(不再回 ①)。
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
@@ -479,44 +482,37 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   }, [completed, requestedStep, completeShown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // C2-B04:登入回來 ⇒ 歷史紀錄排成「⑤ → ⑥」(系統上一頁回到 ⑤);在 LINE 按取消 ⇒ 停在 ⑤。
-  // C3-D07:沒有草稿而且登入成功 = ⑦-3「加入會員」回來 ⇒ 進加入會員流程。
+  // C4-B03(取代 C3-D07):沒有草稿而且登入成功 ⇒ 到會員中心首頁(登入回來頁本來就直接送到 /me,
+  //   這裡只是保險:萬一標記被留在預約頁,一樣轉過去,不在 ① 停留)。
   const restoreHandled = useRef(false);
   useEffect(() => {
     if (restoreHandled.current) return;
     restoreHandled.current = true;
-    const pending = takePendingDraft(slug);
+    const pending = peekPendingDraft(slug);
     if (!pending) return;
     if (!initial) {
-      if (pending.outcome === "logged_in" && pending.draft === null) setJoinMode(true);
+      if (pending.outcome === "logged_in" && pending.draft === null && lineLoginEnabled) {
+        // 標記留給會員中心拿(它要決定跳「已登入」還是「已加入」的提示)。
+        navigate(memberCenterPath(slug), { replace: true });
+        return;
+      }
+      takePendingDraft(slug);
       return;
     }
+    takePendingDraft(slug);
     goTo(4, true);
     if (pending.outcome === "logged_in") goTo(5);
     else setReturnNotice(pending.outcome);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // C3-D07:加入會員回來時,已經是會員(之前就接上)⇒ 直接回 ① 跳提示;沒登入成功 ⇒ 結束加入流程。
+  // C4-E05(⚠️範圍 第 3 點):已登入的會員,地址欄空白就帶入會員地址(只帶一次;客人改了不回寫會員資料)。
+  const addressPrefilled = useRef(false);
+  const memberAddress = session.state === "linked" ? session.memberAddress : null;
   useEffect(() => {
-    if (!joinMode) return;
-    if (!lineLoginEnabled) {
-      setJoinMode(false);
-      return;
-    }
-    if (sessionQuery.isPending || sessionQuery.isFetching) return;
-    if (session.state === "linked") {
-      setJoinMode(false);
-      toast.success(`已加入「${merchant.name}」會員`);
-    } else if (session.state === "anonymous") {
-      setJoinMode(false);
-    }
-  }, [
-    joinMode,
-    lineLoginEnabled,
-    session.state,
-    sessionQuery.isPending,
-    sessionQuery.isFetching,
-    merchant.name,
-  ]);
+    if (addressPrefilled.current || !isOnSite || !memberAddress) return;
+    addressPrefilled.current = true;
+    setForm((f) => (f.address.trim() === "" ? { ...f, address: memberAddress } : f));
+  }, [isOnSite, memberAddress]);
 
   function buildDraft(): BookingDraft | null {
     if (!pickedSlot) return null;
@@ -545,6 +541,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         return;
       }
       rememberLoginSlug(slug);
+      rememberLoginOrigin(null);
       redirectToAuthorizeUrl(url);
       // 不解除 busy:頁面即將離開,避免客人在跳轉前又按一次。
     } catch (err) {
@@ -566,6 +563,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         return;
       }
       rememberLoginSlug(slug);
+      rememberLoginOrigin(null);
       redirectToAuthorizeUrl(url);
     } catch (err) {
       setJoinError(lineStartErrorMessage(err instanceof CustomerAuthError ? err.code : null));
@@ -635,18 +633,11 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
       const result = await completeCustomerProfile({
         slug,
         phone: input.phone,
-        name: joinMode ? "" : form.name.trim(),
+        name: form.name.trim(),
         agreePolicy: input.agree,
       });
       if (result.kind === "phone_taken") return "phone_taken";
       setLinkNotice(result.existing ? "existing" : "created");
-      if (joinMode) {
-        // C3-D07:加入會員完成 ⇒ 回 ①(登入列)+ 跳一次提示。
-        setJoinMode(false);
-        await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
-        toast.success(`已加入「${merchant.name}」會員`);
-        return "linked";
-      }
       // C3-D02:接上會員之後自動送出預約(第二段失敗時客人已經是會員,畫面依 C3-D05)。
       await runSubmit(null);
       await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
@@ -658,7 +649,6 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         await signOutCustomer(slug);
         queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
         setLoginError(completeProfileErrorMessage(hint));
-        if (joinMode) setJoinMode(false);
       }
       return { error: completeProfileErrorMessage(hint) };
     }
@@ -674,36 +664,6 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
       <CustomerLoginBar memberName={session.memberName} onLogout={() => void handleLogout()} />
     ) : null;
 
-  // ─── C3-D07 加入會員流程(沒有草稿)───
-  if (joinMode) {
-    if (session.state === "needs_profile") {
-      return (
-        <CustomerProfileScreen
-          merchantName={merchant.name}
-          lineDisplayName={session.lineDisplayName}
-          linePictureUrl={session.linePictureUrl}
-          policy={page.member_policy}
-          contacts={contacts}
-          allowGuest={false}
-          mode="join"
-          onSubmit={handleProfileSubmit}
-          onLogout={() => {
-            setJoinMode(false);
-            void handleLogout();
-          }}
-          onGuest={() => undefined}
-        />
-      );
-    }
-    return (
-      <PublicShell header={<TitleOnlyHeader title={merchant.name} />}>
-        <div className="flex flex-col gap-3" data-testid="public-booking-join-loading">
-          <LoadingSkeleton variant="lines" rows={3} />
-        </div>
-      </PublicShell>
-    );
-  }
-
   if (completed && (step === COMPLETE_STEP || !completeShown)) {
     return (
       <BookingCompleteScreen
@@ -711,16 +671,37 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         contacts={contacts}
         isOnSite={isOnSite}
         lineLoginEnabled={lineLoginEnabled}
+        cancelDeadlineHours={settings.customer_cancel_deadline_hours}
         joinBusy={joinBusy}
         joinError={joinError}
         onJoin={() => void handleJoin()}
+        onMemberCenter={() => {
+          resetFlow();
+          navigate(memberCenterPath(slug));
+        }}
         onHome={handleHome}
       />
     );
   }
 
   if (step === 0 || completed !== null) {
-    return <HomeStep page={page} contacts={contacts} loginBar={loginBar} onStart={() => goTo(1)} />;
+    return (
+      <HomeStep
+        page={page}
+        contacts={contacts}
+        loginBar={loginBar}
+        memberEntry={
+          // C4-B01:只有啟用 LINE 登入的店才有會員中心入口。
+          lineLoginEnabled ? (
+            <MemberCenterEntry
+              linkedName={session.state === "linked" ? session.memberName : null}
+              onClick={() => navigate(memberCenterPath(slug))}
+            />
+          ) : null
+        }
+        onStart={() => goTo(1)}
+      />
+    );
   }
 
   if (step === 1) {
@@ -1081,16 +1062,55 @@ function BookingSummary({
 // ① 店家首頁
 // =========================================================================
 
+/**
+ * C4-B01:① 右上「會員中心」入口。已登入且接上會員 ⇒ 頭像小圓 +「會員中心」;沒登入 ⇒「會員登入」⚠️。
+ */
+function MemberCenterEntry({
+  linkedName,
+  onClick,
+}: {
+  linkedName: string | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-11 cursor-pointer items-center gap-1.5 rounded-full px-1.5 text-[13px] font-semibold text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid="public-booking-member-entry"
+    >
+      {linkedName !== null ? <LineAvatar name={linkedName} pictureUrl={null} size={24} /> : null}
+      {linkedName !== null ? "會員中心" : "會員登入"}
+    </button>
+  );
+}
+
+/** ① 的頁首:置中店名 + 右邊會員中心入口(沒有入口就跟其他頁一樣只有標題)。 */
+function HomeHeader({ title, right }: { title: string; right: ReactNode }) {
+  if (!right) return <TitleOnlyHeader title={title} />;
+  return (
+    <div className="relative flex h-[54px] items-center justify-end px-2 sm:px-3">
+      <h1 className="pointer-events-none absolute inset-x-[104px] truncate text-center text-base font-bold text-foreground">
+        {title}
+      </h1>
+      {right}
+    </div>
+  );
+}
+
 function HomeStep({
   page,
   contacts,
   loginBar,
+  memberEntry,
   onStart,
 }: {
   page: PublicBookingPageOk;
   contacts: ContactLinks;
   /** C3-D07:已用 LINE 登入並接上會員 ⇒ 顯示登入列(跟確認送出畫面同一個元件)。 */
   loginBar: ReactNode;
+  /** C4-B01:頁首右邊的會員中心入口(沒啟用 LINE 登入 = null)。 */
+  memberEntry: ReactNode;
   onStart: () => void;
 }) {
   const { merchant, booking_settings: settings } = page;
@@ -1101,7 +1121,7 @@ function HomeStep({
 
   return (
     <PublicShell
-      header={<TitleOnlyHeader title={merchant.name} />}
+      header={<HomeHeader title={merchant.name} right={memberEntry} />}
       className="max-w-none px-0 py-0 sm:px-0"
       footer={
         <Button

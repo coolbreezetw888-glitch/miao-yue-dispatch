@@ -25,6 +25,7 @@ import {
   putPendingDraft,
   readLineCallbackParams,
   recallLoginSlug,
+  takeLoginOrigin,
   type LineCallbackParams,
 } from "./customerLoginLogic";
 import { PublicShell, TitleOnlyHeader } from "./PublicBookingChrome";
@@ -74,6 +75,8 @@ export default function LineLoginCallbackPage() {
     }
     if (sentStates.has(state)) return;
     sentStates.add(state);
+    // C4-B02:這次是不是從會員中心登入頁出發(拿一次就清掉)。
+    const origin = takeLoginOrigin();
 
     void (async () => {
       try {
@@ -83,13 +86,20 @@ export default function LineLoginCallbackPage() {
           error: params.error,
         });
         if (!isValidBookingSlug(result.slug)) throw new CustomerAuthError("invalid_response");
+        const fromMemberCenter = origin === "member_center";
         if (result.status === "ok") {
           await establishCustomerSession(result.slug, result.tokenHash, result.verifyType);
           putPendingDraft(result.slug, { draft: result.draft, outcome: "logged_in" });
         } else {
           putPendingDraft(result.slug, { draft: result.draft, outcome: "cancelled" });
         }
-        navigate(`/booking/${result.slug}`, { replace: true });
+        // C4-B03:沒有草稿(⑦-3 加入會員 / 會員中心登入)⇒ 登入成功一律到會員中心首頁;
+        //   在 LINE 按取消 ⇒ 從會員中心出發的回會員中心登入頁,其他回 ①。有草稿的流程不變(回預約頁 ⑤ / ⑥)。
+        const toMemberCenter =
+          result.draft === null && (result.status === "ok" || fromMemberCenter);
+        navigate(toMemberCenter ? `/booking/${result.slug}/me` : `/booking/${result.slug}`, {
+          replace: true,
+        });
       } catch (err) {
         const code = err instanceof CustomerAuthError ? err.code : null;
         const serverSlug =
