@@ -18,6 +18,9 @@
 // 對話框能開啟,沒有實際送出過)。
 import { expect, test } from "@playwright/test";
 
+// #1037(客戶端第 1 批 C1-E02):會員詳細頁的推薦名單跟著同一個開關藏起來;開關關掉(恢復)時照舊驗名單。
+import { REFERRAL_UI_HIDDEN } from "../src/modules/members/referralVisibility";
+
 import {
   EXISTING_MEMBER_PHONE,
   INITIAL_POINTS_BALANCE,
@@ -138,8 +141,12 @@ test("會員詳情頁(§4.2/#830):點數卡片含登記兌換與手動調整入�
   // #849(紅利系統重構 §4.8 / #844):相關訂單的標籤從「已核發 N 點」改成「已入帳 N 點」(看淨額)。
   await expect(page.getByText(`已入帳 ${expectedEarnedPoints} 點`, { exact: true })).toBeVisible();
 
-  // 推薦名單:fixture 的被推薦會員應該出現。
-  await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
+  // 推薦名單:fixture 的被推薦會員應該出現(#1037 隱藏期間改驗「整張推薦名單卡片不出現」)。
+  if (REFERRAL_UI_HIDDEN) {
+    await expect(page.getByText("推薦名單", { exact: true })).toHaveCount(0);
+  } else {
+    await expect(page.getByText(fixture.referredMemberName)).toBeVisible();
+  }
 });
 
 test("紅利點數管理頁(§10.5/#617/#830):獨立卡片入口、只剩規則設定、不再有餘額總覽", async ({

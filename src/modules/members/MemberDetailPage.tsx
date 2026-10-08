@@ -131,6 +131,7 @@ import {
 import { describeRelatedBookingPointsTags } from "./memberRelatedBookingPoints";
 import { MemberPointsPanel } from "./MemberPointsPanel";
 import { RequireMembersAccess } from "./RequireMembersAccess";
+import { REFERRAL_UI_HIDDEN } from "./referralVisibility";
 import { MEMBER_STATUS_LABELS, type MemberDetail } from "./types";
 
 const UNASSIGNED_TIER_VALUE = "__unassigned__";
@@ -225,7 +226,11 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
       <FullPageLayerContent
         dirty={formDirty.dirty}
         title="編輯會員資料"
-        subtitle="只有姓名是必填的。推薦人不能改 —— 推薦獎勵是依建立當下那筆關係核發的。"
+        subtitle={
+          REFERRAL_UI_HIDDEN
+            ? "只有姓名是必填的。"
+            : "只有姓名是必填的。推薦人不能改 —— 推薦獎勵是依建立當下那筆關係核發的。"
+        }
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -306,12 +311,15 @@ function EditMemberDialog({ member, onSaved }: { member: MemberDetail; onSaved: 
               ]}
             />
           </FormField>
-          <FormField label="推薦人">
-            {/* 🟡 這是「為什麼這一格不能改」⇒ 常駐說明,不收進 `?`(skill 二,第一類)。 */}
-            <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
-              推薦人只能在建立會員時設定，之後無法變更。
-            </p>
-          </FormField>
+          {/* #1037 第 2 輪(主腦裁決):推薦人唯讀列跟著推薦開關一起藏。 */}
+          {REFERRAL_UI_HIDDEN ? null : (
+            <FormField label="推薦人">
+              {/* 🟡 這是「為什麼這一格不能改」⇒ 常駐說明,不收進 `?`(skill 二,第一類)。 */}
+              <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2.5 text-[13px] leading-relaxed text-muted-foreground">
+                推薦人只能在建立會員時設定，之後無法變更。
+              </p>
+            </FormField>
+          )}
           <FormField label="備註" htmlFor="edit-member-notes">
             <FieldTextarea
               id="edit-member-notes"
@@ -432,6 +440,8 @@ function MemberDetailInner() {
   const { data: member, isLoading } = useMember(id);
   const { data: relatedBookings } = useMemberRelatedBookings(id);
   const { data: referrals } = useMemberReferrals(id);
+  // #1037(主腦裁決 Q3):「推薦碼」與「推薦名單」跟紅利設定的推薦系統分頁一起藏(開關在 referralVisibility.ts)。
+  const showReferral = !REFERRAL_UI_HIDDEN;
   // #615(SPECS-INDEX):會員等級名稱顯示,查詢範圍是「這位會員所屬商家」的等級清單(含已下架的,
   // 因為這位會員目前指派的等級可能剛好已被下架,下架不會連帶清空既有會員的 tier_id)。
   const { data: tiers } = useMerchantMemberTiers(member?.merchant_id, false);
@@ -549,16 +559,18 @@ function MemberDetailInner() {
           </DetailSection>
 
           <DetailSection label="會員資訊">
-            <DetailRow label="推薦碼">
-              <span className="inline-flex flex-wrap items-center justify-end gap-2">
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono tabular-nums">
-                  {member.referral_code}
-                </code>
-                <Button type="button" variant="text" size="card" onClick={handleCopyReferralCode}>
-                  {copyLabel}
-                </Button>
-              </span>
-            </DetailRow>
+            {showReferral ? (
+              <DetailRow label="推薦碼">
+                <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                  <code className="rounded bg-muted px-1.5 py-0.5 font-mono tabular-nums">
+                    {member.referral_code}
+                  </code>
+                  <Button type="button" variant="text" size="card" onClick={handleCopyReferralCode}>
+                    {copyLabel}
+                  </Button>
+                </span>
+              </DetailRow>
+            ) : null}
             {/* #615(SPECS-INDEX):會員等級顯示(唯讀,編輯入口在上方「編輯」按鈕的表單裡)。 */}
             <DetailRow label="會員等級">
               {member.tier_id && tierNameById.has(member.tier_id)
@@ -738,57 +750,59 @@ function MemberDetailInner() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>推薦名單</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!referrals || referrals.length === 0 ? (
-            // 📌 同上:這是事實不是待辦,不放跳走的下一步按鈕。
-            <EmptyState
-              title="這位會員目前還沒有推薦過任何人"
-              description="把他的推薦碼給新客戶，新客戶建立會員時填上，就會出現在這裡並自動核發推薦獎勵。"
-            />
-          ) : (
-            // 🔴 這裡是 ListCard(skill 二之五「一張卡片 = 一筆資料」),**不是** DetailLinkRow。
-            // 2026-09-30 主腦裁決(推翻收尾批一度改成 DetailLinkRow 的做法,不要再改回去):
-            //   推薦名單的每一列是「一位會員 + 狀態 + 獎勵標籤」,是**一整份名單**,適用二之五;
-            //   二之六 第 6 點那條「可點的列 + ›」講的是「相關訂單 / 操作記錄」那種
-            //   **去別的地方看的入口列**(一兩條、通往另一塊內容),不是名單。
-            //   而且做成可點的列會失去「已移除的會員整列變灰」(state="inactive")的處理 ——
-            //   用 text-muted-foreground 把名字變淡補不回同樣的視覺份量。
-            <ul className="flex flex-col gap-2.5">
-              {referrals.map((r) => (
-                <li key={r.id}>
-                  <ListCard
-                    state={r.status === "active" ? "default" : "inactive"}
-                    title={r.name}
-                    tags={
-                      <>
-                        {r.status === "active" ? (
-                          <StatusTag tone="success">{MEMBER_STATUS_LABELS.active}</StatusTag>
-                        ) : (
-                          <StatusTag tone="neutral">{MEMBER_STATUS_LABELS.removed}</StatusTag>
-                        )}
-                        <AttributeTag wrap>
-                          {r.referralRewardedAt ? "已核發推薦獎勵" : "尚未核發推薦獎勵"}
-                        </AttributeTag>
-                      </>
-                    }
-                    onClick={() => navigate(`/app/members/${r.id}`)}
-                    primaryAction={
-                      // 會跳頁 ⇒ 真正的 <a href>,可以右鍵 / 中鍵開新分頁(第 1 / 2 批已定案的裁決)。
-                      <Button asChild variant="neutral" size="card">
-                        <Link to={`/app/members/${r.id}`}>查看</Link>
-                      </Button>
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {showReferral ? (
+        <Card data-testid="member-referrals-card">
+          <CardHeader>
+            <CardTitle>推薦名單</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!referrals || referrals.length === 0 ? (
+              // 📌 同上:這是事實不是待辦,不放跳走的下一步按鈕。
+              <EmptyState
+                title="這位會員目前還沒有推薦過任何人"
+                description="把他的推薦碼給新客戶，新客戶建立會員時填上，就會出現在這裡並自動核發推薦獎勵。"
+              />
+            ) : (
+              // 🔴 這裡是 ListCard(skill 二之五「一張卡片 = 一筆資料」),**不是** DetailLinkRow。
+              // 2026-09-30 主腦裁決(推翻收尾批一度改成 DetailLinkRow 的做法,不要再改回去):
+              //   推薦名單的每一列是「一位會員 + 狀態 + 獎勵標籤」,是**一整份名單**,適用二之五;
+              //   二之六 第 6 點那條「可點的列 + ›」講的是「相關訂單 / 操作記錄」那種
+              //   **去別的地方看的入口列**(一兩條、通往另一塊內容),不是名單。
+              //   而且做成可點的列會失去「已移除的會員整列變灰」(state="inactive")的處理 ——
+              //   用 text-muted-foreground 把名字變淡補不回同樣的視覺份量。
+              <ul className="flex flex-col gap-2.5">
+                {referrals.map((r) => (
+                  <li key={r.id}>
+                    <ListCard
+                      state={r.status === "active" ? "default" : "inactive"}
+                      title={r.name}
+                      tags={
+                        <>
+                          {r.status === "active" ? (
+                            <StatusTag tone="success">{MEMBER_STATUS_LABELS.active}</StatusTag>
+                          ) : (
+                            <StatusTag tone="neutral">{MEMBER_STATUS_LABELS.removed}</StatusTag>
+                          )}
+                          <AttributeTag wrap>
+                            {r.referralRewardedAt ? "已核發推薦獎勵" : "尚未核發推薦獎勵"}
+                          </AttributeTag>
+                        </>
+                      }
+                      onClick={() => navigate(`/app/members/${r.id}`)}
+                      primaryAction={
+                        // 會跳頁 ⇒ 真正的 <a href>,可以右鍵 / 中鍵開新分頁(第 1 / 2 批已定案的裁決)。
+                        <Button asChild variant="neutral" size="card">
+                          <Link to={`/app/members/${r.id}`}>查看</Link>
+                        </Button>
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
     </main>
   );
 }

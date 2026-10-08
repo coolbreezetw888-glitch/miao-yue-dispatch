@@ -90,6 +90,7 @@ select is(
   $m$private.protect_merchants_group_id_column() ③ 觸發器綁定不變$m$);
 
 -- ----- public.apply_industry_preset(p_merchant_id uuid) -----
+-- 客戶端第 1 批 C1-F03(20261008160000):ACL 的 PUBLIC(=X)已收回,期望值同步更新(函式本體未改)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.apply_industry_preset(p_merchant_id uuid)$m$, array[
     $m$'找不到指定的商家：%'$m$, $m$'找不到指定的商家: %'$m$
@@ -98,7 +99,7 @@ select is(
   $m$public.apply_industry_preset(p_merchant_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.apply_industry_preset(p_merchant_id uuid)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${=X/postgres,postgres=X/postgres,service_role=X/postgres}$m$, $m$依商家的 industry_type 讀取 industry_feature_presets,批次寫入 merchant_feature_flags。目前 industry_feature_presets 是空表,此函式會正常寫入 0 筆,見規格書 1.6/3.4。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,service_role=X/postgres}$m$, $m$依商家的 industry_type 讀取 industry_feature_presets,批次寫入 merchant_feature_flags。目前 industry_feature_presets 是空表,此函式會正常寫入 0 筆,見規格書 1.6/3.4。$m$],
   $m$public.apply_industry_preset(p_merchant_id uuid) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$public.apply_industry_preset(p_merchant_id uuid)$m$),
@@ -157,6 +158,7 @@ select is(
   $m$public.create_merchant_in_group(p_group_id uuid, p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.generate_booking_slug(p_name text) -----
+-- 客戶端第 1 批 C1-F03(20261008160000):ACL 的 PUBLIC(=X)已收回,期望值同步更新(函式本體未改)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.generate_booking_slug(p_name text)$m$, array[
     $m$'無法產生唯一的預約網址代碼，請稍後再試'$m$, $m$'無法產生唯一的預約網址代碼,請稍後再試'$m$
@@ -165,7 +167,7 @@ select is(
   $m$public.generate_booking_slug(p_name text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.generate_booking_slug(p_name text)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${=X/postgres,postgres=X/postgres,service_role=X/postgres}$m$, $m$依店名產生英數字+連字號的預約網址代碼,確保唯一且不與系統路徑衝突,見規則 2.7。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,service_role=X/postgres}$m$, $m$依店名產生英數字+連字號的預約網址代碼,確保唯一且不與系統路徑衝突,見規則 2.7。$m$],
   $m$public.generate_booking_slug(p_name text) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$public.generate_booking_slug(p_name text)$m$),

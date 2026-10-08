@@ -30,6 +30,15 @@ const state = vi.hoisted(() => ({
   saveMock: vi.fn(),
   upsertFormulasMock: vi.fn(),
   toastMock: { success: vi.fn(), error: vi.fn() },
+  // #1037(C1-E02):「推薦系統」分頁的隱藏開關。正式值是 true(藏起來);
+  // 原本驗推薦系統分頁的測試改成「開關打開(false)時才顯示」,不刪測試。
+  referralHidden: true,
+}));
+
+vi.mock("./referralVisibility", () => ({
+  get REFERRAL_UI_HIDDEN() {
+    return state.referralHidden;
+  },
 }));
 
 vi.mock("sonner", () => ({ toast: state.toastMock }));
@@ -110,6 +119,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  state.referralHidden = true;
   state.role = "admin";
   state.agentPointsPermission = false;
   state.settings = makeSettings({ basic_points_per_order: 3, basic_min_amount: 500 });
@@ -128,7 +138,19 @@ afterEach(() => cleanup());
 const TAB_NAMES = ["紅利計算", "點數使用", "推薦系統", "生日獎勵"];
 
 describe("§4.1 分頁顯示條件", () => {
-  it("管理員 + 功能開啟 ⇒ 啟用開關獨立區塊 + 四個分頁", () => {
+  it("#1037:推薦系統隱藏開關打開(正式值)⇒ 只有三個分頁,看不到推薦系統", () => {
+    renderPage();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "紅利計算",
+      "點數使用",
+      "生日獎勵",
+    ]);
+    expect(screen.queryByRole("tab", { name: "推薦系統" })).toBeNull();
+    expect(screen.queryByText("推薦者消費是否累積紅利")).toBeNull();
+  });
+
+  it("管理員 + 功能開啟 + 推薦系統開關關掉(恢復顯示)⇒ 啟用開關獨立區塊 + 四個分頁", () => {
+    state.referralHidden = false;
     renderPage();
     expect(screen.getByRole("switch", { name: "啟用紅利點數功能" })).toBeChecked();
     for (const name of TAB_NAMES) expect(screen.getByRole("tab", { name })).toBeInTheDocument();
@@ -321,7 +343,8 @@ describe("§4.1 未儲存切換分頁", () => {
     expect(screen.getByLabelText("單次最大使用比例")).toHaveValue("40");
   });
 
-  it("沒有改動 ⇒ 直接切換,不跳窗", async () => {
+  it("沒有改動 ⇒ 直接切換,不跳窗(推薦系統開關關掉時)", async () => {
+    state.referralHidden = false;
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole("tab", { name: "推薦系統" }));
@@ -358,7 +381,8 @@ describe("§4.3 / §4.4", () => {
     expect(screen.getAllByText(/要一起填/).length).toBeGreaterThan(0);
   });
 
-  it("推薦系統:開關 1 關閉 ⇒ 兩個數字欄位隱藏,儲存時也不送那兩個值", async () => {
+  it("推薦系統(隱藏開關關掉時):開關 1 關閉 ⇒ 兩個數字欄位隱藏,儲存時也不送那兩個值", async () => {
+    state.referralHidden = false;
     const user = userEvent.setup();
     state.settings = makeSettings({
       referral_inviter_reward_enabled: true,

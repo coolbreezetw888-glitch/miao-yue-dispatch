@@ -35,6 +35,27 @@ export const POINTS_SETTINGS_TABS: { value: PointsSettingsTab; label: string }[]
 ];
 
 /**
+ * #1037(客戶端第 1 批 C1-E02):「推薦系統」分頁可以整個藏起來(開關在 referralVisibility.ts)。
+ * 畫面一律用這支取分頁清單,不要直接用 POINTS_SETTINGS_TABS。
+ */
+export function visiblePointsSettingsTabs(
+  referralHidden: boolean,
+): { value: PointsSettingsTab; label: string }[] {
+  return referralHidden
+    ? POINTS_SETTINGS_TABS.filter((tab) => tab.value !== "referral")
+    : POINTS_SETTINGS_TABS;
+}
+
+/** 目前的分頁如果被藏起來了(例:原本停在「推薦系統」)⇒ 改回第一個分頁。 */
+export function normalizePointsSettingsTab(
+  tab: PointsSettingsTab,
+  referralHidden: boolean,
+): PointsSettingsTab {
+  const tabs = visiblePointsSettingsTabs(referralHidden);
+  return tabs.some((t) => t.value === tab) ? tab : (tabs[0]?.value ?? "calc");
+}
+
+/**
  * §4.1 第 4 點 + 權限:四個分頁只在「看得到規則」且「紅利功能開著」時渲染。
  * 讀不到設定(出錯 / 還在載入)時一律不渲染 —— 不能用預設值猜「應該是開著的」。
  */

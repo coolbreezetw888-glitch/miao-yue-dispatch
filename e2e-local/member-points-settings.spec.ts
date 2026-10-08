@@ -16,6 +16,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { primeCurrentMerchant } from "../e2e/support/app-shell";
+// #1037(客戶端第 1 批 C1-E02):「推薦系統」分頁隱藏開關。隱藏期間改驗「只有三個分頁」,
+// 推薦系統分頁本身的測試在開關關掉(恢復)時才跑 —— 不刪測試。
+import { REFERRAL_UI_HIDDEN } from "../src/modules/members/referralVisibility";
 import {
   injectSession,
   setupBonusFixture,
@@ -80,6 +83,10 @@ test("§4.1:啟用開關獨立區塊;關閉時四個分頁消失,開啟後可切
   const featureSwitch = page.getByRole("switch", { name: "啟用紅利點數功能" });
   await expect(featureSwitch).toBeChecked();
   for (const name of ["紅利計算", "點數使用", "推薦系統", "生日獎勵"]) {
+    if (name === "推薦系統" && REFERRAL_UI_HIDDEN) {
+      await expect(page.getByRole("tab", { name })).toHaveCount(0);
+      continue;
+    }
     await expect(page.getByRole("tab", { name })).toBeVisible();
   }
 
@@ -90,11 +97,13 @@ test("§4.1:啟用開關獨立區塊;關閉時四個分頁消失,開啟後可切
   await page.getByRole("switch", { name: "啟用紅利點數功能" }).click();
   await expect(page.getByRole("tab", { name: "紅利計算" })).toBeVisible({ timeout: LOAD_TIMEOUT });
 
-  await page.getByRole("tab", { name: "推薦系統" }).click();
-  // exact:「被推薦者消費是否累積紅利」也包含這串字(批次 8 本機實跑抓到的 strict mode 衝突)。
-  await expect(
-    page.getByRole("switch", { name: "推薦者消費是否累積紅利", exact: true }),
-  ).toBeVisible();
+  if (!REFERRAL_UI_HIDDEN) {
+    await page.getByRole("tab", { name: "推薦系統" }).click();
+    // exact:「被推薦者消費是否累積紅利」也包含這串字(批次 8 本機實跑抓到的 strict mode 衝突)。
+    await expect(
+      page.getByRole("switch", { name: "推薦者消費是否累積紅利", exact: true }),
+    ).toBeVisible();
+  }
 });
 
 test("§4.1:有未儲存的改動時切換分頁 → 小卡窗提示;留下來改動還在", async ({ page }) => {
@@ -173,6 +182,10 @@ test("§4.3:點數使用儲存後重新整理值仍在,範例即時顯示", asyn
 });
 
 test("§4.4:推薦系統開關 1 關閉時兩個數字欄位隱藏", async ({ page }) => {
+  test.skip(
+    REFERRAL_UI_HIDDEN,
+    "#1037:推薦系統分頁目前隱藏(referralVisibility.ts),恢復顯示時這條照跑",
+  );
   await openPointsPage(page);
   await page.getByRole("tab", { name: "推薦系統" }).click();
   // bonus-fixture 開了開關 1(referral_inviter_reward_enabled = true)。

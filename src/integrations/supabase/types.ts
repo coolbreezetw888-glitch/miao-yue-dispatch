@@ -1470,16 +1470,25 @@ export type Database = {
       }
       merchant_booking_settings: {
         Row: {
+          allow_guest_booking: boolean
           merchant_id: string
+          min_lead_hours: number
           start_time_interval_minutes: number
+          travel_buffer_minutes: number
         }
         Insert: {
+          allow_guest_booking?: boolean
           merchant_id: string
+          min_lead_hours?: number
           start_time_interval_minutes?: number
+          travel_buffer_minutes?: number
         }
         Update: {
+          allow_guest_booking?: boolean
           merchant_id?: string
+          min_lead_hours?: number
           start_time_interval_minutes?: number
+          travel_buffer_minutes?: number
         }
         Relationships: [
           {
@@ -2251,6 +2260,7 @@ export type Database = {
           id: string
           industry_type: string
           intro: string | null
+          line_friend_url: string | null
           logo_url: string | null
           name: string
           phone: string | null
@@ -2270,6 +2280,7 @@ export type Database = {
           id?: string
           industry_type: string
           intro?: string | null
+          line_friend_url?: string | null
           logo_url?: string | null
           name: string
           phone?: string | null
@@ -2289,6 +2300,7 @@ export type Database = {
           id?: string
           industry_type?: string
           intro?: string | null
+          line_friend_url?: string | null
           logo_url?: string | null
           name?: string
           phone?: string | null
@@ -3832,6 +3844,17 @@ export type Database = {
         Returns: Json
       }
       get_my_push_identity: { Args: { p_merchant_id: string }; Returns: Json }
+      get_public_available_slots: {
+        Args: {
+          p_days: number
+          p_from: string
+          p_items: Json
+          p_slug: string
+          p_staff_id: string | null
+        }
+        Returns: Json
+      }
+      get_public_booking_page: { Args: { p_slug: string }; Returns: Json }
       get_point_formula_service_items: {
         Args: { p_merchant_id: string }
         Returns: {

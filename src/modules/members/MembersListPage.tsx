@@ -109,6 +109,7 @@ import {
   type MemberIdentityFilter,
 } from "./memberIdentityStatus";
 import { RequireMembersAccess } from "./RequireMembersAccess";
+import { REFERRAL_UI_HIDDEN } from "./referralVisibility";
 import { MEMBER_STATUS_LABELS, type MemberStatus, type MemberSummary } from "./types";
 
 const UNASSIGNED_TIER_VALUE = "__unassigned__";
@@ -352,13 +353,17 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
               ]}
             />
           </FormField>
-          <FormField
-            label="推薦人(選填)"
-            help="推薦人只能在建立當下設定，建立完成之後就無法再變更了 —— 因為推薦獎勵是依這筆關係核發的。"
-            helpLabel="說明：推薦人為什麼之後不能改"
-          >
-            <ReferrerPicker merchantId={merchantId} value={referrer} onChange={setReferrer} />
-          </FormField>
+          {/* #1037 第 2 輪(主腦裁決):「推薦人」欄位跟著推薦開關一起藏。藏起來時 referrer 永遠是 null,
+              送出的 referredByMemberId 也就是 null(跟沒填一樣);資料庫與推薦獎勵邏輯不動。 */}
+          {REFERRAL_UI_HIDDEN ? null : (
+            <FormField
+              label="推薦人(選填)"
+              help="推薦人只能在建立當下設定，建立完成之後就無法再變更了 —— 因為推薦獎勵是依這筆關係核發的。"
+              helpLabel="說明：推薦人為什麼之後不能改"
+            >
+              <ReferrerPicker merchantId={merchantId} value={referrer} onChange={setReferrer} />
+            </FormField>
+          )}
           <FormField label="備註" htmlFor="member-notes">
             <FieldTextarea
               id="member-notes"
@@ -478,8 +483,8 @@ function MembersListInner() {
             </HelpToggle>
           </div>
           <FieldInput
-            aria-label="搜尋姓名、電話或推薦碼"
-            placeholder="搜尋姓名/電話/推薦碼"
+            aria-label={REFERRAL_UI_HIDDEN ? "搜尋姓名或電話" : "搜尋姓名、電話或推薦碼"}
+            placeholder={REFERRAL_UI_HIDDEN ? "搜尋姓名/電話" : "搜尋姓名/電話/推薦碼"}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -627,8 +632,9 @@ function MembersListInner() {
                       meta={
                         <>
                           {member.phone ? <span>{member.phone}</span> : null}
-                          {member.phone ? <span> ・ </span> : null}
-                          <span>推薦碼 {member.referralCode}</span>
+                          {/* #1037 第 2 輪:推薦碼跟著推薦開關一起藏(連帶分隔點)。 */}
+                          {member.phone && !REFERRAL_UI_HIDDEN ? <span> ・ </span> : null}
+                          {REFERRAL_UI_HIDDEN ? null : <span>推薦碼 {member.referralCode}</span>}
                         </>
                       }
                       onClick={() => navigate(detailPath)}

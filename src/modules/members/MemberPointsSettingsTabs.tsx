@@ -70,7 +70,6 @@ import {
   ALL_SERVICE_ITEMS_VALUE,
   BIRTHDAY_LINE_MESSAGE_MAX,
   BIRTHDAY_TEMPLATE_VARIABLES,
-  POINTS_SETTINGS_TABS,
   REDEEM_PAIR_MESSAGE,
   TIERED_NEEDS_MIN_AMOUNT_MESSAGE,
   basicFieldLabels,
@@ -88,15 +87,18 @@ import {
   formulaPreviewSentence,
   formulaToDraft,
   nextFormulaName,
+  normalizePointsSettingsTab,
   parsePointsField,
   renderBirthdayMessage,
   shouldShowOwnFormulaNote,
   validateBasicDraft,
   validateFormulaDraft,
   validateRedeemDraft,
+  visiblePointsSettingsTabs,
   type FormulaDraft,
   type PointsSettingsTab,
 } from "./memberPointsSettingsLogic";
+import { REFERRAL_UI_HIDDEN } from "./referralVisibility";
 import {
   BIRTHDAY_LINE_STATUS_LABELS,
   type MemberSettingsView,
@@ -162,7 +164,10 @@ export function MemberPointsSettingsTabs({
   settings: MemberSettingsView;
 }) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<PointsSettingsTab>("calc");
+  const [rawActiveTab, setActiveTab] = useState<PointsSettingsTab>("calc");
+  // #1037:「推薦系統」分頁藏起來時,停在那一頁的狀態一律改回第一個分頁。
+  const activeTab = normalizePointsSettingsTab(rawActiveTab, REFERRAL_UI_HIDDEN);
+  const visibleTabs = visiblePointsSettingsTabs(REFERRAL_UI_HIDDEN);
   const [dirty, setDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<PointsSettingsTab | null>(null);
   const [version, setVersion] = useState(0);
@@ -170,6 +175,7 @@ export function MemberPointsSettingsTabs({
   function handleTabChange(next: string) {
     const target = next as PointsSettingsTab;
     if (target === activeTab) return;
+    if (!visibleTabs.some((tab) => tab.value === target)) return;
     if (dirty) {
       setPendingTab(target);
       return;
@@ -199,7 +205,7 @@ export function MemberPointsSettingsTabs({
             z-20 低於頁首的 z-40,捲動時不會蓋住頁首。 */}
         <div className="sticky top-[57px] z-20 -mx-5 bg-surface px-5 pt-1">
           <UnderlineTabsList variant="pages" aria-label="紅利點數設定分頁">
-            {POINTS_SETTINGS_TABS.map((tab) => (
+            {visibleTabs.map((tab) => (
               <UnderlineTabsTrigger key={tab.value} value={tab.value}>
                 {tab.label}
               </UnderlineTabsTrigger>
@@ -212,9 +218,11 @@ export function MemberPointsSettingsTabs({
         <TabsContent value="usage" className="mt-4">
           <UsageTab key={`usage-${version}`} {...bodyProps} />
         </TabsContent>
-        <TabsContent value="referral" className="mt-4">
-          <ReferralTab key={`referral-${version}`} {...bodyProps} />
-        </TabsContent>
+        {REFERRAL_UI_HIDDEN ? null : (
+          <TabsContent value="referral" className="mt-4">
+            <ReferralTab key={`referral-${version}`} {...bodyProps} />
+          </TabsContent>
+        )}
         <TabsContent value="birthday" className="mt-4">
           <BirthdayTab key={`birthday-${version}`} {...bodyProps} />
         </TabsContent>

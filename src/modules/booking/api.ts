@@ -838,6 +838,72 @@ export async function setBookingStartTimeInterval(
 }
 
 /**
+ * 客戶端第 1 批(C1-D01):商家設定頁「線上預約」卡片的三個欄位(同一張 merchant_booking_settings 表)。
+ * 沒有那一列的商家 = 預設值(至少提前 2 小時 / 車程緩衝 0 / 允許不登入預約),不需要先補資料列。
+ * 只影響客人自己線上預約(get_public_available_slots),後台建單不受影響。
+ */
+export interface OnlineBookingSettings {
+  minLeadHours: number;
+  travelBufferMinutes: number;
+  allowGuestBooking: boolean;
+}
+
+export const DEFAULT_ONLINE_BOOKING_SETTINGS: OnlineBookingSettings = {
+  minLeadHours: 2,
+  travelBufferMinutes: 0,
+  allowGuestBooking: true,
+};
+
+// ⚠️ 三個欄位是客戶端第 1 批的 migration 新增的;src/integrations/supabase/types.ts 由 engineer A 更新。
+//    這裡讀寫都不依賴產生出來的型別(讀取結果自己檢查型別、寫入用區域型別),types.ts 更新前後都能編譯。
+interface OnlineBookingSettingsRow {
+  min_lead_hours?: unknown;
+  travel_buffer_minutes?: unknown;
+  allow_guest_booking?: unknown;
+}
+
+/** 讀商家的線上預約設定(商家設定頁用;只有管理員進得來,RLS 把關)。 */
+export async function fetchOnlineBookingSettings(
+  merchantId: string,
+): Promise<OnlineBookingSettings> {
+  const { data, error } = await supabase
+    .from("merchant_booking_settings")
+    .select("min_lead_hours, travel_buffer_minutes, allow_guest_booking")
+    .eq("merchant_id", merchantId)
+    .maybeSingle();
+  if (error) throw error;
+  const row = (data ?? null) as OnlineBookingSettingsRow | null;
+  const d = DEFAULT_ONLINE_BOOKING_SETTINGS;
+  return {
+    minLeadHours: typeof row?.min_lead_hours === "number" ? row.min_lead_hours : d.minLeadHours,
+    travelBufferMinutes:
+      typeof row?.travel_buffer_minutes === "number"
+        ? row.travel_buffer_minutes
+        : d.travelBufferMinutes,
+    allowGuestBooking:
+      typeof row?.allow_guest_booking === "boolean" ? row.allow_guest_booking : d.allowGuestBooking,
+  };
+}
+
+/** 寫入商家的線上預約設定。沿用 setBookingStartTimeInterval 的 upsert 寫法(只送這三欄,
+ * 建單時間間隔不會被蓋掉;沒有那一列時,新列的建單時間間隔用資料庫預設 30)。 */
+export async function saveOnlineBookingSettings(
+  merchantId: string,
+  settings: OnlineBookingSettings,
+): Promise<void> {
+  const payload = {
+    merchant_id: merchantId,
+    min_lead_hours: settings.minLeadHours,
+    travel_buffer_minutes: settings.travelBufferMinutes,
+    allow_guest_booking: settings.allowGuestBooking,
+  };
+  const { error } = await supabase
+    .from("merchant_booking_settings")
+    .upsert(payload as { merchant_id: string }, { onConflict: "merchant_id" });
+  if (error) throw error;
+}
+
+/**
  * SPECS-INDEX #980:建單 / 改單時間選單「只列出能約的開始時間」。
  *
  * 判斷全部在資料庫 `public.list_staff_bookable_start_times`(依商家「建單時間間隔」(5 / 10 / 15 / 30 分鐘,預設 30)產生一天的候選起點,逐一交給送出時

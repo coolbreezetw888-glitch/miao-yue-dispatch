@@ -47,10 +47,11 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  AlertNote,
   ErrorState,
   FieldColor,
   FieldInput,
@@ -77,6 +78,11 @@ import {
 } from "@/modules/booking/context";
 import { staffAvailableSlotStyle } from "@/modules/booking/bookingBlockLayout";
 import {
+  fetchOnlineBookingSettings,
+  saveOnlineBookingSettings,
+  type OnlineBookingSettings,
+} from "@/modules/booking/api";
+import {
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
   calendarStateBlockStyle,
@@ -91,8 +97,22 @@ import { useCurrentMerchant, useRefetchAccessibleMerchants } from "./context";
 import { LogoUploader } from "./LogoUploader";
 import { MerchantAdminList } from "./MerchantAdminList";
 import { ThemePresetPicker } from "./ThemePresetPicker";
+import {
+  parseMinLeadHours,
+  parseTravelBufferMinutes,
+  validateLineFriendUrl,
+} from "./onlineBookingSettingsLogic";
 import { INDUSTRY_TYPES, INDUSTRY_TYPE_LABELS } from "./types";
-import type { IndustryType } from "./types";
+import type { IndustryType, Merchant } from "./types";
+
+/** 客戶端第 1 批(C1-D01):線上預約設定的 react-query key(這一頁自己用)。 */
+const ONLINE_BOOKING_SETTINGS_QUERY_KEY = "merchant-online-booking-settings";
+
+/** line_friend_url 是客戶端第 1 批新增的欄位;types.ts 更新前 Merchant 型別還沒有它,這裡先用區域型別讀。 */
+function merchantLineFriendUrl(merchant: Merchant): string {
+  const value = (merchant as Merchant & { line_friend_url?: string | null }).line_friend_url;
+  return typeof value === "string" ? value : "";
+}
 
 /** 「基本資料/主題色系/公告」那一份主表單的 id——頁面底部固定提示列裡的儲存按鈕用 form 屬性
  * 指向它,兩顆按鈕送出的是同一份表單。 */
@@ -112,7 +132,25 @@ function MerchantSettingsPageInner() {
   const [themeCustomColor, setThemeCustomColor] = useState<string | null>(null);
   const [announcementEnabled, setAnnouncementEnabled] = useState(false);
   const [announcementContent, setAnnouncementContent] = useState("");
+  // 客戶端第 1 批(C1-D01):「線上預約」卡片。LINE 好友連結存在 merchants;其餘三個存在
+  // merchant_booking_settings(另一張表,另外讀)。數字欄位用字串存,才能顯示「打錯了」的提示。
+  const [lineFriendUrl, setLineFriendUrl] = useState("");
+  const [minLeadHours, setMinLeadHours] = useState("");
+  const [travelBufferMinutes, setTravelBufferMinutes] = useState("");
+  const [allowGuestBooking, setAllowGuestBooking] = useState(true);
+  const [onlineSettingsLoadedFor, setOnlineSettingsLoadedFor] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  const onlineSettingsQuery = useQuery({
+    queryKey: [ONLINE_BOOKING_SETTINGS_QUERY_KEY, merchant?.id ?? null],
+    queryFn: () => fetchOnlineBookingSettings(merchant!.id),
+    enabled: Boolean(merchant?.id),
+  });
+  const onlineSettings: OnlineBookingSettings | null =
+    onlineSettingsQuery.data && onlineSettingsLoadedFor === merchant?.id
+      ? onlineSettingsQuery.data
+      : null;
 
   // 每次切換到不同商家時，把表單狀態重新灌成該商家目前的資料。
   useEffect(() => {
@@ -127,7 +165,31 @@ function MerchantSettingsPageInner() {
     setThemeCustomColor(merchant.theme_custom_color);
     setAnnouncementEnabled(merchant.announcement_enabled);
     setAnnouncementContent(merchant.announcement_content ?? "");
+    setLineFriendUrl(merchantLineFriendUrl(merchant));
   }, [merchant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 線上預約設定讀到之後灌一次(同一間商家只灌一次 —— 視窗切回來時 react-query 會自動重抓,
+  // 不能把正在打的字洗掉;存檔成功後會重設 loadedFor,讓它從資料庫最新值重新灌)。
+  useEffect(() => {
+    const data = onlineSettingsQuery.data;
+    if (!merchant || !data || onlineSettingsQuery.isFetching) return;
+    if (onlineSettingsLoadedFor === merchant.id) return;
+    setMinLeadHours(String(data.minLeadHours));
+    setTravelBufferMinutes(String(data.travelBufferMinutes));
+    setAllowGuestBooking(data.allowGuestBooking);
+    setOnlineSettingsLoadedFor(merchant.id);
+  }, [merchant, onlineSettingsQuery.data, onlineSettingsQuery.isFetching, onlineSettingsLoadedFor]);
+
+  const isOnSiteIndustry = industryType === "on_site_dispatch";
+  const lineFriendUrlCheck = validateLineFriendUrl(lineFriendUrl);
+  const minLeadHoursCheck = parseMinLeadHours(minLeadHours);
+  const travelBufferCheck = parseTravelBufferMinutes(travelBufferMinutes);
+  const onlineSettingsDirty = onlineSettings
+    ? minLeadHours.trim() !== String(onlineSettings.minLeadHours) ||
+      (isOnSiteIndustry &&
+        travelBufferMinutes.trim() !== String(onlineSettings.travelBufferMinutes)) ||
+      allowGuestBooking !== onlineSettings.allowGuestBooking
+    : false;
 
   // 使用者回報(2026-09-24):「儲存變更」按鈕在頁面最下方(要捲過地址/電話/主題色/公告/管理員
   // 名單才看得到),而上方的「產業模組」下拉選單改完之後沒有任何提示,使用者以為選了就生效,
@@ -148,7 +210,9 @@ function MerchantSettingsPageInner() {
       themePreset !== merchant.theme_preset ||
       themeCustomColor !== merchant.theme_custom_color ||
       announcementEnabled !== merchant.announcement_enabled ||
-      announcementContent !== (merchant.announcement_content ?? "")
+      announcementContent !== (merchant.announcement_content ?? "") ||
+      lineFriendUrl.trim() !== merchantLineFriendUrl(merchant) ||
+      onlineSettingsDirty
     : false;
 
   // 2026-09-24 深夜巡檢修正(重疊事故):底部的未儲存提示列跟 PWA 安裝提示條原本各自寫死
@@ -195,6 +259,15 @@ function MerchantSettingsPageInner() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // C1-D01 / D02:線上預約卡片的欄位先檢查(資料庫有 check 當最後一道,但那個錯誤訊息看不懂)。
+    const onlineFieldsInvalid =
+      !lineFriendUrlCheck.ok ||
+      (onlineSettings !== null &&
+        (!minLeadHoursCheck.ok || (isOnSiteIndustry && !travelBufferCheck.ok)));
+    if (onlineFieldsInvalid) {
+      toast.error("「線上預約」有欄位填錯了，請先修正標紅的欄位");
+      return;
+    }
     setSaving(true);
     try {
       await updateMerchantSettings(merchant!.id, {
@@ -208,7 +281,23 @@ function MerchantSettingsPageInner() {
         themeCustomColor,
         announcementEnabled,
         announcementContent: announcementContent || null,
+        lineFriendUrl: lineFriendUrlCheck.ok ? lineFriendUrlCheck.value : null,
       });
+      if (onlineSettings && onlineSettingsDirty && minLeadHoursCheck.ok) {
+        await saveOnlineBookingSettings(merchant!.id, {
+          minLeadHours: minLeadHoursCheck.value,
+          // 到店商家看不到這一欄 ⇒ 保留資料庫原本的值,不動它。
+          travelBufferMinutes:
+            isOnSiteIndustry && travelBufferCheck.ok
+              ? travelBufferCheck.value
+              : onlineSettings.travelBufferMinutes,
+          allowGuestBooking,
+        });
+        await queryClient.invalidateQueries({
+          queryKey: [ONLINE_BOOKING_SETTINGS_QUERY_KEY, merchant!.id],
+        });
+        setOnlineSettingsLoadedFor(null);
+      }
       await refetchAccessibleMerchants();
       toast.success("商家設定已儲存");
     } catch (err) {
@@ -322,7 +411,7 @@ function MerchantSettingsPageInner() {
 
             <FormField
               label="預約網址"
-              help="這組網址代碼由系統自動產生，目前不開放自行修改。實際的客戶預約頁面會在「客戶端自助預約」模組推出。"
+              help="這組網址代碼由系統自動產生，目前不開放自行修改。客人打開這個網址就能看服務、選時間，線上送出預約即將開放。"
               helpLabel="說明：預約網址是什麼、可以改嗎"
             >
               {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
@@ -372,6 +461,98 @@ function MerchantSettingsPageInner() {
                 placeholder="公告關閉時，這裡的內容不會顯示，但會保留"
               />
             </FormField>
+          </CardContent>
+        </Card>
+
+        {/* 客戶端第 1 批(C1-D01):線上預約。只影響客人自己在預約頁線上預約,後台建單不受影響。 */}
+        <Card data-testid="online-booking-settings-card">
+          <CardHeader>
+            <CardTitle>線上預約</CardTitle>
+            <CardDescription>客人在預約頁自己線上預約時的規則與聯絡方式</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <FormField
+              label="LINE 好友連結"
+              htmlFor="settings-line-friend-url"
+              help="客人在預約頁按「LINE 聯絡店家」會打開這個連結。到 LINE 官方帳號管理後台複製「加入好友」網址貼上。"
+              helpLabel="說明：LINE 好友連結要貼什麼"
+              error={lineFriendUrlCheck.ok ? null : lineFriendUrlCheck.message}
+            >
+              <FieldInput
+                id="settings-line-friend-url"
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                placeholder="https://lin.ee/..."
+                value={lineFriendUrl}
+                onChange={(e) => setLineFriendUrl(e.target.value)}
+              />
+            </FormField>
+
+            {onlineSettingsQuery.isError ? (
+              <ErrorState
+                title="讀不到線上預約設定"
+                reason="可能是網路不穩"
+                onRetry={() => void onlineSettingsQuery.refetch()}
+              />
+            ) : !onlineSettings ? (
+              <LoadingSkeleton variant="lines" rows={3} />
+            ) : (
+              <>
+                <FormField
+                  label="至少提前幾小時"
+                  htmlFor="settings-min-lead-hours"
+                  help="客人線上預約時，最早只能約幾小時以後的時段。0 = 不限制。只影響客人自己預約，後台建單不受影響。"
+                  helpLabel="說明：至少提前幾小時是什麼意思"
+                  error={minLeadHoursCheck.ok ? null : minLeadHoursCheck.message}
+                >
+                  <FieldInput
+                    id="settings-min-lead-hours"
+                    inputMode="numeric"
+                    className="tabular-nums"
+                    value={minLeadHours}
+                    onChange={(e) => setMinLeadHours(e.target.value)}
+                  />
+                </FormField>
+
+                {isOnSiteIndustry ? (
+                  <FormField
+                    label="車程緩衝（分鐘）"
+                    htmlFor="settings-travel-buffer-minutes"
+                    help="每張預約之間要留給服務人員移動的時間。只影響客人線上預約可以選的時段，後台建單不受影響、也不會提醒。"
+                    helpLabel="說明：車程緩衝是什麼意思"
+                    error={travelBufferCheck.ok ? null : travelBufferCheck.message}
+                  >
+                    <FieldInput
+                      id="settings-travel-buffer-minutes"
+                      inputMode="numeric"
+                      className="tabular-nums"
+                      value={travelBufferMinutes}
+                      onChange={(e) => setTravelBufferMinutes(e.target.value)}
+                    />
+                  </FormField>
+                ) : null}
+
+                <SwitchRow
+                  id="settings-allow-guest-booking"
+                  title="允許不登入預約"
+                  description="關閉後，客人一定要用 LINE 登入才能預約。"
+                  descriptionMode="popover"
+                  helpLabel="說明：允許不登入預約是什麼意思"
+                  checked={allowGuestBooking}
+                  onCheckedChange={setAllowGuestBooking}
+                >
+                  {/* 「現在的狀態跟你以為的不一樣」⇒ 常駐黃色提醒,不收進問號(ui-overlay-patterns 二)。 */}
+                  <AlertNote className="mt-2.5">這個設定會在登入功能推出後才生效。</AlertNote>
+                </SwitchRow>
+              </>
+            )}
+
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {
+                "預約頁的聯絡按鈕：有填 LINE 好友連結就顯示「LINE 聯絡店家」，有填電話（基本資料）就顯示「撥打電話」；兩個都填就兩顆都顯示。"
+              }
+            </p>
           </CardContent>
         </Card>
 

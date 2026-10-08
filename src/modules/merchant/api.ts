@@ -91,6 +91,8 @@ export interface UpdateMerchantSettingsInput {
   announcementEnabled?: boolean;
   announcementContent?: string | null;
   logoUrl?: string | null;
+  /** 客戶端第 1 批(C1-D01):LINE 好友連結(預約頁「LINE 聯絡店家」按鈕)。null = 清除。 */
+  lineFriendUrl?: string | null;
 }
 
 /**
@@ -105,7 +107,9 @@ export async function updateMerchantSettings(
   merchantId: string,
   input: UpdateMerchantSettingsInput,
 ): Promise<void> {
-  const payload: TablesUpdate<"merchants"> = {
+  // ⚠️ line_friend_url 是客戶端第 1 批 migration 新增的欄位,types.ts 更新前產生出來的型別還沒有它,
+  //    所以 payload 用「既有型別 + 這一欄」的區域型別(types.ts 更新後這個交集一樣成立)。
+  const payload: TablesUpdate<"merchants"> & { line_friend_url?: string | null } = {
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.industryType !== undefined ? { industry_type: input.industryType } : {}),
     ...(input.address !== undefined ? { address: input.address } : {}),
@@ -121,9 +125,13 @@ export async function updateMerchantSettings(
       ? { announcement_content: input.announcementContent }
       : {}),
     ...(input.logoUrl !== undefined ? { logo_url: input.logoUrl } : {}),
+    ...(input.lineFriendUrl !== undefined ? { line_friend_url: input.lineFriendUrl } : {}),
   };
 
-  const { error } = await supabase.from("merchants").update(payload).eq("id", merchantId);
+  const { error } = await supabase
+    .from("merchants")
+    .update(payload as TablesUpdate<"merchants">)
+    .eq("id", merchantId);
   if (error) throw error;
 }
 

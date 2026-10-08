@@ -53,6 +53,7 @@ import ReportExportCenterPage from "@/modules/data-tools/ReportExportCenterPage"
 import IndustryTransferWizardPage from "@/modules/data-tools/IndustryTransferWizardPage";
 import PushEventSettingsPage from "@/modules/push-notifications/PushEventSettingsPage";
 import PushLogsPage from "@/modules/push-notifications/PushLogsPage";
+import PublicBookingPage from "@/modules/public-booking/PublicBookingPage";
 
 function NotFound() {
   return (
@@ -164,6 +165,9 @@ export default function App() {
         {/* 對應規格書(帳號登入安全性優化)3.2.1:忘記密碼申請頁,公開頁面,跟 /signin、/signup
             同層級,不需要登入狀態。 */}
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        {/* 客戶端第 1 批(C1-A01):公開預約頁。不需要登入、不套後台外殼(AppLayout);
+            已登入後台的人打開也是客人版畫面,不讀目前操作中的商家。 */}
+        <Route path="/booking/:slug" element={<PublicBookingPage />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="*" element={<NotFound />} />

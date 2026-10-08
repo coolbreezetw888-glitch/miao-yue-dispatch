@@ -17,6 +17,7 @@ import {
   formulaItemOptions,
   formulaPreviewSentence,
   nextFormulaName,
+  normalizePointsSettingsTab,
   renderBirthdayMessage,
   shouldRenderPointsTabs,
   shouldShowOwnFormulaNote,
@@ -24,6 +25,7 @@ import {
   validateFormulaDraft,
   validateRedeemDraft,
   type FormulaDraft,
+  visiblePointsSettingsTabs,
 } from "./memberPointsSettingsLogic";
 import {
   BIRTHDAY_LINE_STATUS_LABELS,
@@ -373,5 +375,30 @@ describe("§3.14 局部 patch(取代整列 upsert)", () => {
       referral_invitee_earning_enabled: true,
       birthday_line_message: "生日快樂！本店已贈送您 {{points}} 點紅利，祝您有美好的一天。",
     });
+  });
+});
+
+describe("#1037 推薦系統分頁隱藏(C1-E02)", () => {
+  it("隱藏 ⇒ 只剩三個分頁(紅利計算 / 點數使用 / 生日獎勵),順序不變", () => {
+    expect(visiblePointsSettingsTabs(true).map((t) => t.label)).toEqual([
+      "紅利計算",
+      "點數使用",
+      "生日獎勵",
+    ]);
+  });
+
+  it("不隱藏 ⇒ 四個分頁照舊", () => {
+    expect(visiblePointsSettingsTabs(false).map((t) => t.value)).toEqual([
+      "calc",
+      "usage",
+      "referral",
+      "birthday",
+    ]);
+  });
+
+  it("停在推薦系統分頁的狀態 ⇒ 隱藏時改回第一個分頁;其他分頁不受影響", () => {
+    expect(normalizePointsSettingsTab("referral", true)).toBe("calc");
+    expect(normalizePointsSettingsTab("birthday", true)).toBe("birthday");
+    expect(normalizePointsSettingsTab("referral", false)).toBe("referral");
   });
 });

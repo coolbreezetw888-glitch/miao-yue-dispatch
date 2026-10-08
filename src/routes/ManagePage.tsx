@@ -51,6 +51,7 @@ import {
   Coins,
   Copy,
   Download,
+  ExternalLink,
   FileBarChart,
   Gift,
   Headset,
@@ -105,6 +106,7 @@ import type { MerchantAgent } from "@/modules/staff-agent/types";
 import { MyLineBindingCard } from "@/modules/line-notifications/MyLineBindingCard";
 import { MyPushSubscriptionCard } from "@/modules/push-notifications/MyPushSubscriptionCard";
 import { SCHEDULING_FEATURE_HIDDEN } from "@/modules/scheduling/featureVisibility";
+import { REFERRAL_UI_HIDDEN } from "@/modules/members/referralVisibility";
 
 import { useAppLayoutContext } from "./AppLayout";
 import {
@@ -359,7 +361,10 @@ function EditProfileDialog({
  * 直接印出整段 booking_slug 純文字,這裡改成用「複製連結」按鈕操作,不在畫面上顯示整段網址。
  * 商家設定頁原本那個區塊保留不移除(使用者原話:「原本商家設定內的保留不移除」)。
  * 實際的客戶預約頁面要等「客戶端自助預約」模組(模組 13)推出才會真正上線,這裡先讓連結可以複製
- * 起來備用,不是本模組新增的功能承諾。 */
+ * 起來備用,不是本模組新增的功能承諾。
+ *
+ * 客戶端第 1 批(C1-E01,2026-10-08):公開預約頁 /booking/<代碼> 已經上線(看得到、能選,還不能送出),
+ * 這裡多一顆「開啟」(另開新分頁),說明文字跟著改。兩顆都是 ② 次要:這一頁的主角是下面的功能卡片。 */
 function BookingUrlCard() {
   const { merchant } = useCurrentMerchant();
   const bookingSlug = merchant?.booking_slug ?? null;
@@ -378,21 +383,36 @@ function BookingUrlCard() {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-foreground">預約網址</p>
         <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-          顧客預約用的專屬連結，實際頁面會在「客戶端自助預約」模組推出後才能使用。
+          顧客預約用的專屬連結。目前客人可以看服務、選時間，線上送出預約即將開放。
         </p>
       </div>
-      {/* ② 次要(skill 二之三)。 */}
-      <Button
-        type="button"
-        variant="neutral"
-        size="card"
-        className="shrink-0"
-        onClick={handleCopy}
-        disabled={!bookingSlug}
-      >
-        <Copy className="mr-1.5 h-3.5 w-3.5" />
-        複製連結
-      </Button>
+      <div className="flex shrink-0 gap-2">
+        {/* ② 次要(skill 二之三)。 */}
+        <Button
+          type="button"
+          variant="neutral"
+          size="card"
+          className="shrink-0"
+          onClick={handleCopy}
+          disabled={!bookingSlug}
+        >
+          <Copy className="mr-1.5 h-3.5 w-3.5" />
+          複製連結
+        </Button>
+        {bookingSlug ? (
+          <Button asChild variant="neutral" size="card" className="shrink-0">
+            <a
+              href={`/booking/${bookingSlug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="booking-url-open"
+            >
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              開啟
+            </a>
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -690,7 +710,10 @@ export default function ManagePage() {
       label: "會員管理",
       // SPECS-INDEX #830(2026-09-29):點數的餘額/異動歷史/登記兌換/手動調整整組從「紅利點數管理」
       // 搬到這裡的會員詳情頁,描述補上,讓使用者從卡片就看得出點數交易在這裡操作。
-      description: "管理會員基本資料、推薦名單，以及各會員的點數兌換、調整與異動歷史",
+      // #1037 第 2 輪(主腦裁決):推薦畫面隱藏期間,說明不提「推薦名單」(開關在 members/referralVisibility.ts)。
+      description: REFERRAL_UI_HIDDEN
+        ? "管理會員基本資料，以及各會員的點數兌換、調整與異動歷史"
+        : "管理會員基本資料、推薦名單，以及各會員的點數兌換、調整與異動歷史",
       icon: UserRound,
       visible: showMembersCard,
     },
