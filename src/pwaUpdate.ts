@@ -77,11 +77,99 @@ function markUpdateAvailable(worker: ServiceWorker, isNewDetection: boolean): vo
   updateAvailableListeners.forEach((listener) => listener({ isNewDetection }));
 }
 
+// ─── SPECS-INDEX #1014(第 19 批,2026-10-08):下拉刷新 / 切回前景時也主動檢查一次新版本 ─────────
+// 使用者回報:手機下拉重新整理不會出現「有新版本」提示,要關掉 App 再開才會。根因:原本只有
+// 「頁面載入時瀏覽器自己檢查」跟「每小時 setInterval」兩個時機會呼叫 `registration.update()`;
+// 下拉刷新(PullToRefresh.tsx)只重抓 react-query 資料,手機 App 切到背景再切回來也不會重新載入頁面
+// ⇒ 新版本上線後,使用者怎麼下拉都看不到提示。
+// 補兩個時機(都走下面同一個 checkForServiceWorkerUpdate,共用節流):
+//   ① 下拉刷新放開時(PullToRefresh.tsx 呼叫)。
+//   ② App 從背景切回前景(document visibilitychange → visible,主腦補上的決定,可單獨退:
+//      把 registerServiceWorkerAutoUpdate 裡那段 visibilitychange 監聽刪掉即可)。
+// 檢查到新版本之後走的是**原本那條** updatefound → installed → markUpdateAvailable(..., true) 路徑,
+// 提示卡外觀、「稍後」規則(#966 isNewDetection)完全不變;**不會**強制 reload、也不會自動套用。
+
+/** 兩次主動檢查之間至少間隔這麼久(主腦補上的決定:避免連續下拉、頻繁切換 App 時一直打伺服器)。 */
+export const SERVICE_WORKER_UPDATE_CHECK_THROTTLE_MS = 30 * 1000;
+
+/** 註冊完成後拿到的 registration;還沒註冊好(或瀏覽器不支援)時是 null,檢查直接略過。 */
+let activeRegistration: ServiceWorkerRegistration | null = null;
+/** 上一次「真的送出」檢查的時間(performance.now());null = 還沒檢查過。 */
+let lastUpdateCheckAt: number | null = null;
+/** 檢查進行中就不再疊一個新的。 */
+let updateCheckInFlight = false;
+/** registerServiceWorkerAutoUpdate 只准生效一次(避免重複註冊 visibilitychange / controllerchange 監聽)。 */
+let autoUpdateRegistered = false;
+/** 掛上去的監聽 / 計時器的拆除函式。正式環境整個頁面生命週期只掛一次、不需要拆;
+ * 留著是讓測試能完整清乾淨(也確保每一個監聽都「拆得掉」)。 */
+const autoUpdateTeardowns: Array<() => void> = [];
+
+/** 主動檢查一次有沒有新版本(`registration.update()`)。
+ *   ・30 秒內已經檢查過、或上一次還沒結束 ⇒ 直接略過(節流)。節流是從「送出檢查」那一刻算,
+ *     失敗(離線)也算一次,離線時連續下拉不會一直重試。
+ *   ・**永遠不會 reject**:任何錯誤(離線、伺服器錯誤、還沒註冊好、瀏覽器不支援)都安靜吞掉,
+ *     呼叫端(下拉刷新)不需要也不應該等它、更不會因此報錯或卡住。
+ *   ・只負責「戳一下」;偵測到新版本之後怎麼通知,一律交給既有的 updatefound 監聽。
+ * 回傳 true = 這次真的送出了檢查;false = 被節流或沒有 registration 而略過(給測試看,呼叫端可忽略)。 */
+export function checkForServiceWorkerUpdate(now: number = performance.now()): Promise<boolean> {
+  const registration = activeRegistration;
+  if (!registration) return Promise.resolve(false);
+  if (updateCheckInFlight) return Promise.resolve(false);
+  if (
+    lastUpdateCheckAt !== null &&
+    now - lastUpdateCheckAt < SERVICE_WORKER_UPDATE_CHECK_THROTTLE_MS
+  ) {
+    return Promise.resolve(false);
+  }
+  lastUpdateCheckAt = now;
+  updateCheckInFlight = true;
+  let pending: Promise<unknown>;
+  try {
+    pending = Promise.resolve(registration.update());
+  } catch {
+    pending = Promise.resolve();
+  }
+  return pending.then(
+    () => {
+      updateCheckInFlight = false;
+      return true;
+    },
+    () => {
+      // 網路離線或其他暫時性錯誤,靜默忽略,下一次(下拉 / 切回前景 / 每小時)還會再檢查。
+      updateCheckInFlight = false;
+      return true;
+    },
+  );
+}
+
+/** 只給單元測試用:把模組層級的狀態清回初始值。 */
+export function __resetServiceWorkerUpdateStateForTest(): void {
+  autoUpdateTeardowns.splice(0).forEach((teardown) => teardown());
+  pendingWorker = null;
+  updateAvailableListeners.clear();
+  activeRegistration = null;
+  lastUpdateCheckAt = null;
+  updateCheckInFlight = false;
+  autoUpdateRegistered = false;
+}
+
+/** App 切回前景時檢查一次新版本(#1014 ②)。具名函式,確保只會被註冊一次、需要時也能移除。 */
+function handleVisibilityChangeForUpdateCheck(): void {
+  if (document.visibilityState === "visible") {
+    void checkForServiceWorkerUpdate();
+  }
+}
+
 export function registerServiceWorkerAutoUpdate(): void {
   if (!("serviceWorker" in navigator)) return;
+  // #1014:防止被呼叫兩次時重複掛 load / visibilitychange / controllerchange 監聽與 setInterval。
+  if (autoUpdateRegistered) return;
+  autoUpdateRegistered = true;
 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js", { scope: "/" }).then((registration) => {
+  const serviceWorkerContainer = navigator.serviceWorker;
+  const handleLoad = () => {
+    serviceWorkerContainer.register("/sw.js", { scope: "/" }).then((registration) => {
+      activeRegistration = registration;
       // 頁面載入當下如果剛好已經有一個新版本卡在 waiting(例如上一次分頁關閉前使用者還沒按下
       // 「重新整理」),視同「偵測到新版本」,通知訂閱者顯示提示條——不再像舊版一樣立刻自動送出
       // SKIP_WAITING。
@@ -107,16 +195,25 @@ export function registerServiceWorkerAutoUpdate(): void {
       // 瀏覽器本身會在每次導覽時自動檢查一次新版本,但如果使用者整天開著同一個分頁完全不做
       // 任何導覽,永遠不會觸發那個檢查——這裡額外每小時主動戳一次,確保這種情境也能在合理時間
       // 內偵測到新版本(偵測到之後一樣只顯示提示條,不會自動整理)。
-      window.setInterval(
+      // #1014:改走 checkForServiceWorkerUpdate(共用節流、錯誤一律靜默忽略),行為跟原本一樣。
+      const intervalId = window.setInterval(
         () => {
-          registration.update().catch(() => {
-            // 網路離線或其他暫時性錯誤,靜默忽略,下一次還會再檢查一次。
-          });
+          void checkForServiceWorkerUpdate();
         },
         60 * 60 * 1000,
       );
+      autoUpdateTeardowns.push(() => window.clearInterval(intervalId));
     });
-  });
+  };
+  window.addEventListener("load", handleLoad, { once: true });
+  autoUpdateTeardowns.push(() => window.removeEventListener("load", handleLoad));
+
+  // #1014 ②:手機 App 從背景切回前景(或電腦切回這個分頁)⇒ 檢查一次新版本(受 30 秒節流)。
+  // 整個頁面生命週期只掛這一次(上面 autoUpdateRegistered 擋住重複呼叫),不會累積。
+  document.addEventListener("visibilitychange", handleVisibilityChangeForUpdateCheck);
+  autoUpdateTeardowns.push(() =>
+    document.removeEventListener("visibilitychange", handleVisibilityChangeForUpdateCheck),
+  );
 
   // 新版本 skipWaiting 後會觸發 controllerchange——這是真正「新版本已經接管這個分頁」的訊號,
   // 這時候重新整理拿到新的 JS/CSS/HTML。**只有使用者主動按下 UpdateAvailableHint.tsx 的
@@ -124,9 +221,13 @@ export function registerServiceWorkerAutoUpdate(): void {
   // 這裡**——不會有「使用者還沒同意,畫面卻自己跳掉」的情況。用 refreshing 旗標避免重複觸發
   // 造成無限重新整理迴圈(標準的 workbox/PWA 教學都會提醒這個防護,不能省略)。
   let refreshing = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
+  const handleControllerChange = () => {
     if (refreshing) return;
     refreshing = true;
     window.location.reload();
-  });
+  };
+  serviceWorkerContainer.addEventListener("controllerchange", handleControllerChange);
+  autoUpdateTeardowns.push(() =>
+    serviceWorkerContainer.removeEventListener("controllerchange", handleControllerChange),
+  );
 }

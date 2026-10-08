@@ -3,6 +3,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
+// #1014:下拉刷新時會呼叫 pwaUpdate.ts 的 checkForServiceWorkerUpdate() 主動檢查新版本。
+// 這裡 mock 掉,只驗「有沒有呼叫、失敗/卡住會不會影響刷新」;檢查本身的節流與錯誤處理在 src/pwaUpdate.test.ts。
+const { checkForServiceWorkerUpdate } = vi.hoisted(() => ({
+  checkForServiceWorkerUpdate: vi.fn((): Promise<boolean> => Promise.resolve(true)),
+}));
+vi.mock("@/pwaUpdate", () => ({ checkForServiceWorkerUpdate }));
+
 import { PullToRefresh } from "./PullToRefresh";
 
 let queryClient: QueryClient;
@@ -52,6 +59,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  checkForServiceWorkerUpdate.mockReset();
+  checkForServiceWorkerUpdate.mockImplementation(() => Promise.resolve(true));
   Object.defineProperty(window, "innerWidth", { configurable: true, value: originalWidth });
   document.body.removeAttribute("data-scroll-locked");
 });
@@ -130,6 +139,53 @@ describe("PullToRefresh", () => {
     setup();
     await pull(screen.getByTestId("content"), 150);
     expect(refetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("#1014 下拉刷新 ⇒ 同時主動檢查一次新版本", async () => {
+    setup();
+    await pull(screen.getByTestId("content"), 120);
+    expect(refetchSpy).toHaveBeenCalledWith({ type: "active" });
+    expect(checkForServiceWorkerUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("#1014 沒觸發刷新(沒超過門檻 / 電腦版)⇒ 也不檢查新版本", async () => {
+    setup();
+    await pull(screen.getByTestId("content"), 50);
+    expect(checkForServiceWorkerUpdate).not.toHaveBeenCalled();
+    cleanup();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1280 });
+    setup();
+    await pull(screen.getByTestId("content"), 150);
+    expect(checkForServiceWorkerUpdate).not.toHaveBeenCalled();
+  });
+
+  it("#1014 🔴 版本檢查一直沒回應 ⇒ 下拉刷新照樣結束、指示器照樣收起(不等它、不卡住)", async () => {
+    checkForServiceWorkerUpdate.mockImplementation(() => new Promise<boolean>(() => {}));
+    setup();
+    await pull(screen.getByTestId("content"), 120);
+    expect(refetchSpy).toHaveBeenCalledWith({ type: "active" });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 650));
+    });
+    expect(screen.queryByTestId("pull-to-refresh-indicator")).not.toBeInTheDocument();
+  });
+
+  it("#1014 🔴 版本檢查失敗(reject)⇒ 不報錯、刷新照常完成", async () => {
+    checkForServiceWorkerUpdate.mockImplementation(() => Promise.reject(new Error("offline")));
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      setup();
+      await pull(screen.getByTestId("content"), 120);
+      expect(refetchSpy).toHaveBeenCalledWith({ type: "active" });
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 650));
+      });
+      expect(screen.queryByTestId("pull-to-refresh-indicator")).not.toBeInTheDocument();
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 
   it("掛著時 html / body 設 overscroll-behavior-y: contain(避免跟瀏覽器原生下拉刷新同時觸發),卸載後還原", () => {

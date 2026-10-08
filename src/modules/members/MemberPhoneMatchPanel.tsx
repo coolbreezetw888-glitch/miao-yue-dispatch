@@ -15,6 +15,8 @@
 //                             那正是第一波「面板講假話」的來源。
 //   C. 電話完全相等     → 一行「將連結既有客戶:{姓名}」(說明,不是按鈕);黑名單 ⇒ 上方常駐 `!`
 //                          其餘開頭相符的候選不再列出。
+//                          #1013(第 19 批):說明下方仍列出「完全相等的那一位」(同狀態 B 的清單樣式),
+//                          點了就帶入資料;之前只有說明文字,客服只能故意少打一碼才帶得進來。
 //
 // 已移除(#915):「建立正式會員」小卡窗(QuickCreateMemberDialog)與它的成功 toast、
 // 「+ 這支電話的新客戶」按鈕(#931 之後同一支電話不允許再建一位)、「清除連結」按鈕
@@ -198,6 +200,9 @@ export function MemberPhoneMatchPanel({
             <span className="text-muted-foreground">電話已更改，儲存後這筆訂單會改掛到：</span>
             <span className="break-words text-foreground">{editState.match.name}</span>
           </p>
+          {/* #1013(第 19 批):電話打完整時也要能一鍵帶入這位客戶的資料(效果同 E1 點選:只帶入,
+              不設定補掛)。之前 E2 只有說明文字,客服得故意少打一碼才點得到。 */}
+          <CandidateList candidates={[editState.match]} onApplyCandidate={onApplyCandidate} />
           {consequence}
         </div>
       );
@@ -252,10 +257,16 @@ export function MemberPhoneMatchPanel({
             <span className="text-muted-foreground">(點一下即可連結到這筆訂單)</span>
           </button>
         ) : (
-          <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed">
-            <span className="text-muted-foreground">將連結既有客戶：</span>
-            <span className="break-words text-foreground">{match.name}</span>
-          </p>
+          <>
+            <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm leading-relaxed">
+              <span className="text-muted-foreground">將連結既有客戶：</span>
+              <span className="break-words text-foreground">{match.name}</span>
+            </p>
+            {/* #1013(第 19 批):電話打完整、對到既有客戶時,清單照樣列出這一位,點了就帶入
+                (跟打到一半點選完全一樣,走同一個 onApplyCandidate)。不自動帶入:避免蓋掉客服
+                已經手動填好的姓名 / 地址。其他只是開頭相符的候選仍不列出。 */}
+            <CandidateList candidates={[match]} onApplyCandidate={onApplyCandidate} />
+          </>
         )}
       </div>
     );

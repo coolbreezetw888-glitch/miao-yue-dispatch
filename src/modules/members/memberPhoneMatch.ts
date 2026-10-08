@@ -31,7 +31,8 @@ export function normalizeCustomerPhone(phone: string | null | undefined): string
  * 面板三種狀態(§12.2 表格):
  *   A. hidden —— 沒有候選(含不足 4 位、查詢中、查詢失敗)⇒ 完全不顯示
  *   B. prefix —— 有候選,但沒有任何一位的電話跟欄位完全相等 ⇒ 列出「開頭相符的客戶」
- *   C. exact  —— 候選中有一位電話完全相等 ⇒ 一行「將連結既有客戶:{姓名}」,其餘候選不再列出
+ *   C. exact  —— 候選中有一位電話完全相等 ⇒ 一行「將連結既有客戶:{姓名}」+ 只列那一位的候選清單
+ *               (#1013:點了帶入資料),其餘開頭相符的候選不再列出
  */
 export type PhoneMatchPanelState =
   | { kind: "hidden" }

@@ -220,8 +220,8 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     expect(nameInput().value).toBe("李小華");
     expect(addressInput()?.value).toBe("台北市信義路 1 號");
     expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
-    // 狀態 C 不再列出其他開頭相符的候選
-    expect(screen.queryByText(/開頭相符的客戶/)).not.toBeInTheDocument();
+    // 狀態 C 不再列出其他開頭相符的候選;#1013 起只列電話完全相等的那一位(可再點一次帶入)
+    expect(screen.getAllByRole("button", { name: /李小華|陳大同/ })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /陳大同/ })).not.toBeInTheDocument();
   });
 
@@ -253,10 +253,60 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
     type(addressInput() as HTMLInputElement, "客服自己打的地址");
     type(phoneInput(), "0903111111");
 
-    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
-    expect(screen.getByText("李小華")).toBeInTheDocument();
+    expect(screen.getByText("將連結既有客戶：").parentElement).toHaveTextContent(
+      "將連結既有客戶：李小華",
+    );
     expect(nameInput().value).toBe("客服自己打的名字");
     expect(addressInput()?.value).toBe("客服自己打的地址");
+  });
+
+  // ─── #1013(第 19 批):電話打完整、對到既有客戶 ⇒ 清單照樣列出那一位,點了就帶入 ───
+  it("#1013 狀態 C:打完整電話 ⇒「將連結既有客戶」保留,下方清單只列那一位,點了三欄帶入(同打一半點選)", () => {
+    renderForm("on_site_dispatch");
+    type(nameInput(), "客服先打的名字");
+    type(addressInput() as HTMLInputElement, "先打的地址");
+    type(phoneInput(), "0903111111");
+
+    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
+    expect(screen.getByText("開頭相符的客戶(點一下帶入資料)")).toBeInTheDocument();
+    const rows = screen.getAllByRole("button", { name: /李小華|陳大同/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("李小華");
+    expect(rows[0]?.className).not.toMatch(/\bbg-(brand|primary)\b/);
+    // 沒點之前不自動帶入
+    expect(nameInput().value).toBe("客服先打的名字");
+    expect(addressInput()?.value).toBe("先打的地址");
+
+    fireEvent.click(rows[0] as HTMLElement);
+    expect(phoneInput().value).toBe("0903111111");
+    expect(nameInput().value).toBe("李小華");
+    expect(addressInput()?.value).toBe("台北市信義路 1 號");
+    expect(screen.getByText("將連結既有客戶：")).toBeInTheDocument();
+  });
+
+  it("#1013 狀態 C 帶分隔符號的完整電話(0903-111-111)也列出那一位可點", () => {
+    renderForm("on_site_dispatch");
+    type(phoneInput(), "0903-111-111");
+    fireEvent.click(screen.getByRole("button", { name: /李小華/ }));
+    expect(nameInput().value).toBe("李小華");
+  });
+
+  it("#1013 狀態 C + 黑名單:清單那一位帶「黑名單」標籤,常駐 `!` 照舊", () => {
+    renderForm("on_site_dispatch");
+    type(phoneInput(), "0903222222");
+    const row = screen.getByRole("button", { name: /陳大同/ });
+    expect(row).toHaveTextContent("黑名單");
+    expect(screen.getByRole("note")).toHaveTextContent("這位客戶被列入黑名單：多次爽約");
+    fireEvent.click(row);
+    expect(nameInput().value).toBe("陳大同");
+  });
+
+  it("#1013 打滿一個不存在的號碼 ⇒ 不出現清單也沒有「將連結」(新客戶流程)", () => {
+    renderForm("on_site_dispatch");
+    type(phoneInput(), "0912345678");
+    expect(screen.queryByText(/開頭相符的客戶/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/將連結既有客戶/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /李小華|陳大同/ })).not.toBeInTheDocument();
   });
 
   it("狀態 C + 黑名單 ⇒ 常駐 `!`(不是一閃即逝的 toast)", () => {
@@ -521,6 +571,28 @@ describe("建單表單 × 會員面板(#915 / #936)", () => {
           "儲存後，這筆訂單的紅利改算給新的會員，派點依新會員重新計算。",
         );
         expect(screen.queryByText("已連結會員：")).not.toBeInTheDocument();
+      });
+
+      it("#1013 E2:打完整電話對到別位會員 ⇒ 下方列出那一位可點,點了只帶入資料,送出仍帶原會員 id", async () => {
+        getBookingMock.mockResolvedValue(editingDetail(LINKED_MEMBER_ID, "王小明"));
+        renderForm("on_site_dispatch", BOOKING_ID);
+        await waitFor(() => expect(screen.getByText("已連結會員：")).toBeInTheDocument());
+        type(phoneInput(), "0903222222");
+        expect(relinkPanel()).toHaveTextContent("電話已更改，儲存後這筆訂單會改掛到：陳大同");
+        const rows = screen.getAllByRole("button", { name: /李小華|陳大同/ });
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toHaveTextContent("陳大同");
+        fireEvent.click(rows[0] as HTMLElement);
+        expect(nameInput().value).toBe("陳大同");
+        expect(addressInput()?.value).toBe("台北市某處"); // 陳大同沒有地址 ⇒ 不覆蓋
+        expect(screen.queryByText("儲存後會連結到會員：")).not.toBeInTheDocument();
+
+        screen.getByRole("button", { name: "儲存變更" }).click();
+        await waitFor(() => expect(updateBookingMock).toHaveBeenCalledTimes(1));
+        expect(updateBookingMock.mock.calls[0]?.[0]).toMatchObject({
+          memberId: LINKED_MEMBER_ID,
+          customerPhone: "0903222222",
+        });
       });
 
       it("E2 不是黑名單 ⇒ 只有後果 `!`(一則)", async () => {

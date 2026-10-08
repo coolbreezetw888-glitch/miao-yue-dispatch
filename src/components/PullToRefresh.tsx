@@ -14,6 +14,8 @@
 //     內層捲動區不在頂端、水平為主、長按之後才拖、多指、電腦版)。
 //   ・html / body 設 overscroll-behavior-y: contain,避免瀏覽器自己的下拉刷新跟這個同時觸發
 //     (規格第 5 點)。只在這個外殼掛著時設,離開 /app(登入頁、首頁)就還原。
+//   ・#1014(第 19 批):放開觸發刷新時,同時呼叫 pwaUpdate.ts 的 checkForServiceWorkerUpdate()
+//     主動檢查一次新版本(原本下拉只重抓資料,新版本上線後下拉也看不到提示,要關掉 App 重開)。
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -27,6 +29,7 @@ import {
   resolvePullIndicator,
   shouldTriggerRefresh,
 } from "@/lib/pullToRefresh";
+import { checkForServiceWorkerUpdate } from "@/pwaUpdate";
 
 /** 轉圈至少顯示這麼久,資料很快回來時才不會一閃而過、看不出有沒有刷新。 */
 const MIN_REFRESHING_MS = 500;
@@ -139,6 +142,11 @@ export function PullToRefresh() {
       refreshingRef.current = true;
       setPhase("refreshing");
       const started = performance.now();
+      // #1014(第 19 批):下拉刷新時順便主動檢查一次有沒有新版本。有的話,既有的「有新版本」提示卡
+      // 會自己跳出來(走 pwaUpdate.ts 原本的 updatefound 路徑)。不等它、不影響轉圈多久;
+      // 它自己有 30 秒節流,失敗(離線)也一律安靜吞掉,不會讓下拉刷新報錯或卡住。
+      // (它本身保證不 reject;這裡再接一層 catch 純粹是保險,絕不讓它變成未處理的錯誤。)
+      checkForServiceWorkerUpdate().catch(() => {});
       void queryClient
         .refetchQueries({ type: "active" })
         .catch(() => {
