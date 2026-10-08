@@ -415,8 +415,9 @@ const LIVE_SYNC_LOG_PREFIX = "[staff-schedule-live-sync]";
 /**
  * 5.x 對外介面(#895):在服務人員行事曆頁掛上「班表即時同步」訂閱。無回傳值,副作用是掛訂閱。
  *
- * - **只在 MyCalendarPage 呼叫**,刻意不放 AppLayout:只有真的開著行事曆的人才佔一條 Realtime 連線
- *   (Free 方案同時連線上限 200,見規格書 #901)。
+ * - **只在 MyCalendarPage 與 MyAvailabilityPage(休假設定,#1036)呼叫**,刻意不放 AppLayout:只有真的開著
+ *   這兩頁的人才佔一條 Realtime 連線(兩頁是不同路由,同一個分頁同時只會開一頁 ⇒ 仍是一條;
+ *   Free 方案同時連線上限 200,見規格書 #901)。
  * - 啟用條件:staffId 是合法 UUID **而且**行事曆檢視權限明確為 true(resolveStaffScheduleSubscription)。
  *   權限中途被關掉(#903)⇒ 權限查詢重抓回 false ⇒ topic 變 null ⇒ effect cleanup 退訂。
  * - 換商家(staffId 變)⇒ topic 變 ⇒ 先跑舊的 cleanup(退舊頻道)再訂新頻道;離開頁面 / 登出 ⇒ 元件卸載 ⇒ cleanup。

@@ -12,8 +12,11 @@
 //   ・填錯(開始 >= 結束、跟同一天另一組重疊)⇒ 欄位框變紅 + 下面一行 `!`(二之七),儲存鈕不能按;
 //     資料庫也擋同樣兩條(繞過畫面也擋),訊息一字不差。
 //   ・有改過還沒儲存 ⇒ onDirtyChange(true),全頁層 Esc / 上方空白條會先問「確定放棄這次輸入？」(三之六)。
+//   ・#1036(第 23 批)即時同步:清單在編輯中被重抓(商家改了 / 另一台裝置改了)⇒ 草稿以時段 id 保留,
+//     正在改的那一列欄位不會被蓋掉(標題換成新存的值、dirty 改跟新值比);沒在改的列照常換成新值;
+//     被別處刪掉的列連同草稿一起消失;那一列正在改的話跳 toast「這組時段已被刪除」(主腦裁決)。
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FieldError, FieldTime, ListCard } from "@/components/patterns";
@@ -51,8 +54,19 @@ export function AvailabilityWindowEditList({
   const [savingIds, setSavingIds] = useState<ReadonlySet<string>>(() => new Set());
 
   // 清單重抓後,已經不存在的那幾組(被刪掉 / 別的分頁刪的)草稿一起丟掉。
+  // #1036(第 23 批,主腦裁決):丟掉的是「正在改、還沒存」的那一列 ⇒ 跳一則 toast 告訴使用者為什麼不見了
+  //   (比對的是「上一次清單」裡那一列存著的值,草稿跟它不同才算正在改)。
   const windowIds = useMemo(() => new Set(windows.map((w) => w.id)), [windows]);
+  const previousWindowsRef = useRef<ReadonlyMap<string, StaffAvailabilityWindow>>(new Map());
   useEffect(() => {
+    const previous = previousWindowsRef.current;
+    previousWindowsRef.current = new Map(windows.map((w) => [w.id, w]));
+    const removedDirty = Object.entries(drafts).some(([id, d]) => {
+      if (windowIds.has(id)) return false;
+      const old = previous.get(id);
+      return !old || d.start !== toHhMm(old.start_time) || d.end !== toHhMm(old.end_time);
+    });
+    if (removedDirty) toast.warning("這組時段已被刪除");
     setDrafts((prev) => {
       const keys = Object.keys(prev);
       if (keys.every((id) => windowIds.has(id))) return prev;
@@ -60,6 +74,8 @@ export function AvailabilityWindowEditList({
       for (const id of keys) if (windowIds.has(id)) next[id] = prev[id]!;
       return next;
     });
+    // 只在清單換了(重抓)時判斷;drafts 刻意不列進依賴,否則每打一個字都會跑一次。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowIds]);
 
   function isRowDirty(w: StaffAvailabilityWindow): boolean {
@@ -78,7 +94,16 @@ export function AvailabilityWindowEditList({
   function setDraft(w: StaffAvailabilityWindow, patch: Partial<Draft>) {
     setDrafts((prev) => {
       const base = prev[w.id] ?? { start: toHhMm(w.start_time), end: toHhMm(w.end_time) };
-      return { ...prev, [w.id]: { ...base, ...patch } };
+      const next = { ...base, ...patch };
+      // #1036(第 23 批):改回跟目前存著的值一樣 ⇒ 直接丟掉這份草稿。否則即時同步重抓到「別人改過的新值」時,
+      // 這份「其實沒改」的舊草稿會變成 dirty、把舊時間蓋回畫面上。
+      if (next.start === toHhMm(w.start_time) && next.end === toHhMm(w.end_time)) {
+        if (!(w.id in prev)) return prev;
+        const rest = { ...prev };
+        delete rest[w.id];
+        return rest;
+      }
+      return { ...prev, [w.id]: next };
     });
   }
 

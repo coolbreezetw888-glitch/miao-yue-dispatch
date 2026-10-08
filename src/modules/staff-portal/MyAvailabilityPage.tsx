@@ -27,6 +27,8 @@ import {
   upsertMyAvailabilityWindow,
   deleteMyAvailabilityWindow,
   useActiveMyStaffRecord,
+  useMyStaffPermission,
+  useStaffScheduleLiveSync,
 } from "./context";
 import { DayOffTabsSection } from "./DayOffTabsSection";
 import { RequireStaffAvailabilityAccess } from "./RequireStaffAvailabilityAccess";
@@ -157,6 +159,13 @@ function MyAvailabilityPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffRow } = useActiveMyStaffRecord(merchantId);
+  // SPECS-INDEX #1036(第 23 批):商家(或有權限的客服)改了我的每週時段 / 我在另一台裝置改了
+  // ⇒ 這一頁的時段清單 5 秒內自動更新(資料庫對 staff:<id>:schedule 發訊號,收到就重抓)。
+  // 跟行事曆頁同一支 hook、同一個頻道;收聽條件也一樣(行事曆檢視權限要開,伺服器端同標準)。
+  // 正在改的那幾列草稿不會被蓋掉(AvailabilityWindowEditList 以 id 保留草稿)。
+  // 一定要在下面 early return 之前呼叫(hook 規則)。
+  const { data: hasCalendarView } = useMyStaffPermission("staff_calendar_view");
+  useStaffScheduleLiveSync(staffRow?.id ?? null, { hasCalendarView });
 
   if (!staffRow) {
     // skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。這裡等的是整頁的前提資料

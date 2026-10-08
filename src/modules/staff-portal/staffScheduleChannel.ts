@@ -86,8 +86,16 @@ export function shouldRefreshFromBroadcast(message: unknown): boolean {
  * 新增編輯訂單、會員資訊、計酬方式、名字…)」變動時也會發同一種 schedule_changed 訊號
  * (migration 20261008100000),所以多重查後兩個;請假已經在 my-day-schedule-state 裡。
  *
- * 仍然刻意**不**包含 my-staff-permission / my-booking-status-colors / my-calendar-state-styles /
- * my-availability-overrides —— 資料庫不會因為那些變動發訊號。
+ * SPECS-INDEX #1036(第 23 批):「自己的每週可預約時段」(staff_availability_windows)變動也會發同一種訊號
+ * (migration 20261008150000)⇒ 多重查 `["booking-module", "staff-availability-windows", staffId]`
+ * (useStaffAvailabilityWindows:時間軸可點格子、休假設定頁的時段清單共用這一把)。
+ *
+ * 同一批(主腦裁決)「自己的單日例外」(staff_availability_overrides,行事曆點格子開關時段)也會發
+ * ⇒ 多重查 `["staff-portal-module", "my-availability-overrides"]`(休假設定頁的排休分頁)。
+ * 時間軸上的單日例外走 my-day-schedule-state,本來就在清單裡。
+ *
+ * 仍然刻意**不**包含 my-staff-permission / my-booking-status-colors / my-calendar-state-styles ——
+ * 資料庫不會因為那些變動發訊號。
  * 用前綴 invalidate 會把所有已快取的日期範圍標成過期,但 React Query 只會立刻重抓「目前畫面上
  * 掛著的那一段」(#896 / Q1 裁決的精神不變;多出來的兩支都是查一列的輕量查詢)。
  */
@@ -96,6 +104,8 @@ export const STAFF_SCHEDULE_INVALIDATE_KEYS = [
   ["staff-portal-module", "my-day-schedule-state"],
   ["staff-portal-module", "my-day-business-hours"],
   ["staff-portal-module", "my-staff-record"],
+  ["booking-module", "staff-availability-windows"],
+  ["staff-portal-module", "my-availability-overrides"],
 ] as const;
 
 /**

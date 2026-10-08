@@ -111,7 +111,7 @@ function renderLiveSync(initial: HookProps, strict = false) {
   );
 }
 
-/** 一次 flush = STAFF_SCHEDULE_INVALIDATE_KEYS.length 次 invalidate(#896 兩個 + #1011 兩個)。 */
+/** 一次 flush = STAFF_SCHEDULE_INVALIDATE_KEYS.length 次 invalidate(#896 兩個 + #1011 兩個 + #1036 兩個)。 */
 function flushCount(): number {
   return invalidateSpy.mock.calls.length / STAFF_SCHEDULE_INVALIDATE_KEYS.length;
 }
@@ -188,7 +188,7 @@ describe("useStaffScheduleLiveSync — 什麼時候訂閱(#895)", () => {
 });
 
 describe("useStaffScheduleLiveSync — 收到訊號重查(#896 / #900)", () => {
-  it("一則合法訊號 ⇒ 400ms 後只 invalidate #896 的兩個 key + #1011 的兩個 key", () => {
+  it("一則合法訊號 ⇒ 400ms 後只 invalidate #896 的兩個 key + #1011 的兩個 key + #1036 的每週時段與單日例外", () => {
     const { client, channels } = createFakeClient();
     renderLiveSync({ staffId: STAFF_A, hasCalendarView: true, client });
     channels[0]!.emitBroadcast(SCHEDULE_MSG);
@@ -200,6 +200,8 @@ describe("useStaffScheduleLiveSync — 收到訊號重查(#896 / #900)", () => {
       { queryKey: ["staff-portal-module", "my-day-schedule-state"] },
       { queryKey: ["staff-portal-module", "my-day-business-hours"] },
       { queryKey: ["staff-portal-module", "my-staff-record"] },
+      { queryKey: ["booking-module", "staff-availability-windows"] },
+      { queryKey: ["staff-portal-module", "my-availability-overrides"] },
     ]);
   });
 
