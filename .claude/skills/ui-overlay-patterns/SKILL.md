@@ -741,3 +741,9 @@ react-remove-scroll 只有「最上層」那把鎖生效,modal Popover 會掛自
 - #1021:行事曆狀態顏色第 4 種 `staff_available_slot`(預設 `#dcfce7`)= 服務人員每週可預約時段內的空格底色;inline 底色會蓋掉 hover class ⇒ hover 改用變暗(brightness)。色碼套用前一律 `sanitizeHexColor`。「後台無時段限制」的人整段營業時間都算可預約(使用者知情)。
 - #1022:🔴 **點了會有反應的格子才 `cursor-pointer`,沒反應的維持 `cursor-default`**;新增可點元素照這條。
 - 中文 JSX 純文字不要跨行寫(換行會變成畫面上的空格,#1018 踩到);長句用 `{"…"}` 或字串相加。
+
+### 2026-10-08 第 22 批(#1023、#1024)
+
+- #1023:每週可預約時段外的格子不給「開啟時段」;格子沒任何選項時 `DaySlotCell` 自動畫成不可點的 div(無選單、箭頭、無 hover),呼叫端不要傳 hover class。時段外舊「例外開放」(淡紫框)只留「關閉時段」。
+- #1024:可預約時段清單用 `AvailabilityWindowEditList`(商家端、服務人員端共用);改了 ⇒「刪除」換成「還原」+「儲存」,按儲存才寫;放在全頁層裡要接 `onDirtyChange`。
+- 🔴 BEFORE 觸發器在 RLS 之前執行:觸發器的錯誤訊息**不能在權限確認前**透露任何資料(第 22 批 anon 可看到別人時段被 QA 抓到)。前端角色(anon/authenticated)沒權限先 raise 42501;其他角色一律檢查。之後寫這張表的 SECURITY DEFINER RPC 要自己檢查重疊與權限。
