@@ -26,9 +26,14 @@
 //     FieldNativeSelect / FieldTime;表單全頁層改 size="wide"(760px)。
 // **只動外觀與版面,不動任何行為**:按鈕顯示條件(isAdmin / login_status / status)、驗證、送出、
 // 服務項目勾選即存、頭像上傳即存、可預約時段增刪,全部照舊。
+// 🔴 第 20 批 #1015(2026-10-08 使用者裁決):「只把移除放在 ⋯ 裡面避免誤按,其他按鈕可以放出來」。
+//   ⇒ 「邀請登入」「服務人員權限」從 ⋯ 搬到卡片上,跟「編輯」並排(編輯維持最前面,同一種次要按鈕);
+//     ⋯ 只剩「移除」(未移除的人)/「真正刪除」(已移除的人,不可逆)。顯示條件一字不改。
+//   這條推翻上面「邀請登入放 ⋯ 第一項」的 2026-09-29 裁決,但只限這一頁與客服管理頁。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -1239,8 +1244,13 @@ function StaffListInner() {
                 //   - 「編輯」是天天用的動作 ⇒ 永遠是主要動作;唯一例外是已移除的人(主要動作換成「恢復」,
                 //     那時編輯沒有意義)。
                 //   - 「邀請登入」一個人一輩子按一次 ⇒ 放 ⋯ 選單第一項(顯示條件 canInvite 照舊)。
+                //     ⇒ 已被第 20 批 #1015 推翻:改成卡片上「編輯」右邊的按鈕(條件不變)。
                 //   - 「服務人員權限」是跳頁 ⇒ 用 `to`(底層是真正的 <Link>,可右鍵 / 中鍵開新分頁)。
                 //   - 「移除」是可逆的(有「恢復」)⇒ 一般項目、不標紅;只有不可逆的「真正刪除」才紅字。
+                // 🔴 第 20 批 #1015:「邀請登入」「服務人員權限」改成卡片上的按鈕(見下方 primaryAction),
+                //   顯示條件與原本 ⋯ 選單項目一字不差:邀請登入 = canInvite;服務人員權限 = isAdmin &&
+                //   login_status === "active" && 未移除。⋯ 只留「移除」與不可逆的「真正刪除」。
+                const canOpenPermissions = isAdmin && loginStatus === "active";
                 const menuItems: ListCardMenuItem[] | undefined = isRemoved
                   ? isAdmin
                     ? [
@@ -1254,23 +1264,7 @@ function StaffListInner() {
                         },
                       ]
                     : undefined
-                  : [
-                      ...(canInvite
-                        ? [
-                            {
-                              label: "邀請登入",
-                              onSelect: () => {
-                                setInvitingStaff(staff);
-                                setInviteOpen(true);
-                              },
-                            },
-                          ]
-                        : []),
-                      ...(isAdmin && loginStatus === "active"
-                        ? [{ label: "服務人員權限", to: `/app/staff/${staff.id}/permissions` }]
-                        : []),
-                      { label: "移除", onSelect: () => setRemovingStaff(staff) },
-                    ];
+                  : [{ label: "移除", onSelect: () => setRemovingStaff(staff) }];
 
                 return (
                   <li key={staff.id}>
@@ -1358,17 +1352,39 @@ function StaffListInner() {
                             恢復
                           </Button>
                         ) : (
-                          <Button
-                            type="button"
-                            variant="neutral"
-                            size="card"
-                            onClick={() => {
-                              setEditingStaff(staff);
-                              setEditOpen(true);
-                            }}
-                          >
-                            編輯
-                          </Button>
+                          // 第 20 批 #1015:多顆按鈕時允許換行(手機 375 不撐出橫向捲軸),靠右對齊。
+                          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="neutral"
+                              size="card"
+                              onClick={() => {
+                                setEditingStaff(staff);
+                                setEditOpen(true);
+                              }}
+                            >
+                              編輯
+                            </Button>
+                            {canInvite ? (
+                              <Button
+                                type="button"
+                                variant="neutral"
+                                size="card"
+                                onClick={() => {
+                                  setInvitingStaff(staff);
+                                  setInviteOpen(true);
+                                }}
+                              >
+                                邀請登入
+                              </Button>
+                            ) : null}
+                            {canOpenPermissions ? (
+                              // 跳頁 ⇒ 真正的 <Link>(保留右鍵 / 中鍵開新分頁),外觀跟編輯同一種按鈕。
+                              <Button asChild variant="neutral" size="card">
+                                <Link to={`/app/staff/${staff.id}/permissions`}>服務人員權限</Link>
+                              </Button>
+                            ) : null}
+                          </div>
                         )
                       }
                       menuItems={menuItems}

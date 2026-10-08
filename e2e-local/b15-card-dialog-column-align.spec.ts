@@ -376,7 +376,12 @@ const CASES: Case[] = [
     who: "admin",
     path: () => "/app/staff",
     open: async (p) => {
-      await openRowMenu(p, UNINVITED_STAFF_NAME, "邀請登入");
+      // 第 20 批 #1015:「邀請登入」從 ⋯ 搬到卡片上的按鈕。
+      await p
+        .locator("li")
+        .filter({ hasText: UNINVITED_STAFF_NAME })
+        .getByRole("button", { name: "邀請登入", exact: true })
+        .click({ timeout: LOAD_TIMEOUT });
       const d = dialogByHeading(p, /開通登入/);
       await expect(d).toBeVisible({ timeout: LOAD_TIMEOUT });
       return d;

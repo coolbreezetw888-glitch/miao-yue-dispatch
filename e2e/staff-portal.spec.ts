@@ -142,12 +142,17 @@ test("4.4:休假設定頁新增每週固定時段,自己看得到,也正確反�
   // #849(ui-v1-full ListCard,StaffListPage.tsx 卡片標籤註解):「已開通登入」不再是一顆標籤,改由卡片下方
   // 「登入信箱:<信箱>」那一行表達(只有已開通的人才會顯示這行);「服務人員權限」「邀請登入」收進 ⋯ 選單。
   // 斷言意圖不變:①看得出已開通 ②有權限設定入口 ③沒有邀請登入。
+  // 第 20 批 #1015:「服務人員權限」「邀請登入」再從 ⋯ 搬回卡片上(⋯ 只留移除)⇒ 改成直接在卡片上找連結 / 按鈕,
+  // 並反向確認 ⋯ 裡已經沒有它們、只剩「移除」。
   const staffRow = adminPage.locator("li", { hasText: fixture.staffName });
   await expect(staffRow.getByText(/^登入信箱：\S+@\S+$/)).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(staffRow.getByText("尚未開通登入", { exact: true })).toHaveCount(0);
+  await expect(staffRow.getByRole("link", { name: "服務人員權限", exact: true })).toBeVisible();
+  await expect(staffRow.getByRole("button", { name: "邀請登入", exact: true })).toHaveCount(0);
   await staffRow.getByRole("button", { name: "更多動作", exact: true }).click();
   const rowMenu = adminPage.getByRole("menu");
-  await expect(rowMenu.getByRole("menuitem", { name: "服務人員權限" })).toBeVisible();
+  await expect(rowMenu.getByRole("menuitem", { name: "移除" })).toBeVisible();
+  await expect(rowMenu.getByRole("menuitem", { name: "服務人員權限" })).toHaveCount(0);
   await expect(rowMenu.getByRole("menuitem", { name: "邀請登入" })).toHaveCount(0);
   await adminPage.keyboard.press("Escape");
   await expect(rowMenu).toHaveCount(0);
@@ -171,9 +176,8 @@ test("4.7:服務人員權限頁正確列出四項自助功能開關,且可以切
   await expect(adminPage.getByText(fixture.staffName)).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   const staffRow = adminPage.locator("li", { hasText: fixture.staffName });
-  // #849:「服務人員權限」收進每列右側的 ⋯(更多動作)選單,點開後是一個連結型的 menuitem。
-  await staffRow.getByRole("button", { name: "更多動作", exact: true }).click();
-  await adminPage.getByRole("menu").getByRole("menuitem", { name: "服務人員權限" }).click();
+  // 第 20 批 #1015:「服務人員權限」從 ⋯ 搬到卡片上,是一顆外觀像按鈕的真正連結。
+  await staffRow.getByRole("link", { name: "服務人員權限", exact: true }).click();
 
   await expect(
     adminPage.getByRole("heading", { name: `${fixture.staffName} 的權限設定` }),

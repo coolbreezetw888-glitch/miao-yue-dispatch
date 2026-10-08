@@ -226,6 +226,8 @@ test("T5 移除 → 出現「已移除」徽章、「恢復」按鈕出現、「
   await expect(row.getByRole("button", { name: "編輯" })).toHaveCount(0);
   // #849:「權限設定」原本是列上的按鈕,現在在 ⋯ 選單裡 ⇒ 打開選單驗:已移除的列沒有「權限設定」,
   // 只剩「真正刪除」(正向對照,證明選單真的打開了、不是對空選單斷言)。
+  // 第 20 批 #1015:「權限設定」改成卡片上的連結按鈕(只在未移除時出現)⇒ 卡片上也要確認沒有。
+  await expect(row.getByRole("link", { name: "權限設定" })).toHaveCount(0);
   const menu = await openRowMenu(page, row);
   await expect(menu.getByRole("menuitem", { name: "真正刪除" })).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: "權限設定" })).toHaveCount(0);

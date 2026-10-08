@@ -17,9 +17,13 @@
 //   紅字;「權限設定」改成真正的連結(ListCard menuItems 的 `to`);空狀態拿掉「聚焦上方欄位」的
 //   按鈕 hack,改成一句話指路(邀請表單就在正上方,skill 二之八的例外,見 EmptyState 註解)。
 // **只動外觀與版面,不動任何行為**:驗證、送出、移除 / 恢復 / 真正刪除、篩選邏輯全部照舊。
+// 🔴 第 20 批 #1015(2026-10-08 使用者裁決):「只把移除放在 ⋯ 裡面避免誤按,其他按鈕可以放出來」。
+//   ⇒ 「權限設定」從 ⋯ 搬到卡片上「編輯」右邊(同一種次要按鈕、仍是真正的 <Link>);⋯ 只剩「移除」
+//     (在職)/「真正刪除」(已移除,不可逆)。顯示條件一字不改(權限設定 = 未移除;整頁仍只給管理員)。
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -554,7 +558,8 @@ function AgentListInner() {
                   <li key={agent.id}>
                     {/* skill 二之五 列表卡片:姓名 + 狀態標籤 → 次要資訊(email、登入信箱狀態)→
                         右側「一顆主要動作 + ⋯」。已移除整張變灰。主要動作隨狀態換字(編輯 / 恢復),
-                        位置固定;權限設定、移除、真正刪除收進 ⋯。
+                        位置固定;移除、真正刪除收進 ⋯。
+                        第 20 批 #1015:「權限設定」改成卡片上「編輯」右邊的按鈕(只在未移除時出現)。
                         2026-09-29 主腦裁決:「移除」是可逆的(有「恢復」)⇒ 一般項目不標紅,只有不可逆的
                         「真正刪除」才紅字;「權限設定」是跳頁 ⇒ 用 `to`(真正的連結,可右鍵開新分頁)。 */}
                     <ListCard
@@ -594,17 +599,24 @@ function AgentListInner() {
                             恢復
                           </Button>
                         ) : (
-                          <Button
-                            type="button"
-                            variant="neutral"
-                            size="card"
-                            onClick={() => {
-                              setEditingAgent(agent);
-                              setEditOpen(true);
-                            }}
-                          >
-                            編輯
-                          </Button>
+                          // 第 20 批 #1015:多顆按鈕時允許換行(手機 375 不撐出橫向捲軸),靠右對齊。
+                          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="neutral"
+                              size="card"
+                              onClick={() => {
+                                setEditingAgent(agent);
+                                setEditOpen(true);
+                              }}
+                            >
+                              編輯
+                            </Button>
+                            {/* 跳頁 ⇒ 真正的 <Link>(保留右鍵 / 中鍵開新分頁),外觀跟編輯同一種按鈕。 */}
+                            <Button asChild variant="neutral" size="card">
+                              <Link to={`/app/agents/${agent.id}/permissions`}>權限設定</Link>
+                            </Button>
+                          </div>
                         )
                       }
                       menuItems={
@@ -619,7 +631,6 @@ function AgentListInner() {
                               },
                             ]
                           : [
-                              { label: "權限設定", to: `/app/agents/${agent.id}/permissions` },
                               {
                                 label: "移除",
                                 disabled: removingId === agent.id,
