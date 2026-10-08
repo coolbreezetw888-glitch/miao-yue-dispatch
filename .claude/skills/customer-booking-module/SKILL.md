@@ -50,6 +50,17 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 - 服務人員順位 `display_order`:只能透過 `move_merchant_staff_order`(保護 trigger 擋直接 UPDATE);新增自動排最後;變動只發**商家**行事曆訊號。後台所有選服務人員的地方(`useMerchantStaffList`、`fetchMerchantStaff`、行事曆/排班一覽/帳單報表/報表匯出函式)都依順位;平台端 `platform_get_merchant_staff`、服務人員端不改。**新增列服務人員的地方要照 `display_order, created_at, id` 排。**
 - 已知:同一 submission_id 真並發只有程式碼審查(本機建可提交資料被擋);Vercel 預覽網址訪客送出會失敗(只有一組正式 secret);LINE 內建瀏覽器的 Turnstile 要實機測。
 
+## 第 4-A 批 會員中心 / 自己取消(2026-10-09,commit 1b1d243,#1045)
+- 網址 `/booking/<代碼>/me`(+`/bookings`、`/wallet`、`/profile`);**只開給有啟用 LINE 登入的店**,沒啟用 ⇒ 函式回 `unavailable`。LINE 加入/登入沒有草稿時一律進 `/me`(取代第 3 批 C3-D07 回 ①)。
+- 客人身分一律 `auth.uid()` + slug 經 `private.customer_member_of` / `customer_me_context` 推出,**不收前端傳 member_id**;別人的、別店的、不存在的單一律同一個 `not_found`。4-B 會把 `customer_member_of` 改成查聯絡人表,4-A 函式不用回頭改。
+- 取消:前端 → Edge `customer-booking-cancel`(verify_jwt=false,同 IP 10 分鐘 20 次,頻率在驗 token 前算)→ `internal_customer_cancel_booking`(只給 service_role)。**後台 `cancel_booking` 不動**,客人版是同步驟複本,pgTAP 對照結果一致 —— 改後台取消流程時要同步改客人版並重跑 `c4_cancel.sql`。期限 `merchant_booking_settings.customer_cancel_deadline_hours`(0~168,預設 24,只管理員能改);店家建的單也能取消(使用者 Q1)。
+- **改 bookings 狀態/內容的函式一律先 `for update` 鎖單、鎖到後才檢查狀態、UPDATE where 加狀態條件**(2026-10-09 修 confirm_booking / move_booking / update_booking_payment_method 的並發 bug:客人取消同時店家確認會把已取消改回已確認)。新增此類函式照做,pgTAP 有本體含 for update 的守門。
+- 錢包只有紅利(儲值金 #1038 留 `stored_value: null`);紅利關掉 ⇒ 底部選單不出現錢包、`/me/wallet` 導回 `/me`。點數紀錄**不回 note**(店家手打內部說明)、不回 balance_after,排序在資料庫做;推薦類型跟 `REFERRAL_UI_HIDDEN` 切換成「活動贈點」。
+- 我的資料:手機不能改;**生日填過就鎖**(防改生日領生日禮,使用者 Q3);`members.address`(≤200)。`update_member` 第 8 參數 `p_address`:**null = 不變、空字串 = 清掉**(匯入/復原用 7 參數不會洗掉地址),後台編輯一律帶這個參數。
+- 後台:訂單詳細已取消的單顯示「取消原因：〇〇」;「最後修改」是客人帳號時依操作紀錄 `actor_role_snapshot='customer'` 顯示「客人」(`get_booking_actor_names` 查不到人會回「(已移除的人員)」字樣,要當成查不到)。
+- 鈴鐺 `customer_booking_cancelled`(同交易寫,收件人規則同 `customer_booking_created`);推播 `booking_cancelled` + `skipInAppNotification`。
+- 第 5 批接點:LINE 通知客人「已取消」接在 Edge 推播旁邊。
+
 ## 前端(`src/modules/public-booking/`)
 - 不套後台外殼、不需登入;已登入後台的人打開也看客人版,不帶自己商家資料。主題色依該預約頁商家,離開要還原。
 - ①~⑤ 同一網址內切換,系統「上一頁」= 上一步(history state);填的資料**不存瀏覽器**,重新整理回 ①。
