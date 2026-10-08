@@ -2,7 +2,7 @@
 // 2026-09-20 主腦複查後新增,對應修正 1(PWA 更新機制改成「提示使用者」,不要靜默自動重新整理)。
 // 2026-10-01(SPECS-INDEX #966)改版成底部深色浮動卡片,測試一起改寫並補三件事:
 //   ・「稍後」之後本次瀏覽不再顯示(含重新掛載、早就在等待中的版本再補發一次);但「又偵測到新版本」要再跳。
-//   ・「立即更新」呼叫 applyPendingServiceWorkerUpdate(),元件自己不 reload。
+//   ・「立即更新」呼叫 applyLatestServiceWorkerUpdate()(#1016 前叫 applyPendingServiceWorkerUpdate),元件自己不 reload。
 //   ・卡片浮在底部分頁籤列上方、不蓋住分頁籤列(以 class 斷言:bottom 距離、z-index)。
 //
 // mock src/pwaUpdate.ts,不依賴真正的 Service Worker API(那需要真實瀏覽器,jsdom 測不到,也不是
@@ -23,7 +23,7 @@ import {
 } from "@/lib/fixedLayers";
 
 const {
-  applyPendingServiceWorkerUpdate,
+  applyLatestServiceWorkerUpdate,
   onServiceWorkerUpdateAvailable,
   triggerUpdateAvailable,
   setPending,
@@ -32,7 +32,7 @@ const {
   // 模擬 pwaUpdate.ts「訂閱當下如果已經有在等待中的新版本,立刻補發一次(isNewDetection: false)」。
   let pending = false;
   return {
-    applyPendingServiceWorkerUpdate: vi.fn(),
+    applyLatestServiceWorkerUpdate: vi.fn((): Promise<boolean> => new Promise<boolean>(() => {})),
     onServiceWorkerUpdateAvailable: vi.fn((cb: (info: { isNewDetection: boolean }) => void) => {
       listener = cb;
       if (pending) cb({ isNewDetection: false });
@@ -51,7 +51,7 @@ const {
 });
 
 vi.mock("@/pwaUpdate", () => ({
-  applyPendingServiceWorkerUpdate,
+  applyLatestServiceWorkerUpdate,
   onServiceWorkerUpdateAvailable,
 }));
 
@@ -101,7 +101,7 @@ describe("UpdateAvailableHint", () => {
     expect(screen.getByText("有新版本可更新")).toBeInTheDocument();
   });
 
-  it("點擊「立即更新」呼叫 applyPendingServiceWorkerUpdate,按鈕改成「更新中⋯」並停用,元件自己不 reload", () => {
+  it("點擊「立即更新」呼叫 applyLatestServiceWorkerUpdate,按鈕改成「更新中⋯」並停用,元件自己不 reload", () => {
     const reloadSpy = vi.fn();
     const originalLocation = window.location;
     Object.defineProperty(window, "location", {
@@ -112,7 +112,7 @@ describe("UpdateAvailableHint", () => {
       render(<UpdateAvailableHint />);
       act(() => triggerUpdateAvailable());
       fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
-      expect(applyPendingServiceWorkerUpdate).toHaveBeenCalledTimes(1);
+      expect(applyLatestServiceWorkerUpdate).toHaveBeenCalledTimes(1);
       expect(screen.getByRole("button", { name: "更新中⋯" })).toBeDisabled();
       expect(reloadSpy).not.toHaveBeenCalled();
     } finally {
@@ -120,12 +120,31 @@ describe("UpdateAvailableHint", () => {
     }
   });
 
+  it("#1016:連點「立即更新」只送一次;處理期間一直顯示「更新中⋯」", () => {
+    render(<UpdateAvailableHint />);
+    act(() => triggerUpdateAvailable());
+    const button = screen.getByRole("button", { name: "立即更新" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(applyLatestServiceWorkerUpdate).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "更新中⋯" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "稍後" })).toBeDisabled();
+  });
+
+  it("#1016:手上已經沒有可套用的版本(回傳 false)⇒ 按鈕恢復可按,不卡在「更新中⋯」", async () => {
+    applyLatestServiceWorkerUpdate.mockImplementationOnce(() => Promise.resolve(false));
+    render(<UpdateAvailableHint />);
+    act(() => triggerUpdateAvailable());
+    fireEvent.click(screen.getByRole("button", { name: "立即更新" }));
+    expect(await screen.findByRole("button", { name: "立即更新" })).toBeEnabled();
+  });
+
   it("按「稍後」收起卡片,而且不會呼叫套用更新", () => {
     render(<UpdateAvailableHint />);
     act(() => triggerUpdateAvailable());
     fireEvent.click(screen.getByRole("button", { name: "稍後" }));
     expect(screen.queryByText("有新版本可更新")).toBeNull();
-    expect(applyPendingServiceWorkerUpdate).not.toHaveBeenCalled();
+    expect(applyLatestServiceWorkerUpdate).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem(UPDATE_CARD_DISMISSED_SESSION_KEY)).toBe("1");
   });
 

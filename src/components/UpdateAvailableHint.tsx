@@ -14,9 +14,12 @@
 //     也不是 toast(toast 不能放唯一的操作入口,而且會自己消失)⇒ 常駐到使用者按掉為止的浮動卡片。
 //
 // 按鈕行為:
-//   ・「立即更新」= 原本的「重新整理」:呼叫 applyPendingServiceWorkerUpdate() 送出 SKIP_WAITING,
+//   ・「立即更新」= 原本的「重新整理」:呼叫 applyLatestServiceWorkerUpdate() 送出 SKIP_WAITING,
 //     真正的 window.location.reload() 由 pwaUpdate.ts 的 controllerchange 監聽器負責,
 //     這個元件**不自己 reload**(避免自己猜時機)。按下後改成「更新中⋯」並停用,避免重複點擊。
+//     #1016(第 20 批):按下後會先向伺服器問一次最新版、有更新的就等它下載好再套用(最多約 15 秒,
+//     離線/逾時就套用手上那一版)⇒ 按一次就到最新版,不會重新整理後又跳一次。這段期間一直顯示「更新中⋯」。
+//     萬一手上已經沒有任何可套用的版本(回傳 false),把按鈕恢復可按,不讓使用者卡住。
 //   ・「稍後」= 收起卡片,**本次瀏覽期間不再跳出**:寫 sessionStorage(分頁關掉 / 重新開啟 App 就清空)。
 //     但如果這段期間**又偵測到一個新的版本**(pwaUpdate.ts 回呼帶 isNewDetection: true),
 //     那是另一個新版本,清掉「稍後」的紀錄、重新跳出。sessionStorage 讀寫一律 try/catch
@@ -34,7 +37,7 @@ import {
   useHasBottomActionBar,
 } from "@/lib/fixedLayers";
 import { cn } from "@/lib/utils";
-import { applyPendingServiceWorkerUpdate, onServiceWorkerUpdateAvailable } from "@/pwaUpdate";
+import { applyLatestServiceWorkerUpdate, onServiceWorkerUpdateAvailable } from "@/pwaUpdate";
 
 /** sessionStorage 的 key:這個分頁(這次瀏覽)使用者已經按過「稍後」。 */
 export const UPDATE_CARD_DISMISSED_SESSION_KEY = "miaoyue_update_card_dismissed";
@@ -93,8 +96,11 @@ export default function UpdateAvailableHint({
   }, [visible]);
 
   function handleApplyClick() {
+    if (applying) return;
     setApplying(true);
-    applyPendingServiceWorkerUpdate();
+    void applyLatestServiceWorkerUpdate().then((applied) => {
+      if (!applied) setApplying(false);
+    });
   }
 
   function handleLaterClick() {

@@ -24,7 +24,7 @@ export default defineConfig({
     // 內建「監聽 `{type:"SKIP_WAITING"}` 這個 postMessage 才呼叫 self.skipWaiting()」的訊息
     // 監聽器,不代表 sw.js 自己會「自動」skipWaiting(已用 Playwright 對建置產物實測確認過:
     // sw.js 裡是 `self.addEventListener("message", ...)` 訊息觸發式寫法,不是安裝完就自己呼叫)。
-    // skipWaiting 什麼時候真的被觸發,完全由 `applyPendingServiceWorkerUpdate()` 什麼時候被
+    // skipWaiting 什麼時候真的被觸發,完全由 `applyLatestServiceWorkerUpdate()`(#1016 前叫 applyPendingServiceWorkerUpdate)什麼時候被
     // 使用者主動呼叫決定,跟這個設定值本身無關,不需要為了這次修正改掉這個值。
     VitePWA({
       registerType: "autoUpdate",

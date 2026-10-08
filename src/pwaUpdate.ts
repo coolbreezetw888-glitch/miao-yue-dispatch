@@ -7,7 +7,7 @@
 // 風險——如果客服正在填一份很長的新增預約表單,填到一半剛好遇到後端推送新版本上線,畫面會被
 // 強制重新整理,表單內容全部消失、沒有存檔。改成:偵測到新版本 → 只記錄「有新版本待套用」這個
 // 狀態、通知訂閱者(給 UpdateAvailableHint.tsx 顯示不擋畫面的提示條)→ 使用者自己按下提示條的
-// 「重新整理」按鈕,才呼叫 applyPendingServiceWorkerUpdate() 送出 SKIP_WAITING、進而觸發
+// 「立即更新」按鈕,才呼叫 applyLatestServiceWorkerUpdate()(#1016 前叫 applyPendingServiceWorkerUpdate)送出 SKIP_WAITING、進而觸發
 // controllerchange → reload。使用者如果不理會這個提示,新版本會在他們下次自然重新整理/重新
 // 開啟分頁時生效——這是可以接受的行為,比起未經同意就蓋掉別人正在填的表單,晚一點拿到新版本是
 // 小很多的代價。
@@ -28,8 +28,8 @@
 // 這讓產出的 sw.js 監聽 `{ type: "SKIP_WAITING" }` 這個 postMessage 來呼叫 self.skipWaiting()
 // (workbox 標準的「訊息觸發式」skip waiting,對應 `registerType: "autoUpdate"`——這個設定值只
 // 影響 sw.js 內建的訊息監聽器,不代表「自動」skip waiting,skipWaiting 什麼時候真的被觸發,
-// 完全由這裡的 `applyPendingServiceWorkerUpdate()` 什麼時候被呼叫決定),這裡的
-// `applyPendingServiceWorkerUpdate` 就是負責送出這個訊息的那一端。
+// 完全由這裡的 `applyLatestServiceWorkerUpdate()` 什麼時候被呼叫決定),這裡的
+// `applyLatestServiceWorkerUpdate` 就是負責送出這個訊息的那一端。
 
 /** 目前偵測到、卡在 `installed`(waiting)狀態、尚未取得使用者同意套用的新 service worker。
  * null 代表目前沒有待套用的新版本。 */
@@ -61,17 +61,6 @@ export function onServiceWorkerUpdateAvailable(listener: UpdateAvailableListener
   };
 }
 
-/** 使用者在 UpdateAvailableHint.tsx 按下「重新整理」之後呼叫:把待套用的新 worker 標記清空,
- * 送出 SKIP_WAITING 訊息讓它 `self.skipWaiting()`,之後觸發的 `controllerchange` 事件會負責
- * 真正的 `window.location.reload()`(見下方 `registerServiceWorkerAutoUpdate`)。沒有待套用的
- * 新版本時安全地什麼都不做(避免元件重複點擊時重複送出/丟例外)。 */
-export function applyPendingServiceWorkerUpdate(): void {
-  if (!pendingWorker) return;
-  const worker = pendingWorker;
-  pendingWorker = null;
-  worker.postMessage({ type: "SKIP_WAITING" });
-}
-
 function markUpdateAvailable(worker: ServiceWorker, isNewDetection: boolean): void {
   pendingWorker = worker;
   updateAvailableListeners.forEach((listener) => listener({ isNewDetection }));
@@ -96,19 +85,69 @@ export const SERVICE_WORKER_UPDATE_CHECK_THROTTLE_MS = 30 * 1000;
 let activeRegistration: ServiceWorkerRegistration | null = null;
 /** 上一次「真的送出」檢查的時間(performance.now());null = 還沒檢查過。 */
 let lastUpdateCheckAt: number | null = null;
-/** 檢查進行中就不再疊一個新的。 */
-let updateCheckInFlight = false;
+/** 檢查進行中就不再疊一個新的(#1016 起存「那一個進行中的檢查」,按「立即更新」時可以直接等它)。 */
+let updateCheckInFlight: Promise<void> | null = null;
 /** registerServiceWorkerAutoUpdate 只准生效一次(避免重複註冊 visibilitychange / controllerchange 監聽)。 */
 let autoUpdateRegistered = false;
 /** 掛上去的監聽 / 計時器的拆除函式。正式環境整個頁面生命週期只掛一次、不需要拆;
  * 留著是讓測試能完整清乾淨(也確保每一個監聽都「拆得掉」)。 */
 const autoUpdateTeardowns: Array<() => void> = [];
 
+/** 等 `registration.update()` 回應最多這麼久(#1016 一併補上,QA #1014 的提醒):瀏覽器的 update()
+ * 理論上一定會 resolve / reject,但萬一網路卡住、永遠不回應,「檢查中」旗標就永遠清不掉,之後所有
+ * 下拉 / 切回前景 / 每小時的檢查都會被當成「上一次還沒結束」而略過。逾時就當作這次檢查結束(不算錯誤)。 */
+export const SERVICE_WORKER_UPDATE_CHECK_TIMEOUT_MS = 5 * 1000;
+
+/** #1016:按「立即更新」時,如果檢查發現更新的版本正在下載,最多等它下載好(進入 waiting)這麼久。
+ * 等不到(網路很慢)就照舊套用手上那一版,不讓使用者卡在「更新中⋯」。 */
+export const SERVICE_WORKER_INSTALL_WAIT_TIMEOUT_MS = 10 * 1000;
+
+/** 最多等 `ms` 毫秒;時間到就當作完成(resolve,不 reject)。原本的 promise 結束時會把計時器清掉。 */
+function settleWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = window.setTimeout(resolve, ms);
+    promise.then(
+      () => {
+        window.clearTimeout(timer);
+        resolve();
+      },
+      () => {
+        // 網路離線或其他暫時性錯誤,靜默忽略,下一次(下拉 / 切回前景 / 每小時)還會再檢查。
+        window.clearTimeout(timer);
+        resolve();
+      },
+    );
+  });
+}
+
+/** 真正向伺服器問一次有沒有新版本。已經有一個在進行中 ⇒ 不疊新的,直接回傳那一個(「進行中不重複」)。
+ * 永遠不會 reject;最多 SERVICE_WORKER_UPDATE_CHECK_TIMEOUT_MS 一定結束並清掉進行中旗標。
+ * 不看節流——節流由呼叫端(checkForServiceWorkerUpdate)自己決定。 */
+function runServiceWorkerUpdateCheck(registration: ServiceWorkerRegistration): Promise<void> {
+  if (updateCheckInFlight) return updateCheckInFlight;
+  let call: Promise<unknown>;
+  try {
+    call = Promise.resolve(registration.update());
+  } catch (error) {
+    // update() 同步丟例外(例如 InvalidStateError)也當作檢查結束。
+    call = Promise.reject(error);
+  }
+  const check: Promise<void> = settleWithin(call, SERVICE_WORKER_UPDATE_CHECK_TIMEOUT_MS).then(
+    () => {
+      // 只清「自己」這一次的旗標(逾時之後原本那個 update() 才回來,也不會誤清別人的)。
+      if (updateCheckInFlight === check) updateCheckInFlight = null;
+    },
+  );
+  updateCheckInFlight = check;
+  return check;
+}
+
 /** 主動檢查一次有沒有新版本(`registration.update()`)。
  *   ・30 秒內已經檢查過、或上一次還沒結束 ⇒ 直接略過(節流)。節流是從「送出檢查」那一刻算,
  *     失敗(離線)也算一次,離線時連續下拉不會一直重試。
  *   ・**永遠不會 reject**:任何錯誤(離線、伺服器錯誤、還沒註冊好、瀏覽器不支援)都安靜吞掉,
  *     呼叫端(下拉刷新)不需要也不應該等它、更不會因此報錯或卡住。
+ *   ・#1016:update() 超過 5 秒沒回應 ⇒ 視同這次檢查結束、清掉「檢查中」旗標(不會永遠卡住後續檢查)。
  *   ・只負責「戳一下」;偵測到新版本之後怎麼通知,一律交給既有的 updatefound 監聽。
  * 回傳 true = 這次真的送出了檢查;false = 被節流或沒有 registration 而略過(給測試看,呼叫端可忽略)。 */
 export function checkForServiceWorkerUpdate(now: number = performance.now()): Promise<boolean> {
@@ -122,24 +161,85 @@ export function checkForServiceWorkerUpdate(now: number = performance.now()): Pr
     return Promise.resolve(false);
   }
   lastUpdateCheckAt = now;
-  updateCheckInFlight = true;
-  let pending: Promise<unknown>;
-  try {
-    pending = Promise.resolve(registration.update());
-  } catch {
-    pending = Promise.resolve();
-  }
-  return pending.then(
-    () => {
-      updateCheckInFlight = false;
-      return true;
-    },
-    () => {
-      // 網路離線或其他暫時性錯誤,靜默忽略,下一次(下拉 / 切回前景 / 每小時)還會再檢查。
-      updateCheckInFlight = false;
-      return true;
-    },
+  return runServiceWorkerUpdateCheck(registration).then(() => true);
+}
+
+// ─── SPECS-INDEX #1016(第 20 批,2026-10-08):「立即更新」按一次就到最新版 ─────────────────────
+// 使用者回報「有時候要按很多次」。根因:原本按下只會對「早先偵測到、已經下載好」的那一版送 SKIP_WAITING;
+// 如果在那之後伺服器又上線了更新的版本,重新整理後瀏覽器馬上又偵測到,提示卡又跳出來,要再按一次。
+// 改成按下時:
+//   ① 先問伺服器一次最新版(registration.update(),**不受 30 秒節流**,但跟其他檢查共用「進行中不重複」;
+//      最多等 5 秒)。
+//   ② 如果真的有更新的版本正在下載(registration.installing),等它下載好進入 waiting(最多 10 秒)。
+//   ③ 對「現在 waiting 的那一版」(= 最新的)送 SKIP_WAITING;之後由 controllerchange 監聽照舊 reload。
+//   檢查失敗(離線)/ 逾時 / 等下載逾時 ⇒ 照舊套用手上那一版,不會卡住。
+// 只有使用者按下按鈕才會走到這裡;不會強制 reload、不會在使用者沒按的情況下套用。
+
+let applyInFlight: Promise<boolean> | null = null;
+
+/** 等這個 worker 下載好(state 不再是 installing);最多等 `ms`。 */
+function waitUntilInstalled(worker: ServiceWorker, ms: number): Promise<void> {
+  if (worker.state !== "installing" && worker.state !== "parsed") return Promise.resolve();
+  return settleWithin(
+    new Promise<void>((resolve) => {
+      const handleStateChange = () => {
+        if (worker.state !== "installing") {
+          worker.removeEventListener("statechange", handleStateChange);
+          resolve();
+        }
+      };
+      worker.addEventListener("statechange", handleStateChange);
+    }),
+    ms,
   );
+}
+
+/** 挑要套用的那一版:優先用 registration 現在 waiting 的(檢查完之後它就是最新的);
+ * 沒有的話退回早先記下的 pendingWorker(已經失效的不要)。 */
+function pickWorkerToApply(registration: ServiceWorkerRegistration | null): ServiceWorker | null {
+  if (registration?.waiting) return registration.waiting;
+  if (pendingWorker && pendingWorker.state !== "redundant") return pendingWorker;
+  return null;
+}
+
+async function applyLatest(): Promise<boolean> {
+  const registration = activeRegistration;
+  if (registration) {
+    await runServiceWorkerUpdateCheck(registration);
+    const installing = registration.installing;
+    if (installing) await waitUntilInstalled(installing, SERVICE_WORKER_INSTALL_WAIT_TIMEOUT_MS);
+  }
+  const worker = pickWorkerToApply(registration);
+  if (!worker) return false;
+  pendingWorker = null;
+  worker.postMessage({ type: "SKIP_WAITING" });
+  return true;
+}
+
+/** 使用者在 UpdateAvailableHint.tsx 按下「立即更新」之後呼叫(#1016 取代原本的
+ * applyPendingServiceWorkerUpdate):先檢查一次最新版、有更新的就等它下載好,再對最新的那一版送
+ * SKIP_WAITING。真正的 `window.location.reload()` 一樣由下方 `registerServiceWorkerAutoUpdate` 的
+ * controllerchange 監聽器負責。
+ *   ・重複呼叫(連點)⇒ 回傳同一個進行中的 promise,不會送兩次。
+ *   ・永遠不會 reject。回傳 true = 已送出 SKIP_WAITING;false = 手上沒有任何可套用的新版本
+ *     (呼叫端可以把按鈕恢復可按)。 */
+export function applyLatestServiceWorkerUpdate(): Promise<boolean> {
+  if (applyInFlight) return applyInFlight;
+  const run: Promise<boolean> = applyLatest()
+    .catch(() => {
+      // 理論上不會走到這裡(上面每一步都不 reject);保險起見退回「照舊套用手上那一版」。
+      const worker = pickWorkerToApply(activeRegistration);
+      if (!worker) return false;
+      pendingWorker = null;
+      worker.postMessage({ type: "SKIP_WAITING" });
+      return true;
+    })
+    .then((applied) => {
+      if (applyInFlight === run) applyInFlight = null;
+      return applied;
+    });
+  applyInFlight = run;
+  return run;
 }
 
 /** 只給單元測試用:把模組層級的狀態清回初始值。 */
@@ -149,7 +249,8 @@ export function __resetServiceWorkerUpdateStateForTest(): void {
   updateAvailableListeners.clear();
   activeRegistration = null;
   lastUpdateCheckAt = null;
-  updateCheckInFlight = false;
+  updateCheckInFlight = null;
+  applyInFlight = null;
   autoUpdateRegistered = false;
 }
 
@@ -217,7 +318,7 @@ export function registerServiceWorkerAutoUpdate(): void {
 
   // 新版本 skipWaiting 後會觸發 controllerchange——這是真正「新版本已經接管這個分頁」的訊號,
   // 這時候重新整理拿到新的 JS/CSS/HTML。**只有使用者主動按下 UpdateAvailableHint.tsx 的
-  // 「重新整理」按鈕、呼叫 applyPendingServiceWorkerUpdate() 送出 SKIP_WAITING 之後,才會走到
+  // 「立即更新」按鈕、呼叫 applyLatestServiceWorkerUpdate() 送出 SKIP_WAITING 之後,才會走到
   // 這裡**——不會有「使用者還沒同意,畫面卻自己跳掉」的情況。用 refreshing 旗標避免重複觸發
   // 造成無限重新整理迴圈(標準的 workbox/PWA 教學都會提醒這個防護,不能省略)。
   let refreshing = false;
