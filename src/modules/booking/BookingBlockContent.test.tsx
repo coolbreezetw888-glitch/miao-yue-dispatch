@@ -113,20 +113,34 @@ describe("BookingBlockContent", () => {
   // 2036-03-12 10:00 台北 = 02:00 UTC
   const START = "2036-03-12T02:00:00+00:00";
 
-  it("一小時卡片:左上時間標籤(台北時間)、中間白色虛線、下面粗體名字置中", () => {
+  it("一小時卡片(#1017):上半左上時間標籤、正中間白色虛線、下半粗體名字置中;上下兩半等分", () => {
     const { container } = render(<BookingBlockContent startAt={START} name="李思賢" height={57} />);
     const root = container.querySelector("[data-booking-block-layout]");
     expect(root?.getAttribute("data-booking-block-layout")).toBe("stacked");
     const children = Array.from(root!.children);
+    expect(children).toHaveLength(3);
+    // 上半部:時間標籤靠左上
+    expect(children[0]!.hasAttribute("data-booking-block-top")).toBe(true);
     expect(children[0]!.textContent).toBe("10:00");
+    expect(children[0]!.className).toContain("items-start");
+    // 中間虛線:不留上下 margin(否則中心會偏)
     expect(children[1]!.hasAttribute("data-booking-block-divider")).toBe(true);
     expect(children[1]!.className).toContain("border-dashed");
     expect(children[1]!.className).toContain("border-[rgba(255,255,255,0.6)]");
+    expect(children[1]!.className).not.toMatch(/\bm[ty]?-/);
+    // 下半部:姓名上下左右置中
+    expect(children[2]!.hasAttribute("data-booking-block-bottom")).toBe(true);
     expect(children[2]!.textContent).toBe("李思賢");
-    // 剩餘空間垂直 + 水平置中
-    expect(children[2]!.className).toContain("flex-1");
     expect(children[2]!.className).toContain("items-center");
     expect(children[2]!.className).toContain("justify-center");
+    // 上下兩半等分(flex-1 + basis-0)⇒ 虛線落在正中間
+    for (const half of [children[0]!, children[2]!]) {
+      expect(half.className).toContain("flex-1");
+      expect(half.className).toContain("basis-0");
+    }
+    // 上半部不准縮到比時間標籤矮(放不下時寧可把虛線往下推,也不裁切標籤)
+    expect(children[0]!.className).not.toContain("min-h-0");
+    expect(children[0]!.className).not.toContain("overflow-hidden");
     const name = container.querySelector("[data-booking-block-name]")!;
     expect(name.className).toContain("font-bold");
     expect(name.className).toContain("truncate");

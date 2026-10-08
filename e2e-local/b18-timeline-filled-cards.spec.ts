@@ -1,5 +1,9 @@
 // SPECS-INDEX #1012(第 18 批):時間軸預約卡片整張填色 + 白字;時間標籤左上半透明白底深色字;
 // 姓名粗體、在虛線下方剩餘空間垂直 + 水平置中;追加:卡片之間留間隔(左右各 3px、前後相連 3px)。
+// #1017(第 20 批):虛線改在卡片**垂直正中間**(50%),上半時間標籤靠左上、下半姓名上下左右置中;
+//   每張三層卡片量「虛線中心 ÷ 卡片高度」,誤差 ≤ 1px;時間標籤不能被裁切、不能壓到虛線。
+//   fixture 的服務項目一格 30 分鐘、做不出真的 45 分鐘單 ⇒ 45 分鐘高度用一小時卡複製一份、
+//   把高度改成 45 分鐘卡實際畫出的 42px 來量(同一個元件、同一組 class,只差高度)。
 // 執行:`npm run test:e2e:local -- b18-timeline-filled-cards`(只連本機 Docker Supabase)。
 //
 //   M1 商家端 1280 / 375:半小時 / 一小時 / 兩小時卡片、待確認 / 已確認 / 已完成三種狀態色(已取消的單
@@ -206,6 +210,15 @@ interface CardLook {
   /** 姓名中心 與「虛線下方(或整張)剩餘空間」中心 的垂直 / 水平差距(px) */
   nameDy: number;
   nameDx: number;
+  /** #1017:卡片畫出來的高度(px) */
+  cardH: number;
+  /** #1017:虛線中心離卡片上緣的距離(px);沒有虛線 = null */
+  dividerY: number | null;
+  /** #1017:時間標籤上緣 / 下緣離卡片上緣的距離(px) */
+  labelTop: number;
+  labelBottom: number;
+  /** #1017:時間標籤有沒有被上半部裁切(內容高 > 可見高) */
+  labelClipped: boolean;
 }
 
 /** 讀一張卡片的外觀,並量姓名有沒有在剩餘空間正中間。 */
@@ -219,7 +232,16 @@ async function readCard(block: Locator): Promise<CardLook> {
     const lcs = getComputedStyle(label);
     const nameBox = name.parentElement!.getBoundingClientRect(); // 置中用的那個區塊
     const n = name.getBoundingClientRect();
+    const card = el.getBoundingClientRect();
+    const d = divider?.getBoundingClientRect();
+    const l = label.getBoundingClientRect();
+    const top = label.parentElement!;
     return {
+      cardH: card.height,
+      dividerY: d ? d.top + d.height / 2 - card.top : null,
+      labelTop: l.top - card.top,
+      labelBottom: l.bottom - card.top,
+      labelClipped: top.getBoundingClientRect().height + 0.5 < l.height,
       bg: cs.backgroundColor,
       color: cs.color,
       borderLeftWidth: cs.borderLeftWidth,
@@ -248,11 +270,46 @@ function expectFilledLook(look: CardLook, c: Card, layout: "stacked" | "inline")
   if (layout === "stacked") {
     expect(look.dividerStyle).toBe("dashed");
     expect(look.dividerColor).toBe("rgba(255, 255, 255, 0.6)");
+    expectDividerCentered(look, c.name);
   } else {
     expect(look.dividerColor).toBeNull();
   }
   expect(look.nameDy, `${c.name} 姓名垂直置中`).toBeLessThanOrEqual(1.5);
   expect(look.nameDx, `${c.name} 姓名水平置中`).toBeLessThanOrEqual(1.5);
+}
+
+/** #1017:虛線在卡片垂直正中間(誤差 ≤ 1px);時間標籤在上半部、沒被裁切、沒壓到虛線。 */
+function expectDividerCentered(look: CardLook, label: string) {
+  const y = look.dividerY!;
+  const pct = (y / look.cardH) * 100;
+  console.log(
+    `[#1017] ${label}:卡高 ${look.cardH.toFixed(1)}px、虛線中心 ${y.toFixed(2)}px = ${pct.toFixed(1)}%;` +
+      `時間標籤 ${look.labelTop.toFixed(1)}~${look.labelBottom.toFixed(1)}px`,
+  );
+  expect(Math.abs(y - look.cardH / 2), `${label} 虛線在正中間`).toBeLessThanOrEqual(1);
+  expect(look.labelClipped, `${label} 時間標籤沒被裁切`).toBe(false);
+  expect(look.labelTop, `${label} 時間標籤在卡片內`).toBeGreaterThanOrEqual(0);
+  expect(look.labelBottom, `${label} 時間標籤在虛線上方`).toBeLessThanOrEqual(y);
+}
+
+/** #1017:把一張三層卡片複製一份、高度改成 heightPx,量完就拿掉(45 分鐘卡做不出真的單)。 */
+async function readCardAtHeight(block: Locator, heightPx: number): Promise<CardLook> {
+  const marker = `b18-probe-${heightPx}`;
+  await block.evaluate(
+    (el, [h, m]) => {
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.style.height = `${h}px`;
+      clone.removeAttribute("data-testid");
+      clone.setAttribute("data-b18-probe", m as string);
+      clone.style.pointerEvents = "none";
+      el.parentElement!.appendChild(clone);
+    },
+    [heightPx, marker] as [number, string],
+  );
+  const probe = block.page().locator(`[data-b18-probe="${marker}"]`);
+  const look = await readCard(probe);
+  await probe.evaluate((el) => el.remove());
+  return look;
 }
 
 test.beforeAll(async () => {
@@ -306,6 +363,11 @@ test("M1 #1012 商家端:整張填色白字、標籤固定、姓名置中;欄與
     const assistBlock = block(assist, A, "assistant");
     await expect(assistBlock).toContainText("張協助(協助)");
     expectFilledLook(await readCard(assistBlock), assist, "stacked");
+    // #1017:45 分鐘卡(畫出來 42px = 45px 扣上下間隔 3px)
+    const m45 = await readCardAtHeight(block(hour), 42);
+    expect(m45.layout).toBe("stacked");
+    expectDividerCentered(m45, `商家端 ${width} 45 分鐘(複製)`);
+    expect(m45.nameDy, "45 分鐘姓名在下半部垂直置中").toBeLessThanOrEqual(1.5);
     // 已取消的單時間軸本來就不顯示(不變)
     await expect(page.getByTestId(`booking-block-${card("林取消").id}-main`)).toHaveCount(0);
 
@@ -385,6 +447,11 @@ test("M2 #1012 服務人員端:同一套填色白字與間隔;點卡片照樣開
     expectFilledLook(await readCard(block("陳兩時")), two, "stacked");
     await expect(block("張協助")).toContainText("張協助(協助)");
     expectFilledLook(await readCard(block("張協助")), assist, "stacked");
+    // #1017:45 分鐘卡(複製一小時卡、高度 42px)
+    const m45 = await readCardAtHeight(block("李一時"), 42);
+    expect(m45.layout).toBe("stacked");
+    expectDividerCentered(m45, `服務人員端 ${width} 45 分鐘(複製)`);
+    expect(m45.nameDy, "45 分鐘姓名在下半部垂直置中").toBeLessThanOrEqual(1.5);
     await expect(block("林取消")).toHaveCount(0);
 
     const g = (await grid.boundingBox())!;
