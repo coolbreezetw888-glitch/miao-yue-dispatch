@@ -25,6 +25,17 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 9. `apply_industry_preset`、`generate_booking_slug` 已收回 PUBLIC/anon/authenticated 執行權限(只剩 service_role);呼叫者是 SECURITY DEFINER 的建店函式。
 10. 測試用「現在時間」只在 `private.public_available_slots_at`(postgres/service_role),**對外函式不能多一個指定現在時間的參數**。
 
+## 第 2 批 LINE 登入(2026-10-08,commit 191be87,#1042)
+- **每店自己的 LINE Login channel**,Secret 存 Vault(`merchant_line_login_configs`),只進不出;登入走 Edge Function `customer-line-login`(`verify_jwt=false`,寫在 config.toml),**自驗 HS256 id_token**(LINE 網頁登入用 Channel Secret 簽;不用 Supabase 自訂 OIDC:免費只 3 個且只認公鑰)。state 存雜湊、單次;PKCE;固定 callback `/auth/line/callback`(`PUBLIC_SITE_URL` 組,不收前端傳入)。掛自訂網域時每店要補登 callback。
+- 客戶帳號 = 「LINE channel + userId」一個 `auth.users`,合成 email `line-<uuid>@customer.miaoyue.invalid`,`app_metadata.account_type='customer'`(判斷一律看 app_metadata,不看 user_metadata)。
+- **任何「用 email 找帳號再給權限」的地方都要排除客人帳號**(invite_merchant_admin、platform_add_merchant_admin、platform_set_group_admin、lookup_*_by_email、`_shared/inviteAccountResolver.ts` 擋 `.invalid`),錯誤訊息要跟「查無此人」逐字相同。新增類似入口時照做。
+- 前端客戶專用 client(`customerClient.ts`,storageKey `miaoyue-customer-<slug>`);後台 AppLayout / PlatformAdminGuard 遇到客人帳號只登出後台 client。
+- 電話規則(使用者定案):既有會員**直接接上**(不驗證)+ 店家鈴鐺 `member_line_login_linked`(管理員 + 有會員權限客服);已被別的客戶帳號接上 ⇒ `phone_taken`(不取代、不帶任何資料);店家解除後被解除的帳號進 `customer_member_link_blocks`,不能自動接回,`allow_member_customer_relink` 撤銷;每人每店 24h 最多 5 支電話;收市話(0 開頭 9~10 碼,不收分機)。多位聯絡人 #1041 在第 4 批。
+- 建會員沿用 `create_member`,靠 `private.can_manage_members` 的交易內 GUC 標記(只有 `create_member_as_customer_flow` 設,用完即清);PostgREST 不開放 `set_config`,客人設不到。
+- Edge 取 IP:先 `cf-connecting-ip`(Cloudflare 會擋客戶端自帶此標頭,回 error 1000),再 XFF **最後一段**,都沒有 = `unknown`;**不可信 XFF 第一段**。頻率限制在「店有啟用 LINE 登入」之後才計算。
+- 設 Edge secret(`supabase secrets set`)會讓**所有** Edge Function 版本 +1,verify_jwt 不變;部署前後用 `functions list` 核對。
+- LINE 好友狀態 API 回 400/403 當 `not_linked` 是推測,要用真 LINE 實測確認。
+
 ## 前端(`src/modules/public-booking/`)
 - 不套後台外殼、不需登入;已登入後台的人打開也看客人版,不帶自己商家資料。主題色依該預約頁商家,離開要還原。
 - ①~⑤ 同一網址內切換,系統「上一頁」= 上一步(history state);填的資料**不存瀏覽器**,重新整理回 ①。
