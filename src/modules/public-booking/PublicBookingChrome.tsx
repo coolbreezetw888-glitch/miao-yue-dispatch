@@ -53,6 +53,43 @@ export function TitleOnlyHeader({ title }: { title: string }) {
   );
 }
 
+/**
+ * C2 ⑥ 系列(登入會員 / 完成會員資料 / 不登入預約)的頁首:返回箭頭(可省略)+ 置中標題 + 右側動作(登出)。
+ * 沒有步驟進度條(⑥ 已經不是 ②~⑤ 的四步驟,同預覽圖)。
+ */
+export function SimpleHeader({
+  title,
+  onBack,
+  right,
+}: {
+  title: string;
+  onBack?: (() => void) | undefined;
+  right?: ReactNode;
+}) {
+  return (
+    <div className="relative flex h-[54px] items-center justify-between px-2 sm:px-3">
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="回上一步"
+          className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-foreground">
+            <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+          </span>
+        </button>
+      ) : (
+        <span className="h-11 w-11 shrink-0" aria-hidden="true" />
+      )}
+      <h1 className="pointer-events-none absolute inset-x-[72px] truncate text-center text-base font-bold text-foreground">
+        {title}
+      </h1>
+      <div className="flex min-w-11 shrink-0 justify-end">{right}</div>
+    </div>
+  );
+}
+
 const STEP_NAMES: readonly string[] = ["選服務", "選服務人員", "選時間", "填資料"];
 /** 「步驟 1／4」與步驟名稱之間的全形空白(同預覽圖)。寫成跳脫字元,避免原始碼裡出現看不見的特殊空白。 */
 const FULLWIDTH_SPACE = "\u3000";
@@ -112,7 +149,7 @@ export function StepHeader({
   );
 }
 
-function LineIcon({ className }: { className?: string }) {
+export function LineIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={className}>
       <path

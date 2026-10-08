@@ -25,10 +25,21 @@ export interface PublicMerchant {
 }
 
 export interface PublicBookingSettings {
-  /** 第 2 / 3 批才用;這批只是先收下來。 */
+  /** 允許不登入預約(⑥-1 的「不登入，直接預約」、⑥-4)。 */
   allow_guest_booking: boolean;
   /** = 商家產業是到府。 */
   is_on_site: boolean;
+  /** C2-C01:有設定 LINE 登入而且已啟用。沒回傳(舊版函式)= false。 */
+  line_login_enabled: boolean;
+}
+
+/**
+ * C2-C06:同意勾選框要用的會員政策。商家沒開或內容空白 ⇒ 勾選框只寫「隱私權政策」。
+ * 內容是商家自己打的純文字,只在「會員政策」小卡窗裡顯示。
+ */
+export interface PublicMemberPolicy {
+  enabled: boolean;
+  content: string | null;
 }
 
 export interface PublicCategory {
@@ -62,6 +73,7 @@ export interface PublicBookingPageOk {
   status: "ok";
   merchant: PublicMerchant;
   booking_settings: PublicBookingSettings;
+  member_policy: PublicMemberPolicy;
   categories: PublicCategory[];
   service_items: PublicServiceItem[];
   staff: PublicStaff[];

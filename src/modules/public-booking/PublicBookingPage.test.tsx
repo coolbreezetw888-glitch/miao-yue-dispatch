@@ -62,7 +62,9 @@ function makePage(
     booking_settings: {
       allow_guest_booking: true,
       is_on_site: (overrides.industry_type ?? "on_site_dispatch") === "on_site_dispatch",
+      line_login_enabled: false,
     },
+    member_policy: { enabled: false, content: null },
     categories: [{ id: "split", name: "分離式冷氣" }],
     service_items: [
       {

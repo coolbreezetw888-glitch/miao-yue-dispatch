@@ -6,17 +6,21 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { CustomerAccountBlocked } from "@/components/CustomerAccountBlocked";
 import { GuardLoading } from "@/components/patterns";
+import { isCustomerAccountUser, signOutBackendClientOnly } from "@/lib/customerAccountGuard";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { amIPlatformAdmin } from "./api";
 
 export function PlatformAdminGuard({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<"checking" | "allowed">("checking");
+  // C2-H01:"customer" = 後台 client 拿到客人帳號 ⇒ 顯示原因並只登出後台 client(不導去 /signin)。
+  const [status, setStatus] = useState<"checking" | "allowed" | "customer">("checking");
 
   useEffect(() => {
     let active = true;
+    let blocked = false;
 
     async function check() {
       // 2026-09 修正:改用 getVerifiedUser(),取代直接呼叫 supabase.auth.getUser()。原因跟
@@ -25,6 +29,12 @@ export function PlatformAdminGuard({ children }: { children: ReactNode }) {
       if (!active) return;
       if (!user) {
         navigate("/signin", { replace: true });
+        return;
+      }
+      if (isCustomerAccountUser(user)) {
+        blocked = true;
+        setStatus("customer");
+        void signOutBackendClientOnly();
         return;
       }
       try {
@@ -45,6 +55,7 @@ export function PlatformAdminGuard({ children }: { children: ReactNode }) {
     check();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (blocked) return;
       if (!session) navigate("/signin", { replace: true });
     });
 
@@ -53,6 +64,10 @@ export function PlatformAdminGuard({ children }: { children: ReactNode }) {
       sub.subscription.unsubscribe();
     };
   }, [navigate]);
+
+  if (status === "customer") {
+    return <CustomerAccountBlocked />;
+  }
 
   if (status !== "allowed") {
     return <GuardLoading />;

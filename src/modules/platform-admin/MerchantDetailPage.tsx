@@ -27,6 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LineLoginSettingsCard } from "@/modules/line-notifications/LineLoginSettingsCard";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -695,6 +696,9 @@ export default function MerchantDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* 客戶端第 2 批(C2-A05):超管協助商家設定 LINE 登入(跟商家端共用同一張卡)。 */}
+        <LineLoginSettingsCard merchantId={merchant.id} />
       </div>
     </PlatformAdminShell>
   );

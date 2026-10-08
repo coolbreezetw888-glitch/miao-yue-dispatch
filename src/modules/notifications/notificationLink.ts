@@ -30,6 +30,14 @@ export const NOTIFICATION_TARGET_URLS: Record<NotificationTargetType, string> = 
   agent: "/app/orders",
 };
 
+/**
+ * 客戶端第 2 批:跟訂單無關的鈴鐺事件,點了直接去對應的頁面(不看身份)。
+ * member_line_login_linked(會員用 LINE 登入接上)⇒ 會員列表。推播沒有這個事件,所以不影響上面三份對照表的一致性。
+ */
+export const EVENT_TARGET_URLS: Readonly<Record<string, string>> = {
+  member_line_login_linked: "/app/members",
+};
+
 /** §4.7 第 4 點:唯一允許的 fallback(這個路由一定存在,HomePage 本身會依角色自動導到落點)。 */
 export const NOTIFICATION_FALLBACK_URL = "/app";
 
@@ -38,7 +46,13 @@ export const NOTIFICATION_FALLBACK_URL = "/app";
  * 刻意只吃 target_type 一個欄位 —— 深層連結(點進去直接開那一筆訂單)v1 不做,
  * `booking_id` 已經存進資料庫了,之後要做只是改這支函式,不用動資料庫(§13.7 最後一段)。
  */
-export function resolveNotificationLink(input: { target_type: string | null | undefined }): string {
+export function resolveNotificationLink(input: {
+  target_type: string | null | undefined;
+  /** 客戶端第 2 批:少數「跟訂單無關」的事件有自己的目的地(見 EVENT_TARGET_URLS)。 */
+  event_type?: string | null | undefined;
+}): string {
+  const byEvent = input.event_type ? EVENT_TARGET_URLS[input.event_type] : undefined;
+  if (byEvent) return byEvent;
   const targetType = input.target_type;
   if (!targetType) return NOTIFICATION_FALLBACK_URL;
   return (
@@ -246,6 +260,8 @@ export const BELL_ONLY_EVENT_LABELS: Readonly<Record<string, string>> = {
   // SPECS-INDEX #997 第 11 批 H:由資料庫寫給其他管理員與有訂單管理權限的在職客服(純站內,推播設定沒有)。
   booking_completed_cancelled: "已完成訂單被取消時",
   booking_completed_reverted: "已完成訂單被還原時",
+  // 客戶端第 2 批(零之二第 1 點):客人用 LINE 登入接上「既有」會員時,資料庫寫給管理員與有會員權限的客服(純站內)。
+  member_line_login_linked: "會員用 LINE 登入接上時",
 };
 
 /**

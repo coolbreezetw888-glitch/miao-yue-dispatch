@@ -49,11 +49,22 @@ export type InviteAccountResult =
   | { kind: "lookup_error"; error: unknown }
   | { kind: "send_error"; message: string };
 
+/** `.invalid` 結尾的網域(RFC 2606 保留,永遠收不到信)。 */
+export function isUndeliverableEmail(email: string): boolean {
+  return /\.invalid\s*$/i.test(email.trim());
+}
+
 export async function resolveInviteAccount(
   email: string,
   redirectTo: string,
   deps: InviteAccountDeps,
 ): Promise<InviteAccountResult> {
+  // 客戶端第 2 批(QA):`.invalid` 網域依 RFC 2606 永遠收不到信 —— 客戶端 LINE 登入建立的客人帳號就是用這種
+  // 合成信箱。直接擋下,不查帳號、不呼叫 Supabase 寄信(資料庫的 lookup_auth_account_by_email 也已排除客人帳號,
+  // 這裡是第二道)。訊息只說「收不到信」,不透露那是不是某個客人的帳號。
+  if (isUndeliverableEmail(email)) {
+    return { kind: "send_error", message: "這個 Email 收不到信，請確認是否打錯" };
+  }
   const { data: account, error: lookupError } = await deps.lookupAccount(email);
   if (lookupError) {
     return { kind: "lookup_error", error: lookupError };

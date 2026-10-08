@@ -116,3 +116,21 @@ Deno.test("重寄邀請回傳的帳號跟查到的不一致 → send_error,不�
   });
   assertEquals((await resolveInviteAccount(EMAIL, REDIRECT, deps)).kind, "send_error");
 });
+
+Deno.test("客戶端第 2 批:客人帳號的合成信箱(.invalid)→ send_error,不查帳號、不寄任何信", async () => {
+  let looked = 0;
+  const { deps, calls } = makeDeps({ account: { user_id: "customer-uid", email_confirmed: true, is_activated: true } });
+  const wrapped: InviteAccountDeps = { ...deps, lookupAccount(e) { looked += 1; return deps.lookupAccount(e); } };
+  for (const e of ["line-0000@customer.miaoyue.invalid", "  LINE-AB@Customer.Miaoyue.INVALID "]) {
+    const r = await resolveInviteAccount(e, REDIRECT, wrapped);
+    assertEquals(r, { kind: "send_error", message: "這個 Email 收不到信，請確認是否打錯" });
+  }
+  assertEquals([looked, calls.invite.length, calls.setup.length], [0, 0, 0]);
+});
+
+Deno.test("客戶端第 2 批:資料庫把客人帳號當查無帳號時,一般信箱仍照原流程(寄邀請信)", async () => {
+  const { deps, calls } = makeDeps({ account: null });
+  const r = await resolveInviteAccount("invalid.user@example.com", REDIRECT, deps);
+  assertEquals(r, { kind: "ok", userId: "new-user", status: "invited" });
+  assertEquals(calls.invite.length, 1);
+});

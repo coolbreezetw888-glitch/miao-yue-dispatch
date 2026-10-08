@@ -102,3 +102,51 @@ describe("parsePublicAvailableSlots", () => {
     ).toThrow(PublicBookingError);
   });
 });
+
+describe("C2-C01 / C2-C06 新欄位", () => {
+  const base = {
+    status: "ok",
+    merchant: {
+      name: "店",
+      industry_type: "in_store_beauty",
+      logo_url: null,
+      address: null,
+      phone: null,
+      intro: null,
+      theme_preset: null,
+      theme_custom_color: null,
+      announcement: null,
+      line_friend_url: null,
+    },
+    categories: [],
+    service_items: [],
+    staff: [],
+  };
+
+  it("line_login_enabled、member_policy(有內容 ⇒ 開;null / 空白 ⇒ 沒開);Channel ID 不會被收下", () => {
+    const page = parsePublicBookingPage({
+      ...base,
+      booking_settings: {
+        allow_guest_booking: true,
+        is_on_site: false,
+        line_login_enabled: true,
+        member_policy: "點數一年內有效。",
+        channel_id: "SENTINEL_CHANNEL",
+      },
+    });
+    if (page.status !== "ok") throw new Error("expected ok");
+    expect(page.booking_settings.line_login_enabled).toBe(true);
+    expect(page.member_policy).toEqual({ enabled: true, content: "點數一年內有效。" });
+    expect(JSON.stringify(page)).not.toContain("SENTINEL_CHANNEL");
+
+    for (const policy of [null, "  ", undefined]) {
+      const p2 = parsePublicBookingPage({
+        ...base,
+        booking_settings: { member_policy: policy },
+      });
+      if (p2.status !== "ok") throw new Error("expected ok");
+      expect(p2.booking_settings.line_login_enabled).toBe(false);
+      expect(p2.member_policy).toEqual({ enabled: false, content: null });
+    }
+  });
+});

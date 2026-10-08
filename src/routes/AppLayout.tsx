@@ -95,7 +95,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { CustomerAccountBlocked } from "@/components/CustomerAccountBlocked";
+import { isCustomerAccountUser, signOutBackendClientOnly } from "@/lib/customerAccountGuard";
 
 import { GuardLoading } from "@/components/patterns";
 import InstallPwaHint from "@/components/InstallPwaHint";
@@ -191,6 +194,10 @@ export default function AppLayout() {
   const [userId, setUserId] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  // C2-H01:後台 client 拿到客人帳號的登入狀態 ⇒ 顯示「這是客人帳號，不能進入後台」並只登出後台 client。
+  // 用 ref 記住,登出觸發的 onAuthStateChange 才不會把畫面導去 /signin(要讓使用者看得到原因)。
+  const [customerBlocked, setCustomerBlocked] = useState(false);
+  const customerBlockedRef = useRef(false);
 
   const { merchants, isLoading: merchantsLoading } = useGroupMerchants();
   const clearCurrentMerchantSelection = useClearCurrentMerchantSelection();
@@ -254,10 +261,20 @@ export default function AppLayout() {
   // 只多存一份 userId(user.id)供 1.2 首頁個人資料卡片查詢自己的管理員/客服紀錄使用。
   useEffect(() => {
     let active = true;
+    function blockCustomer() {
+      customerBlockedRef.current = true;
+      setCustomerBlocked(true);
+      void signOutBackendClientOnly();
+    }
     getVerifiedUser().then((user) => {
       if (!active) return;
+      if (customerBlockedRef.current) return;
       if (!user) {
         navigate("/signin", { replace: true });
+        return;
+      }
+      if (isCustomerAccountUser(user)) {
+        blockCustomer();
         return;
       }
       setEmail(user.email ?? null);
@@ -266,7 +283,9 @@ export default function AppLayout() {
       setAuthChecked(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (customerBlockedRef.current) return;
       if (!session) navigate("/signin", { replace: true });
+      else if (isCustomerAccountUser(session.user)) blockCustomer();
       else {
         setEmail(session.user.email ?? null);
         setUserId(session.user.id);
@@ -321,6 +340,10 @@ export default function AppLayout() {
     clearCurrentMerchantSelection();
     void queryClient.cancelQueries().then(() => queryClient.clear());
     void supabase.auth.signOut();
+  }
+
+  if (customerBlocked) {
+    return <CustomerAccountBlocked />;
   }
 
   if (!authChecked || merchantsLoading || (merchants.length === 0 && authChecked)) {

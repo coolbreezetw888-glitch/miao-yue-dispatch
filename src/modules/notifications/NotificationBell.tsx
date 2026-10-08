@@ -147,7 +147,9 @@ export function NotificationBell({
     }
 
     // ③ 用純函式算出目的地並導航(跟 §5.5 的推播 payload url 完全同一套規則)。
-    navigate(resolveNotificationLink({ target_type: item.primaryTargetType }));
+    navigate(
+      resolveNotificationLink({ target_type: item.primaryTargetType, event_type: item.event_type }),
+    );
 
     // ④ 關閉面板。
     setOpen(false);

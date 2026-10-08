@@ -385,3 +385,21 @@ describe("#997 第 11 批 H:booking_cancelled 併進 booking_completed_cancelled
     ).toHaveLength(2);
   });
 });
+
+describe("客戶端第 2 批:會員用 LINE 登入接上的鈴鐺", () => {
+  it("有中文標籤(不會顯示成英文代碼),而且只在鈴鐺專用清單", () => {
+    expect(BELL_ONLY_EVENT_LABELS["member_line_login_linked"]).toBe("會員用 LINE 登入接上時");
+    expect(Object.keys(PUSH_NOTIFICATION_EVENT_LABELS)).not.toContain("member_line_login_linked");
+  });
+
+  it("點了到會員列表(不看身份);其他事件照舊依身份", () => {
+    for (const t of ["admin", "agent"]) {
+      expect(
+        resolveNotificationLink({ target_type: t, event_type: "member_line_login_linked" }),
+      ).toBe("/app/members");
+    }
+    expect(resolveNotificationLink({ target_type: "admin", event_type: "booking_created" })).toBe(
+      NOTIFICATION_TARGET_URLS.admin,
+    );
+  });
+});

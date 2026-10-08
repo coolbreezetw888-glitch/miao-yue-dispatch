@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   ChevronLeft,
@@ -52,6 +52,34 @@ import {
   rejectedSlotsMessage,
 } from "./api";
 import { ContactButtons, PublicShell, StepHeader, TitleOnlyHeader } from "./PublicBookingChrome";
+import {
+  CompleteProfileError,
+  completeCustomerProfile,
+  CustomerAuthError,
+  fetchCustomerSessionState,
+  redirectToAuthorizeUrl,
+  signOutCustomer,
+  startLineLogin,
+} from "./customerAuthApi";
+import {
+  completeProfileErrorMessage,
+  isAllowedAuthorizeUrl,
+  isSessionInvalidHint,
+  lineStartErrorMessage,
+  peekPendingDraft,
+  rememberLoginSlug,
+  takePendingDraft,
+  type BookingDraft,
+  type CustomerSessionState,
+  type PendingDraft,
+} from "./customerLoginLogic";
+import {
+  CustomerProfileScreen,
+  GuestScreen,
+  LineLoginScreen,
+  LinkedConfirmScreen,
+  type ProfileSubmitOutcome,
+} from "./CustomerLoginScreens";
 import {
   addDays,
   buildPublicServiceTabs,
@@ -200,10 +228,13 @@ function NoticeCard({ title, body, testId }: { title: string; body: string; test
 }
 
 // =========================================================================
-// 預約流程(① ~ ⑤)
+// 預約流程(① ~ ⑤,C2 加上 ⑥)
 // =========================================================================
 
-type Step = 0 | 1 | 2 | 3 | 4; // 0 = ① 店家首頁,1 = ② 選服務,2 = ③ 選服務人員,3 = ④ 選時間,4 = ⑤ 填資料
+// 0 = ① 店家首頁,1 = ② 選服務,2 = ③ 選服務人員,3 = ④ 選時間,4 = ⑤ 填資料,
+// 5 = ⑥ 會員(依登入狀態顯示 ⑥-1 LINE 登入 / ⑥-2 填電話 / 已登入確認),6 = ⑥-4 不登入預約(C2)。
+type Step = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+const LAST_STEP = 6;
 
 interface FlowHistoryState {
   c1Session?: unknown;
@@ -220,28 +251,64 @@ interface PickedSlot {
   time: string;
 }
 
+/** C2-B04:登入回來的草稿 → 預約頁的初始狀態(只在第一次掛上時用一次)。 */
+function draftToInitial(page: PublicBookingPageOk, pending: PendingDraft | null) {
+  const draft = pending?.draft ?? null;
+  if (!draft) return null;
+  const known = new Set(page.service_items.map((i) => i.id));
+  const selection = new Map<string, number>();
+  for (const item of draft.items) {
+    if (known.has(item.service_item_id)) selection.set(item.service_item_id, item.quantity);
+  }
+  const items = selectionToItems(selection);
+  const staffId = draft.staff_id;
+  return {
+    selection,
+    staffId,
+    picked: { signature: JSON.stringify([items, staffId]), date: draft.date, time: draft.time },
+    form: { name: draft.name, address: draft.address, note: draft.note },
+  };
+}
+
+const SESSION_QUERY_KEY = (slug: string) => [PAGE_QUERY_KEY, "customer-session", slug] as const;
+
 function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
   const [sessionId] = useState(newSessionId);
 
   const { merchant, booking_settings: settings } = page;
   const contacts = useMemo(() => resolveContactLinks(merchant), [merchant]);
   const isOnSite = settings.is_on_site;
+  const lineLoginEnabled = settings.line_login_enabled;
+  const allowGuest = settings.allow_guest_booking;
+
+  // C2-B04 / C2-E07:LINE 登入回來時帶著草稿(只在記憶體;重新整理就沒有 ⇒ 回到 ①)。
+  const [initial] = useState(() => draftToInitial(page, peekPendingDraft(slug)));
 
   // ─── 選擇的內容(只放記憶體)───
-  const [selection, setSelection] = useState<PublicSelection>(() => new Map());
+  const [selection, setSelection] = useState<PublicSelection>(
+    () => initial?.selection ?? new Map(),
+  );
   const [serviceTab, setServiceTab] = useState<string | null>(null);
-  const [chosenStaffId, setChosenStaffId] = useState<string | null>(null);
+  const [chosenStaffId, setChosenStaffId] = useState<string | null>(initial?.staffId ?? null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [viewDate, setViewDate] = useState<string | null>(null);
-  const [picked, setPicked] = useState<PickedSlot | null>(null);
-  const [form, setForm] = useState<CustomerFormValues>({ name: "", address: "", note: "" });
+  const [picked, setPicked] = useState<PickedSlot | null>(initial?.picked ?? null);
+  const [form, setForm] = useState<CustomerFormValues>(
+    () => initial?.form ?? { name: "", address: "", note: "" },
+  );
   const [touched, setTouched] = useState<Record<keyof CustomerFormValues, boolean>>({
     name: false,
     address: false,
     note: false,
   });
+  // ⑥ 的提示:剛接上會員 / 剛建立會員(已登入確認畫面上方)、在 LINE 按了取消(⑤ 上方)。
+  const [linkNotice, setLinkNotice] = useState<"existing" | "created" | null>(null);
+  const [returnNotice, setReturnNotice] = useState<"cancelled" | "failed" | null>(null);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const totals = useMemo(
     () => computeSelectionTotals(selection, page.service_items),
@@ -259,6 +326,19 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   // C1-A07 邊界:回上一步改了服務或服務人員 ⇒ 已選的時間清空、重新查詢。
   const signature = JSON.stringify([items, staffId]);
   const pickedSlot = picked && picked.signature === signature ? picked : null;
+  const errors = validateCustomerForm(form, isOnSite);
+  const formValid = Object.keys(errors).length === 0;
+
+  // C2-C05:這間店的客人登入狀態(只有啟用 LINE 登入的店才查;沒登入不打網路)。
+  const sessionQuery = useQuery({
+    queryKey: SESSION_QUERY_KEY(slug),
+    queryFn: () => fetchCustomerSessionState(slug),
+    enabled: lineLoginEnabled,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+  const session: CustomerSessionState = sessionQuery.data ?? { state: "anonymous" };
 
   // ─── 步驟(來自 history state)───
   const historyState = (location.state ?? null) as FlowHistoryState | null;
@@ -266,11 +346,11 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     historyState?.c1Session === sessionId &&
     typeof historyState.c1Step === "number" &&
     historyState.c1Step >= 0 &&
-    historyState.c1Step <= 4
+    historyState.c1Step <= LAST_STEP
       ? (historyState.c1Step as Step)
       : 0;
   // 用「上一頁 / 下一頁」跳回來時,前面的條件可能已經不成立(例:回 ② 把主要服務取消後又按瀏覽器的下一頁)
-  // ⇒ 最多只顯示到條件還成立的那一步。
+  // ⇒ 最多只顯示到條件還成立的那一步。⑥ 只有啟用 LINE 登入的店才有(沒啟用的店這批維持第 1 批停用按鈕)。
   const maxStep: Step =
     serviceBlocked !== null || page.service_items.length === 0
       ? 1
@@ -278,20 +358,103 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         ? 2
         : pickedSlot === null
           ? 3
-          : 4;
-  const step = Math.min(requestedStep, maxStep) as Step;
+          : !lineLoginEnabled || !formValid
+            ? 4
+            : LAST_STEP;
+  let step = Math.min(requestedStep, maxStep) as Step;
+  if (step === 6 && !allowGuest) step = 5;
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [step]);
 
-  function goTo(next: Step) {
-    navigate(location.pathname, { state: { c1Session: sessionId, c1Step: next } });
+  function goTo(next: Step, replace = false) {
+    navigate(location.pathname, { state: { c1Session: sessionId, c1Step: next }, replace });
   }
   function goBack() {
     // 這一步一定是從上一步 push 進來的(同一個 session),所以直接退回上一筆歷史紀錄。
     if (requestedStep > 0) navigate(-1);
     else goTo(0);
+  }
+
+  // C2-B04:登入回來 ⇒ 歷史紀錄排成「⑤ → ⑥」(系統上一頁回到 ⑤);在 LINE 按取消 ⇒ 停在 ⑤。
+  const restoreHandled = useRef(false);
+  useEffect(() => {
+    if (restoreHandled.current) return;
+    restoreHandled.current = true;
+    const pending = takePendingDraft(slug);
+    if (!pending || !initial) return;
+    goTo(4, true);
+    if (pending.outcome === "logged_in") goTo(5);
+    else setReturnNotice(pending.outcome);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function buildDraft(): BookingDraft | null {
+    if (!pickedSlot) return null;
+    return {
+      items,
+      staff_id: staffId,
+      date: pickedSlot.date,
+      time: pickedSlot.time,
+      name: form.name.trim(),
+      address: isOnSite ? form.address.trim() : "",
+      note: form.note.trim(),
+    };
+  }
+
+  async function handleLineLogin() {
+    const draft = buildDraft();
+    if (!draft || loginBusy) return;
+    setLoginBusy(true);
+    setLoginError(null);
+    try {
+      const url = await startLineLogin(slug, draft);
+      // C2-F04:只跳 LINE 官方授權頁或本站的 callback,其他網址一律不跳。
+      if (!isAllowedAuthorizeUrl(url, window.location.origin)) {
+        setLoginError(lineStartErrorMessage(null));
+        setLoginBusy(false);
+        return;
+      }
+      rememberLoginSlug(slug);
+      redirectToAuthorizeUrl(url);
+      // 不解除 busy:頁面即將離開,避免客人在跳轉前又按一次。
+    } catch (err) {
+      setLoginError(lineStartErrorMessage(err instanceof CustomerAuthError ? err.code : null));
+      setLoginBusy(false);
+    }
+  }
+
+  async function handleLogout() {
+    await signOutCustomer(slug);
+    setLinkNotice(null);
+    queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
+  }
+
+  async function handleProfileSubmit(input: {
+    phone: string;
+    agree: boolean;
+  }): Promise<ProfileSubmitOutcome> {
+    try {
+      const result = await completeCustomerProfile({
+        slug,
+        phone: input.phone,
+        name: form.name.trim(),
+        agreePolicy: input.agree,
+      });
+      if (result.kind === "phone_taken") return "phone_taken";
+      setLinkNotice(result.existing ? "existing" : "created");
+      await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY(slug) });
+      return "linked";
+    } catch (err) {
+      const hint = err instanceof CompleteProfileError ? err.hint : null;
+      if (isSessionInvalidHint(hint)) {
+        // 登入狀態不能用了(例:商家剛好換了 LINE 登入設定)⇒ 登出,回到 ⑥-1 重新登入。
+        await signOutCustomer(slug);
+        queryClient.setQueryData(SESSION_QUERY_KEY(slug), { state: "anonymous" });
+        setLoginError(completeProfileErrorMessage(hint));
+      }
+      return { error: completeProfileErrorMessage(hint) };
+    }
   }
 
   if (step === 0) {
@@ -351,8 +514,6 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
     );
   }
 
-  // step === 4
-  const errors = validateCustomerForm(form, isOnSite);
   const itemNames = [...selection]
     .map(([id, qty]) => {
       const item = page.service_items.find((i) => i.id === id);
@@ -363,54 +524,147 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
   const staffName = staffId
     ? (page.staff.find((s) => s.id === staffId)?.display_name ?? "不指定（由店家安排）")
     : "不指定（由店家安排）";
+  const timeText = pickedSlot ? `${formatDateWithWeekday(pickedSlot.date)}${pickedSlot.time}` : "";
+
+  if (step === 5) {
+    const summary = (
+      <BookingSummary
+        timeText={timeText}
+        staffName={staffName}
+        customerName={form.name.trim()}
+        itemNames={itemNames}
+        totalPrice={totals.totalPrice}
+      />
+    );
+    if (session.state === "needs_profile") {
+      return (
+        <CustomerProfileScreen
+          merchantName={merchant.name}
+          lineDisplayName={session.lineDisplayName}
+          linePictureUrl={session.linePictureUrl}
+          policy={page.member_policy}
+          contacts={contacts}
+          allowGuest={allowGuest}
+          onSubmit={handleProfileSubmit}
+          onLogout={() => void handleLogout()}
+          onGuest={() => goTo(6)}
+        />
+      );
+    }
+    if (session.state === "linked") {
+      return (
+        <LinkedConfirmScreen
+          merchantName={merchant.name}
+          memberName={session.memberName}
+          linkNotice={linkNotice}
+          summary={summary}
+          contacts={contacts}
+          onBack={goBack}
+          onLogout={() => void handleLogout()}
+        />
+      );
+    }
+    return (
+      <LineLoginScreen
+        merchantName={merchant.name}
+        logoUrl={merchant.logo_url}
+        allowGuest={allowGuest}
+        onBack={goBack}
+        onLogin={() => void handleLineLogin()}
+        onGuest={() => goTo(6)}
+        busy={loginBusy || sessionQuery.isFetching}
+        error={loginError}
+      />
+    );
+  }
+
+  if (step === 6) {
+    return (
+      <GuestScreen
+        merchantName={merchant.name}
+        policy={page.member_policy}
+        contacts={contacts}
+        summary={
+          <BookingSummary
+            timeText={timeText}
+            staffName={staffName}
+            customerName={form.name.trim()}
+            itemNames={itemNames}
+            totalPrice={totals.totalPrice}
+          />
+        }
+        onBack={goBack}
+      />
+    );
+  }
+
+  // step === 4(⑤ 填資料)
+  function handleConfirm() {
+    setTouched({ name: true, address: true, note: true });
+    setReturnNotice(null);
+    setLoginError(null);
+    if (!formValid) return;
+    goTo(5);
+  }
 
   return (
     <PublicShell
       header={<StepHeader stepNumber={4} title="填寫資料" onBack={goBack} />}
       footer={
-        <>
+        lineLoginEnabled ? (
+          // C2-E02:有啟用 LINE 登入 ⇒「確定預約」進 ⑥(依登入狀態顯示對應畫面)。
           <Button
             type="button"
             variant="primary"
             size="touch"
             className="w-full"
-            disabled
+            onClick={handleConfirm}
             data-testid="public-booking-submit"
           >
-            線上預約即將開放
+            確定預約
           </Button>
-          {contacts.lineUrl || contacts.telHref ? (
-            <>
-              <p className="text-center text-[13px] text-muted-foreground">
-                目前請透過下方方式聯絡店家預約
-              </p>
-              <ContactButtons links={contacts} />
-            </>
-          ) : null}
-        </>
+        ) : (
+          // 沒有啟用 LINE 登入:這批維持第 1 批的停用按鈕(訪客送出第 3 批才開放)。
+          <>
+            <Button
+              type="button"
+              variant="primary"
+              size="touch"
+              className="w-full"
+              disabled
+              data-testid="public-booking-submit"
+            >
+              線上預約即將開放
+            </Button>
+            {contacts.lineUrl || contacts.telHref ? (
+              <>
+                <p className="text-center text-[13px] text-muted-foreground">
+                  目前請透過下方方式聯絡店家預約
+                </p>
+                <ContactButtons links={contacts} />
+              </>
+            ) : null}
+          </>
+        )
       }
     >
       <div className="flex flex-col gap-4">
-        <section
-          className="rounded-xl border border-border bg-card p-3.5 shadow-sm"
-          data-testid="public-booking-summary"
-        >
-          <h2 className="mb-2 text-[15px] font-semibold text-foreground">預約內容</h2>
-          <dl className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-[13.5px]">
-            <dt className="text-muted-foreground">時間</dt>
-            <dd className="tabular-nums text-foreground">
-              {pickedSlot ? `${formatDateWithWeekday(pickedSlot.date)}${pickedSlot.time}` : ""}
-            </dd>
-            <dt className="text-muted-foreground">服務人員</dt>
-            <dd className="break-words text-foreground">{staffName}</dd>
-            <dt className="text-muted-foreground">項目</dt>
-            <dd className="break-words text-foreground">{itemNames}</dd>
-            <dt className="text-muted-foreground">預估金額</dt>
-            <dd className="font-semibold tabular-nums text-destructive/80">
-              {formatPublicPrice(totals.totalPrice)}
-            </dd>
-          </dl>
-        </section>
+        {returnNotice === "cancelled" ? (
+          <AlertNote data-testid="public-booking-line-cancelled">
+            你取消了 LINE 登入。填好的資料都還在，可以再按「確定預約」。
+          </AlertNote>
+        ) : returnNotice === "failed" ? (
+          <AlertNote data-testid="public-booking-line-failed">
+            LINE 登入沒有成功，請再試一次。填好的資料都還在，可以再按「確定預約」。
+          </AlertNote>
+        ) : null}
+        <BookingSummary
+          timeText={timeText}
+          staffName={staffName}
+          customerName={null}
+          itemNames={itemNames}
+          totalPrice={totals.totalPrice}
+        />
 
         <FormField
           label="姓名"
@@ -470,6 +724,47 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
         </FormField>
       </div>
     </PublicShell>
+  );
+}
+
+function BookingSummary({
+  timeText,
+  staffName,
+  customerName,
+  itemNames,
+  totalPrice,
+}: {
+  timeText: string;
+  staffName: string;
+  customerName: string | null;
+  itemNames: string;
+  totalPrice: number;
+}) {
+  return (
+    <section
+      className="rounded-xl border border-border bg-card p-3.5 shadow-sm"
+      data-testid="public-booking-summary"
+    >
+      <h2 className="mb-2 text-[15px] font-semibold text-foreground">預約內容</h2>
+      <dl className="grid grid-cols-[72px_minmax(0,1fr)] gap-x-2.5 gap-y-1.5 text-[13.5px]">
+        <dt className="text-muted-foreground">時間</dt>
+        <dd className="tabular-nums text-foreground">{timeText}</dd>
+        <dt className="text-muted-foreground">服務人員</dt>
+        <dd className="break-words text-foreground">{staffName}</dd>
+        {customerName ? (
+          <>
+            <dt className="text-muted-foreground">姓名</dt>
+            <dd className="break-words text-foreground">{customerName}</dd>
+          </>
+        ) : null}
+        <dt className="text-muted-foreground">項目</dt>
+        <dd className="break-words text-foreground">{itemNames}</dd>
+        <dt className="text-muted-foreground">預估金額</dt>
+        <dd className="font-semibold tabular-nums text-destructive/80">
+          {formatPublicPrice(totalPrice)}
+        </dd>
+      </dl>
+    </section>
   );
 }
 

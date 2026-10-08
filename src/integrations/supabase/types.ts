@@ -458,6 +458,7 @@ export type Database = {
           final_amount_snapshot: number
           hide_notes_from_staff: boolean
           id: string
+          is_guest_booking: boolean
           last_modified_at: string | null
           last_modified_by_user_id: string | null
           member_auto_created: boolean
@@ -510,6 +511,7 @@ export type Database = {
           final_amount_snapshot?: number
           hide_notes_from_staff?: boolean
           id?: string
+          is_guest_booking?: boolean
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
           member_auto_created?: boolean
@@ -562,6 +564,7 @@ export type Database = {
           final_amount_snapshot?: number
           hide_notes_from_staff?: boolean
           id?: string
+          is_guest_booking?: boolean
           last_modified_at?: string | null
           last_modified_by_user_id?: string | null
           member_auto_created?: boolean
@@ -617,6 +620,176 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_line_identities: {
+        Row: {
+          display_name: string | null
+          first_login_at: string
+          last_login_at: string
+          line_channel_id: string
+          line_sub: string
+          picture_url: string | null
+          user_id: string
+        }
+        Insert: {
+          display_name?: string | null
+          first_login_at?: string
+          last_login_at?: string
+          line_channel_id: string
+          line_sub: string
+          picture_url?: string | null
+          user_id: string
+        }
+        Update: {
+          display_name?: string | null
+          first_login_at?: string
+          last_login_at?: string
+          line_channel_id?: string
+          line_sub?: string
+          picture_url?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      customer_line_login_attempts: {
+        Row: {
+          channel_id: string
+          code_verifier: string
+          consumed_at: string | null
+          created_at: string
+          draft: Json | null
+          expires_at: string
+          ip_hash: string | null
+          merchant_id: string
+          nonce: string
+          state_hash: string
+        }
+        Insert: {
+          channel_id: string
+          code_verifier: string
+          consumed_at?: string | null
+          created_at?: string
+          draft?: Json | null
+          expires_at: string
+          ip_hash?: string | null
+          merchant_id: string
+          nonce: string
+          state_hash: string
+        }
+        Update: {
+          channel_id?: string
+          code_verifier?: string
+          consumed_at?: string | null
+          created_at?: string
+          draft?: Json | null
+          expires_at?: string
+          ip_hash?: string | null
+          merchant_id?: string
+          nonce?: string
+          state_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_line_login_attempts_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_member_link_blocks: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          member_id: string
+          merchant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          member_id: string
+          merchant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          member_id?: string
+          merchant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_member_link_blocks_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_member_link_blocks_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_policy_consents: {
+        Row: {
+          consented_at: string
+          context: string
+          id: string
+          member_id: string | null
+          member_policy_enabled: boolean
+          member_policy_hash: string | null
+          merchant_id: string
+          phone_normalized: string | null
+          privacy_policy_version: string
+          user_id: string | null
+        }
+        Insert: {
+          consented_at?: string
+          context: string
+          id?: string
+          member_id?: string | null
+          member_policy_enabled: boolean
+          member_policy_hash?: string | null
+          merchant_id: string
+          phone_normalized?: string | null
+          privacy_policy_version: string
+          user_id?: string | null
+        }
+        Update: {
+          consented_at?: string
+          context?: string
+          id?: string
+          member_id?: string | null
+          member_policy_enabled?: boolean
+          member_policy_hash?: string | null
+          merchant_id?: string
+          phone_normalized?: string | null
+          privacy_policy_version?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_policy_consents_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_policy_consents_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
         ]
@@ -1744,6 +1917,53 @@ export type Database = {
             foreignKeyName: "merchant_line_event_settings_merchant_id_fkey"
             columns: ["merchant_id"]
             isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_line_login_configs: {
+        Row: {
+          channel_id: string
+          channel_secret_last4: string
+          channel_secret_vault_id: string
+          created_at: string
+          enabled: boolean
+          last_login_succeeded_at: string | null
+          linked_oa_status: string | null
+          merchant_id: string
+          updated_at: string
+          updated_by_user_id: string | null
+        }
+        Insert: {
+          channel_id: string
+          channel_secret_last4: string
+          channel_secret_vault_id: string
+          created_at?: string
+          enabled?: boolean
+          last_login_succeeded_at?: string | null
+          linked_oa_status?: string | null
+          merchant_id: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Update: {
+          channel_id?: string
+          channel_secret_last4?: string
+          channel_secret_vault_id?: string
+          created_at?: string
+          enabled?: boolean
+          last_login_succeeded_at?: string | null
+          linked_oa_status?: string | null
+          merchant_id?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_line_login_configs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: true
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
@@ -3025,6 +3245,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      allow_member_customer_relink: {
+        Args: { p_member_id: string }
+        Returns: number
+      }
       am_i_allowed_line_marketing: {
         Args: { p_merchant_id: string }
         Returns: boolean
@@ -3498,6 +3722,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      customer_complete_profile: {
+        Args: {
+          p_agree_policy: boolean
+          p_name: string
+          p_phone: string
+          p_slug: string
+        }
+        Returns: Json
+      }
       deactivate_member: {
         Args: { p_member_id: string }
         Returns: {
@@ -3537,6 +3770,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      delete_merchant_line_login_config: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
       }
       disconnect_merchant_line: {
         Args: { p_merchant_id: string }
@@ -3668,6 +3905,7 @@ export type Database = {
           status: string
         }[]
       }
+      get_customer_session_state: { Args: { p_slug: string }; Returns: Json }
       get_line_notification_log: {
         Args: {
           p_event_type?: string
@@ -3700,6 +3938,10 @@ export type Database = {
       }
       get_material_cost_commission_setting: {
         Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      get_member_customer_login_status: {
+        Args: { p_member_id: string }
         Returns: Json
       }
       get_member_point_history: {
@@ -3812,6 +4054,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      get_merchant_line_login_status: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
       get_merchant_points_feature_enabled: {
         Args: { p_merchant_id: string }
         Returns: boolean
@@ -3917,6 +4163,47 @@ export type Database = {
       import_members_batch: {
         Args: { p_merchant_id: string; p_rows: Json; p_write_mode: string }
         Returns: string
+      }
+      internal_customer_line_identity_find: {
+        Args: { p_channel_id: string; p_sub: string }
+        Returns: Json
+      }
+      internal_customer_line_identity_upsert: {
+        Args: {
+          p_channel_id: string
+          p_display_name: string
+          p_picture_url: string
+          p_sub: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      internal_customer_line_login_consume: {
+        Args: { p_state_hash: string }
+        Returns: Json
+      }
+      internal_customer_line_login_start: {
+        Args: {
+          p_code_verifier: string
+          p_draft: Json
+          p_ip_hash: string
+          p_nonce: string
+          p_slug: string
+          p_state_hash: string
+        }
+        Returns: Json
+      }
+      internal_customer_line_login_succeeded: {
+        Args: {
+          p_channel_id: string
+          p_linked_oa_status: string
+          p_merchant_id: string
+        }
+        Returns: undefined
+      }
+      internal_get_line_login_credentials: {
+        Args: { p_merchant_id: string }
+        Returns: Json
       }
       invite_merchant_admin: {
         Args: { p_merchant_id: string; p_user_email: string }
@@ -4414,6 +4701,18 @@ export type Database = {
           p_channel_secret: string
           p_merchant_id: string
         }
+        Returns: undefined
+      }
+      set_merchant_line_login_config: {
+        Args: {
+          p_channel_id: string
+          p_channel_secret: string
+          p_merchant_id: string
+        }
+        Returns: undefined
+      }
+      set_merchant_line_login_enabled: {
+        Args: { p_enabled: boolean; p_merchant_id: string }
         Returns: undefined
       }
       set_staff_day_override: {

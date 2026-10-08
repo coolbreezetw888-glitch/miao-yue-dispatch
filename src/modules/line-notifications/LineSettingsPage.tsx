@@ -55,6 +55,7 @@ import {
   useMerchantLineConfigStatus,
 } from "./api";
 import { buildLineAddFriendUrl } from "./lineBindingViewLogic";
+import { LineLoginSettingsCard } from "./LineLoginSettingsCard";
 
 const configStatusQueryKey = (merchantId: string) =>
   ["line-notifications-module", "config-status", merchantId] as const;
@@ -373,6 +374,10 @@ function LineSettingsPageInner() {
           </form>
         </CardContent>
       </Card>
+
+      {/* 客戶端第 2 批(C2-A05):LINE 登入設定卡。放在官方帳號串接卡片下面(兩者都在 LINE Developers 設定)。
+          這一頁本身已經只有商家管理員進得來(RequireMerchantAdmin)。 */}
+      <LineLoginSettingsCard merchantId={merchantId} />
     </main>
   );
 }

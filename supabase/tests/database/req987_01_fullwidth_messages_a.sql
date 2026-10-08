@@ -126,8 +126,15 @@ select is(
   $m$public.claim_birthday_line_pending(p_limit integer) ③ 觸發器綁定不變$m$);
 
 -- ----- public.create_group_and_merchant(p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text) -----
+-- 客戶端第 2 批 C2-H01(20261008170100):開頭多一段「客人帳號不能建店」,這裡多一組對照把那一段換掉,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.create_group_and_merchant(p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text)$m$, array[
+    $m$  -- [c2] C2-H01:客戶端 LINE 登入的客人帳號不能建店。
+  if private.is_customer_account() then
+    raise exception '客人帳號不能建立商家。' using errcode = '42501';
+  end if;
+
+$m$, $m$$m$,
     $m$'不支援的產業類型：%'$m$, $m$'不支援的產業類型: %'$m$
   ])),
   $m$395131714e9868c8031969a198616f8b$m$,
@@ -142,8 +149,15 @@ select is(
   $m$public.create_group_and_merchant(p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.create_merchant_in_group(p_group_id uuid, p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text) -----
+-- 客戶端第 2 批 C2-H01(20261008170100):開頭多一段「客人帳號不能建店」,這裡多一組對照把那一段換掉,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.create_merchant_in_group(p_group_id uuid, p_name text, p_industry_type text, p_address text, p_contact_email text, p_intro text)$m$, array[
+    $m$  -- [c2] C2-H01:客戶端 LINE 登入的客人帳號不能建店。
+  if private.is_customer_account() then
+    raise exception '客人帳號不能建立商家。' using errcode = '42501';
+  end if;
+
+$m$, $m$$m$,
     $m$'不支援的產業類型：%'$m$, $m$'不支援的產業類型: %'$m$
   ])),
   $m$059764bf68379fd6b8c3a6099fc70471$m$,
@@ -207,8 +221,12 @@ select is(
   $m$public.get_staff_login_email_status(p_staff_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.invite_merchant_admin(p_merchant_id uuid, p_user_email text) -----
+-- 客戶端第 2 批 QA 修正(20261008170300):email 查詢多一個「排除客人帳號」條件,這裡多一組對照把它換掉,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.invite_merchant_admin(p_merchant_id uuid, p_user_email text)$m$, array[
+    $m$
+    -- [c2-qa] 客戶端 LINE 登入的客人帳號一律當作「找不到」(訊息跟真的找不到一樣,不透露是客人帳號)。
+    and coalesce(raw_app_meta_data ->> 'account_type', '') <> 'customer'$m$, $m$$m$,
     $m$'沒有權限執行此操作，僅限該商家管理員使用'$m$, $m$'沒有權限執行此操作,僅限該商家管理員使用'$m$,
     $m$'找不到指定的商家：%'$m$, $m$'找不到指定的商家: %'$m$,
     $m$'找不到這個 email 對應的使用者，請確認對方已經註冊過秒約帳號'$m$, $m$'找不到這個 email 對應的使用者,請確認對方已經註冊過秒約帳號'$m$
@@ -225,8 +243,12 @@ select is(
   $m$public.invite_merchant_admin(p_merchant_id uuid, p_user_email text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.platform_add_merchant_admin(p_merchant_id uuid, p_user_email text) -----
+-- 客戶端第 2 批 QA 修正(20261008170300):email 查詢多一個「排除客人帳號」條件,這裡多一組對照把它換掉,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.platform_add_merchant_admin(p_merchant_id uuid, p_user_email text)$m$, array[
+    $m$
+    -- [c2-qa] 客戶端 LINE 登入的客人帳號一律當作「找不到」(訊息跟真的找不到一樣,不透露是客人帳號)。
+    and coalesce(raw_app_meta_data ->> 'account_type', '') <> 'customer'$m$, $m$$m$,
     $m$'找不到指定的商家：%'$m$, $m$'找不到指定的商家: %'$m$
   ])),
   $m$4f0329f160ee8845de62fd4801f7ea41$m$,
@@ -273,8 +295,12 @@ select is(
   $m$public.platform_remove_merchant_admin(p_merchant_id uuid, p_user_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.platform_set_group_admin(p_group_id uuid, p_user_email text) -----
+-- 客戶端第 2 批 QA 修正(20261008170300):email 查詢多一個「排除客人帳號」條件,這裡多一組對照把它換掉,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.platform_set_group_admin(p_group_id uuid, p_user_email text)$m$, array[
+    $m$
+    -- [c2-qa] 客戶端 LINE 登入的客人帳號一律當作「找不到」(訊息跟真的找不到一樣,不透露是客人帳號)。
+    and coalesce(raw_app_meta_data ->> 'account_type', '') <> 'customer'$m$, $m$$m$,
     $m$'找不到指定的集團：%'$m$, $m$'找不到指定的集團: %'$m$
   ])),
   $m$efd6992d544808187dff4579f0753d78$m$,
@@ -372,8 +398,23 @@ select is(
   $m$public.resolve_line_notification_targets(p_merchant_id uuid, p_event_type text, p_booking_id uuid, p_staff_leave_record_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.unbind_line_account(p_target_type text, p_target_id uuid) -----
+-- 客戶端第 2 批 C2-H02(20261008170100):member 分支多清 user_id + 一行註解;20261008170200 再多寫封鎖表。這裡的對照把它們換回去,其餘本體逐字不變。
 select is(
   md5(pg_temp.req987_swap_back($m$public.unbind_line_account(p_target_type text, p_target_id uuid)$m$, array[
+    $m$    --   ・[c2] C2-H02(使用者 Q3):同時清 user_id ⇒ 客戶端 LINE 登入一起斷開,客人下次登入要重新填電話。
+$m$, $m$$m$,
+    $m$    --   ・[c2-relink] 被解除的客戶帳號記進封鎖表 ⇒ 這個帳號之後填同一支電話不會自動接回(回 phone_taken);
+    --     別的 LINE 帳號照常可以接上。店家用 allow_member_customer_relink 撤銷。
+    insert into public.customer_member_link_blocks (member_id, user_id, merchant_id, created_by_user_id)
+    select m.id, m.user_id, m.merchant_id, auth.uid()
+    from public.members m
+    where m.id = p_target_id and m.user_id is not null
+    on conflict (member_id, user_id) do nothing;
+$m$, $m$$m$,
+    $m$        identity_verified_via = null,
+        user_id = null
+$m$, $m$        identity_verified_via = null
+$m$,
     $m$'不支援的綁定目標類型：%'$m$, $m$'不支援的綁定目標類型: %'$m$
   ])),
   $m$aaa2ba2f98909d5eb5ac3b86db3d8fb2$m$,

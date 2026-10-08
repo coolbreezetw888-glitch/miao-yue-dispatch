@@ -216,6 +216,11 @@ verify_jwt = false
 [functions.push-test-ack]
 verify_jwt = false
 
+# 客戶端第 2 批 C2-B:客人還沒登入(沒有 Supabase JWT)就要呼叫 start / complete。
+# 安全靠 state(單次、10 分鐘、只存雜湊)+ nonce + PKCE + 自己驗 id_token,不是靠 JWT。
+[functions.customer-line-login]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

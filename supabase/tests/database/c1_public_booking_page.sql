@@ -55,6 +55,12 @@ insert into merchant_admins (merchant_id, user_id) values
 insert into merchant_business_hours (merchant_id, day_of_week, is_closed, open_time, close_time)
 select 'c1b00000-0000-4000-8000-000000000021'::uuid, d, false, '09:00', '18:00' from generate_series(0, 6) d;
 insert into merchant_booking_settings (merchant_id, min_lead_hours) values ('c1b00000-0000-4000-8000-000000000021', 0);
+-- 客戶端第 2 批 C2-C01:LINE 登入設定(Channel ID 是哨兵,不能出現在公開回應);會員政策關閉時內容也不能出現
+insert into merchant_line_login_configs (merchant_id, channel_id, channel_secret_vault_id, channel_secret_last4, enabled)
+values ('c1b00000-0000-4000-8000-000000000021', '9876543210', 'c1b00000-0000-4000-8000-0000000000f1', 'zz99', true);
+insert into merchant_member_settings (merchant_id, policy_enabled, policy_content)
+values ('c1b00000-0000-4000-8000-000000000021', false, 'SENTINEL_POLICY_OFF')
+on conflict (merchant_id) do update set policy_enabled = false, policy_content = 'SENTINEL_POLICY_OFF';
 
 insert into service_categories (id, merchant_id, name) values
   ('c1b00000-0000-4000-8000-000000000041', 'c1b00000-0000-4000-8000-000000000021', '乙分類'),
@@ -121,8 +127,8 @@ select is((select array_agg(k order by k) from c1_page, jsonb_object_keys(r -> '
                 'theme_custom_color', 'theme_preset'],
           'C01-6 merchant 物件 key');
 select is((select array_agg(k order by k) from c1_page, jsonb_object_keys(r -> 'booking_settings') k),
-          array['allow_guest_booking', 'is_on_site'],
-          'C01-7 booking_settings 只有兩個 key(不回傳 min_lead_hours / travel_buffer / 間隔)');
+          array['allow_guest_booking', 'is_on_site', 'line_login_enabled', 'member_policy'],
+          'C01-7 booking_settings 只有四個 key(第 2 批加 line_login_enabled / member_policy;不回傳 min_lead_hours / travel_buffer / 間隔 / Channel ID)');
 select is((select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'service_items') e, jsonb_object_keys(e) k)
           || (select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'staff') e, jsonb_object_keys(e) k)
           || (select array_agg(distinct k order by k) from c1_page, jsonb_array_elements(r -> 'categories') e, jsonb_object_keys(e) k),
@@ -146,7 +152,8 @@ select is((select jsonb_agg(e -> 'primary_service_item_ids' order by ord) from c
           '[["c1b00000-0000-4000-8000-000000000051", "c1b00000-0000-4000-8000-000000000052"], null, ["c1b00000-0000-4000-8000-000000000051"]]'::jsonb,
           'C01-13 primary_service_item_ids:只列上架中的主要項目;沒有任何對應 = null');
 select is((select r -> 'booking_settings' from c1_page),
-          '{"is_on_site": true, "allow_guest_booking": true}'::jsonb, 'C01-14 到府 + 允許不登入預約預設 true');
+          '{"is_on_site": true, "allow_guest_booking": true, "line_login_enabled": true, "member_policy": null}'::jsonb,
+          'C01-14 到府 + 允許不登入預約預設 true + LINE 登入已啟用 + 會員政策關閉 ⇒ null');
 
 -- 公告開啟才給內容
 update merchants set announcement_enabled = true where id = 'c1b00000-0000-4000-8000-000000000021';
@@ -200,7 +207,9 @@ select unnest(array[
   'c1b00000-0000-4000-8000-000000000033',           -- 未上架服務人員 id
   'pgtap-c1page-ok',                                -- booking_slug 本身也不需要回傳
   'unlimited_backend_edit', 'auto_accept_booking', 'advance_booking_days', 'no_time_slot_limit',
-  'min_lead_hours', 'travel_buffer', 'created_at', 'updated_at', 'contact_email', 'user_id', 'line_bound'
+  'min_lead_hours', 'travel_buffer', 'created_at', 'updated_at', 'contact_email', 'user_id', 'line_bound',
+  -- 第 2 批 C2-C01:Channel ID、Vault id、末 4 碼、關閉中的會員政策內容
+  '9876543210', 'c1b00000-0000-4000-8000-0000000000f1', 'zz99', 'SENTINEL_POLICY_OFF', 'channel'
 ]) as needle;
 
 select is(

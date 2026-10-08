@@ -29,6 +29,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
+import { MemberCustomerLoginRow } from "./MemberCustomerLoginRow";
+import { memberCustomerLoginQueryKey } from "./memberCustomerLoginApi";
 import {
   generateMemberLineBindingCode,
   unbindLineAccount,
@@ -58,6 +60,8 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
   }, [issuedCode]);
 
   function refetch() {
+    // C2-H02:解除綁定會連客戶端登入一起斷開 ⇒「客戶端登入」那一行也要重抓。
+    void queryClient.invalidateQueries({ queryKey: memberCustomerLoginQueryKey(memberId) });
     return queryClient.invalidateQueries({
       queryKey: ["line-notifications-module", "member-binding-status", memberId],
     });
@@ -112,6 +116,9 @@ export function MemberLineBindingSection({ memberId }: { memberId: string }) {
           <strong>不需要會員先有系統登入帳號</strong>。綁定碼有時效，過期就重新產生一組。
         </HelpToggle>
       </div>
+
+      {/* 客戶端第 2 批(C2-H03):客人用 LINE 登入預約頁之後,這裡顯示「已連結」。只讀。 */}
+      <MemberCustomerLoginRow memberId={memberId} />
 
       {bindingStatus?.lineBound ? (
         // 🔴 可逆動作(解除後可以再產生綁定碼重綁)⇒ 不標紅,用 ② 次要。

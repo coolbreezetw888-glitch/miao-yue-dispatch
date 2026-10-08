@@ -17,6 +17,7 @@ import type {
   PublicBookingPageOk,
   PublicCategory,
   PublicDayState,
+  PublicMemberPolicy,
   PublicSelectedItem,
   PublicServiceItem,
   PublicSlotDay,
@@ -171,6 +172,15 @@ function parseStaff(raw: unknown): PublicStaff {
   };
 }
 
+/**
+ * C2-C06:booking_settings.member_policy = 商家會員政策內容(純文字);沒開或空白 = null。
+ * 有內容 ⇒ 勾選框「會員政策 與 隱私權政策」;null ⇒ 只有「隱私權政策」。
+ */
+function parseMemberPolicy(raw: unknown): PublicMemberPolicy {
+  if (typeof raw === "string" && raw.trim() !== "") return { enabled: true, content: raw };
+  return { enabled: false, content: null };
+}
+
 export function parsePublicBookingPage(data: unknown): PublicBookingPage {
   if (!isRecord(data)) throw new PublicBookingError("invalid_response");
   const status = data["status"];
@@ -201,7 +211,9 @@ export function parsePublicBookingPage(data: unknown): PublicBookingPage {
     booking_settings: {
       allow_guest_booking: bool(settings["allow_guest_booking"], true),
       is_on_site: bool(settings["is_on_site"], industry === "on_site_dispatch"),
+      line_login_enabled: bool(settings["line_login_enabled"], false),
     },
+    member_policy: parseMemberPolicy(settings["member_policy"]),
     categories: arr(data["categories"]).map(parseCategory),
     service_items: arr(data["service_items"]).map(parseServiceItem),
     staff: arr(data["staff"]).map(parseStaff),
