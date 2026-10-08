@@ -36,6 +36,12 @@ description: 秒約服務人員端行事曆「即時同步」(Supabase Realtime 
     - 建單表單已開著時不重抓可選時段(沿用「表單不閃動」原則)。
     - 新表要加即時同步:照這三支 trigger 的寫法,欄位篩選 + 交易內去重 + 每段 begin/exception。
   - 每個開著行事曆的商家分頁多佔 1 條 Realtime 連線(Free 上限 200,#901)。
+- 2026-10-08 第 23 批 #1036(migration `20261008150000_req1036`,commit be1614c):服務人員頻道多了兩個觸發來源。
+  - `staff_availability_windows`(每週時段)→ `private.tg_staff_availability_windows_staff_live_sync`;`staff_availability_overrides`(單日例外)→ `private.tg_staff_availability_overrides_staff_live_sync`。**只送本人、不跨店**;單日例外只在人/日期/格子/開關變動時發,「再關一次」只動 updated_at 不發。
+  - 前端:`useStaffScheduleLiveSync` 現在掛在 **MyCalendarPage 與 MyAvailabilityPage(休假設定)** 兩頁;重抓清單 `STAFF_SCHEDULE_INVALIDATE_KEYS` 共 6 把(含每週時段 `["booking-module","staff-availability-windows"]`、排休 `["staff-portal-module","my-availability-overrides"]`)。
+  - `AvailabilityWindowEditList`(商家端、服務人員端共用):重抓時正在編輯(草稿≠原值)的列被刪 ⇒ toast「這組時段已被刪除」;沒草稿或改回原值的列安靜消失;改回原值即丟草稿。
+  - 已知限制(使用者接受):休假設定頁即時更新需要「行事曆檢視」權限(收聽判定沿用鐵律 4)。
+  - 同集團同一人「收不到別店時段訊號」只有 pgTAP 驗(B1/H1/G2),e2e fixture 沒有同一人跨店情境。
   - e2e 的清理程式要連 `merchant:%:calendar` 的訊號列一起清(b14 有寫,其他測試尚未補)。
 
 ## 已知限制(不修)
