@@ -235,7 +235,7 @@ import { calculateBookingAmountPreview, formatAmount } from "./orderAmount";
 import { RequireBookingAccess } from "./RequireBookingAccess";
 // SPECS-INDEX #977 第 7 批:背景格子元件與每格狀態的純函式搬到共用檔(服務人員端時間軸也用同一份)。
 import { DaySlotCell } from "./DaySlotCell";
-import { whiteBookingBlockStyle } from "./bookingBlockLayout";
+import { bookingBlockVerticalBox, filledBookingBlockStyle } from "./bookingBlockLayout";
 import { useMerchantCalendarLiveSync } from "./useMerchantCalendarLiveSync";
 import { DayStatusCountBadges } from "./DayStatusCountBadges";
 import {
@@ -257,7 +257,6 @@ import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
 import { useAppLayoutContext } from "@/routes/AppLayout";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
-  bookingBlockStyle,
   buildPaymentMethodOptions,
   calendarStateBlockStyle,
   DEFAULT_BOOKING_STATUS_COLORS,
@@ -3431,13 +3430,12 @@ function CalendarPageInner() {
                           booking={b}
                           staffId={s.staff_id}
                           style={{
-                            top,
-                            height,
-                            // #1005(第 14 批):改用服務人員端那種白底卡片(左邊 4px 狀態色條 + 細框),
-                            // 狀態色照舊讀商家自訂的訂單狀態顏色。兩端共用 whiteBookingBlockStyle。
-                            ...whiteBookingBlockStyle(
-                              bookingBlockStyle(effectiveStatusColors, b.status),
-                            ),
+                            // #1012 追加(第 18 批):上下留間隔,前後相連的卡片不會黏成一大塊;
+                            // 左右內縮在 DraggableBookingBlock 的 inset-x(相鄰服務人員欄之間留 8px)。
+                            ...bookingBlockVerticalBox(top, height),
+                            // #1012(第 18 批):整張填滿狀態色 + 白字(使用者選比較圖 B)。狀態色照舊讀
+                            // 商家自訂的訂單狀態顏色。兩端共用 filledBookingBlockStyle。
+                            ...filledBookingBlockStyle(effectiveStatusColors, b.status),
                           }}
                           controller={dragController}
                         />

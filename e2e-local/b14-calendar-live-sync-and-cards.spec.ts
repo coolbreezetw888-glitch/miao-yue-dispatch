@@ -7,6 +7,7 @@
 //   L3 #1006 同集團二店替同一個人建單 / 拖拉改時間(move_booking)⇒ 一店**商家端**與**服務人員端**時間軸
 //      的灰色「外店預約中」5 秒內自己出現 / 跟著移動
 //   L4 #1005 卡片:一小時「時間 / 虛線 / 名字」、半小時一行;商家端與服務人員端 1280 / 375 截圖
+//      (#1012 第 18 批起底色改成整張填色 + 白字,外觀細節在 b18-timeline-filled-cards)
 //   L5 #1007 只開「店家報表」的客服點「服務人員報表」⇒ 導回 + 「你沒有「服務人員報表」的權限…」提示
 //   L6 #1008 服務人員按「確認接單」⇒ 提示 + 詳情自動關閉,回到行事曆
 //
@@ -616,15 +617,15 @@ test("L4 #1005 卡片:一小時「時間 / 虛線 / 名字」、半小時一行;
       "inline",
     );
     await expect(shortBlock.locator("[data-booking-block-divider]")).toHaveCount(0);
-    // 白底 + 左側 4px 狀態色條(跟服務人員端同一種)
+    // 左側 4px 狀態色條(跟服務人員端同一種)。
+    // #1012(第 18 批)起卡片改成整張填滿狀態色 + 白字(原本 #1005 的白底作廢);完整檢查在 b18。
     const style = await longBlock.evaluate((el) => {
       const cs = getComputedStyle(el);
-      return { bg: cs.backgroundColor, left: cs.borderLeftWidth };
+      return { bg: cs.backgroundColor, color: cs.color, left: cs.borderLeftWidth };
     });
     expect(style.left).toBe("4px");
-    expect(["oklch(1 0 0)", "rgb(255, 255, 255)"], "背景是卡片底色(--card,白色)").toContain(
-      style.bg,
-    );
+    expect(style.bg, "背景 = 待確認的狀態色(#ebaa2d)").toBe("rgb(235, 170, 45)");
+    expect(style.color, "白字").toBe("rgb(255, 255, 255)");
     // 名字沒有被截成空(三層都放得下)
     const nameBox = await longBlock.getByText("李思賢").boundingBox();
     expect(nameBox && nameBox.height > 0).toBe(true);

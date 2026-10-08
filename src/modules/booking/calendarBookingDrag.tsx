@@ -55,6 +55,7 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import { moveBooking, type MoveBookingNotifyContext } from "./api";
 import { BookingBlockContent } from "./BookingBlockContent";
+import { BOOKING_BLOCK_GAP_TOP_PX } from "./bookingBlockLayout";
 import {
   buildUndoInput,
   canDrag,
@@ -629,7 +630,9 @@ export function DraggableBookingBlock({
         //    蓋住** —— 往下捲時名字列要蓋住它,往右捲時時間欄要蓋住它。原本名字列也是 z-10,
         //    同級 ⇒ DOM 順序後畫的色塊蓋住名字列,把服務人員名字整排蓋掉。
         //    完整的階梯表寫在 CalendarPage.tsx 時間欄那一段的註解裡(搜 "層級階梯")。
-        "absolute inset-x-0 z-10 select-none overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm [-webkit-touch-callout:none]",
+        // #1012 追加(第 18 批):inset-x-[3px] = 左右各內縮 3px(BOOKING_BLOCK_INSET_X_PX),相鄰兩位服務人員
+        //    的卡片之間留約 7px(含 1px 欄線)看得到欄底色。服務人員端用 inline style 的 left / right 蓋過。
+        "absolute inset-x-[3px] z-10 select-none overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm [-webkit-touch-callout:none]",
         draggable ? "cursor-grab" : "cursor-default",
         // §5.4:dragging 期間原色塊 opacity-40 留在原位當佔位。
         isSource && "opacity-40",
@@ -649,7 +652,9 @@ export function DraggableBookingBlock({
                   role: b.role,
                   staffId,
                   status: b.status,
-                  blockTopClientY: e.currentTarget.getBoundingClientRect().top,
+                  // #1012 追加:卡片畫的位置往下內縮了 GAP_TOP,這裡加回去 = 時間格的上緣,落點計算不受影響。
+                  blockTopClientY:
+                    e.currentTarget.getBoundingClientRect().top - BOOKING_BLOCK_GAP_TOP_PX,
                 },
                 style,
               )

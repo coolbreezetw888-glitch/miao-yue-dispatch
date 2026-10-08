@@ -204,13 +204,20 @@ test("#981 服務人員端行事曆:卡片列表與時間軸格線的訂單卡�
       .filter((b) => /E2E981/.test(b.innerText))
       .map((b) => {
         const cs = getComputedStyle(b);
-        return { text: b.innerText, bg: cs.backgroundColor, borderLeftWidth: cs.borderLeftWidth };
+        return {
+          text: b.innerText,
+          bg: cs.backgroundColor,
+          color: cs.color,
+          borderLeftWidth: cs.borderLeftWidth,
+        };
       }),
   );
   console.log("[#981] 時間軸色塊樣式:", JSON.stringify(blockStyles));
   expect(blockStyles.length).toBeGreaterThanOrEqual(3);
+  // #1012(第 18 批):時間軸卡片改成整張填滿狀態色 + 白字(#981 的時間軸白底作廢;卡片清單仍白底,見上面 ①)。
   for (const s of blockStyles) {
-    expect(WHITE).toContain(s.bg);
+    expect(WHITE).not.toContain(s.bg);
+    expect(s.color).toBe("rgb(255, 255, 255)");
     expect(s.borderLeftWidth).toBe("4px");
   }
   await context.close();

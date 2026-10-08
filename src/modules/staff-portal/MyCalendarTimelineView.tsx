@@ -51,7 +51,11 @@ import {
 } from "@/modules/booking/calendarBookingDrag";
 import { useStaffAvailabilityWindows } from "@/modules/booking/context";
 import { BookingBlockContent } from "@/modules/booking/BookingBlockContent";
-import { whiteBookingBlockStyle } from "@/modules/booking/bookingBlockLayout";
+import {
+  BOOKING_BLOCK_INSET_X_PX,
+  bookingBlockVerticalBox,
+  filledBookingBlockStyle,
+} from "@/modules/booking/bookingBlockLayout";
 import { DaySlotCell } from "@/modules/booking/DaySlotCell";
 import {
   buildStaffDayAvailableWindows,
@@ -62,7 +66,6 @@ import {
 } from "@/modules/booking/daySlotGrid";
 import { isoToTaipeiTime, minutesToTime, timeToMinutes } from "@/modules/booking/dateUtils";
 import {
-  bookingBlockStyle,
   calendarStateBlockStyle,
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
@@ -437,10 +440,16 @@ export function MyCalendarTimelineView({
           const bStartMin = timeToMinutes(isoToTaipeiTime(b.start_at));
           const bEndMin = timeToMinutes(isoToTaipeiTime(b.end_at));
           const top = Math.max(0, ((bStartMin - gridStartMin) / SLOT_MINUTES) * SLOT_PX);
-          const height = Math.max(SLOT_PX / 2, ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX);
+          const slotHeight = Math.max(
+            SLOT_PX / 2,
+            ((bEndMin - bStartMin) / SLOT_MINUTES) * SLOT_PX,
+          );
+          // #1012 追加(第 18 批):跟商家端同一套間隔 —— 上下留空(前後相連的卡片分得開),
+          // 左右各內縮 3px(時間欄 64px 右邊再空 3px;右緣 3px)。
+          const { top: blockTop, height } = bookingBlockVerticalBox(top, slotHeight);
           // #977 第 7 批(裁決 9):開關生效 + 自己是主要服務人員 + 待確認 / 已確認 ⇒ 可以長按拖拉改時間。
           // 用商家端同一個 DraggableBookingBlock(手勢、長按 500ms、復原提示都同一份);位置照服務人員端的
-          // left-16 right-1(inline style 蓋過元件預設的 inset-x-0)。
+          // 左 67px / 右 3px(inline style 蓋過元件預設的 inset-x-[3px];#1012 追加內縮 3px)。
           const ownDraggable =
             interactive &&
             staffId &&
@@ -463,13 +472,11 @@ export function MyCalendarTimelineView({
                 }}
                 staffId={staffId}
                 style={{
-                  top,
+                  top: blockTop,
                   height,
-                  left: 64,
-                  right: 4,
-                  ...whiteBookingBlockStyle(
-                    bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
-                  ),
+                  left: 64 + BOOKING_BLOCK_INSET_X_PX,
+                  right: BOOKING_BLOCK_INSET_X_PX,
+                  ...filledBookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
                 }}
                 controller={dragController}
               />
@@ -485,19 +492,18 @@ export function MyCalendarTimelineView({
               // 同一筆預約是不同顏色。改成跟商家端 CalendarPage.tsx:2448 同一支 bookingBlockStyle
               // (背景 16% 透明 + 實色文字/邊框),兩端的色塊從此一致。
               // 動態顏色沒辦法寫成 Tailwind class(build 時就固定了),所以是 inline style。
-              className="absolute left-16 right-1 z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
+              className="absolute left-[67px] right-[3px] z-10 overflow-hidden rounded-sm border p-1 text-left text-[11px] leading-tight shadow-sm"
               // 🔴 SPECS-INDEX #981(2026-10-06):服務人員端「時間軸格線」檢視的預約色塊也照 #970 一律白底
               // (規格書:服務人員端行事曆含各種檢視)。做法:沿用 bookingBlockStyle 的文字色 / 邊框色,
               // 只把背景換成卡片底色(var(--card),深色模式自動跟著主題),再補一條 4px 左側狀態色條,
               // 狀態仍一眼看得出來。⚠️ **不改 bookingBlockStyle 本身**。
               // #1005(第 14 批):商家端也改用同一種白底卡片,原本在這個檔案的 staffPortalWhiteBlockStyle
               // 搬到 booking/bookingBlockLayout.ts 的 whiteBookingBlockStyle,兩端共用。
+              // #1012(第 18 批):上面的白底作廢,改成整張填滿狀態色 + 白字,跟商家端同一支 filledBookingBlockStyle。
               style={{
-                top,
+                top: blockTop,
                 height,
-                ...whiteBookingBlockStyle(
-                  bookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
-                ),
+                ...filledBookingBlockStyle(effectiveStatusColors, b.status as BookingStatus),
               }}
             >
               {/* #1005(第 14 批,主腦補上的決定):服務人員端卡片也是「時間標籤 / 虛線 / 名字」,跟商家端同一個元件。 */}

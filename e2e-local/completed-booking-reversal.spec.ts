@@ -327,7 +327,8 @@ function taipeiHHMM(ms: number): string {
 const CALENDAR_SLOT_PX = 30;
 const CALENDAR_SLOT_MINUTES = 30;
 /** 已確認(accepted)預設狀態色 #1c6fd2(types.ts DEFAULT_BOOKING_STATUS_COLORS;測試商家沒有自訂顏色)。
- *  色塊文字色 = 狀態色本身(bookingBlockStyle),已完成會是 #1ea25d。 */
+ *  色塊文字色 = 狀態色本身(bookingBlockStyle),已完成會是 #1ea25d。
+ *  #1012(第 18 批)起時間軸卡片是「底色 = 狀態色、白字」,下面改比對底色。 */
 const ACCEPTED_TEXT_COLOR = "rgb(28, 111, 210)";
 
 /**
@@ -359,7 +360,8 @@ async function dragRevertedBlockInCalendar(page: Page, bookingId: string): Promi
   await expect(grid).toBeVisible({ timeout: LOAD_TIMEOUT });
   const block = page.getByTestId(`booking-block-${bookingId}-main`);
   await expect(block).toBeVisible({ timeout: LOAD_TIMEOUT });
-  await expect(block).toHaveCSS("color", ACCEPTED_TEXT_COLOR);
+  // #1012(第 18 批):時間軸卡片改成整張填滿狀態色 + 白字 ⇒ 狀態色看底色,不再是字色。
+  await expect(block).toHaveCSS("background-color", ACCEPTED_TEXT_COLOR);
   await expect(block).toHaveClass(/cursor-grab/);
 
   const slots = 2;
