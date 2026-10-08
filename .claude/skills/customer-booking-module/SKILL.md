@@ -72,6 +72,17 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 - 會被交易內刪索引的測試(c3_submit_booking A03-38、module10_09)打到的輔助函式要寫 plpgsql,不要寫成可內聯的 SQL 函式(否則快取計畫報「could not open relation with OID」)。
 - 第 5 批接點:通知主要聯絡人「有人申請」、通知聯絡人「已被移除」,目前只有會員中心/鈴鐺看得到。
 
+## 第 5-A 批 LINE 通知客人(2026-10-09,commit f54b02e,#1046)
+- 流程:bookings trigger `bookings_enqueue_customer_line`(AFTER INSERT / UPDATE OF status, start_at)→ `private.enqueue_customer_line` 寫 `customer_line_outbox` → cron `customer-line-dispatch-every-minute` 帶 `X-Cron-Secret`(Vault `customer_line_cron_secret`,Edge secret `CUSTOMER_LINE_CRON_SECRET` 同值)→ Edge `customer-line-notify-dispatch`(verify_jwt=false)claim(`for update skip locked`)/ prepare / finish。Vault 沒密鑰時 cron 不呼叫,待發停在 pending。
+- **新增會改 bookings 狀態/時間的函式,一定要設 `last_modified_by_user_id`**(trigger 靠它判斷客人/店家);服務人員端函式要設交易內 GUC `miaoyue.staff_order_actor`(優先於帳號判斷,服務人員操作不通知客人)。匯入(source=import)不發。
+- 改時間合併:pending 列只延後 send_after、保留第一次的 old_start_at;前一則 processing 中又改 ⇒ 另寫一則(dedupe_key 加 `:after:<id>`,3 分鐘後,old_start_at = 這次改前時間)。發送時時間已改回 ⇒ 不發。
+- 重試 1/5/15 分、共 4 次;LINE retry key 由 outbox id + 收件人算,409 當成功;已寫過紀錄的收件人不重發。卡 processing 10 分鐘放回(`claimed_at`)。
+- 收件人 = 該會員開著「預約通知」的聯絡人;已知非好友(webhook unfollow)略過不扣則數;客人函式回應不得含 LINE userId / token。
+- 模組 11 不再發會員:`resolve_line_notification_targets` 拿掉 notify_member 段、`line-notify-dispatch` Edge 也濾 `type:'member'`(verify_jwt 維持 true)。`get_line_notification_log` 是 5 參數(`p_category`),會員列 target_line_user_id 一律 null。
+- 預設範本只存 DB(`get_customer_line_settings` 回 default_templates);「（預計抵達時間）」只加在時間獨立一行的範本。「恢復預設」與清空文字儲存都要確認窗(danger)。
+- 5-A 刻意未做(5-B):提醒、完成、聯絡人通知(S03)、每月上限、80% 鈴鐺、用量查詢;**優惠通知開關 `src/lib/customerLinePromo.ts` `PROMO_SWITCH_VISIBLE=false`,5-B 行銷/生日照開關發時改 true**(客人端與後台聯絡人卡共用)。5-B 種類進清單 dispatcher 會標 skipped。
+- 已知風險:集團多店共用官方帳號 webhook 查詢失敗;LINE 登入 channel 與官方帳號不同 Provider 時 push failed;LINE 429 分辨月額度靠 message 文字,待真 LINE 實測。
+
 ## 前端(`src/modules/public-booking/`)
 - 不套後台外殼、不需登入;已登入後台的人打開也看客人版,不帶自己商家資料。主題色依該預約頁商家,離開要還原。
 - ①~⑤ 同一網址內切換,系統「上一頁」= 上一步(history state);填的資料**不存瀏覽器**,重新整理回 ①。
