@@ -80,8 +80,22 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 - 收件人 = 該會員開著「預約通知」的聯絡人;已知非好友(webhook unfollow)略過不扣則數;客人函式回應不得含 LINE userId / token。
 - 模組 11 不再發會員:`resolve_line_notification_targets` 拿掉 notify_member 段、`line-notify-dispatch` Edge 也濾 `type:'member'`(verify_jwt 維持 true)。`get_line_notification_log` 是 5 參數(`p_category`),會員列 target_line_user_id 一律 null。
 - 預設範本只存 DB(`get_customer_line_settings` 回 default_templates);「（預計抵達時間）」只加在時間獨立一行的範本。「恢復預設」與清空文字儲存都要確認窗(danger)。
-- 5-A 刻意未做(5-B):提醒、完成、聯絡人通知(S03)、每月上限、80% 鈴鐺、用量查詢;**優惠通知開關 `src/lib/customerLinePromo.ts` `PROMO_SWITCH_VISIBLE=false`,5-B 行銷/生日照開關發時改 true**(客人端與後台聯絡人卡共用)。5-B 種類進清單 dispatcher 會標 skipped。
+- 5-A 刻意未做(5-B):提醒、完成、聯絡人通知(S03)、每月上限、80% 鈴鐺、用量查詢;優惠通知開關 `src/lib/customerLinePromo.ts`(5-B 已改 true)。
 - 已知風險:集團多店共用官方帳號 webhook 查詢失敗;LINE 登入 channel 與官方帳號不同 Provider 時 push failed;LINE 429 分辨月額度靠 message 文字,待真 LINE 實測。
+
+## 第 5-B 批 提醒、完成、聯絡人通知、上限與優惠開關(2026-10-09,commit e52e441,#1047)
+- migration `20261010130000~130200`;130200 重新定義 5-A 的 `private.customer_line_default_templates`、`internal_finish_customer_line_job`(**已上線的 migration 檔一律不改,修正另開新檔**)。
+- 提醒:cron `customer-line-reminder-enqueue` 每 10 分鐘(純 SQL,`private.enqueue_customer_line_reminders_at` 可傳固定時間測)。範圍含剛好 N 小時(N=12、9 點的單 ⇒ 前晚 21:00 發);台北 22:00~08:00 不寫;離開始 < 1 小時不寫。`{{booking_day_word}}` = 今天/明天/後天/日期。
+- 🔴 **提醒去重 = outbox 歷史,只排除「被作廢」列(`status='skipped' and last_error='stale'`)**。曾改成只看 pending/processing/sent ⇒ 被略過/失敗的單每 10 分鐘重寫一次(QA R1)。去重靠 outbox 保留 30 天,清理期限不可短於 48 小時。
+- 服務完成:trigger 寫前先查 outbox 有 pending/processing/sent 的完成列就不寫(還原再完成不重發)。服務人員按完成也發。
+- 聯絡人通知(申請/同意/拒絕/移除)只用 `member_name/merchant_name/merchant_phone/contact_name`,`member_center_url` 由 Edge 組;申請人已是聯絡人、沒聯絡人的舊綁定碼會員不發。
+- 🔴 **範本裡含 `{{merchant_phone}}` 的句子要獨立一行**:沒填電話時整行拿掉,同一行會讓整則變空白 → failed(正式庫 462/463 店沒電話)。
+- 每月上限:只算 `customer_*` 本月成功則數,prepare 時算 + Edge `cap_remaining` 第二道;只管理員能改(`set_customer_line_monthly_cap`),客服看唯讀數字。已知風險:排程重疊可能多發幾則。
+- 80% 鈴鐺:`internal_line_quota_check_due`(每店每小時最多查一次 LINE)+ `internal_line_quota_warning`(同月一則、已發用完就不發);只在客人通知排程觸發。函式刻意不叫 `internal_customer_line_*`(c2_acl 計數測試)。
+- Edge `line-quota-status`(verify_jwt=true):先用呼叫者 JWT 擋權限,再用 service role 讀 token;叫不到時前端退回 `get_customer_line_usage`。
+- 行銷 `line-send-marketing`:照每位聯絡人優惠開關、一次 ≤ 5000 位、log 不印錯誤物件;確認窗則數用 `preview_line_marketing_recipients`。生日只看主要聯絡人開關,關 ⇒ `skipped_opted_out`(點數照發)。
+- 客人端固定文案不寫「服務前提醒」(預設關,不承諾)。
+- 部署順序:先 migration 再 Edge(`line-send-marketing` 需新 RPC)。
 
 ## 前端(`src/modules/public-booking/`)
 - 不套後台外殼、不需登入;已登入後台的人打開也看客人版,不帶自己商家資料。主題色依該預約頁商家,離開要還原。
