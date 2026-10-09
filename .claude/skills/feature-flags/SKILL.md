@@ -67,5 +67,18 @@ description: 秒約「平台功能開關」(#1025)的規則與已知坑。要新
 has_own_staff_permission b30806e9、staff_order_self_ok 9aebab86、generate_own_staff_line_binding_code 27b39cde、resolve_push_recipients 5da04839。正式庫 merchant_feature_grants = 商家數 × 7。
 
 ### 待做
-- FG-2:LINE 通知、再行銷、手機推播開關(等週額度重置)。
 - 小尾巴(體檢時處理):批次確認窗大項關閉缺「底下的細部功能也會一起停用。」;關閉畫面頁首標題仍是「個人資料」;req1025 e2e 沒監聽 console same key。
+
+---
+
+## FG-2 LINE 通知、再行銷、手機推播(2026-10-10,commit fac6818,migration 20261010220000/220100)
+
+- 功能:`line_notifications`(50)、`line_marketing`(51,parent = line_notifications)、`push_notifications`(60);預設全開。grants = 商家數 × 10。
+- 資料庫擋點(只插 `[req1025 FG2]` 標記段):`resolve_line_notification_targets`(在 #972 歸屬檢查**之後**,關 ⇒ 回空清單)、`private.enqueue_customer_line`(關 ⇒ 不入列)、`private.customer_line_notify_available`(會員中心 LINE 區塊與完成頁文字自動隱藏)。指紋:3cc6fb04、cdedcefe、c5f1cf39。
+- Edge:共用 `_shared/featureGate.ts`(service role 呼叫 `internal_merchant_has_feature`;**只有明確 true 才算開,查詢失敗一律不發**;排程同店每次只查一次)。客人待發 LINE 送出前再檢查 ⇒ `customer_line_outbox.status='skipped'`、`last_error='feature_disabled'`。生日禮記 failed + 白話原因(不新增狀態)。再行銷 403「這個功能目前沒有開放。」。
+- 🔴 主腦裁決:**關推播只停手機/瀏覽器推播,站內鈴鐺照寫**(`pushDispatchCore` 在寫鈴鐺後、查裝置前擋;log skipped/feature_disabled)。push-send-test 照擋。
+- 🔴 主腦裁決:**關 LINE 通知時 LINE 串接設定頁仍可進入,只顯示 LINE 登入卡**(LINE 登入用自己的 Channel,不依賴 Messaging API 憑證);會員詳情卡改標題「LINE 登入」只留登入列與聯絡人卡(`MemberLineLoginOnlySection`、`showNotificationInfo=false`)。
+- 前端隱藏:功能頁卡、個人卡(管理員與服務人員端)、客服權限三列、服務人員編輯窗 LINE 綁定/推播裝置、會員詳情綁定碼、line_quota_* 鈴鐺在 LINE 關時不導向。
+- 推播訂閱/取消訂閱與 line-test-connection、line-webhook 不擋(不發訊息/保留裝置)。
+- 部署注意:migration 要**先於** Edge 部署(Edge 查不到新 key 會當關閉而全部不發)。共用推播核心改動要連 push-notify-reminder-dispatch、customer-booking-submit、customer-booking-cancel 一起部署。
+- 小尾巴(體檢):line-send-marketing 403 路線無自動化測試;舊綁定碼仍有自動回覆;MemberPointsPage「只看 LINE 已綁定」篩選與會員列表空白文字仍提 LINE。
