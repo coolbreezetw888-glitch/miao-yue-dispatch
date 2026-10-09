@@ -2074,6 +2074,7 @@ export type Database = {
           color: string
           created_at: string
           merchant_id: string
+          opacity: number
           state_type: string
           updated_at: string
         }
@@ -2081,6 +2082,7 @@ export type Database = {
           color: string
           created_at?: string
           merchant_id: string
+          opacity?: number
           state_type: string
           updated_at?: string
         }
@@ -2088,6 +2090,7 @@ export type Database = {
           color?: string
           created_at?: string
           merchant_id?: string
+          opacity?: number
           state_type?: string
           updated_at?: string
         }
@@ -5012,6 +5015,14 @@ export type Database = {
         Args: { p_date: string; p_staff_id: string }
         Returns: Json
       }
+      get_my_staff_availability_windows: {
+        Args: { p_staff_id: string }
+        Returns: {
+          day_of_week: number
+          end_time: string
+          start_time: string
+        }[]
+      }
       get_my_push_identity: { Args: { p_merchant_id: string }; Returns: Json }
       get_public_available_slots: {
         Args: {
@@ -6289,15 +6300,22 @@ export type Database = {
       update_merchant_calendar_state_styles: {
         Args: {
           p_cross_store_occupied_color: string
+          p_cross_store_occupied_opacity?: number
           p_full_day_leave_color: string
+          p_full_day_leave_opacity?: number
           p_merchant_id: string
+          p_outside_business_hours_color?: string
+          p_outside_business_hours_opacity?: number
           p_partial_leave_color: string
+          p_partial_leave_opacity?: number
           p_staff_available_slot_color?: string
+          p_staff_available_slot_opacity?: number
         }
         Returns: {
           color: string
           created_at: string
           merchant_id: string
+          opacity: number
           state_type: string
           updated_at: string
         }[]

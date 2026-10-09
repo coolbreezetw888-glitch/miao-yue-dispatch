@@ -110,6 +110,11 @@ export interface CalendarBookingDragParams {
    * 格線、空白格選單、建單預帶時間都不受影響。
    */
   snapMinutes?: number | undefined;
+  /**
+   * SPECS-INDEX #1049:格線改成 00:00~24:00 之後,拖拉只能落在這段時間(= 營業時間,分鐘數),
+   * 落點超出就夾回來(跟改版前「格線 = 營業時間、超出夾到邊界」相同)。不傳 = 整條格線。
+   */
+  dropRange?: { startMin: number; endMin: number } | undefined;
   /** ≤ 閾值就放開 = 點擊 → 開詳情(取代色塊原本的 onClick)。
    * SPECS-INDEX #873:第二個參數告訴詳情「是從哪一張色塊打開的」(主 / 協助 + 那一欄的服務人員),
    * 從「(協助)」色塊打開時,詳情要給「移除協助人員」而不是「取消預約」(原本兩張色塊都只傳 booking id,
@@ -228,6 +233,9 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
     moveFn,
   } = params;
   const staffBlocks = params.staffBlocks ?? EMPTY_STAFF_BLOCKS;
+  // #1049:物件每次 render 都是新的 ⇒ 拆成兩個數字放進依賴陣列,避免拖拉中的計算函式每次都換身分。
+  const dropRangeStartMin = params.dropRange?.startMin;
+  const dropRangeEndMin = params.dropRange?.endMin;
 
   // --- 索引:每顆色塊的資料(依 欄位 + 訂單)、每筆訂單的主服務人員與助手清單(坑 4)、每欄是否整天休假。
   const blockIndex = useMemo(() => {
@@ -311,6 +319,10 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
             columnRects: geometry.rects,
             occludedLeftClientX: geometry.occludedLeft,
             snapMinutes,
+            dropRange:
+              dropRangeStartMin != null && dropRangeEndMin != null
+                ? { startMin: dropRangeStartMin, endMin: dropRangeEndMin }
+                : undefined,
           })
         : null;
 
@@ -389,6 +401,8 @@ export function useCalendarBookingDrag(params: CalendarBookingDragParams) {
       slotMinutes,
       slotPx,
       snapMinutes,
+      dropRangeStartMin,
+      dropRangeEndMin,
     ],
   );
 

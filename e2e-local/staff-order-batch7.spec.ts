@@ -414,7 +414,15 @@ test("E9 手機 375 寬:直向捲動不誤開選單;選單、建單、編輯畫�
     const box = (await cell.boundingBox())!;
     const cdp = await context.newCDPSession(page);
     const from = { x: box.x + 30, y: box.y + box.height / 2 };
-    const before = await page.evaluate(() => window.scrollY);
+    // #1049:時間軸改成自己一個捲動框(24 小時),手指直向滑先捲的是那個框;頁面捲動也算(兩者相加)。
+    const scrolled = () =>
+      page.evaluate(
+        () =>
+          window.scrollY +
+          (document.querySelector<HTMLElement>('[data-testid="my-timeline-scroll"]')?.scrollTop ??
+            0),
+      );
+    const before = await scrolled();
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [{ x: from.x, y: from.y }],
@@ -427,7 +435,7 @@ test("E9 手機 375 寬:直向捲動不誤開選單;選單、建單、編輯畫�
     }
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await expect
-      .poll(async () => (await page.evaluate(() => window.scrollY)) - before, { timeout: 5_000 })
+      .poll(async () => (await scrolled()) - before, { timeout: 5_000 })
       .toBeGreaterThan(40);
     await page.waitForTimeout(500);
     await expect(page.getByRole("menu")).toHaveCount(0);

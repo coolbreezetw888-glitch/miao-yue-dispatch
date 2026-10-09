@@ -60,6 +60,25 @@ begin
                             E'if v_compensation_type <> ''monthly_salary'' then');
     v_src := replace(v_src, '只有月薪制、日薪制、時薪制的服務人員可以登記請假紀錄', '只有月薪制的服務人員可以登記請假紀錄');
   end if;
+  -- #1049 / #1050(migration 20261010210100):get_my_calendar_state_styles 多回一個 "opacity" 物件(只改這三段),先換回再比對改前指紋。
+  if p_sig like 'public.get_my_calendar_state_styles(%' then
+    v_src := replace(v_src, E'  v_opacity jsonb;
+', '');
+    v_src := replace(v_src,
+      E'  select coalesce(jsonb_object_agg(state_type, color), ''{}''::jsonb),
+         coalesce(jsonb_object_agg(state_type, opacity), ''{}''::jsonb)
+  into v_result, v_opacity
+',
+      E'  select coalesce(jsonb_object_agg(state_type, color), ''{}''::jsonb)
+  into v_result
+');
+    v_src := replace(v_src,
+      E'  -- #1050:{state_type: 色碼} 照舊,另外多一個 "opacity": {state_type: 透明度}。
+  return v_result || jsonb_build_object(''opacity'', v_opacity);
+',
+      E'  return v_result;
+');
+  end if;
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;

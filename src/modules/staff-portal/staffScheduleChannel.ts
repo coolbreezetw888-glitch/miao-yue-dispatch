@@ -94,6 +94,9 @@ export function shouldRefreshFromBroadcast(message: unknown): boolean {
  * ⇒ 多重查 `["staff-portal-module", "my-availability-overrides"]`(休假設定頁的排休分頁)。
  * 時間軸上的單日例外走 my-day-schedule-state,本來就在清單裡。
  *
+ * SPECS-INDEX #1049(R6 / R7):服務人員時間軸改讀 get_my_staff_availability_windows(不論有沒有開「新增編輯訂單」),
+ * queryKey 是 `["staff-portal-module", "my-availability-windows", staffId]` ⇒ 也要重查(同一個每週時段變動訊號)。
+ *
  * 仍然刻意**不**包含 my-staff-permission / my-booking-status-colors / my-calendar-state-styles ——
  * 資料庫不會因為那些變動發訊號。
  * 用前綴 invalidate 會把所有已快取的日期範圍標成過期,但 React Query 只會立刻重抓「目前畫面上
@@ -106,6 +109,7 @@ export const STAFF_SCHEDULE_INVALIDATE_KEYS = [
   ["staff-portal-module", "my-staff-record"],
   ["booking-module", "staff-availability-windows"],
   ["staff-portal-module", "my-availability-overrides"],
+  ["staff-portal-module", "my-availability-windows"],
 ] as const;
 
 /**

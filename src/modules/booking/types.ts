@@ -292,18 +292,65 @@ export function bookingCardHoverBorderColor(
 /** 有固定圖樣(斜線 / 交叉網格)的三種排程狀態(#644)。 */
 export type CalendarPatternStateType = "full_day_leave" | "partial_leave" | "cross_store_occupied";
 
-/** 對應資料表 merchant_calendar_state_styles.state_type 的四個枚舉值。
- * SPECS-INDEX #1021 第 21 批新增第 4 種 staff_available_slot(服務人員每週可預約時段的空格子底色,純色、無圖樣)。 */
-export type CalendarStateType = CalendarPatternStateType | "staff_available_slot";
+/** 對應資料表 merchant_calendar_state_styles.state_type 的五個枚舉值。
+ * SPECS-INDEX #1021 第 21 批新增第 4 種 staff_available_slot(服務人員每週可預約時段的空格子底色,純色、無圖樣)。
+ * SPECS-INDEX #1049 新增第 5 種 outside_business_hours(營業時間外的格子,深色、純色無圖樣)。 */
+export type CalendarSolidStateType = "staff_available_slot" | "outside_business_hours";
+export type CalendarStateType = CalendarPatternStateType | CalendarSolidStateType;
 
-/** 商家目前設定的 4 種行事曆排程狀態代表色。查無資料(還沒特別設定過)時,呼叫端一律 fallback
+/** #1050:每種狀態的透明度(百分比 10~100,100 = 跟改版前一模一樣)。key 跟 CalendarStateStyleMap 的顏色欄位一一對應。 */
+export interface CalendarStateOpacityMap {
+  fullDayLeave: number;
+  partialLeave: number;
+  crossStoreOccupied: number;
+  staffAvailableSlot: number;
+  outsideBusinessHours: number;
+}
+
+/** 商家目前設定的 5 種行事曆排程狀態代表色 + 透明度。查無資料(還沒特別設定過)時,呼叫端一律 fallback
  * 成 DEFAULT_CALENDAR_STATE_STYLES,不回傳 undefined 欄位。 */
 export interface CalendarStateStyleMap {
   fullDayLeave: string;
   partialLeave: string;
   crossStoreOccupied: string;
-  /** #1021:服務人員每週可預約時段內、可預約的空格子底色(直接當底色用,不另外調透明度)。 */
+  /** #1021:服務人員每週可預約時段內、可預約的空格子底色(純色)。 */
   staffAvailableSlot: string;
+  /** #1049:營業時間外的格子底色(純色,預設深灰藍)。 */
+  outsideBusinessHours: string;
+  /** #1050:各狀態透明度。 */
+  opacity: CalendarStateOpacityMap;
+}
+
+/** 顏色欄位的 key(不含 opacity),設定頁、讀取函式共用。 */
+export type CalendarStateColorKey = keyof CalendarStateOpacityMap;
+
+/** 資料表 state_type ⇄ 前端 key 對照(讀取 / 儲存共用,不各寫一份)。 */
+export const CALENDAR_STATE_TYPE_TO_KEY: Readonly<
+  Record<CalendarStateType, CalendarStateColorKey>
+> = {
+  full_day_leave: "fullDayLeave",
+  partial_leave: "partialLeave",
+  cross_store_occupied: "crossStoreOccupied",
+  staff_available_slot: "staffAvailableSlot",
+  outside_business_hours: "outsideBusinessHours",
+};
+
+/** #1050:透明度合法範圍(跟資料庫 CHECK 一致)。 */
+export const CALENDAR_STATE_OPACITY_MIN = 10;
+export const CALENDAR_STATE_OPACITY_MAX = 100;
+
+/** 把任意輸入整理成合法透明度:不是有限數字 ⇒ 100;超出範圍夾到 10~100;四捨五入成整數。 */
+export function normalizeCalendarStateOpacity(input: unknown): number {
+  const n = typeof input === "number" ? input : typeof input === "string" ? Number(input) : NaN;
+  if (!Number.isFinite(n)) return CALENDAR_STATE_OPACITY_MAX;
+  return Math.min(CALENDAR_STATE_OPACITY_MAX, Math.max(CALENDAR_STATE_OPACITY_MIN, Math.round(n)));
+}
+
+/** #1050:透明度乘在既有 alpha 上(例:0.12 × 50% = 0.06)。100% 時原值原樣回傳(逐像素跟改版前相同)。 */
+export function scaleCalendarAlpha(alpha: number, opacity: number): number {
+  const o = normalizeCalendarStateOpacity(opacity);
+  if (o === CALENDAR_STATE_OPACITY_MAX) return alpha;
+  return Math.round(alpha * o * 100) / 10000;
 }
 
 /** 查無資料時的預設值,跟資料庫 seed 函式(20260923020100_req644_...)的預設色碼逐字一致。
@@ -316,7 +363,49 @@ export const DEFAULT_CALENDAR_STATE_STYLES: CalendarStateStyleMap = {
   // #1021 第 21 批:淡綠(tailwind green-100)。跟填色預約卡片(實色)、時段外灰格、特別開放的淡紫底紫框、
   // 斜線 / 網格圖樣都分得開;跟資料庫 seed_default_merchant_calendar_state_styles 逐字一致。
   staffAvailableSlot: "#dcfce7",
+  // #1049:深灰藍(tailwind slate-700),跟資料庫 seed 逐字一致。理由見 migration 20261010210000_req1049_1050_*。
+  outsideBusinessHours: "#334155",
+  opacity: {
+    fullDayLeave: 100,
+    partialLeave: 100,
+    crossStoreOccupied: 100,
+    staffAvailableSlot: 100,
+    outsideBusinessHours: 100,
+  },
 };
+
+/**
+ * 把資料庫一列一狀態(state_type, color, opacity)轉成 CalendarStateStyleMap。
+ * 商家端直接讀表、服務人員端 get_my_calendar_state_styles 都走這一支(#1049 / #1050),缺的狀態 / 透明度一律用預設值。
+ * 不認得的 state_type 直接略過。
+ */
+export function buildCalendarStateStyleMap(
+  rows: readonly { state_type: string; color: string | null | undefined; opacity?: unknown }[],
+): CalendarStateStyleMap {
+  const result: CalendarStateStyleMap = {
+    ...DEFAULT_CALENDAR_STATE_STYLES,
+    opacity: { ...DEFAULT_CALENDAR_STATE_STYLES.opacity },
+  };
+  for (const row of rows) {
+    const key = (CALENDAR_STATE_TYPE_TO_KEY as Record<string, CalendarStateColorKey | undefined>)[
+      row.state_type
+    ];
+    if (!key) continue;
+    if (typeof row.color === "string") result[key] = row.color;
+    if (row.opacity !== undefined && row.opacity !== null) {
+      result.opacity[key] = normalizeCalendarStateOpacity(row.opacity);
+    }
+  }
+  return result;
+}
+
+/** #1050:依狀態拿透明度(舊資料 / 缺欄位 ⇒ 100)。 */
+export function getCalendarStateOpacity(
+  colors: CalendarStateStyleMap,
+  state: CalendarStateType,
+): number {
+  return normalizeCalendarStateOpacity(colors.opacity?.[CALENDAR_STATE_TYPE_TO_KEY[state]]);
+}
 
 /** 依狀態值從顏色表挑出對應色碼。 */
 export function getCalendarStateColor(
@@ -326,6 +415,7 @@ export function getCalendarStateColor(
   if (state === "full_day_leave") return colors.fullDayLeave;
   if (state === "partial_leave") return colors.partialLeave;
   if (state === "staff_available_slot") return colors.staffAvailableSlot;
+  if (state === "outside_business_hours") return colors.outsideBusinessHours;
   return colors.crossStoreOccupied;
 }
 
@@ -340,9 +430,11 @@ export function calendarStateBlockStyle(
   state: CalendarPatternStateType,
 ): { backgroundColor: string; backgroundImage: string; borderColor: string; color: string } {
   const color = getCalendarStateColor(colors, state);
-  const line = hexToRgba(color, 0.55);
-  const base = hexToRgba(color, 0.12);
-  const borderColor = hexToRgba(color, 0.55);
+  // #1050:透明度乘在既有 alpha 上;文字色(color)不跟著變淡。100% 時三個值跟改版前逐字相同。
+  const opacity = getCalendarStateOpacity(colors, state);
+  const line = hexToRgba(color, scaleCalendarAlpha(0.55, opacity));
+  const base = hexToRgba(color, scaleCalendarAlpha(0.12, opacity));
+  const borderColor = hexToRgba(color, scaleCalendarAlpha(0.55, opacity));
 
   if (state === "cross_store_occupied") {
     return {

@@ -254,6 +254,12 @@ export interface ComputeDropTargetInput {
    * 只是放開時可以落在格子中間。
    */
   snapMinutes?: number | undefined;
+  /**
+   * SPECS-INDEX #1049:時間軸改畫 00:00~24:00 之後,拖拉落點仍然只能落在這一段(= 營業時間,分鐘數)。
+   * 色塊頂端不早於 startMin、尾端不晚於 endMin(超出就夾回來,跟原本「夾到格線邊界」同一個規則)。
+   * 沒帶 = 整條格線(跟改版前逐位元相同)。
+   */
+  dropRange?: { startMin: number; endMin: number } | undefined;
 }
 
 export interface DropTarget {
@@ -304,16 +310,24 @@ export function computeDropTarget(input: ComputeDropTargetInput): DropTarget | n
   // --- Y:以「色塊頂端」算格,round 到最近格(半格以上就跳下一格)。
   const blockTopClientY = input.pointerClientY - input.grabOffsetY;
 
+  // #1049:可落點的範圍(分鐘)。沒帶 dropRange ⇒ 整條格線(改版前的行為)。
+  const fullGridEndMin = input.gridStartMin + slotCount * slotMinutes;
+  const rangeStartMin = input.dropRange
+    ? Math.max(input.gridStartMin, input.dropRange.startMin)
+    : input.gridStartMin;
+  const rangeEndMin = input.dropRange
+    ? Math.min(fullGridEndMin, input.dropRange.endMin)
+    : fullGridEndMin;
+
   // #986 第 9 批:有帶 snapMinutes ⇒ 改用「當天第幾分鐘」吸附到建單時間間隔(沒帶 ⇒ 下面原本的算法,一字不改)。
   const snap = input.snapMinutes;
   if (snap != null && Number.isFinite(snap) && snap > 0) {
     const blockTopMin =
       input.gridStartMin + ((blockTopClientY - input.gridTopClientY) / slotPx) * slotMinutes;
-    const gridEndMin = input.gridStartMin + slotCount * slotMinutes;
     const blockMinutes =
       input.durationMin != null && input.durationMin > 0 ? input.durationMin : slotMinutes;
-    const earliest = Math.ceil(input.gridStartMin / snap) * snap;
-    const latest = Math.max(earliest, Math.floor((gridEndMin - blockMinutes) / snap) * snap);
+    const earliest = Math.ceil(rangeStartMin / snap) * snap;
+    const latest = Math.max(earliest, Math.floor((rangeEndMin - blockMinutes) / snap) * snap);
     const snapped = Math.round(blockTopMin / snap) * snap;
     const snappedStartMin = Math.min(latest, Math.max(earliest, snapped));
     return {
@@ -329,8 +343,14 @@ export function computeDropTarget(input: ComputeDropTargetInput): DropTarget | n
   // --- clamp:頂端不早於第 0 格;有帶時長時,尾端也不超出最後一格的底。
   const durationSlots =
     input.durationMin != null && input.durationMin > 0 ? input.durationMin / slotMinutes : 1;
-  const maxIndex = Math.max(0, Math.floor(slotCount - durationSlots + 1e-9));
-  const slotIndex = Math.min(maxIndex, Math.max(0, rawIndex));
+  // #1049:沒帶 dropRange 時 minIndex = 0、rangeSlots = slotCount,跟改版前一字不差的算法等價。
+  const minIndex = Math.max(
+    0,
+    Math.ceil((rangeStartMin - input.gridStartMin) / slotMinutes - 1e-9),
+  );
+  const rangeEndIndex = (rangeEndMin - input.gridStartMin) / slotMinutes;
+  const maxIndex = Math.max(minIndex, Math.floor(rangeEndIndex - durationSlots + 1e-9));
+  const slotIndex = Math.min(maxIndex, Math.max(minIndex, rawIndex));
 
   const startMin = input.gridStartMin + slotIndex * slotMinutes;
   return { staffId: column.staffId, slotIndex, startMin, startTime: minutesToTime(startMin) };

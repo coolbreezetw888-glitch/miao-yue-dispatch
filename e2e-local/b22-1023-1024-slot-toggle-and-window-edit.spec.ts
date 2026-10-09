@@ -179,10 +179,10 @@ async function openMerchantCalendar(p: Page): Promise<void> {
   });
 }
 
-/** 某一欄某個時間那一格(營業時間 08:00 開始,每格 30 分鐘;按 top 排序)。 */
+/** 某一欄某個時間那一格(#1049 起格線 00:00 開始,每格 30 分鐘;按 top 排序)。 */
 function slotAt(p: Page, gridTestId: string, time: string) {
   const [h, m] = time.split(":").map(Number) as [number, number];
-  const index = (h * 60 + m - 8 * 60) / 30;
+  const index = (h * 60 + m) / 30;
   return p.getByTestId(gridTestId).locator(":scope > [data-slot-state]").nth(index);
 }
 

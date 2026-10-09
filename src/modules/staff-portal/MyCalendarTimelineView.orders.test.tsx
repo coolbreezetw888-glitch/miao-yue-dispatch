@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const staffSetMySlotMock = vi.fn(async () => 0);
 const clearMyDayOverrideMock = vi.fn(async () => {});
+const windowsHookCalls: (string | null)[] = [];
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({}), rpc: () => ({}), channel: () => ({}) },
@@ -47,20 +48,23 @@ vi.mock("./context", () => ({
   useMyCalendarStateStyles: () => ({ data: undefined }),
   useMyBookingStatusColors: () => ({ data: undefined }),
   clearMyDayOverride: (...args: unknown[]) => clearMyDayOverrideMock(...(args as [])),
-}));
-
-vi.mock("@/modules/booking/context", () => ({
+  // #1049(R6):每週時段改由 get_my_staff_availability_windows 讀,不論有沒有開「新增編輯訂單」。
   // 每週三 09:00–10:00 可預約(2036-03-12 是星期三)
-  useStaffAvailabilityWindows: (staffId: string | null) => ({
-    data: staffId ? [{ day_of_week: 3, start_time: "09:00:00", end_time: "10:00:00" }] : undefined,
-  }),
+  useMyTimelineAvailabilityWindows: (staffId: string | null) => {
+    windowsHookCalls.push(staffId);
+    return {
+      data: staffId
+        ? [{ day_of_week: 3, start_time: "09:00:00", end_time: "10:00:00" }]
+        : undefined,
+    };
+  },
 }));
 
 import { MyCalendarTimelineView, type MyTimelineOrderActions } from "./MyCalendarTimelineView";
 
 const STAFF_ID = "33333333-3333-4333-8333-333333333333";
 
-function renderView(orderActions: MyTimelineOrderActions | null) {
+function renderView(orderActions: MyTimelineOrderActions | null, unlimitedBackendEdit?: boolean) {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
@@ -70,6 +74,7 @@ function renderView(orderActions: MyTimelineOrderActions | null) {
         bookings={[]}
         onSelectBooking={() => {}}
         orderActions={orderActions}
+        unlimitedBackendEdit={unlimitedBackendEdit}
       />
     </QueryClientProvider>,
   );
@@ -98,6 +103,64 @@ describe("服務人員時間軸點格子(#977 第 7 批)", () => {
     renderView(null);
     expect(screen.queryAllByRole("button")).toHaveLength(0);
     expect(screen.getByTestId("my-timeline-grid").getAttribute("data-interactive")).toBeNull();
+  });
+
+  it("#1049 唯讀畫法也讀每週時段:00~24 共 48 格,營業時間外深色、時段內自訂色、時段外白色", () => {
+    windowsHookCalls.length = 0;
+    renderView(null);
+    expect(windowsHookCalls).toContain(STAFF_ID);
+    const grid = screen.getByTestId("my-timeline-grid");
+    const cells = [...grid.querySelectorAll<HTMLElement>(":scope > [data-slot-state]")];
+    expect(cells).toHaveLength(48);
+    const stateAt = (hhmm: string) => {
+      const [h, m] = hhmm.split(":").map(Number);
+      return cells[(h! * 60 + m!) / 30]!.getAttribute("data-slot-state");
+    };
+    expect(stateAt("00:00")).toBe("outside-business-hours");
+    expect(stateAt("08:30")).toBe("outside-business-hours");
+    expect(stateAt("09:00")).toBe("available");
+    expect(stateAt("09:30")).toBe("override-closed");
+    expect(stateAt("10:00")).toBe("unavailable");
+    expect(stateAt("11:00")).toBe("outside-business-hours");
+    expect(stateAt("23:30")).toBe("outside-business-hours");
+    // 營業時間外 = 深色(預設 #334155)+ 淺色文字;時段內 = 預設淡綠;時段外 = 白色(bg-background)
+    expect(cells[0]!.style.backgroundColor).toBe("rgb(51, 65, 85)");
+    expect(cells[0]!.querySelector("span")?.className).not.toMatch(/text-muted-foreground/);
+    expect(cells[18]!.style.backgroundColor).toBe("rgb(220, 252, 231)");
+    expect(cells[20]!.className).toMatch(/bg-background/);
+    expect(cells[20]!.className).not.toMatch(/bg-muted/);
+  });
+
+  it("#1049 QA M1:唯讀 + 商家後台編輯無時段限制 ⇒ 營業時間內全部可預約(跟商家端一致),營業時間外仍深色", () => {
+    renderView(null, true);
+    const grid = screen.getByTestId("my-timeline-grid");
+    const cells = [...grid.querySelectorAll<HTMLElement>(":scope > [data-slot-state]")];
+    // 09:00、10:00 都可預約(10:00 在每週時段外,但無時段限制 ⇒ 整段營業時間);09:30 / 10:30 是排休
+    expect(cells[18]!.getAttribute("data-slot-state")).toBe("available");
+    expect(cells[20]!.getAttribute("data-slot-state")).toBe("available");
+    expect(cells[20]!.style.backgroundColor).toBe("rgb(220, 252, 231)");
+    expect(cells[19]!.getAttribute("data-slot-state")).toBe("override-closed");
+    expect(cells[22]!.getAttribute("data-slot-state")).toBe("outside-business-hours");
+    expect(grid.querySelectorAll('[data-slot-state="unavailable"]')).toHaveLength(0);
+    // 仍是唯讀:沒有任何按鈕
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("#1049 QA M1:唯讀 + 沒開無時段限制 ⇒ 照每週時段畫(10:00 白色)", () => {
+    renderView(null, false);
+    const cells = [
+      ...screen
+        .getByTestId("my-timeline-grid")
+        .querySelectorAll<HTMLElement>(":scope > [data-slot-state]"),
+    ];
+    expect(cells[20]!.getAttribute("data-slot-state")).toBe("unavailable");
+  });
+
+  it("#1049 R4:營業時間外的格子就算開了新增編輯訂單也不是按鈕", () => {
+    renderView({ unlimitedBackendEdit: true, canToggleSlots: true, onCreateBooking: vi.fn() });
+    expect(screen.queryByRole("button", { name: /08:30/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /11:00/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "10:00 可預約" })).toBeTruthy();
   });
 
   it("生效 + B2(可開關時段):可預約格子有「新增預約」+「關閉時段」,時段內排休的格子只有「開啟時段」", async () => {

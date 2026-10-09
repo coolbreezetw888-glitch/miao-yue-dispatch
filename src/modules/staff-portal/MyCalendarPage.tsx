@@ -414,6 +414,8 @@ export default function MyCalendarPage() {
               selectedDateKey={selectedDateKey}
               bookings={selectedDayBookings}
               onSelectBooking={setDetailBookingId}
+              // #1049 QA M1:唯讀畫法也要知道「商家後台編輯無時段限制」,格子顏色才會跟商家端一致。
+              unlimitedBackendEdit={staffRow?.unlimited_backend_edit === true}
               orderActions={
                 orderAbility.canEditOrders && staffRow
                   ? {

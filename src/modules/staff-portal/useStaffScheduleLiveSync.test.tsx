@@ -202,6 +202,7 @@ describe("useStaffScheduleLiveSync — 收到訊號重查(#896 / #900)", () => {
       { queryKey: ["staff-portal-module", "my-staff-record"] },
       { queryKey: ["booking-module", "staff-availability-windows"] },
       { queryKey: ["staff-portal-module", "my-availability-overrides"] },
+      { queryKey: ["staff-portal-module", "my-availability-windows"] },
     ]);
   });
 

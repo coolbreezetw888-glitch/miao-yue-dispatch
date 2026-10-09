@@ -58,10 +58,10 @@ const LOAD_TIMEOUT = 20_000;
 const REALTIME_TIMEOUT = 5_000;
 const NO_RELOAD_MARK = "__e2eB14NoReload";
 const SHOTS = process.env["B14_SHOTS"] ?? "test-results/b14-shots";
-/** fixture 營業時間 08:00 開始,半小時一格 ⇒ HH:MM 是第幾格。 */
+/** #1049:格線一律 00:00 開始,半小時一格 ⇒ HH:MM 是第幾格。 */
 const slotIndex = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number) as [number, number];
-  return ((h - 8) * 60 + m) / 30;
+  return (h * 60 + m) / 30;
 };
 
 test.describe.configure({ mode: "serial", timeout: 150_000 });

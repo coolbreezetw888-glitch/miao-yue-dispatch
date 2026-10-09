@@ -6,10 +6,15 @@
 
 import type { CSSProperties } from "react";
 
+import type { DayCellKind } from "./daySlotGrid";
 import {
+  calendarStateBlockStyle,
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
   getBookingStatusColor,
+  getCalendarStateOpacity,
+  hexToRgba,
+  scaleCalendarAlpha,
   type BookingStatus,
   type BookingStatusColorMap,
   type CalendarStateStyleMap,
@@ -92,16 +97,92 @@ export function sanitizeHexColor(input: string | null | undefined, fallback: str
  * SPECS-INDEX #1021 第 21 批:服務人員每週可預約時段內、可預約的空格子底色(商家端時間軸、服務人員端時間軸、
  * 設定頁預覽共用)。純色、無圖樣,商家選什麼顏色就畫什麼顏色。
  * 🔴 資安:色碼是商家自己輸入的字串 ⇒ 一律先過 sanitizeHexColor,格式不對就退回系統預設淡綠。
+ * #1050:透明度 100% ⇒ 原樣輸出 `#rrggbb`(跟改版前逐字相同);低於 100% ⇒ rgba(…, 透明度)。
  */
 export function staffAvailableSlotStyle(colors: CalendarStateStyleMap): {
   backgroundColor: string;
 } {
   return {
-    backgroundColor: sanitizeHexColor(
-      colors.staffAvailableSlot,
-      DEFAULT_CALENDAR_STATE_STYLES.staffAvailableSlot,
+    backgroundColor: solidStateBackground(
+      sanitizeHexColor(colors.staffAvailableSlot, DEFAULT_CALENDAR_STATE_STYLES.staffAvailableSlot),
+      getCalendarStateOpacity(colors, "staff_available_slot"),
     ),
   };
+}
+
+/** 深色底上的時間文字顏色(#1049:營業時間外的格子)。 */
+export const CALENDAR_LIGHT_INK = "#f8fafc";
+
+/** 純色狀態的底色:100% ⇒ 原色碼;否則 rgba(alpha = 透明度 / 100)。輸入必須是 sanitize 過的 6 碼色碼。 */
+function solidStateBackground(hex: string, opacity: number): string {
+  const alpha = scaleCalendarAlpha(1, opacity);
+  return alpha >= 1 ? hex : hexToRgba(hex, alpha);
+}
+
+/**
+ * 「疊在白底上」實際看起來的相對亮度(0 黑 ~ 1 白,WCAG 公式)。透明度越低越接近白色。
+ * 輸入必須是 sanitize 過的 6 碼色碼。
+ */
+export function tintedLuminanceOnWhite(hex: string, opacity: number): number {
+  const alpha = scaleCalendarAlpha(1, opacity);
+  const channel = (i: number) => {
+    const v = parseInt(hex.slice(i, i + 2), 16);
+    const blended = (v * alpha + 255 * (1 - alpha)) / 255;
+    return blended <= 0.03928 ? blended / 12.92 : ((blended + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+/** 底色夠深(白字對比 ≥ 深色字對比)時改用淺色字。0.18 ≈ 白字與 #0f172a 字對比相等的分界。 */
+export const CALENDAR_DARK_BG_LUMINANCE = 0.18;
+
+/**
+ * SPECS-INDEX #1049:營業時間外的格子(兩端時間軸 + 設定頁預覽共用)。純色、無圖樣,可設定顏色與透明度。
+ * 🔴 資安:色碼一律先過 sanitizeHexColor,格式不對就退回系統預設深灰藍。
+ * 文字不跟著變淡(#1050 R11):底色看起來夠深 ⇒ 時間文字用淺色;透明度調低、底色變淺 ⇒ 不設定(沿用原本的灰字)。
+ */
+export function outsideBusinessHoursStyle(colors: CalendarStateStyleMap): CSSProperties {
+  const hex = sanitizeHexColor(
+    colors.outsideBusinessHours,
+    DEFAULT_CALENDAR_STATE_STYLES.outsideBusinessHours,
+  );
+  const opacity = getCalendarStateOpacity(colors, "outside_business_hours");
+  const style: CSSProperties = { backgroundColor: solidStateBackground(hex, opacity) };
+  if (tintedLuminanceOnWhite(hex, opacity) < CALENDAR_DARK_BG_LUMINANCE) {
+    style.color = CALENDAR_LIGHT_INK;
+  }
+  return style;
+}
+
+/**
+ * SPECS-INDEX #1049(R3):一格的外觀(兩端時間軸共用)。className 只放「底色類」class,
+ * 滑過回饋(hover:*)由呼叫端依這格能不能點自己加。
+ *   全天休假 / 外店佔用 / 時段排休 ⇒ 既有圖樣(calendarStateBlockStyle)
+ *   例外開啟 ⇒ 既有淡紫底 + 紫框
+ *   營業時間外 ⇒ outsideBusinessHoursStyle(深色,可設定)
+ *   可預約 ⇒ staffAvailableSlotStyle(自訂色)
+ *   營業時間內、每週時段外 ⇒ 白色(bg-background,不再是灰色 bg-muted/40)
+ */
+export function dayCellAppearance(
+  kind: DayCellKind,
+  colors: CalendarStateStyleMap,
+): { className: string; style: CSSProperties | undefined } {
+  switch (kind) {
+    case "full_day_leave":
+      return { className: "", style: calendarStateBlockStyle(colors, "full_day_leave") };
+    case "cross_store_occupied":
+      return { className: "", style: calendarStateBlockStyle(colors, "cross_store_occupied") };
+    case "override_closed":
+      return { className: "", style: calendarStateBlockStyle(colors, "partial_leave") };
+    case "override_open":
+      return { className: "bg-brand-soft/70 ring-1 ring-inset ring-brand", style: undefined };
+    case "outside_business_hours":
+      return { className: "", style: outsideBusinessHoursStyle(colors) };
+    case "available":
+      return { className: "", style: staffAvailableSlotStyle(colors) };
+    default:
+      return { className: "bg-background", style: undefined };
+  }
 }
 
 /** 左邊色條往白色調亮的比例(規格:約 40~45%;取 45%,跟使用者看過的比較圖 B 一樣)。 */

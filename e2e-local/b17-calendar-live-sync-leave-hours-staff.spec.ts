@@ -134,13 +134,16 @@ async function stillNoReload(p: Page): Promise<boolean> {
   );
 }
 
+/** #1049:格線改成 00:00~24:00 之後,「營業時間內」的格子 = 不是 outside-business-hours 的那些(格數跟改版前一樣)。 */
+const INSIDE_SLOT = ':scope > [data-slot-state]:not([data-slot-state="outside-business-hours"])';
+
 function slotsOf(p: Page, staffId: string) {
-  return p.getByTestId(`staff-grid-${staffId}`).locator(":scope > [data-slot-state]");
+  return p.getByTestId(`staff-grid-${staffId}`).locator(INSIDE_SLOT);
 }
 
+/** #1049:時間軸固定 24 小時高,改量「營業時間內格子的總高度」(= 改版前的格線高度)。 */
 async function timelineHeight(p: Page): Promise<number> {
-  const box = await p.getByTestId("my-timeline-grid").boundingBox();
-  return box?.height ?? 0;
+  return (await p.getByTestId("my-timeline-grid").locator(INSIDE_SLOT).count()) * 30;
 }
 
 function expectCleanPayloads(log: RealtimeLog, topic: string, event: string, reason: string) {

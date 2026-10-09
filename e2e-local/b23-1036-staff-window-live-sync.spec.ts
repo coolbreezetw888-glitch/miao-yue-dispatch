@@ -236,10 +236,10 @@ async function stillNoReload(p: Page): Promise<boolean> {
   );
 }
 
-/** 時間軸某個時間那一格(營業時間 08:00 開始,每格 30 分鐘)。 */
+/** 時間軸某個時間那一格(#1049 起格線 00:00 開始,每格 30 分鐘)。 */
 function slotAt(p: Page, time: string) {
   const [h, m] = time.split(":").map(Number) as [number, number];
-  const index = (h * 60 + m - 8 * 60) / 30;
+  const index = (h * 60 + m) / 30;
   return p.getByTestId("my-timeline-grid").locator(":scope > [data-slot-state]").nth(index);
 }
 
@@ -461,7 +461,7 @@ test("N5 🔴 單日例外:商家在行事曆點 A 的格子關閉 / 開啟 ⇒ 
     .click({ timeout: LOAD_TIMEOUT });
   const grid = merchant.getByTestId(`staff-grid-${fixture.staffA.staffId}`);
   await expect(grid).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const cell = grid.locator(":scope > [data-slot-state]").nth((10 * 60 - 8 * 60) / 30);
+  const cell = grid.locator(":scope > [data-slot-state]").nth((10 * 60) / 30);
   await expect(cell).toHaveAttribute("data-slot-state", "available");
   await expect(slotAt(timelineA, "10:00")).toHaveAttribute("data-slot-state", "available");
 

@@ -296,3 +296,166 @@ export function buildStaffDayAvailableWindows(input: {
       end_time: timeToMinutes(w.end_time) <= close ? w.end_time : input.closeTime!,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #1049(2026-10-10):時間軸一律畫 00:00~24:00,商家端與服務人員端用同一套格子狀態規則。
+// ---------------------------------------------------------------------------
+
+/** 一天的分鐘數(時間軸最後一格的結束)。 */
+export const DAY_GRID_END_MIN = 24 * 60;
+
+/** 沒有營業時間時自動捲到的位置(08:00)。 */
+export const DAY_GRID_FALLBACK_SCROLL_MIN = 8 * 60;
+
+export interface DayGridSlot {
+  /** "HH:MM" */
+  start: string;
+  /** "HH:MM"(最後一格是 "24:00") */
+  end: string;
+  startMin: number;
+  endMin: number;
+}
+
+/** R1:00:00~24:00 每 slotMinutes 一格(30 分 ⇒ 48 格)。 */
+export function buildFullDaySlots(slotMinutes: number): DayGridSlot[] {
+  const result: DayGridSlot[] = [];
+  if (!(slotMinutes > 0)) return result;
+  for (let m = 0; m < DAY_GRID_END_MIN; m += slotMinutes) {
+    const end = Math.min(DAY_GRID_END_MIN, m + slotMinutes);
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    result.push({
+      start: `${pad(Math.floor(m / 60))}:${pad(m % 60)}`,
+      end: `${pad(Math.floor(end / 60))}:${pad(end % 60)}`,
+      startMin: m,
+      endMin: end,
+    });
+  }
+  return result;
+}
+
+/**
+ * R2:打開頁面 / 換日期時要捲到哪一分鐘 = 營業開始時間;沒有營業時間(沒設定 / 公休 / 缺欄位)⇒ 08:00。
+ * 往下取到格線(09:15 ⇒ 09:00),讓第一格完整露出來。
+ */
+export function dayGridInitialScrollMin(
+  businessHours:
+    { has_setting: boolean; is_closed: boolean; open_time: string | null } | null | undefined,
+  slotMinutes: number,
+): number {
+  const open =
+    businessHours &&
+    businessHours.has_setting &&
+    !businessHours.is_closed &&
+    businessHours.open_time
+      ? timeToMinutes(businessHours.open_time)
+      : DAY_GRID_FALLBACK_SCROLL_MIN;
+  if (!(slotMinutes > 0)) return open;
+  return Math.max(0, Math.floor(open / slotMinutes) * slotMinutes);
+}
+
+/** 營業時間換成分鐘數;沒有營業時間 ⇒ null(整天都算營業時間外)。close 是 "24:00" / "00:00"(跨午夜)時當成 1440。 */
+export function businessRangeMinutes(
+  businessHours:
+    | {
+        has_setting: boolean;
+        is_closed: boolean;
+        open_time: string | null;
+        close_time: string | null;
+      }
+    | null
+    | undefined,
+): { openMin: number; closeMin: number } | null {
+  if (!businessHours || !businessHours.has_setting || businessHours.is_closed) return null;
+  if (!businessHours.open_time || !businessHours.close_time) return null;
+  const openMin = timeToMinutes(businessHours.open_time);
+  let closeMin = timeToMinutes(businessHours.close_time);
+  if (closeMin === 0 || closeMin > DAY_GRID_END_MIN) closeMin = DAY_GRID_END_MIN;
+  return { openMin, closeMin };
+}
+
+/**
+ * #1049 R3:一格最後要畫成哪一種(兩端共用,優先順序由上到下):
+ *   1. full_day_leave        全天休假(既有樣式)
+ *   2. cross_store_occupied  外店佔用(既有樣式)
+ *   3. override_closed       單日例外關閉 = 時段排休(既有樣式);override_open 單日例外開啟(既有「例外開啟」樣式)
+ *   4. outside_business_hours 營業時間外(新狀態,深色,可設定)
+ *   5. available             營業時間內、每週時段內、可預約 ⇒ staff_available_slot 自訂色
+ *   6. unavailable           營業時間內、每週時段外 ⇒ 白色
+ * 「商家後台編輯無時段限制」的人:availableWindows 傳 buildStaffDayAvailableWindows / get_merchant_day_schedule
+ * 的結果(= 整段營業時間)⇒ 營業時間內全部是 available。
+ * 一格只要有一部分落在營業時間外(例如營業 09:15 開始時的 09:00 那格)就算營業時間外。
+ */
+export type DayCellKind =
+  | "full_day_leave"
+  | "cross_store_occupied"
+  | "override_closed"
+  | "override_open"
+  | "outside_business_hours"
+  | "available"
+  | "unavailable";
+
+export interface ClassifiedDayCell {
+  kind: DayCellKind;
+  /** 這一格在營業時間外(R4:不給新增預約、不給開關時段,純顯示)。 */
+  outsideBusinessHours: boolean;
+  /** resolveDaySlot 的原始結果(營業時間內的格子拿去算選單、開關時段)。 */
+  resolved: ResolvedDaySlot;
+  /** 輸出到 data-slot-state:營業時間外、而且沒有休假 / 外店 / 例外 ⇒ "outside-business-hours";全天休假 ⇒ "full-day-leave"。 */
+  slotState: DaySlotState | "outside-business-hours" | "full-day-leave";
+}
+
+export function classifyDayCell(input: {
+  slotStartMin: number;
+  slotEndMin: number;
+  onLeave: boolean;
+  business: { openMin: number; closeMin: number } | null;
+  availableWindows: readonly DaySlotTimeRange[];
+  overrides: readonly DaySlotOverride[];
+  foreignBookings: readonly DaySlotForeignBooking[];
+}): ClassifiedDayCell {
+  const outsideBusinessHours =
+    input.business === null ||
+    input.slotStartMin < input.business.openMin ||
+    input.slotEndMin > input.business.closeMin;
+  const resolved = resolveDaySlot({
+    slotStartMin: input.slotStartMin,
+    slotEndMin: input.slotEndMin,
+    // 營業時間外一律不可預約(可約區間本來就是營業時間的交集,這裡再保險一次)。
+    availableWindows: outsideBusinessHours ? [] : input.availableWindows,
+    overrides: input.overrides,
+    foreignBookings: input.foreignBookings,
+  });
+  if (input.onLeave) {
+    return { kind: "full_day_leave", outsideBusinessHours, resolved, slotState: "full-day-leave" };
+  }
+  if (resolved.foreignBusy) {
+    return {
+      kind: "cross_store_occupied",
+      outsideBusinessHours,
+      resolved,
+      slotState: "cross-store-occupied",
+    };
+  }
+  if (resolved.isOverride) {
+    return {
+      kind: resolved.finalAvailable ? "override_open" : "override_closed",
+      outsideBusinessHours,
+      resolved,
+      slotState: resolved.state,
+    };
+  }
+  if (outsideBusinessHours) {
+    return {
+      kind: "outside_business_hours",
+      outsideBusinessHours,
+      resolved,
+      slotState: "outside-business-hours",
+    };
+  }
+  return {
+    kind: resolved.finalAvailable ? "available" : "unavailable",
+    outsideBusinessHours,
+    resolved,
+    slotState: resolved.state,
+  };
+}

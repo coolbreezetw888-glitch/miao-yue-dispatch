@@ -34,6 +34,7 @@ import {
   fetchMyAvailabilityOverrides,
   fetchMyBookingSchedule,
   fetchMyBookingStatusColors,
+  fetchMyAvailabilityWindows,
   fetchMyCalendarStateStyles,
   fetchMyDayBusinessHours,
   fetchMyDayScheduleState,
@@ -41,6 +42,7 @@ import {
   staffCompleteBooking,
   staffConfirmBooking,
   type MyBookingScheduleItem,
+  type MyAvailabilityWindow,
   type MyDayBusinessHours,
   type MyDayScheduleState,
   type StaffAvailabilityOverride,
@@ -387,6 +389,22 @@ export function useMyBookingStatusColors(
   return useQuery({
     queryKey: ["staff-portal-module", "my-booking-status-colors", staffId],
     queryFn: () => fetchMyBookingStatusColors(staffId as string),
+    enabled: Boolean(staffId),
+  });
+}
+
+/**
+ * SPECS-INDEX #1049(R6):服務人員時間軸的「自己的每週可預約時段」——不論有沒有開「新增編輯訂單」都讀。
+ * 走 get_my_staff_availability_windows(不放寬 staff_availability_windows 的 RLS)。
+ * 即時同步:queryKey 前綴 ["staff-portal-module", "my-availability-windows"] 已加進
+ * STAFF_SCHEDULE_INVALIDATE_KEYS(管理員改每週時段 ⇒ 資料庫發 schedule_changed ⇒ 這裡重查)。
+ */
+export function useMyTimelineAvailabilityWindows(
+  staffId: string | null | undefined,
+): UseQueryResult<MyAvailabilityWindow[]> {
+  return useQuery({
+    queryKey: ["staff-portal-module", "my-availability-windows", staffId],
+    queryFn: () => fetchMyAvailabilityWindows(staffId as string),
     enabled: Boolean(staffId),
   });
 }

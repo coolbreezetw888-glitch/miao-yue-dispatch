@@ -60,8 +60,8 @@ delete from merchant_calendar_state_styles where merchant_id = 'c1021000-0000-40
 select seed_default_merchant_calendar_state_styles('c1021000-0000-4000-8000-000000000021');
 select is(
   (select count(*)::int from merchant_calendar_state_styles where merchant_id = 'c1021000-0000-4000-8000-000000000021'),
-  4,
-  'seed 種 4 列'
+  5,
+  'seed 種 5 列(#1049 起多一種 outside_business_hours)'
 );
 select is(
   (select color from merchant_calendar_state_styles where merchant_id = 'c1021000-0000-4000-8000-000000000021' and state_type = 'staff_available_slot'),
@@ -177,21 +177,21 @@ select is(
   '服務人員端 get_my_calendar_state_styles 讀到第 4 色'
 );
 select is(
-  (select count(*)::int from jsonb_object_keys(get_my_calendar_state_styles('c1021000-0000-4000-8000-000000000041'::uuid))),
-  4,
-  '服務人員端只拿到 4 個色碼 key,沒有多露其他欄位'
+  (select array_agg(k order by k) from jsonb_object_keys(get_my_calendar_state_styles('c1021000-0000-4000-8000-000000000041'::uuid)) k),
+  array['cross_store_occupied', 'full_day_leave', 'opacity', 'outside_business_hours', 'partial_leave', 'staff_available_slot'],
+  '服務人員端只拿到 5 個色碼 key + #1050 的 opacity,沒有多露其他欄位'
 );
 select pg_temp.test_clear_auth();
 
 -- ⑩ 函式屬性
 select is(
   (select row(p.prosecdef, p.proconfig::text)::text from pg_proc p
-   where p.oid = 'public.update_merchant_calendar_state_styles(uuid,text,text,text,text)'::regprocedure),
+   where p.oid = 'public.update_merchant_calendar_state_styles(uuid,text,text,text,text,text,integer,integer,integer,integer,integer)'::regprocedure),
   row(true, '{search_path=public}')::text,
   'update 函式 SECURITY DEFINER + search_path=public'
 );
 select ok(
-  not has_function_privilege('anon', 'public.update_merchant_calendar_state_styles(uuid,text,text,text,text)', 'execute'),
+  not has_function_privilege('anon', 'public.update_merchant_calendar_state_styles(uuid,text,text,text,text,text,integer,integer,integer,integer,integer)', 'execute'),
   'anon 不能執行 update 函式'
 );
 select is(

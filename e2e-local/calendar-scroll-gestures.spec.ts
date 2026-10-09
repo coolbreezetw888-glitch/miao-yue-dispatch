@@ -68,9 +68,13 @@ import {
 } from "./support/request-guard";
 
 const LOAD_TIMEOUT = 20_000;
-/** = CalendarPage.tsx 的 SLOT_PX;openDayGrid 會用「26 格 × 30px」反查,對不上當場紅。 */
+/** = CalendarPage.tsx 的 SLOT_PX;openDayGrid 會用「48 格 × 30px」反查,對不上當場紅。 */
 const SLOT_PX = 30;
-const GRID_SLOT_COUNT = 26;
+/** #1049:格線一律 00:00~24:00 = 48 格(改版前只畫營業時間 08:00–21:00 = 26 格)。 */
+const GRID_SLOT_COUNT = 48;
+/** #1049:fixture 營業時間 08:00 開始 = 第 16 格。把格線捲到這裡 = 改版前「scrollTop 0」看到的畫面。 */
+const OPEN_SLOT_INDEX = 16;
+const OPEN_TOP_PX = OPEN_SLOT_INDEX * SLOT_PX;
 const MOVE_BOOKING_RPC_PATH = "/rest/v1/rpc/move_booking";
 const FAULT = process.env["E2E_FAULT_INJECT"] ?? "";
 
@@ -146,9 +150,11 @@ function blockOf(page: Page, b: GestureBooking): Locator {
 function slotCell(page: Page, staffId: string, index: number): Locator {
   return staffGrid(page, staffId).locator("button[data-slot-state]").nth(index);
 }
-/** 時間欄裡的第 i 個時間標籤(i = 0 是 08:00)。 */
+/** 時間欄裡的第 i 個時間標籤(i = 0 是 08:00;#1049 起時間欄從 00:00 開始,所以實際要加 16 格)。 */
 function timeLabel(page: Page, index: number): Locator {
-  return grid(page).locator("[data-drag-time-gutter] + div > div").nth(index);
+  return grid(page)
+    .locator("[data-drag-time-gutter] + div > div")
+    .nth(index + OPEN_SLOT_INDEX);
 }
 
 /** 手機 context:375×667(或指定寬)、isMobile + hasTouch、台北時區。只挑欄位,不整包 spread。 */
@@ -189,7 +195,7 @@ async function openDayGrid(page: Page, merchant: GestureMerchant): Promise<void>
   const h = await staffGrid(page, merchant.staffIds[0] as string).evaluate(
     (el) => el.getBoundingClientRect().height,
   );
-  expect(Math.round(h), "前提:格線高度 = 26 格 × 30px(08:00–21:00),SLOT_PX 常數才對").toBe(
+  expect(Math.round(h), "前提:格線高度 = 48 格 × 30px(00:00–24:00),SLOT_PX 常數才對").toBe(
     GRID_SLOT_COUNT * SLOT_PX,
   );
   await startToastRecorder(page);
@@ -399,7 +405,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     const { context, page, cdp, sent } = await openMobile(browser);
     try {
       await bringGridToTop(page);
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       await startPhaseRecorder(page);
       // 第 2 位服務人員(整天沒預約)10:00 那一格:375px 下第 2 欄在 x ≈ 212~332,往左滑 160 還在畫面內。
       const cell = slotCell(page, fixture.many.staffIds[1] as string, 4);
@@ -421,7 +427,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
       await expectNoDragEffect(page, sent);
 
       // 正向對照:同一格點一下(不移動)→ 選單打開(證明上面的「選單 0」不是因為選單根本打不開)。
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       await bringGridToTop(page);
       await cell.tap();
       await expect(page.getByRole("menu"), "點一下空白格應該打開選單").toHaveCount(1, {
@@ -436,7 +442,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     const { context, page, cdp, sent } = await openMobile(browser);
     try {
       await bringGridToTop(page);
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       // 11:00 那個時間標籤(第 6 格):格線頂端 + 名字列 36 + 180 ⇒ 375×667 畫面內。
       const label = timeLabel(page, 6);
       await expect(label).toHaveText("11:00");
@@ -475,7 +481,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     const { context, page, cdp, sent } = await openMobile(browser);
     try {
       await bringGridToTop(page);
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       await startPhaseRecorder(page);
       const block = blockOf(page, p1);
       await expect(block, "前提:P1 是可拖的色塊").toHaveClass(/cursor-grab/);
@@ -520,7 +526,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     const { context, page, cdp, sent } = await openMobile(browser);
     try {
       await bringGridToTop(page);
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       const block = blockOf(page, p1);
       const from = await centerOf(block);
       await expectHit(page, from, block, "P1 色塊");
@@ -563,7 +569,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
     const { context, page, cdp, sent } = await openMobile(browser);
     try {
       await bringGridToTop(page);
-      await setScroll(page, 0, 0);
+      await setScroll(page, 0, OPEN_TOP_PX);
       const block = blockOf(page, p1);
       const from = await centerOf(block);
       await expectHit(page, from, block, "P1 色塊");
@@ -801,7 +807,7 @@ test.describe("電腦組:固定欄回歸", () => {
 
     // P1 在內容裡的位置(T5 會把它轉派到第 2 位,所以不寫死欄位,現場量)。
     const p1Block = blockOf(page, fixture.bookings.p1);
-    await setScroll(page, 0, 0);
+    await setScroll(page, 0, OPEN_TOP_PX);
     const content = await page.evaluate(
       ([blockId]) => {
         const el = document.querySelector('[data-testid="calendar-day-grid"]') as HTMLElement;
@@ -858,7 +864,8 @@ test.describe("電腦組:固定欄回歸", () => {
       );
 
     // ③ 時間欄蓋住色塊:往右捲到 P1 左緣滑進時間欄底下 12px 處。
-    await setScroll(page, Math.max(0, content.left - 12), 0);
+    // #1049:格線從 00:00 開始,P1 那一列要先捲進容器裡才量得到(改版前 scrollTop 0 就看得到)。
+    await setScroll(page, Math.max(0, content.left - 12), Math.max(0, content.top - 120));
     const geo = await readGeo();
     expect(geo.bLeft, "前提:P1 色塊左半段要真的滑進時間欄底下").toBeLessThan(geo.gRight - 20);
     const hitGutter = await pointInfo(geo.gRight - 8, geo.bMidY);

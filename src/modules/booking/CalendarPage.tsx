@@ -237,9 +237,10 @@ import { RequireBookingAccess } from "./RequireBookingAccess";
 import { DaySlotCell } from "./DaySlotCell";
 import {
   bookingBlockVerticalBox,
+  dayCellAppearance,
   filledBookingBlockStyle,
-  staffAvailableSlotStyle,
 } from "./bookingBlockLayout";
+import { useDayGridInitialScroll } from "./useDayGridInitialScroll";
 import { useMerchantCalendarLiveSync } from "./useMerchantCalendarLiveSync";
 import { DayStatusCountBadges } from "./DayStatusCountBadges";
 import {
@@ -247,11 +248,13 @@ import {
   countMerchantDayStatusBadges,
 } from "./merchantMonthBadges";
 import {
+  buildFullDaySlots,
+  businessRangeMinutes,
   canToggleDayOverride,
+  classifyDayCell,
   countBookingsInSlot,
-  daySlotState,
+  dayGridInitialScrollMin,
   planDayOverrideToggle,
-  resolveDaySlot,
   SLOT_TAP_VS_DRAG_THRESHOLD_PX,
 } from "./daySlotGrid";
 // 模組 14(服務人員端)規格書 4.3:目前這位使用者該看服務人員端時渲染服務人員自助行事曆,不渲染
@@ -2905,20 +2908,22 @@ function CalendarPageInner() {
   }
 
   const businessHours = schedule?.business_hours;
-  const slots = useMemo(() => {
-    if (!businessHours || !businessHours.has_setting || businessHours.is_closed) return [];
-    if (!businessHours.open_time || !businessHours.close_time) return [];
-    const startMin = timeToMinutes(businessHours.open_time);
-    const endMin = timeToMinutes(businessHours.close_time);
-    const result: { start: string; end: string }[] = [];
-    for (let m = startMin; m < endMin; m += SLOT_MINUTES) {
-      result.push({ start: minutesToTime(m), end: minutesToTime(m + SLOT_MINUTES) });
-    }
-    return result;
-  }, [businessHours]);
+  // SPECS-INDEX #1049(R1):格線一律 00:00~24:00(48 格),營業時間外畫深色(R3,跟服務人員端同一支 classifyDayCell)。
+  // R5:公休 / 沒設定營業時間 ⇒ 維持下面的 EmptyState(不畫格線)。
+  const business = useMemo(() => businessRangeMinutes(businessHours), [businessHours]);
+  const slots = useMemo(() => (business ? buildFullDaySlots(SLOT_MINUTES) : []), [business]);
 
-  const gridStartMin = slots.length > 0 ? timeToMinutes(slots[0]!.start) : 0;
+  const gridStartMin = 0;
   const gridTotalPx = slots.length * SLOT_PX;
+
+  // R2:打開 / 換日期時捲到營業開始時間(沒有營業時間 ⇒ 08:00)。同一天只捲一次:即時同步重查、拖拉後重抓
+  // 都不會把使用者自己捲到的位置拉回去。
+  const attachInitialScroll = useDayGridInitialScroll(
+    selectedDateKey,
+    businessHours
+      ? (dayGridInitialScrollMin(businessHours, SLOT_MINUTES) / SLOT_MINUTES) * SLOT_PX
+      : null,
+  );
 
   // SPECS-INDEX #811~#817:拖拉控制器。格線常數與 #641 的閾值從這裡傳進去(bookingDragMove.ts 不自己定義數字);
   // 成功/40001 之後用既有的 refetchAll 重抓;點一下(≤ 閾值)開詳情沿用 setDetailBookingId。
@@ -2934,6 +2939,8 @@ function CalendarPageInner() {
     // #986 第 9 批(9-10,使用者裁決 3「先做出來看結果,不妥再修」):放開時吸附到「建單時間間隔」。
     // 讀取失敗 / 還沒讀到 ⇒ 30(= 格線,跟改版前一樣)。格線、空白格選單、建單預帶時間都不變。
     snapMinutes: bookingStartTimeInterval ?? DEFAULT_BOOKING_START_TIME_INTERVAL,
+    // #1049:格線變成 24 小時,拖拉落點仍然只在營業時間內(跟改版前「格線 = 營業時間」一樣,不擴大也不縮小)。
+    dropRange: business ? { startMin: business.openMin, endMin: business.closeMin } : undefined,
     onOpenDetail: openDetailFromBlock,
     onMoved: refetchAll,
   });
@@ -2948,9 +2955,13 @@ function CalendarPageInner() {
   setGridRootFnRef.current = dragController.setGridRoot;
   const attachScrollHintRef = useRef(gridScrollHint.attach);
   attachScrollHintRef.current = gridScrollHint.attach;
+  // #1049(R2):第三個目標 = 自動捲到營業開始時間(attachInitialScroll 本身是穩定的 useCallback)。
+  const attachInitialScrollRef = useRef(attachInitialScroll);
+  attachInitialScrollRef.current = attachInitialScroll;
   const setGridScrollRoot = useCallback((node: HTMLDivElement | null) => {
     setGridRootFnRef.current(node);
     attachScrollHintRef.current(node);
+    attachInitialScrollRef.current(node);
   }, []);
 
   return (
@@ -3221,7 +3232,7 @@ function CalendarPageInner() {
                 <div className="relative" style={{ height: gridTotalPx }}>
                   {slots.map((slot, i) => (
                     <div
-                      key={slot.start}
+                      key={`time-${slot.start}`}
                       className="absolute inset-x-0 border-b border-r border-border p-1 text-right text-[11px] tabular-nums text-muted-foreground"
                       style={{ top: i * SLOT_PX, height: SLOT_PX }}
                     >
@@ -3295,35 +3306,40 @@ function CalendarPageInner() {
                     {/* 背景格線:依可預約時段/單日例外/跨店占用著色。模組 6 §5.3/§5.5 第 4 點:
                         每格先看有沒有落在某個 availability_overrides 區間內,有則採用該區間的
                         is_available 值決定顯示狀態,沒有則沿用既有的商家營業時間∩服務人員時段判斷
-                        (available_windows,第一層∩第二層,後端算好的結果)。 */}
+                        (available_windows,第一層∩第二層,後端算好的結果)。
+                        SPECS-INDEX #1049(R3):狀態判斷與外觀改用跟服務人員端同一支 classifyDayCell /
+                        dayCellAppearance(全天休假 > 外店佔用 > 單日例外 > 營業時間外 > 可預約 > 每週時段外白色)。
+                        營業時間外的格子(R4)純顯示,不給新增預約、不給開關時段。 */}
                     {s.on_leave
                       ? null
                       : slots.map((slot, i) => {
-                          // §5.3 / §5.5 第 4 點:單日例外 → 可約區間 → 跨店佔用的判斷,
-                          // #977 第 7 批搬到 daySlotGrid.ts 的 resolveDaySlot(服務人員端時間軸共用同一份)。
-                          const resolvedSlot = resolveDaySlot({
-                            slotStartMin: timeToMinutes(slot.start),
-                            slotEndMin: timeToMinutes(slot.end),
+                          const cell = classifyDayCell({
+                            slotStartMin: slot.startMin,
+                            slotEndMin: slot.endMin,
+                            onLeave: false,
+                            business,
                             availableWindows: s.available_windows,
                             overrides: s.availability_overrides,
                             foreignBookings: s.foreign_bookings,
                           });
-                          const { isOverride, finalAvailable, foreignBusy } = resolvedSlot;
+                          const resolvedSlot = cell.resolved;
+                          const { finalAvailable } = resolvedSlot;
+                          const appearance = dayCellAppearance(
+                            cell.kind,
+                            effectiveCalendarStateStyles,
+                          );
 
-                          if (foreignBusy) {
+                          if (cell.kind === "cross_store_occupied") {
                             // SPECS-INDEX #644:底色/圖樣改讀商家自訂的「跨店佔用」設定(交叉網格紋),
                             // 不再是寫死的 bg-warn/15(避免跟「待確認」訂單狀態的黃橘色混淆)。
                             return (
                               <div
-                                key={slot.start}
+                                key={`slot-${slot.start}`}
                                 className="absolute inset-x-0 border-b border-border p-1 text-[10px]"
                                 style={{
                                   top: i * SLOT_PX,
                                   height: SLOT_PX,
-                                  ...calendarStateBlockStyle(
-                                    effectiveCalendarStateStyles,
-                                    "cross_store_occupied",
-                                  ),
+                                  ...appearance.style,
                                 }}
                                 data-slot-state="cross-store-occupied"
                               >
@@ -3332,18 +3348,29 @@ function CalendarPageInner() {
                             );
                           }
 
+                          // #1049(R4):營業時間外 ⇒ 純顯示(深色;有單日例外的照既有樣式)。
                           // 沒有任何可用操作(建單需要可預約,開啟/關閉時段需要 business_hours 權限)時,
                           // 維持既有的純視覺格子,不包 DropdownMenu(避免點了沒有反應造成困惑)。
-                          if (!finalAvailable && !canManageDayOverride) {
+                          if (
+                            cell.outsideBusinessHours ||
+                            (!finalAvailable && !canManageDayOverride)
+                          ) {
                             return (
                               <div
-                                key={slot.start}
-                                className="absolute inset-x-0 border-b border-border bg-muted/40"
-                                style={{ top: i * SLOT_PX, height: SLOT_PX }}
-                                aria-label="不可預約"
+                                key={`slot-${slot.start}`}
+                                className={cn(
+                                  "absolute inset-x-0 border-b border-border",
+                                  appearance.className,
+                                )}
+                                style={{ top: i * SLOT_PX, height: SLOT_PX, ...appearance.style }}
+                                aria-label={
+                                  finalAvailable && !cell.outsideBusinessHours
+                                    ? "可預約"
+                                    : "不可預約"
+                                }
                                 // 沒有 business_hours 權限的人走這個純視覺分支,一樣標出狀態,
                                 // 讓「不同權限視角看到的同一格是不是同一個狀態」也能被測試比對。
-                                data-slot-state={daySlotState(isOverride, finalAvailable)}
+                                data-slot-state={cell.slotState}
                               />
                             );
                           }
@@ -3354,56 +3381,37 @@ function CalendarPageInner() {
                             canManageDayOverride && canToggleDayOverride(resolvedSlot);
                           const slotInteractive = finalAvailable || showOverrideOption;
 
-                          // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式,方便
-                          // 管理員一眼看出這是臨時調整過的,不是預設狀態。
-                          // SPECS-INDEX #644:「例外關閉」(時段排休)這一分支不再用寫死的
-                          // bg-destructive/10 ring,改讀商家自訂顏色 + 稀疏 45 度斜線圖樣(下面的
-                          // cellStyle),圖樣本身已經足夠跟其他狀態視覺區隔,不需要再疊加 ring。
-                          // #1021 第 21 批:落在服務人員每週可預約時段內、可預約(沒有單日例外)的空格子,
-                          // 底色改讀商家自訂的「服務人員可預約時段」顏色(預設淡綠),不再是白色;
-                          // inline 底色會蓋掉 hover:bg-*,所以滑過改用 brightness 稍微變暗當回饋。
-                          const cellClassName = finalAvailable
-                            ? isOverride
-                              ? "bg-brand-soft/70 ring-1 ring-inset ring-brand hover:bg-brand-soft"
-                              : "hover:brightness-95"
-                            : isOverride
-                              ? slotInteractive
+                          // §5.5 第 4 點:「例外關閉」「例外開啟」給跟預設狀態視覺上有區別的樣式。
+                          // #1021:可預約(沒有單日例外)= 商家自訂底色;inline 底色會蓋掉 hover:bg-*,滑過用 brightness。
+                          // #1049(U3):每週時段外 = 白色(原本灰色 bg-muted/40)。
+                          const hoverClass = !slotInteractive
+                            ? ""
+                            : cell.kind === "override_open"
+                              ? "hover:bg-brand-soft"
+                              : cell.kind === "override_closed"
                                 ? "hover:opacity-80"
-                                : ""
-                              : slotInteractive
-                                ? "bg-muted/40 hover:bg-muted/60"
-                                : "bg-muted/40";
-                          const cellStyle =
-                            isOverride && !finalAvailable
-                              ? calendarStateBlockStyle(
-                                  effectiveCalendarStateStyles,
-                                  "partial_leave",
-                                )
-                              : finalAvailable && !isOverride
-                                ? staffAvailableSlotStyle(effectiveCalendarStateStyles)
-                                : undefined;
+                                : cell.kind === "available"
+                                  ? "hover:brightness-95"
+                                  : "hover:bg-muted/60";
 
                           // SPECS-INDEX #641:格子本體(觸控手勢區分拖曳滑動/點擊)抽成 DaySlotCell,
                           // 見該元件上方註解說明修法。這裡只負責把這一格的資料/權限判斷結果轉成 props。
                           return (
                             <DaySlotCell
-                              key={slot.start}
+                              key={`slot-${slot.start}`}
                               top={i * SLOT_PX}
                               height={SLOT_PX}
-                              cellClassName={cellClassName}
-                              cellStyle={cellStyle}
+                              cellClassName={cn(appearance.className, hoverClass)}
+                              cellStyle={appearance.style}
                               ariaLabel={finalAvailable ? "可預約" : "不可預約"}
                               // 見 DaySlotState 的說明:斜線圖樣不帶文字之後,這是唯一能穩定
                               // 分辨「例外關閉」跟「預設關閉」的標記。
-                              slotState={daySlotState(isOverride, finalAvailable)}
+                              slotState={resolvedSlot.state}
                               // 使用者要求:「例外開啟/例外關閉」這個色塊(斜線圖樣)不需要疊加文字說明,
-                              // 圖樣本身已經足夠跟預設狀態區隔——只有跨店占用(上面 foreignBusy 那個
-                              // 分支的「外店預約中」)才需要文字,因為那個狀態光靠顏色/圖樣不足以說明
-                              // 「這是被別家佔用,不是本店自己的例外設定」這件事。
+                              // 只有跨店占用(上面那個分支的「外店預約中」)才需要文字。
                               badgeText=""
-                              // §5.5 第 1 點:「新增預約」(建單與訂單管理介面優化 §6 改名,原本叫
-                              // 「建立訂單」)依既有 orders 權限判斷(頁面層級已限定),只有這一格
-                              // 實際可預約時才提供。
+                              // §5.5 第 1 點:「新增預約」依既有 orders 權限判斷(頁面層級已限定),
+                              // 只有這一格實際可預約時才提供。
                               showCreateOption={finalAvailable}
                               onCreateBooking={() =>
                                 openCreateForm({
@@ -3412,10 +3420,7 @@ function CalendarPageInner() {
                                   time: slot.start,
                                 })
                               }
-                              // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,跟上面
-                              // 的「新增預約」是不同的權限鑰匙。建單與訂單管理介面優化 §1:文字依這一格
-                              // 目前的可預約狀態動態顯示,點擊後直接切換,範圍固定是目前這一格半小時,
-                              // 不再跳對話框選時間範圍。
+                              // §5.4/§5.5 第 1 點:「開啟/關閉時段」依 business_hours 權限判斷,範圍固定是這一格半小時。
                               showOverrideOption={showOverrideOption}
                               overrideOptionLabel={finalAvailable ? "關閉時段" : "開啟時段"}
                               onToggleOverride={() =>
@@ -3448,7 +3453,7 @@ function CalendarPageInner() {
                       // 「≤ 閾值就放開 = 點擊」才開詳情,否則拖完放開瀏覽器補發的 click 會把詳情彈出來。
                       return (
                         <DraggableBookingBlock
-                          key={b.id}
+                          key={`booking-${b.id}`}
                           booking={b}
                           staffId={s.staff_id}
                           style={{

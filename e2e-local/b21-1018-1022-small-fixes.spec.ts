@@ -235,11 +235,11 @@ async function openMerchantCalendar(p: Page): Promise<void> {
   });
 }
 
-/** 某一欄某個時間那一格(用 top 換算:第 0 格 = 營業時間開始 08:00,每格 30 分鐘)。 */
+/** 某一欄某個時間那一格(用 top 換算:#1049 起第 0 格 = 00:00,每格 30 分鐘)。 */
 async function slotAt(p: Page, gridTestId: string, time: string) {
   const grid = p.getByTestId(gridTestId);
   const [h, m] = time.split(":").map(Number) as [number, number];
-  const index = (h * 60 + m - 8 * 60) / 30;
+  const index = (h * 60 + m) / 30;
   const handle = await grid.evaluateHandle((el, i) => {
     const cells = [...el.querySelectorAll<HTMLElement>("[data-slot-state]")];
     const sorted = cells.sort(

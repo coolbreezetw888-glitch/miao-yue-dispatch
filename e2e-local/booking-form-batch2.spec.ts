@@ -665,8 +665,8 @@ test("M2 手機 375px:行事曆長按拖拉預約往下拖 → 改時間成功,�
         sent.push(req.url());
     });
     const grid = page.getByTestId("calendar-day-grid");
+    // #1049:格線改成 00:00~24:00,打開時已自動捲到營業開始時間;直向不要再歸零(歸零會把 10:00 的色塊捲出容器)。
     await grid.evaluate((el) => {
-      el.scrollTop = 0;
       el.scrollLeft = 0;
     });
     const block = page.getByTestId(`booking-block-${bookingId}-main`);

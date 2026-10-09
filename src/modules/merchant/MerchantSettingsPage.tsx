@@ -75,7 +75,10 @@ import {
   updateMerchantCalendarStateStyles,
   useMerchantCalendarStateStyles,
 } from "@/modules/booking/context";
-import { staffAvailableSlotStyle } from "@/modules/booking/bookingBlockLayout";
+import {
+  outsideBusinessHoursStyle,
+  staffAvailableSlotStyle,
+} from "@/modules/booking/bookingBlockLayout";
 import {
   fetchOnlineBookingSettings,
   saveOnlineBookingSettings,
@@ -84,8 +87,12 @@ import {
 import {
   DEFAULT_BOOKING_STATUS_COLORS,
   DEFAULT_CALENDAR_STATE_STYLES,
+  CALENDAR_STATE_OPACITY_MAX,
+  CALENDAR_STATE_OPACITY_MIN,
   calendarStateBlockStyle,
+  normalizeCalendarStateOpacity,
   type BookingStatusColorMap,
+  type CalendarStateColorKey,
   type CalendarStateStyleMap,
   type CalendarStateType,
 } from "@/modules/booking/types";
@@ -862,8 +869,9 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
 // 函式),讓商家在設定畫面就能看到跟行事曆上一模一樣的圖樣效果(斜線/交叉網格),不是只看到
 // 純色塊。這個元件只在 RequireMerchantAdmin 通過後才會渲染,不需要再重複判斷一次權限。
 // ---------------------------------------------------------------------------
+// SPECS-INDEX #1049 / #1050:多第 5 種「營業時間外」;每種狀態多一條透明度滑桿(10%~100%,步進 5),預覽即時跟著變。
 const CALENDAR_STATE_FIELDS: {
-  key: keyof CalendarStateStyleMap;
+  key: CalendarStateColorKey;
   state: CalendarStateType;
   label: string;
   hint: string;
@@ -883,7 +891,24 @@ const CALENDAR_STATE_FIELDS: {
     label: "服務人員可預約時段",
     hint: "純色底",
   },
+  // #1049:第 5 種。營業時間以外的格子;純色底、沒有圖樣,預設深色。
+  {
+    key: "outsideBusinessHours",
+    state: "outside_business_hours",
+    label: "營業時間外",
+    hint: "純色底",
+  },
 ];
+
+/** #1050:透明度滑桿的步進(%)。 */
+const CALENDAR_STATE_OPACITY_STEP = 5;
+
+/** 設定頁預覽用:跟兩端行事曆實際渲染時同一支函式。 */
+function calendarStatePreviewStyle(form: CalendarStateStyleMap, state: CalendarStateType) {
+  if (state === "staff_available_slot") return staffAvailableSlotStyle(form);
+  if (state === "outside_business_hours") return outsideBusinessHoursStyle(form);
+  return calendarStateBlockStyle(form, state);
+}
 
 function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
   const queryClient = useQueryClient();
@@ -916,10 +941,12 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
         <CardTitle>行事曆排程狀態顏色設定</CardTitle>
         <CardDescription>
           {/* 用字串而不是 JSX 純文字:JSX 跨行會在中文字中間多出一個空白(第 21 批截圖看到「可以 預約」)。 */}
-          {"自訂「全天休假」「時段排休」「跨店佔用」「服務人員可預約時段」這 4 種行事曆排程狀態的底色，" +
+          {"自訂「全天休假」「時段排休」「跨店佔用」「服務人員可預約時段」「營業時間外」這 5 種行事曆排程狀態的底色與透明度，" +
             "同時套用到商家/客服端行事曆跟服務人員自己的行事曆，兩邊看到的顏色一致。" +
             "前 3 種固定搭配一種圖樣(不是純色塊)，方便一眼分辨；" +
-            "「服務人員可預約時段」是服務人員每週開放、還空著可以預約的格子，用純色底標出來。"}
+            "「服務人員可預約時段」是服務人員每週開放、還空著可以預約的格子，" +
+            "「營業時間外」是商家營業時間以外的格子，這兩種用純色底標出來。" +
+            "透明度越低顏色越淡，時間文字不會跟著變淡。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">
@@ -953,14 +980,31 @@ function CalendarStateStylesCard({ merchantId }: { merchantId: string }) {
                     一模一樣。 */}
                 <span
                   className="ml-auto flex h-9 w-20 shrink-0 items-center justify-center rounded-md border text-[11px] font-medium sm:w-24"
-                  style={
-                    state === "staff_available_slot"
-                      ? staffAvailableSlotStyle(form)
-                      : calendarStateBlockStyle(form, state)
-                  }
+                  style={calendarStatePreviewStyle(form, state)}
+                  data-testid={`calendar-state-preview-${state}`}
                 >
                   預覽
                 </span>
+                {/* #1050:透明度滑桿(10%~100%,步進 5),旁邊顯示目前百分比。 */}
+                <div className="flex basis-full items-center gap-2">
+                  <span className="shrink-0 text-[11px] text-muted-foreground">透明度</span>
+                  <input
+                    type="range"
+                    aria-label={`「${label}」的透明度`}
+                    className="h-9 min-w-0 flex-1 cursor-pointer accent-brand"
+                    min={CALENDAR_STATE_OPACITY_MIN}
+                    max={CALENDAR_STATE_OPACITY_MAX}
+                    step={CALENDAR_STATE_OPACITY_STEP}
+                    value={form.opacity[key]}
+                    onChange={(e) => {
+                      const next = normalizeCalendarStateOpacity(e.target.value);
+                      setForm((prev) => ({ ...prev, opacity: { ...prev.opacity, [key]: next } }));
+                    }}
+                  />
+                  <span className="w-11 shrink-0 text-right text-[12px] tabular-nums text-foreground">
+                    {`${form.opacity[key]}%`}
+                  </span>
+                </div>
               </div>
             ))}
             {/* ② 次要:理由同上面那張顏色卡。 */}

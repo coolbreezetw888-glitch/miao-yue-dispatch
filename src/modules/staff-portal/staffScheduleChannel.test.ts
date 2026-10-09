@@ -135,8 +135,8 @@ describe("#894 shouldRefreshFromBroadcast:supabase-js 回呼收到的外層信�
   });
 });
 
-describe("#896 / #1011 / #1036 invalidateStaffSchedule:只重查六個 key", () => {
-  it("清單逐字等於 my-booking-schedule / my-day-schedule-state / my-day-business-hours / my-staff-record / staff-availability-windows / my-availability-overrides", () => {
+describe("#896 / #1011 / #1036 / #1049 invalidateStaffSchedule:只重查七個 key", () => {
+  it("清單逐字等於 my-booking-schedule / my-day-schedule-state / my-day-business-hours / my-staff-record / staff-availability-windows / my-availability-overrides / my-availability-windows", () => {
     expect(STAFF_SCHEDULE_INVALIDATE_KEYS).toEqual([
       ["staff-portal-module", "my-booking-schedule"],
       ["staff-portal-module", "my-day-schedule-state"],
@@ -144,13 +144,14 @@ describe("#896 / #1011 / #1036 invalidateStaffSchedule:只重查六個 key", () 
       ["staff-portal-module", "my-staff-record"],
       ["booking-module", "staff-availability-windows"],
       ["staff-portal-module", "my-availability-overrides"],
+      ["staff-portal-module", "my-availability-windows"],
     ]);
   });
 
-  it("剛好 invalidate 那六個 key,回傳 true", () => {
+  it("剛好 invalidate 那七個 key,回傳 true", () => {
     const queryClient = makeQueryClient();
     expect(invalidateStaffSchedule(queryClient)).toBe(true);
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(6);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(7);
     expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(1, {
       queryKey: ["staff-portal-module", "my-booking-schedule"],
     });
@@ -168,6 +169,9 @@ describe("#896 / #1011 / #1036 invalidateStaffSchedule:只重查六個 key", () 
     });
     expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(6, {
       queryKey: ["staff-portal-module", "my-availability-overrides"],
+    });
+    expect(queryClient.invalidateQueries).toHaveBeenNthCalledWith(7, {
+      queryKey: ["staff-portal-module", "my-availability-windows"],
     });
   });
 
@@ -202,6 +206,7 @@ describe("#896 / #1011 / #1036 invalidateStaffSchedule:只重查六個 key", () 
     seed(["staff-portal-module", "my-staff-record", "merchant-1"]);
     seed(["staff-portal-module", "my-staff-permission", STAFF_ID, "staff_calendar_view"]);
     seed(["booking-module", "staff-availability-windows", STAFF_ID]);
+    seed(["staff-portal-module", "my-availability-windows", STAFF_ID]);
     seed([
       "staff-portal-module",
       "my-availability-overrides",
@@ -225,6 +230,8 @@ describe("#896 / #1011 / #1036 invalidateStaffSchedule:只重查六個 key", () 
     ).toBe(false);
     // #1036:每週時段(時間軸可點格子 + 休假設定頁清單共用)、單日例外(休假設定頁排休分頁)都要重查。
     expect(stale(["booking-module", "staff-availability-windows", STAFF_ID])).toBe(true);
+    // #1049:服務人員時間軸讀的每週時段(get_my_staff_availability_windows)。
+    expect(stale(["staff-portal-module", "my-availability-windows", STAFF_ID])).toBe(true);
     expect(
       stale([
         "staff-portal-module",

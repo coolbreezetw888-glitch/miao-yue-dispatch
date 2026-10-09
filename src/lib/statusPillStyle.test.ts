@@ -62,9 +62,15 @@ describe("solidFillStyle", () => {
   });
 
   it("商家設定頁 4 個預設色 + 行事曆 3 個排程狀態色,一律白字", () => {
+    // #1050:DEFAULT_CALENDAR_STATE_STYLES 多了 opacity(透明度物件,不是色碼)⇒ 只取色碼欄位。
+    const calendarColors = Object.fromEntries(
+      Object.entries(DEFAULT_CALENDAR_STATE_STYLES).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
     for (const [key, color] of Object.entries({
       ...DEFAULT_BOOKING_STATUS_COLORS,
-      ...DEFAULT_CALENDAR_STATE_STYLES,
+      ...calendarColors,
     })) {
       expect(solidFillStyle(color).color, `${key}(${color})不是白字`).toBe(STATUS_PILL_INK);
     }

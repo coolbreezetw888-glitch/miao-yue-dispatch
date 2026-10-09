@@ -13,8 +13,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import {
+  buildCalendarStateStyleMap,
   DEFAULT_BOOKING_STATUS_COLORS,
-  DEFAULT_CALENDAR_STATE_STYLES,
   type BookingStatusColorMap,
   type CalendarStateStyleMap,
   type DayScheduleAvailabilityOverride,
@@ -242,16 +242,52 @@ export async function fetchMyCalendarStateStyles(staffId: string): Promise<Calen
     p_staff_id: staffId,
   });
   if (error) throw error;
-  const raw = (data ?? {}) as unknown as Record<string, string>;
-  return {
-    fullDayLeave: raw["full_day_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.fullDayLeave,
-    partialLeave: raw["partial_leave"] ?? DEFAULT_CALENDAR_STATE_STYLES.partialLeave,
-    crossStoreOccupied:
-      raw["cross_store_occupied"] ?? DEFAULT_CALENDAR_STATE_STYLES.crossStoreOccupied,
-    // #1021 第 21 批:第 4 種。get_my_calendar_state_styles 本來就回傳這間商家所有列 ⇒ 函式不用改。
-    staffAvailableSlot:
-      raw["staff_available_slot"] ?? DEFAULT_CALENDAR_STATE_STYLES.staffAvailableSlot,
-  };
+  return parseMyCalendarStateStyles(data);
+}
+
+/**
+ * get_my_calendar_state_styles 回傳 `{ state_type: 色碼, ..., opacity: { state_type: 透明度 } }`
+ * (#1050 起多了 opacity;舊格式沒有 opacity 也讀得懂)。缺的一律 fallback 成 DEFAULT_CALENDAR_STATE_STYLES,
+ * 跟商家設定頁 fetchMerchantCalendarStateStyles 共用同一支 buildCalendarStateStyleMap。
+ */
+export function parseMyCalendarStateStyles(data: unknown): CalendarStateStyleMap {
+  const raw =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  const opacityRaw =
+    raw["opacity"] && typeof raw["opacity"] === "object" && !Array.isArray(raw["opacity"])
+      ? (raw["opacity"] as Record<string, unknown>)
+      : {};
+  const rows = Object.entries(raw)
+    .filter(([key, value]) => key !== "opacity" && typeof value === "string")
+    .map(([key, value]) => ({ state_type: key, color: value as string, opacity: opacityRaw[key] }));
+  return buildCalendarStateStyleMap(rows);
+}
+
+/** SPECS-INDEX #1049(R6):服務人員自己的每週可預約時段(只有星期幾 / 開始 / 結束)。 */
+export interface MyAvailabilityWindow {
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+}
+
+/**
+ * SPECS-INDEX #1049(R6):服務人員行事曆時間軸畫「自己的每週可預約時段」用。
+ * staff_availability_windows 的 SELECT 政策只放行「可管理營業時間的人」或「有自己排休權限的按件計酬服務人員」,
+ * 其他服務人員直接查表會拿到 0 筆(看起來像沒有時段)。不放寬 RLS,改呼叫 SECURITY DEFINER 的
+ * get_my_staff_availability_windows(只回本人、只回 day_of_week / start_time / end_time,檢查平台功能開關)。
+ */
+export async function fetchMyAvailabilityWindows(staffId: string): Promise<MyAvailabilityWindow[]> {
+  const { data, error } = await supabase.rpc("get_my_staff_availability_windows", {
+    p_staff_id: staffId,
+  });
+  if (error) throw error;
+  return (data ?? []).map((w) => ({
+    day_of_week: w.day_of_week,
+    start_time: w.start_time,
+    end_time: w.end_time,
+  }));
 }
 
 /** SPECS-INDEX #860:服務人員自助讀取自己所屬商家的「訂單狀態顏色設定」(待確認/已確認/

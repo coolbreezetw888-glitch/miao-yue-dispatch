@@ -40,7 +40,8 @@ import type {
 import {
   DEFAULT_MERCHANT_TAX_SETTINGS,
   DEFAULT_BOOKING_STATUS_COLORS,
-  DEFAULT_CALENDAR_STATE_STYLES,
+  buildCalendarStateStyleMap,
+  normalizeCalendarStateOpacity,
 } from "./types";
 import { bookingMatchesKeyword } from "./ordersPageLogic";
 
@@ -1773,19 +1774,18 @@ export async function fetchMerchantCalendarStateStyles(
 ): Promise<CalendarStateStyleMap> {
   const { data, error } = await supabase
     .from("merchant_calendar_state_styles")
-    .select("state_type, color")
+    .select("state_type, color, opacity")
     .eq("merchant_id", merchantId);
   if (error) throw error;
 
-  const result: CalendarStateStyleMap = { ...DEFAULT_CALENDAR_STATE_STYLES };
-  for (const row of data ?? []) {
-    if (row.state_type === "full_day_leave") result.fullDayLeave = row.color;
-    else if (row.state_type === "partial_leave") result.partialLeave = row.color;
-    else if (row.state_type === "cross_store_occupied") result.crossStoreOccupied = row.color;
-    // #1021 第 21 批:第 4 種「服務人員可預約時段」。
-    else if (row.state_type === "staff_available_slot") result.staffAvailableSlot = row.color;
-  }
-  return result;
+  // #1021 第 4 種、#1049 第 5 種、#1050 透明度:state_type ⇄ key 對照表共用 CALENDAR_STATE_TYPE_TO_KEY。
+  return buildCalendarStateStyleMap(
+    (data ?? []).map((row) => ({
+      state_type: row.state_type,
+      color: row.color,
+      opacity: row.opacity,
+    })),
+  );
 }
 
 /** 顏色設定畫面用:upsert 商家的三筆 merchant_calendar_state_styles,三個顏色一次全部帶入
@@ -1802,6 +1802,19 @@ export async function updateMerchantCalendarStateStyles(
     p_cross_store_occupied_color: styles.crossStoreOccupied,
     // #1021 第 21 批:第 4 種(資料庫參數有預設值 null = 不改,舊版前端照樣能呼叫)。
     p_staff_available_slot_color: styles.staffAvailableSlot,
+    // #1049 / #1050:第 5 色 + 5 個透明度(資料庫參數都有預設值 null = 不改)。
+    p_outside_business_hours_color: styles.outsideBusinessHours,
+    p_full_day_leave_opacity: normalizeCalendarStateOpacity(styles.opacity.fullDayLeave),
+    p_partial_leave_opacity: normalizeCalendarStateOpacity(styles.opacity.partialLeave),
+    p_cross_store_occupied_opacity: normalizeCalendarStateOpacity(
+      styles.opacity.crossStoreOccupied,
+    ),
+    p_staff_available_slot_opacity: normalizeCalendarStateOpacity(
+      styles.opacity.staffAvailableSlot,
+    ),
+    p_outside_business_hours_opacity: normalizeCalendarStateOpacity(
+      styles.opacity.outsideBusinessHours,
+    ),
   });
   if (error) throw error;
 }
