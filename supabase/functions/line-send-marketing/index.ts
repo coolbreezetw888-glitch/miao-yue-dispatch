@@ -12,6 +12,15 @@
 //      line_notification_log 記錄)。
 //   3. message 支援 {{member_name}} 變數替換。event_type='marketing_manual',
 //      created_by_user_id 記錄觸發的管理員。
+//
+// 客戶端第 5-B 批 C5-P01(#1047):照客人的「優惠通知」開關發。
+//   ・會員資料改由 internal_line_marketing_candidates(service_role)一次取回:會員 + 每位聯絡人
+//     (這間店 LINE 登入 channel 的身分、notify_promo、好友狀態)。
+//   ・有聯絡人 ⇒ 每位「優惠通知」開著的聯絡人各發一則;關掉的寫 skipped / customer_opted_out;
+//     沒有這間店 LINE 身分 ⇒ target_not_bound;已知沒加好友 ⇒ not_friend。
+//   ・沒有聯絡人、用舊綁定碼綁過的會員 ⇒ 照舊發 members.line_user_id(已知非好友 ⇒ not_friend)。
+//   ・黑名單仍然優先擋(伺服器端第二道防線)。發送前確認窗的則數由 preview_line_marketing_recipients 算,規則同這裡。
+//   ・一次最多 5000 位會員。
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -87,11 +96,25 @@ export interface MarketingRequestBody {
   message?: string;
 }
 
+/** C5-P01:會員的一位聯絡人(由 internal_line_marketing_candidates 取回)。 */
+export interface MarketingContactRow {
+  user_id: string;
+  /** 這間店 LINE 登入 channel 的身分;沒有 ⇒ null。 */
+  line_user_id: string | null;
+  notify_promo: boolean;
+  friend_status: "friend" | "not_friend" | "unknown";
+}
+
 export interface MarketingMemberRow {
   id: string;
   name: string;
+  /** 沒有聯絡人時才可能是 true(舊綁定碼會員)。 */
   line_bound: boolean;
   line_user_id: string | null;
+  /** C5-P01:active 聯絡人;沒有 / 空陣列 ⇒ 走舊綁定碼規則。 */
+  contacts?: MarketingContactRow[];
+  /** 舊綁定碼會員的好友狀態。 */
+  legacy_friend_status?: "friend" | "not_friend" | "unknown";
   // §10.2(SPECS-INDEX #612 問題 2):黑名單「無例外」規則的伺服器端第二道防線——不能只信任
   // 前端已經把黑名單會員從勾選名單濾掉,這裡查回會員資料時一併帶出 is_blacklisted,
   // buildMarketingDispatchPlan 會用這個欄位強制擋下,不管呼叫端(不管是不是正常的前端畫面)
@@ -101,10 +124,14 @@ export interface MarketingMemberRow {
 
 export interface MarketingDispatchPlanItem {
   memberId: string;
-  status: "will_send" | "skipped_not_bound" | "skipped_blacklisted";
+  status: "will_send" | "skipped_not_bound" | "skipped_blacklisted" | "skipped_opted_out" | "skipped_not_friend";
   name: string;
   lineUserId: string | null;
+  /** C5-P01:收到 / 被略過的聯絡人帳號(舊綁定碼會員、黑名單、找不到會員 ⇒ null)。 */
+  targetUserId: string | null;
 }
+
+export const MARKETING_MAX_MEMBERS = 5000;
 
 /**
  * 3.15 純函式:依查回來的會員資料,決定每個 member_id 的處理計畫(要發送/因未綁定而跳過/
@@ -117,33 +144,47 @@ export function buildMarketingDispatchPlan(
   members: MarketingMemberRow[],
 ): MarketingDispatchPlanItem[] {
   const byId = new Map(members.map((m) => [m.id, m]));
-  return requestedMemberIds.map((memberId) => {
+  const plan: MarketingDispatchPlanItem[] = [];
+  for (const memberId of requestedMemberIds) {
     const member = byId.get(memberId);
     // §10.2(SPECS-INDEX #612 問題 2):黑名單「無例外」——這個判斷放在最前面,優先權高於
     // 「有沒有綁定 LINE」,不管前端傳了什麼進來都一律擋下,不會被標記成 will_send。
     if (member?.is_blacklisted) {
-      return {
-        memberId,
-        status: "skipped_blacklisted",
-        name: member.name,
-        lineUserId: null,
-      };
+      plan.push({ memberId, status: "skipped_blacklisted", name: member.name, lineUserId: null, targetUserId: null });
+      continue;
     }
-    if (!member || !member.line_bound || !member.line_user_id) {
-      return {
-        memberId,
-        status: "skipped_not_bound",
-        name: member?.name ?? "",
-        lineUserId: null,
-      };
+    if (!member) {
+      plan.push({ memberId, status: "skipped_not_bound", name: "", lineUserId: null, targetUserId: null });
+      continue;
     }
-    return {
-      memberId,
-      status: "will_send",
-      name: member.name,
-      lineUserId: member.line_user_id,
-    };
-  });
+    const contacts = member.contacts ?? [];
+    if (contacts.length > 0) {
+      // C5-P01:每位聯絡人自己的「優惠通知」開關。
+      for (const c of contacts) {
+        const base = { memberId, name: member.name, targetUserId: c.user_id };
+        if (!c.notify_promo) {
+          plan.push({ ...base, status: "skipped_opted_out", lineUserId: null });
+        } else if (!c.line_user_id) {
+          plan.push({ ...base, status: "skipped_not_bound", lineUserId: null });
+        } else if (c.friend_status === "not_friend") {
+          plan.push({ ...base, status: "skipped_not_friend", lineUserId: null });
+        } else {
+          plan.push({ ...base, status: "will_send", lineUserId: c.line_user_id });
+        }
+      }
+      continue;
+    }
+    if (!member.line_bound || !member.line_user_id) {
+      plan.push({ memberId, status: "skipped_not_bound", name: member.name, lineUserId: null, targetUserId: null });
+      continue;
+    }
+    if (member.legacy_friend_status === "not_friend") {
+      plan.push({ memberId, status: "skipped_not_friend", name: member.name, lineUserId: null, targetUserId: null });
+      continue;
+    }
+    plan.push({ memberId, status: "will_send", name: member.name, lineUserId: member.line_user_id, targetUserId: null });
+  }
+  return plan;
 }
 
 async function handleRequest(req: Request): Promise<Response> {
@@ -176,6 +217,9 @@ async function handleRequest(req: Request): Promise<Response> {
 
   if (!merchantId || memberIds.length === 0 || !message) {
     return jsonResponse({ error: "缺少必要欄位(merchant_id/member_ids/message)" }, 400);
+  }
+  if (!Array.isArray(memberIds) || memberIds.length > MARKETING_MAX_MEMBERS) {
+    return jsonResponse({ error: `一次最多選 ${MARKETING_MAX_MEMBERS} 位會員` }, 400);
   }
 
   // 規則 2.6(核心必測)+ #976 第 3 批:商家管理員或 line_marketing 客服才放行;
@@ -210,14 +254,14 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // §10.2(SPECS-INDEX #612 問題 2):一併查 is_blacklisted,不能只信任前端已經把黑名單會員
   // 濾掉——見 buildMarketingDispatchPlan 的強制擋下邏輯。
-  const { data: members, error: membersError } = await adminClient
-    .from("members")
-    .select("id, name, line_bound, line_user_id, is_blacklisted")
-    .eq("merchant_id", merchantId)
-    .in("id", memberIds);
+  // C5-P01:連同每位聯絡人(LINE 身分、優惠通知開關、好友狀態)一起取回;只回這間店的會員。
+  const { data: members, error: membersError } = await adminClient.rpc("internal_line_marketing_candidates", {
+    p_merchant_id: merchantId,
+    p_member_ids: memberIds,
+  });
 
   if (membersError) {
-    console.error("[line-send-marketing] 查詢 members 失敗", membersError);
+    console.error("[line-send-marketing] 查詢會員資料失敗");
     return jsonResponse({ error: "查詢會員資料時發生錯誤" }, 500);
   }
 
@@ -254,15 +298,21 @@ async function handleRequest(req: Request): Promise<Response> {
       });
       continue;
     }
-    if (item.status === "skipped_not_bound") {
+    if (item.status !== "will_send") {
+      // skipped_not_bound / skipped_opted_out(C5-P01 客人關掉優惠通知)/ skipped_not_friend(已知沒加好友)
       skippedCount += 1;
       await adminClient.from("line_notification_log").insert({
         merchant_id: merchantId,
         event_type: "marketing_manual",
         target_type: "member",
         target_id: item.memberId,
+        target_user_id: item.targetUserId,
         status: "skipped",
-        skip_reason: "target_not_bound",
+        skip_reason: item.status === "skipped_opted_out"
+          ? "customer_opted_out"
+          : item.status === "skipped_not_friend"
+          ? "not_friend"
+          : "target_not_bound",
         created_by_user_id: createdByUserId,
       });
       continue;
@@ -281,6 +331,7 @@ async function handleRequest(req: Request): Promise<Response> {
       event_type: "marketing_manual",
       target_type: "member",
       target_id: item.memberId,
+      target_user_id: item.targetUserId,
       target_line_user_id: item.lineUserId,
       status: pushResult.ok ? "sent" : "failed",
       error_detail: pushResult.ok ? null : pushResult.errorDetail,

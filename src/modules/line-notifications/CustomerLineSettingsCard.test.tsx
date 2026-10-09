@@ -1,5 +1,6 @@
-// 客戶端第 5 批 5-A(C5-K01 / K02):後台「LINE 通知事件」頁的「通知客人」卡(沒接上 / 正常 / 客服視角、
-// 開關立即儲存與失敗退回、範本編輯與恢復預設),以及店家事件卡不再有「會員」勾選、確認訂單彈窗只列店家這邊。
+// 客戶端第 5 批(C5-K01 / K02;5-B 加 Q01 / Q02、提醒時數):後台「LINE 通知事件」頁的「通知客人」卡
+// (沒接上 / 正常 / 客服視角、開關立即儲存與失敗退回、範本編輯與恢復預設、本月額度、每月上限只有管理員),
+// 以及店家事件卡不再有「會員」勾選、確認訂單彈窗只列店家這邊。
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -14,6 +15,13 @@ const state = vi.hoisted(() => ({
   toasts: [] as string[],
   rpcCalls: [] as { fn: string; args: unknown }[],
   rpcData: null as unknown,
+  quota: null as unknown,
+  quotaError: null as unknown,
+  invokeCalls: [] as { fn: string; body: unknown }[],
+  capCalls: [] as unknown[],
+  capError: null as unknown,
+  usage: null as unknown,
+  usageError: null as unknown,
 }));
 
 vi.mock("sonner", () => ({
@@ -46,8 +54,32 @@ vi.mock("@/integrations/supabase/client", () => ({
         };
         return { data: state.settings, error: null };
       }
+      if (fn === "get_customer_line_usage") {
+        if (state.usageError) return { data: null, error: state.usageError };
+        return { data: state.usage, error: null };
+      }
+      if (fn === "set_customer_line_monthly_cap") {
+        state.capCalls.push(args);
+        if (state.capError) return { data: null, error: state.capError };
+        const cur = state.settings as Record<string, Record<string, unknown>>;
+        state.settings = {
+          ...cur,
+          settings: {
+            ...cur["settings"],
+            monthly_cap: (args as { p_monthly_cap: unknown }).p_monthly_cap,
+          },
+        };
+        return { data: state.settings, error: null };
+      }
       return { data: state.rpcData, error: null };
     }),
+    functions: {
+      invoke: vi.fn(async (fn: string, opts: { body: unknown }) => {
+        state.invokeCalls.push({ fn, body: opts.body });
+        if (state.quotaError) return { data: null, error: state.quotaError };
+        return { data: state.quota, error: null };
+      }),
+    },
   },
 }));
 
@@ -115,15 +147,28 @@ beforeEach(() => {
   state.toasts = [];
   state.rpcCalls = [];
   state.rpcData = null;
+  state.quota = {
+    plan_limit: 200,
+    used: 132,
+    by_category: { customer: 80, store: 40, marketing: 12, birthday: 0 },
+    cap: null,
+    blocked_until: null,
+  };
+  state.quotaError = null;
+  state.invokeCalls = [];
+  state.capCalls = [];
+  state.capError = null;
+  state.usage = null;
+  state.usageError = null;
 });
 afterEach(() => cleanup());
 
 describe("C5-K02「通知客人」卡", () => {
-  it("正常:6 種通知各一列(開關、何時發、大約用量、編輯文字);常駐額度說明;沒有 5-B 的東西", async () => {
+  it("正常:9 種通知各一列(開關、何時發、大約用量、編輯文字);常駐額度說明;本月額度;管理員看得到上限", async () => {
     renderCard();
     const card = await screen.findByTestId("customer-line-card");
     await within(card).findByTestId("customer-line-kind-on_submitted");
-    expect(within(card).getAllByRole("switch")).toHaveLength(6);
+    expect(within(card).getAllByRole("switch")).toHaveLength(9);
     expect(card).toHaveTextContent("收到線上預約");
     expect(card).toHaveTextContent("店家幫客人建了預約");
     expect(card).toHaveTextContent("客人取消時通知其他聯絡人");
@@ -131,10 +176,27 @@ describe("C5-K02「通知客人」卡", () => {
       "大約用量：每筆預約 1 則；公司會員由第二聯絡人下單時 2 則。",
     );
     expect(screen.getByTestId("customer-line-quota-note")).toHaveTextContent("免費方案每月 200 則");
-    expect(card).toHaveTextContent("客人可以在會員中心自己關掉預約通知。");
-    expect(card).not.toHaveTextContent("服務前提醒");
-    expect(card).not.toHaveTextContent("每月客人通知上限");
-    expect(card).not.toHaveTextContent("本月已用");
+    expect(card).toHaveTextContent("客人可以在會員中心自己關掉預約通知或優惠通知。");
+    expect(card).toHaveTextContent("服務前提醒");
+    expect(card).toHaveTextContent("服務完成");
+    expect(card).toHaveTextContent("聯絡人申請與移除");
+    expect(await screen.findByTestId("customer-line-quota-summary")).toHaveTextContent(
+      "本月已用 132／200 則（客人通知 80、員工通知 40、行銷 12）",
+    );
+    expect(state.invokeCalls).toEqual([{ fn: "line-quota-status", body: { merchant_id: "m1" } }]);
+    expect(screen.getByTestId("customer-line-monthly-cap")).toHaveTextContent("每月客人通知上限");
+    expect(screen.getByTestId("customer-line-monthly-cap-input")).toHaveValue("");
+    expect(screen.queryByTestId("customer-line-quota-blocked")).toBeNull();
+    // Q1 = A:提醒、完成預設關;聯絡人申請預設開。
+    for (const [key, on] of [
+      ["on_reminder", "false"],
+      ["on_completed", "false"],
+      ["on_contact_events", "true"],
+    ] as const) {
+      expect(
+        within(screen.getByTestId(`customer-line-kind-${key}`)).getByRole("switch"),
+      ).toHaveAttribute("aria-checked", on);
+    }
     expect(screen.queryByTestId("customer-line-not-connected")).toBeNull();
     expect(screen.queryByTestId("customer-line-login-off")).toBeNull();
     // 「店家幫客人建了預約」預設關(Q1 = A)。
@@ -156,15 +218,44 @@ describe("C5-K02「通知客人」卡", () => {
     expect(screen.getByTestId("customer-line-login-off")).toHaveTextContent(
       "客人要用 LINE 登入加入會員後才收得到。",
     );
+    // 沒接上 ⇒ 不查 LINE 用量;管理員仍可先設上限。
+    expect(state.invokeCalls).toEqual([]);
+    expect(screen.queryByTestId("customer-line-quota-summary")).toBeNull();
+    expect(screen.getByTestId("customer-line-monthly-cap")).toBeInTheDocument();
   });
 
   it("客服視角:沒接上時不給連結(那頁只有管理員進得去),改成文字說明", async () => {
     state.role = "agent";
-    state.settings = baseSettings({ connected: false });
+    state.settings = baseSettings({ connected: false, is_admin: false });
     renderCard();
     const note = await screen.findByTestId("customer-line-not-connected");
     expect(within(note).queryByRole("link")).toBeNull();
     expect(note).toHaveTextContent("請商家管理員到「LINE 串接設定」接上。");
+    // 客服 + 沒接上:整個額度區不出現。
+    expect(screen.queryByTestId("customer-line-quota")).toBeNull();
+  });
+
+  it("客服視角(is_admin = false):看得到本月額度與上限數字(唯讀),沒有輸入框", async () => {
+    state.role = "agent";
+    state.settings = baseSettings({ is_admin: false });
+    renderCard();
+    expect(await screen.findByTestId("customer-line-quota-summary")).toHaveTextContent(
+      "本月已用 132／200 則",
+    );
+    expect(screen.queryByTestId("customer-line-monthly-cap")).toBeNull();
+    expect(screen.queryByTestId("customer-line-monthly-cap-input")).toBeNull();
+    expect(screen.getByTestId("customer-line-monthly-cap-readonly")).toHaveTextContent(
+      "每月客人通知上限：不限制（只有商家管理員可以修改）",
+    );
+    cleanup();
+    state.settings = baseSettings({
+      is_admin: false,
+      settings: { ...baseSettings().settings, monthly_cap: 1500 },
+    });
+    renderCard();
+    expect(await screen.findByTestId("customer-line-monthly-cap-readonly")).toHaveTextContent(
+      "每月客人通知上限：1,500 則（只有商家管理員可以修改）",
+    );
   });
 
   it("切開關 ⇒ 立即只送那一個鍵;成功 toast", async () => {
@@ -259,6 +350,131 @@ describe("C5-K02「通知客人」卡", () => {
     await userEvent.paste("字".repeat(501));
     expect(editor).toHaveTextContent("最多 500 字");
     expect(within(editor).getByTestId("customer-line-template-save")).toBeDisabled();
+  });
+});
+
+describe("C5-K02 5-B:服務前提醒時數、每月上限、本月額度", () => {
+  it("服務前 N 小時:預設 24;改成 6 ⇒ 立即只送 reminder_hours_before", async () => {
+    renderCard();
+    const row = await screen.findByTestId("customer-line-kind-on_reminder");
+    const select = within(row).getByTestId("customer-line-reminder-hours");
+    expect(select).toHaveValue("24");
+    expect(Array.from((select as HTMLSelectElement).options).map((o) => o.value)).toEqual([
+      "2",
+      "3",
+      "6",
+      "12",
+      "24",
+      "48",
+    ]);
+    await userEvent.selectOptions(select, "6");
+    await waitFor(() => expect(state.updateCalls).toHaveLength(1));
+    expect(state.updateCalls[0]).toEqual({
+      p_merchant_id: "m1",
+      p_patch: { reminder_hours_before: 6 },
+    });
+    await waitFor(() => expect(select).toHaveValue("6"));
+    expect(state.toasts).toContain("已儲存提醒時間");
+  });
+
+  it("提醒時數存檔失敗 ⇒ 退回原值", async () => {
+    state.updateError = { code: "22023", hint: "reminder_hours_invalid" };
+    renderCard();
+    const select = within(await screen.findByTestId("customer-line-kind-on_reminder")).getByTestId(
+      "customer-line-reminder-hours",
+    );
+    await userEvent.selectOptions(select, "48");
+    await waitFor(() => expect(state.toasts).toContain("儲存失敗"));
+    await waitFor(() => expect(select).toHaveValue("24"));
+  });
+
+  it("每月上限:沒改 ⇒ 停用 + 常駐 !;填 0 ⇒ 錯誤;填 150 存檔;清空 = 不限制", async () => {
+    renderCard();
+    const capBox = await screen.findByTestId("customer-line-monthly-cap");
+    const input = within(capBox).getByTestId("customer-line-monthly-cap-input");
+    const save = within(capBox).getByTestId("customer-line-monthly-cap-save");
+    expect(save).toBeDisabled();
+    expect(capBox).toHaveTextContent("還沒有修改上限。");
+
+    await userEvent.type(input, "0");
+    expect(capBox).toHaveTextContent("每月上限請填 1 到 100,000 的整數，留空代表不限制。");
+    expect(save).toBeDisabled();
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "150");
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    await waitFor(() => expect(state.capCalls).toHaveLength(1));
+    expect(state.capCalls[0]).toEqual({ p_merchant_id: "m1", p_monthly_cap: 150 });
+    expect(state.toasts).toContain("已儲存每月上限");
+    await waitFor(() => expect(save).toBeDisabled());
+
+    await userEvent.clear(input);
+    await userEvent.click(save);
+    await waitFor(() => expect(state.capCalls).toHaveLength(2));
+    expect(state.capCalls[1]).toEqual({ p_merchant_id: "m1", p_monthly_cap: null });
+    expect(state.toasts).toContain("已改成不限制");
+  });
+
+  it("每月上限存檔被擋(客服)⇒ 固定中文", async () => {
+    state.capError = { code: "42501", hint: "forbidden", message: "raw" };
+    renderCard();
+    const capBox = await screen.findByTestId("customer-line-monthly-cap");
+    await userEvent.type(within(capBox).getByTestId("customer-line-monthly-cap-input"), "100");
+    await userEvent.click(within(capBox).getByTestId("customer-line-monthly-cap-save"));
+    await waitFor(() => expect(state.toasts).toContain("儲存失敗"));
+  });
+
+  it("已有上限 ⇒ 輸入框帶出現值", async () => {
+    state.settings = baseSettings({
+      settings: { ...baseSettings().settings, monthly_cap: 150 },
+    });
+    renderCard();
+    expect(await screen.findByTestId("customer-line-monthly-cap-input")).toHaveValue("150");
+  });
+
+  it("停發中 ⇒ 紅字「本月額度已用完，下個月 1 日恢復。」", async () => {
+    state.settings = baseSettings({
+      settings: { ...baseSettings().settings, quota_blocked_until: "2999-01-01T00:00:00Z" },
+    });
+    renderCard();
+    const blocked = await screen.findByTestId("customer-line-quota-blocked");
+    expect(blocked).toHaveTextContent("本月額度已用完，下個月 1 日恢復。");
+    expect(blocked.className).toMatch(/text-destructive/);
+  });
+
+  it("LINE 查不到用量 ⇒ 只顯示秒約的統計 + 說明;Edge 失敗 ⇒ 查不到 + 重新查詢", async () => {
+    state.quota = {
+      plan_limit: null,
+      used: null,
+      by_category: { customer: 5, store: 2, marketing: 0, birthday: 0 },
+    };
+    renderCard();
+    expect(await screen.findByTestId("customer-line-quota-summary")).toHaveTextContent(
+      "秒約本月已發 7 則（客人通知 5、員工通知 2、行銷 0）",
+    );
+    expect(screen.getByTestId("customer-line-quota")).toHaveTextContent(
+      "暫時查不到 LINE 官方帳號的用量，上面只算秒約發出的訊息。",
+    );
+    cleanup();
+    // Edge 叫不到 ⇒ 退回資料庫統計。
+    state.quotaError = new Error("boom");
+    state.usage = {
+      by_category: { customer: 1, store: 2, marketing: 3, birthday: 0 },
+      blocked_until: null,
+    };
+    renderCard();
+    expect(await screen.findByTestId("customer-line-quota-summary")).toHaveTextContent(
+      "秒約本月已發 6 則（客人通知 1、員工通知 2、行銷 3）",
+    );
+    cleanup();
+    // 兩個都失敗 ⇒ 查不到 + 重新查詢。
+    state.usageError = { code: "42501" };
+    renderCard();
+    expect(
+      await screen.findByTestId("customer-line-quota-error", {}, { timeout: 3000 }),
+    ).toHaveTextContent("暫時查不到本月用量。");
+    expect(screen.getByRole("button", { name: "重新查詢" })).toBeInTheDocument();
   });
 });
 

@@ -208,7 +208,8 @@ export interface PointFormulaServiceItem {
   status: "active" | "removed";
 }
 
-/** §1.3 + v2.4 主腦裁決第 19/20 條:生日 LINE 發送狀態,共 7 種。 */
+/** §1.3 + v2.4 主腦裁決第 19/20 條:生日 LINE 發送狀態。
+ *  客戶端第 5 批 5-B(#1047,c5-contract 5B-5)加 skipped_opted_out(主要聯絡人關掉「優惠通知」,點數照發)⇒ 共 8 種。 */
 export type BirthdayLineStatus =
   | "pending"
   | "sent"
@@ -216,7 +217,8 @@ export type BirthdayLineStatus =
   | "skipped_not_bound"
   | "skipped_not_connected"
   | "skipped_member_removed"
-  | "skipped_merchant_disabled";
+  | "skipped_merchant_disabled"
+  | "skipped_opted_out";
 
 /** §4.5 生日分頁「LINE 狀態」欄的中文標籤。v2.4 第 20 條:兩個新略過狀態用指定文案,
  *  不可借用「未綁定」(那會讓商家以為是會員沒綁 LINE)。 */
@@ -228,6 +230,7 @@ export const BIRTHDAY_LINE_STATUS_LABELS: Record<BirthdayLineStatus, string> = {
   skipped_not_connected: "商家未連線略過",
   skipped_member_removed: "會員已下架，未發送",
   skipped_merchant_disabled: "商家已停用，未發送",
+  skipped_opted_out: "未發送（客人關閉優惠通知）",
 };
 
 /** get_birthday_bonus_grants 回傳的一筆生日發送紀錄。 */

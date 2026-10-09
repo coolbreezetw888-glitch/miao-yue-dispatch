@@ -31,6 +31,11 @@
 //
 // **只動外觀,不動行為**:選取 / 排除的計算(memberSelection.ts)、黑名單自動排除、送出的
 // 名單與訊息、送出後導向發送記錄頁、字數上限 5000 全部照舊。
+//
+// 客戶端第 5 批 5-B(#1047,C5-P01):行銷改成「每位開著優惠通知的聯絡人各發一則」。
+//   - 名單每位會員多一行「可收到 X 人」(preview_line_marketing_recipients,整份名單算一次)。
+//   - 發送確認窗改成「即將發送給 N 位會員，共 M 則訊息（會用掉 M 則官方帳號額度），確定要送出嗎？」,
+//     打開確認窗時用「最後要送的名單」重新算一次;一則都不會發 ⇒ 確定鈕停用 + 常駐 `!` 說明原因。
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -69,7 +74,19 @@ import { useMerchantMemberTiers } from "@/modules/members/api";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
-import { sendMarketingMessage, useMarketableMembers, type MarketableMember } from "./api";
+import {
+  sendMarketingMessage,
+  useLineMarketingPreview,
+  useMarketableMembers,
+  type MarketableMember,
+} from "./api";
+import {
+  formatMarketingConfirmText,
+  formatReachableCount,
+  formatUnreachableNote,
+  MARKETING_NOBODY_NOTE,
+  MARKETING_PREVIEW_FAILED_NOTE,
+} from "./marketingPreview";
 import {
   computeFinalRecipientIds,
   isTierFullySelected,
@@ -121,8 +138,16 @@ function LineMarketingPageInner() {
   const [excludedIds, setExcludedIds] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const memberList: MarketableMember[] = members ?? [];
+  const memberList: MarketableMember[] = useMemo(() => members ?? [], [members]);
+  // C5-P01:整份名單每位會員「可收到 X 人」(算一次;失敗就不顯示那行,不擋操作)。
+  const allMemberIds = useMemo(() => memberList.map((m) => m.id), [memberList]);
+  const { data: listPreview } = useLineMarketingPreview(
+    merchantId,
+    allMemberIds,
+    allMemberIds.length > 0,
+  );
 
   const filteredMembers = useMemo(() => {
     const term = search.trim();
@@ -184,6 +209,11 @@ function LineMarketingPageInner() {
   }
 
   const canSend = finalRecipientIds.length > 0 && message.trim().length > 0;
+
+  // C5-P01:確認窗打開時用最後要送的名單重新算則數。
+  const confirmPreview = useLineMarketingPreview(merchantId, finalRecipientIds, confirmOpen);
+  const confirmReady = confirmPreview.data !== undefined;
+  const nobodyReachable = confirmReady && confirmPreview.data.messageCount === 0;
 
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-5 py-12">
@@ -253,6 +283,14 @@ function LineMarketingPageInner() {
                           ) : null}
                           {m.isBlacklisted ? (
                             <AttributeTag wrap>黑名單・會自動從送出名單排除</AttributeTag>
+                          ) : null}
+                          {!m.isBlacklisted && listPreview ? (
+                            <span
+                              className="text-xs tabular-nums text-muted-foreground"
+                              data-testid="line-marketing-reachable"
+                            >
+                              {formatReachableCount(listPreview.perMember.get(m.id))}
+                            </span>
                           ) : null}
                         </ChoiceChip>
                       </li>
@@ -405,7 +443,12 @@ function LineMarketingPageInner() {
             實際會送出 {finalRecipientIds.length} 位會員(已扣除排除清單與黑名單客戶)
           </p>
 
-          <CardAlertDialog>
+          <CardAlertDialog
+            open={confirmOpen}
+            onOpenChange={(open) => {
+              if (!sending) setConfirmOpen(open);
+            }}
+          >
             <CardAlertDialogTrigger asChild>
               {/* 這一頁唯一的 ① 主要按鈕(skill 二之三)。 */}
               <Button
@@ -418,18 +461,54 @@ function LineMarketingPageInner() {
                 {sending ? "發送中⋯" : "發送"}
               </Button>
             </CardAlertDialogTrigger>
-            <CardAlertDialogContent>
+            <CardAlertDialogContent data-testid="line-marketing-confirm">
               <CardAlertDialogHeader>
                 <CardAlertDialogTitle>確定要發送嗎？</CardAlertDialogTitle>
-                <CardAlertDialogDescription>
-                  即將發送給 {finalRecipientIds.length} 位會員。
+                <CardAlertDialogDescription data-testid="line-marketing-confirm-text">
+                  {confirmPreview.isLoading
+                    ? "正在計算會用掉幾則官方帳號額度⋯"
+                    : confirmPreview.data
+                      ? formatMarketingConfirmText(
+                          confirmPreview.data.memberCount,
+                          confirmPreview.data.messageCount,
+                        )
+                      : `即將發送給 ${finalRecipientIds.length} 位會員，確定要送出嗎？`}
                 </CardAlertDialogDescription>
               </CardAlertDialogHeader>
-              {/* 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。 */}
-              <AlertNote>訊息一旦送到會員的 LINE 就無法收回，也不能編輯。</AlertNote>
+              {confirmPreview.data && !nobodyReachable ? (
+                formatUnreachableNote(finalRecipientIds.length, confirmPreview.data.memberCount) ? (
+                  <p className="text-[13px] leading-relaxed text-muted-foreground">
+                    {formatUnreachableNote(
+                      finalRecipientIds.length,
+                      confirmPreview.data.memberCount,
+                    )}
+                  </p>
+                ) : null
+              ) : null}
+              {confirmPreview.isError ? (
+                <p className="text-[13px] leading-relaxed text-muted-foreground">
+                  {MARKETING_PREVIEW_FAILED_NOTE}
+                </p>
+              ) : null}
+              {/* 🟡 常駐 `!`:為什麼確定鈕按不了(skill 二,第一類)。 */}
+              {nobodyReachable ? (
+                <AlertNote data-testid="line-marketing-nobody">{MARKETING_NOBODY_NOTE}</AlertNote>
+              ) : (
+                // 🟡 常駐 `!`:按下去會發生什麼不可逆的事(skill 二,第二類)。
+                <AlertNote>訊息一旦送到會員的 LINE 就無法收回，也不能編輯。</AlertNote>
+              )}
               <CardAlertDialogFooter>
-                <CardAlertDialogCancel>再想想</CardAlertDialogCancel>
-                <CardAlertDialogAction onClick={handleSend}>確定發送</CardAlertDialogAction>
+                <CardAlertDialogCancel disabled={sending}>再想想</CardAlertDialogCancel>
+                <CardAlertDialogAction
+                  disabled={sending || confirmPreview.isLoading || nobodyReachable}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void handleSend().then(() => setConfirmOpen(false));
+                  }}
+                  data-testid="line-marketing-confirm-send"
+                >
+                  {sending ? "發送中⋯" : "確定發送"}
+                </CardAlertDialogAction>
               </CardAlertDialogFooter>
             </CardAlertDialogContent>
           </CardAlertDialog>

@@ -185,7 +185,7 @@ export function MemberContactsCard({ memberId }: { memberId: string }) {
                 {[
                   `LINE 好友：${lineFriendStatusLabel(c.lineFriendStatus)}`,
                   `預約通知：${onOffLabel(c.notifyBooking)}`,
-                  // 5-A 先不顯示(客人端也還不能改、發送也還不看這個開關),5-B 跟客人端一起出現。
+                  // 5-B 起跟客人端一起出現(PROMO_SWITCH_VISIBLE)。
                   PROMO_SWITCH_VISIBLE ? `優惠通知：${onOffLabel(c.notifyPromo)}` : null,
                 ]
                   .filter(Boolean)

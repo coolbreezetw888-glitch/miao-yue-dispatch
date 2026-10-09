@@ -295,7 +295,7 @@ const BELL_FULL_BODY_EVENT_TYPES: ReadonlySet<string> = new Set([
   "customer_booking_created",
   // 客戶端第 4 批:「客人「王小明」取消了 10/13（二）10:00 的預約，服務人員：阿明。」截成一行會看不到是哪一張。
   "customer_booking_cancelled",
-  // 客戶端第 5 批:「…這個月的 LINE 通知(包含員工通知)都會發送失敗，下個月 1 日自動恢復。」截掉會看不到何時恢復。
+  // 客戶端第 5 批:「…這個月的 LINE 通知（包含員工通知）都會發送失敗，下個月 1 日自動恢復。」截掉會看不到何時恢復。
   "line_quota_exhausted",
   "line_quota_warning",
 ]);

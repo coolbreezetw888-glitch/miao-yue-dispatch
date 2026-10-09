@@ -413,9 +413,10 @@ describe("§4.5 生日獎勵", () => {
     ["skipped_not_connected", "商家未連線略過"],
     ["skipped_member_removed", "會員已下架，未發送"],
     ["skipped_merchant_disabled", "商家已停用，未發送"],
+    ["skipped_opted_out", "未發送（客人關閉優惠通知）"],
   ] as const;
 
-  it("發送紀錄:7 種 LINE 狀態都顯示對應中文標籤", async () => {
+  it("發送紀錄:8 種 LINE 狀態都顯示對應中文標籤", async () => {
     const user = userEvent.setup();
     state.grants = ALL_STATUSES.map(([status], i) => grant({ id: `g${i}`, lineStatus: status }));
     renderPage();
@@ -424,7 +425,7 @@ describe("§4.5 生日獎勵", () => {
     for (const [, label] of ALL_STATUSES) {
       expect(within(list).getByText(label)).toBeInTheDocument();
     }
-    expect(within(list).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(list).getAllByRole("listitem")).toHaveLength(ALL_STATUSES.length);
   });
 
   it("沒有紀錄 ⇒ 空狀態文字", async () => {

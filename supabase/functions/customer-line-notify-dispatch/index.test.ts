@@ -6,6 +6,8 @@ import { assert, assertEquals } from "jsr:@std/assert@1";
 
 import {
   classifyLineResponse,
+  fetchLineQuota,
+  isQuotaWarning,
   type CustomerLineDb,
   type FinishOutcome,
   handleRequest,
@@ -39,7 +41,7 @@ const T = {
   contact_request: "{{contact_name}} 申請成為你在「{{merchant_name}}」會員的聯絡人，請到會員中心同意或拒絕：{{member_center_url}}",
   contact_removed: "你已不是「{{merchant_name}}」會員「{{member_name}}」的聯絡人，之後不會再收到這位會員的預約通知。",
   contact_approved: "你已成為「{{merchant_name}}」會員「{{member_name}}」的聯絡人，可以到會員中心查看預約：{{member_center_url}}",
-  contact_rejected: "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。有問題請聯絡店家：{{merchant_phone}}",
+  contact_rejected: "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
 };
 
 const VARS: Record<string, string> = {
@@ -71,7 +73,7 @@ Deno.test("N13-1 每個預設範本代入結果逐字比對", () => {
     contact_request: "王太太 申請成為你在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings",
     contact_removed: "你已不是「涼風工匠」會員「王小明」的聯絡人，之後不會再收到這位會員的預約通知。",
     contact_approved: "你已成為「涼風工匠」會員「王小明」的聯絡人，可以到會員中心查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    contact_rejected: "你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。有問題請聯絡店家：0223456789",
+    contact_rejected: "你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789",
   };
   for (const code of Object.keys(T) as (keyof typeof T)[]) {
     assertEquals(renderCustomerLineMessage(T[code], VARS), expected[code], code);
@@ -82,7 +84,8 @@ Deno.test("N13-2 店家沒填電話 ⇒ 含 {{merchant_phone}} 的那一整行�
   const vars = { ...VARS, merchant_phone: "" };
   assertEquals(renderCustomerLineMessage(T.rescheduled, vars), "「涼風工匠」調整了你的預約時間：\n原本：10月12日（一） 09:00\n改為：10月13日（二） 10:00");
   assertEquals(renderCustomerLineMessage(T.cancelled_by_store, vars), "「涼風工匠」取消了你 10月13日（二） 10:00 的預約。");
-  assertEquals(renderCustomerLineMessage(T.contact_rejected, vars), "");
+  // QA #1:電話那句是獨立一行 ⇒ 店家沒電話時仍會發出前半句(不再整則空白)
+  assertEquals(renderCustomerLineMessage(T.contact_rejected, vars), "你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
 });
 
 Deno.test("N13-3 姓名換行換成空白;變數只代入一次(不遞迴);不認得的原樣保留;截 5000 字", () => {
@@ -231,7 +234,7 @@ Deno.test("S05-5 成功:每位收件人一則(帶該店 token + retry key)、寫
   const w = world({ "ob-1": sendJob() });
   const res = await handleRequest(req(), deps(w));
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { claimed: 1, sent: 1, skipped: 0, failed: 0, retried: 0, quota_exhausted: 0 });
+  assertEquals(await res.json(), { claimed: 1, sent: 1, skipped: 0, failed: 0, retried: 0, quota_exhausted: 0, quota_warned: 0 });
   assertEquals(w.lineCalls.length, 2);
   assertEquals(w.lineCalls[0].url, "https://api.line.me/v2/bot/message/push");
   assertEquals(w.lineCalls[0].auth, `Bearer ${TOKEN}`);
@@ -375,4 +378,146 @@ Deno.test("X02 token / LINE userId 不出現在 console、記錄的錯誤內容�
     assert(!everything.includes(TOKEN), "token leaked");
     assert(!everything.includes(USER_A) && !everything.includes(USER_B), "userId leaked");
   }
+});
+
+// =========================================================================
+// 第 5-B 批(#1047):每月上限雙保險、80% 鈴鐺、提醒 / 完成 / 聯絡人通知照常發
+// =========================================================================
+
+function quotaFetch(quota: { status?: number; body: unknown }, consumption: { status?: number; body: unknown }, w?: World) {
+  return ((input: string, init: RequestInit) => {
+    const url = String(input);
+    const auth = new Headers(init.headers).get("Authorization");
+    if (url.endsWith("/v2/bot/message/quota")) {
+      w?.lineCalls.push({ url, auth, retryKey: null, body: { to: "", messages: [] } });
+      return Promise.resolve(new Response(JSON.stringify(quota.body), { status: quota.status ?? 200 }));
+    }
+    if (url.endsWith("/v2/bot/message/quota/consumption")) {
+      w?.lineCalls.push({ url, auth, retryKey: null, body: { to: "", messages: [] } });
+      return Promise.resolve(new Response(JSON.stringify(consumption.body), { status: consumption.status ?? 200 }));
+    }
+    const body = JSON.parse(String(init.body));
+    w?.lineCalls.push({ url, auth, retryKey: new Headers(init.headers).get("X-Line-Retry-Key"), body });
+    return Promise.resolve(new Response("{}", { status: 200 }));
+  }) as unknown as typeof fetch;
+}
+
+Deno.test("Q01-1 cap_remaining 比收件人少 ⇒ 只發前面幾位,其餘寫 skipped / monthly_cap", async () => {
+  const w = world({ "ob-1": sendJob({ cap_remaining: 1, skipped: [] }) });
+  const res = await handleRequest(req(), deps(w));
+  assertEquals((await res.json()).sent, 1);
+  assertEquals(w.lineCalls.length, 1);
+  assertEquals(w.logs.map((l) => `${l.status}:${l.target_user_id}:${l.skip_reason}`), ["skipped:user-b:monthly_cap", "sent:user-a:null"]);
+  assertEquals(w.finishes, [["ob-1", "sent", null]]);
+});
+
+Deno.test("Q01-2 cap_remaining = 0 ⇒ 不打 LINE,全部 monthly_cap,列 skipped;null(沒設上限)⇒ 照常", async () => {
+  const w = world({ "ob-1": sendJob({ cap_remaining: 0, skipped: [] }) });
+  await handleRequest(req(), deps(w));
+  assertEquals(w.lineCalls.length, 0);
+  assertEquals(w.logs.map((l) => l.skip_reason), ["monthly_cap", "monthly_cap"]);
+  assertEquals(w.finishes, [["ob-1", "skipped", null]]);
+
+  const w2 = world({ "ob-1": sendJob({ cap_remaining: null, skipped: [] }) });
+  await handleRequest(req(), deps(w2));
+  assertEquals(w2.lineCalls.length, 2);
+});
+
+Deno.test("Q01-3 店家那邊(store_*)不受客人通知上限影響", async () => {
+  const w = world({ "ob-1": sendJob({ kind: "store_booking_created", log_event_type: "booking_created", cap_remaining: 0, skipped: [] }) });
+  await handleRequest(req(), deps(w));
+  assertEquals(w.lineCalls.length, 2);
+});
+
+Deno.test("Q04-1 fetchLineQuota:limited / none / 失敗;isQuotaWarning 80% 整數比較", async () => {
+  assertEquals(await fetchLineQuota(quotaFetch({ body: { type: "limited", value: 200 } }, { body: { totalUsage: 160 } }), "https://api.line.me", TOKEN),
+    { type: "limited", limit: 200, used: 160 });
+  assertEquals(await fetchLineQuota(quotaFetch({ body: { type: "none" } }, { body: { totalUsage: 5000 } }), "https://api.line.me", TOKEN),
+    { type: "none", limit: null, used: 5000 });
+  assertEquals(await fetchLineQuota(quotaFetch({ status: 401, body: {} }, { body: { totalUsage: 1 } }), "https://api.line.me", TOKEN), null);
+  assertEquals(await fetchLineQuota(quotaFetch({ body: { type: "limited", value: 200 } }, { body: { oops: 1 } }), "https://api.line.me", TOKEN), null);
+  const throwing = (() => Promise.reject(new Error(`net ${TOKEN}`))) as unknown as typeof fetch;
+  assertEquals(await fetchLineQuota(throwing, "https://api.line.me", TOKEN), null);
+  assertEquals(isQuotaWarning({ type: "limited", limit: 200, used: 160 }), true);
+  assertEquals(isQuotaWarning({ type: "limited", limit: 200, used: 159 }), false);
+  assertEquals(isQuotaWarning({ type: "none", limit: null, used: 999999 }), false);
+  assertEquals(isQuotaWarning(null), false);
+});
+
+function quotaDeps(w: World, opts: { due: boolean; quota: unknown; used: number }) {
+  const d = deps(w);
+  const calls: string[] = [];
+  d.db.quotaCheckDue = (m) => {
+    calls.push(`due:${m}`);
+    return Promise.resolve(opts.due);
+  };
+  d.db.quotaWarning = (m, used, limit) => {
+    calls.push(`warn:${m}:${used}/${limit}`);
+    return Promise.resolve(true);
+  };
+  d.fetchImpl = quotaFetch({ body: opts.quota }, { body: { totalUsage: opts.used } }, w);
+  return { d, calls };
+}
+
+Deno.test("Q04-2 有發出去 + 該查了 + 已用 ≥ 80% ⇒ 查額度(用該店 token)並發鈴鐺;回應 quota_warned 1", async () => {
+  const w = world({ "ob-1": sendJob() });
+  const { d, calls } = quotaDeps(w, { due: true, quota: { type: "limited", value: 200 }, used: 170 });
+  const res = await handleRequest(req(), d);
+  assertEquals((await res.json()).quota_warned, 1);
+  assertEquals(calls, ["due:m-1", "warn:m-1:170/200"]);
+  const quotaCalls = w.lineCalls.filter((c) => c.url.includes("/quota"));
+  assertEquals(quotaCalls.length, 2);
+  assert(quotaCalls.every((c) => c.auth === `Bearer ${TOKEN}`));
+});
+
+Deno.test("Q04-3 未滿 80% / 沒有上限 / 這小時查過 ⇒ 不發鈴鐺;沒有任何一則發出去 ⇒ 連查都不查", async () => {
+  const cases: { due: boolean; quota: unknown; used: number }[] = [
+    { due: true, quota: { type: "limited", value: 200 }, used: 159 },
+    { due: true, quota: { type: "none" }, used: 9999 },
+    { due: false, quota: { type: "limited", value: 200 }, used: 199 },
+  ];
+  for (const opts of cases) {
+    const w = world({ "ob-1": sendJob() });
+    const { d, calls } = quotaDeps(w, opts);
+    const res = await handleRequest(req(), d);
+    assertEquals((await res.json()).quota_warned, 0);
+    assertEquals(calls, ["due:m-1"]);
+    if (!opts.due) assertEquals(w.lineCalls.filter((c) => c.url.includes("/quota")).length, 0);
+  }
+  const w = world({ "ob-1": sendJob({ recipients: [] }) });
+  const { d, calls } = quotaDeps(w, { due: true, quota: { type: "limited", value: 200 }, used: 199 });
+  await handleRequest(req(), d);
+  assertEquals(calls, []);
+});
+
+Deno.test("Q04-4 查額度失敗不影響這次發送結果,也不洩漏 token", async () => {
+  const w = world({ "ob-1": sendJob() });
+  const d = deps(w);
+  d.db.quotaCheckDue = () => Promise.reject(new Error(`db down ${TOKEN}`));
+  d.db.quotaWarning = () => Promise.resolve(true);
+  const res = await handleRequest(req(), d);
+  const body = await res.json();
+  assertEquals(body.sent, 1);
+  assertEquals(body.quota_warned, 0);
+  assert(![JSON.stringify(body), ...w.consoleLines].join("\n").includes(TOKEN));
+});
+
+Deno.test("N07/N08/N09~N11 提醒、完成、聯絡人通知:照一般流程發(資料庫 prepare 不再標 skipped)", async () => {
+  const jobs: Record<string, PreparedJob> = {
+    "ob-r": sendJob({ outbox_id: "ob-r", kind: "customer_reminder", log_event_type: "customer_reminder", template_code: "reminder", template: T.reminder, skipped: [] }),
+    "ob-c": sendJob({ outbox_id: "ob-c", kind: "customer_completed", log_event_type: "customer_completed", template_code: "completed", template: T.completed, skipped: [] }),
+    "ob-q": sendJob({
+      outbox_id: "ob-q", kind: "customer_contact_request", log_event_type: "customer_contact_request", booking_id: null,
+      template_code: "contact_request", template: T.contact_request, skipped: [],
+      recipients: [{ to: USER_A, target_type: "member", target_id: "mem-1", target_user_id: "user-a" }],
+    }),
+  };
+  const w = world(jobs);
+  const res = await handleRequest(req(), deps(w));
+  assertEquals((await res.json()).sent, 3);
+  const texts = w.lineCalls.map((c) => c.body.messages[0].text);
+  assert(texts.includes("提醒你：明天 10:00 在「涼風工匠」有預約。\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings"));
+  assert(texts.includes("王太太 申請成為你在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings"));
+  assertEquals([...new Set(w.logs.map((l) => l.event_type))].sort(), ["customer_completed", "customer_contact_request", "customer_reminder"]);
+  assert(w.logs.filter((l) => l.event_type === "customer_contact_request").every((l) => l.booking_id === null));
 });

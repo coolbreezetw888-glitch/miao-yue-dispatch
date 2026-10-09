@@ -22,6 +22,14 @@
 //
 // 🔒 安全(C5-X02):
 //   ・token 只在記憶體使用:不寫 log、不寫 error_detail / last_error、不回應。
+//
+// 第 5-B 批(#1047)加:
+//   ・C5-Q01 每月客人通知上限:資料庫 prepare 已把超過上限的收件人移到 skipped(monthly_cap);
+//     這裡再用 cap_remaining 擋一次(雙保險)。
+//   ・C5-Q04 80% 鈴鐺:跑完後,這次有發出去的店(每店每小時最多一次,internal_line_quota_check_due 搶時間戳)
+//     查 LINE GET /v2/bot/message/quota 與 /quota/consumption;上限是 limited 且已用 ≥ 80% ⇒
+//     internal_line_quota_warning(同月一則,用完的那則已發過就不再發)。查詢失敗安靜略過。
+//   ・提醒、完成、聯絡人通知:資料庫 prepare 不再標 skipped,跟其他種類同一條路發。
 //   ・console 只印 outbox id 與數字,不印 token / LINE userId / 電話 / 訊息內容。
 //   ・回應只回統計數字。
 //   ・pushLineMessage / renderMessageTemplate 跟其他 LINE function 一樣各寫一份(不跨 function import),這支多 retry key。
@@ -165,6 +173,43 @@ export function resolveLineApiBase(env: (k: string) => string | undefined): stri
   return (env("LINE_MOCK_API_BASE") || official).replace(/\/+$/, "");
 }
 
+export interface LineQuota {
+  /** "none" = 沒有上限;"limited" = 有上限(limit 則)。 */
+  type: "none" | "limited";
+  limit: number | null;
+  used: number;
+}
+
+/**
+ * C5-Q02 / Q04:查官方帳號本月額度(GET /v2/bot/message/quota)與已用則數(GET /v2/bot/message/quota/consumption)。
+ * 任一失敗 ⇒ null(不丟例外、不回錯誤內容)。這兩支查詢不算訊息則數。
+ */
+export async function fetchLineQuota(fetchImpl: typeof fetch, apiBase: string, channelAccessToken: string): Promise<LineQuota | null> {
+  try {
+    const headers = { Authorization: `Bearer ${channelAccessToken}` };
+    const [q, c] = await Promise.all([
+      fetchImpl(`${apiBase}/v2/bot/message/quota`, { method: "GET", headers }),
+      fetchImpl(`${apiBase}/v2/bot/message/quota/consumption`, { method: "GET", headers }),
+    ]);
+    if (!q.ok || !c.ok) return null;
+    const quota = (await q.json()) as { type?: unknown; value?: unknown };
+    const consumption = (await c.json()) as { totalUsage?: unknown };
+    const used = Number(consumption?.totalUsage);
+    if (!Number.isFinite(used) || used < 0) return null;
+    if (quota?.type === "none") return { type: "none", limit: null, used };
+    const limit = Number(quota?.value);
+    if (quota?.type !== "limited" || !Number.isFinite(limit) || limit <= 0) return null;
+    return { type: "limited", limit, used };
+  } catch {
+    return null;
+  }
+}
+
+/** 已用 ≥ 80%(整數比較,避免浮點誤差)。 */
+export function isQuotaWarning(q: LineQuota | null): q is LineQuota & { limit: number } {
+  return !!q && q.type === "limited" && q.limit !== null && q.used * 5 >= q.limit * 4;
+}
+
 // =========================================================================
 // 資料庫介面
 // =========================================================================
@@ -198,6 +243,8 @@ export interface PreparedJob {
   slug?: string | null;
   recipients?: PreparedRecipient[];
   skipped?: PreparedSkipped[];
+  /** C5-Q01:店家有設每月上限時,準備當下還剩幾則;沒設 ⇒ null。 */
+  cap_remaining?: number | null;
 }
 
 export interface LogInsert {
@@ -222,6 +269,10 @@ export interface CustomerLineDb {
   prepare(outboxId: string): Promise<PreparedJob>;
   insertLog(row: LogInsert): Promise<void>;
   finish(outboxId: string, outcome: FinishOutcome, error: string | null): Promise<void>;
+  /** C5-Q04:這間店現在要不要查 LINE 額度(每店每小時最多一次;要 ⇒ 資料庫已記下時間)。沒提供 ⇒ 不查。 */
+  quotaCheckDue?(merchantId: string): Promise<boolean>;
+  /** C5-Q04:已用 ≥ 80% ⇒ 發鈴鐺(同月一則);回 true = 這次有發。 */
+  quotaWarning?(merchantId: string, used: number, limit: number): Promise<boolean>;
 }
 
 export interface Logger {
@@ -237,6 +288,7 @@ export interface DispatchSummary {
   failed: number;
   retried: number;
   quota_exhausted: number;
+  quota_warned: number;
 }
 
 export const CLAIM_BATCH_SIZE = 50;
@@ -247,6 +299,10 @@ const MAX_ATTEMPTS = 3;
 // 主流程
 // =========================================================================
 
+function isCustomerKindOf(kind: string | undefined): boolean {
+  return (kind ?? "").startsWith("customer_");
+}
+
 export async function processJob(
   db: CustomerLineDb,
   fetchImpl: typeof fetch,
@@ -255,6 +311,7 @@ export async function processJob(
   outboxId: string,
   summary: DispatchSummary,
   log: Logger,
+  touched?: Map<string, string>,
 ): Promise<void> {
   const job = await db.prepare(outboxId);
   if (job.state === "not_claimed") return;
@@ -265,7 +322,7 @@ export async function processJob(
     return;
   }
 
-  const isCustomerKind = (job.kind ?? "").startsWith("customer_");
+  const isCustomerKind = isCustomerKindOf(job.kind);
 
   if (job.state === "stale" || job.state === "superseded") {
     if (isCustomerKind) {
@@ -297,7 +354,18 @@ export async function processJob(
     outbox_id: outboxId,
   };
 
-  for (const s of job.skipped ?? []) {
+  // C5-Q01 雙保險:資料庫已依上限截過;萬一收件人還是比剩餘則數多,超過的寫 skipped / monthly_cap。
+  let recipients = job.recipients ?? [];
+  const skippedList = [...(job.skipped ?? [])];
+  if (isCustomerKindOf(job.kind) && typeof job.cap_remaining === "number" && recipients.length > job.cap_remaining) {
+    const keep = Math.max(0, Math.floor(job.cap_remaining));
+    for (const r of recipients.slice(keep)) {
+      skippedList.push({ target_type: r.target_type, target_id: r.target_id, target_user_id: r.target_user_id, reason: "monthly_cap" });
+    }
+    recipients = recipients.slice(0, keep);
+  }
+
+  for (const s of skippedList) {
     await db.insertLog({
       ...baseLog,
       target_type: s.target_type,
@@ -311,9 +379,8 @@ export async function processJob(
     });
   }
 
-  const recipients = job.recipients ?? [];
   if (recipients.length === 0) {
-    await db.finish(outboxId, "skipped", (job.skipped ?? []).length ? null : "no_recipient");
+    await db.finish(outboxId, "skipped", skippedList.length ? null : "no_recipient");
     summary.skipped += 1;
     return;
   }
@@ -367,6 +434,7 @@ export async function processJob(
     );
     if (result.kind === "ok") {
       sent += 1;
+      if (touched && job.merchant_id && job.channel_access_token) touched.set(job.merchant_id, job.channel_access_token);
       await db.insertLog({ ...recipientLog(r), status: "sent", skip_reason: null, error_detail: null, rendered_message: text });
     } else if (result.kind === "permanent") {
       failed += 1;
@@ -428,13 +496,15 @@ export async function runCustomerLineDispatch(
   site: string | null,
   log: Logger,
 ): Promise<DispatchSummary> {
-  const summary: DispatchSummary = { claimed: 0, sent: 0, skipped: 0, failed: 0, retried: 0, quota_exhausted: 0 };
+  const summary: DispatchSummary = { claimed: 0, sent: 0, skipped: 0, failed: 0, retried: 0, quota_exhausted: 0, quota_warned: 0 };
+  // 這次有成功發出去的店 ⇒ 該店 token(只在記憶體;跑完查額度用)。
+  const touched = new Map<string, string>();
   for (let batch = 0; batch < MAX_BATCHES; batch++) {
     const ids = await db.claim(CLAIM_BATCH_SIZE);
     summary.claimed += ids.length;
     for (const id of ids) {
       try {
-        await processJob(db, fetchImpl, apiBase, site, id, summary, log);
+        await processJob(db, fetchImpl, apiBase, site, id, summary, log, touched);
       } catch (_err) {
         // 單一列出錯不中斷整批;那一列留在 processing,10 分鐘後下一次領取時放回 pending(attempts + 1)。
         log.error(`[customer-line-notify-dispatch] 處理失敗(outbox ${id})`);
@@ -442,7 +512,31 @@ export async function runCustomerLineDispatch(
     }
     if (ids.length < CLAIM_BATCH_SIZE) break;
   }
+  await checkQuotaWarnings(db, fetchImpl, apiBase, touched, summary, log);
   return summary;
+}
+
+/** C5-Q04 第 2 點:這次有發出去的店,查 LINE 額度,≥ 80% 發鈴鐺。任何失敗都不影響這次發送結果。 */
+export async function checkQuotaWarnings(
+  db: CustomerLineDb,
+  fetchImpl: typeof fetch,
+  apiBase: string,
+  touched: Map<string, string>,
+  summary: DispatchSummary,
+  log: Logger,
+): Promise<void> {
+  if (!db.quotaCheckDue || !db.quotaWarning) return;
+  for (const [merchantId, token] of touched) {
+    try {
+      if (!(await db.quotaCheckDue(merchantId))) continue;
+      const quota = await fetchLineQuota(fetchImpl, apiBase, token);
+      if (isQuotaWarning(quota) && (await db.quotaWarning(merchantId, quota.used, quota.limit))) {
+        summary.quota_warned += 1;
+      }
+    } catch (_err) {
+      log.warn("[customer-line-notify-dispatch] 查 LINE 額度失敗(略過)");
+    }
+  }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -471,6 +565,20 @@ export function buildDbDeps(client: AnySupabaseClient): CustomerLineDb {
         p_error: errorText,
       });
       if (error) throw new Error("finish failed");
+    },
+    async quotaCheckDue(merchantId) {
+      const { data, error } = await client.rpc("internal_line_quota_check_due", { p_merchant_id: merchantId });
+      if (error) throw new Error("quota check failed");
+      return data === true;
+    },
+    async quotaWarning(merchantId, used, limit) {
+      const { data, error } = await client.rpc("internal_line_quota_warning", {
+        p_merchant_id: merchantId,
+        p_used: used,
+        p_limit: limit,
+      });
+      if (error) throw new Error("quota warning failed");
+      return data === true;
     },
   };
 }

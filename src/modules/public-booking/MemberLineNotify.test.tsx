@@ -66,7 +66,7 @@ describe("C5-M01 ⑧ 加好友提示卡", () => {
     wrap(<MemberAddFriendCard slug="demo" merchantName="涼風工匠" lineNotify={ln} />);
     const card = screen.getByTestId("member-home-add-friend");
     expect(card).toHaveTextContent("加入「涼風工匠」LINE 好友");
-    expect(card).toHaveTextContent("預約確認、改時間、取消都會用 LINE 通知你。");
+    expect(card).toHaveTextContent("預約確認、改時間等消息都會用 LINE 通知你。");
     const go = within(card).getByRole("link", { name: /加入好友/ });
     expect(go).toHaveAttribute("href", URL_OK);
     expect(go).toHaveAttribute("target", "_blank");
@@ -117,17 +117,40 @@ describe("C5-M02 ⑪-1「LINE 通知」區塊", () => {
     expect(document.body.textContent).not.toContain("LINE 通知");
   });
 
-  it("主要 / 第二聯絡人都一樣:只有「預約通知」開關(5-A 不顯示優惠通知);不確定 ⇒ 沒有黃色 !", async () => {
-    state.prefs = ok();
+  it("主要 / 第二聯絡人都一樣:「預約通知」「優惠通知」兩個開關(5-B);不確定 ⇒ 沒有黃色 !", async () => {
+    state.prefs = ok({ notify_promo: false });
     wrap(<MemberLineNotifySection slug="demo" onSessionLost={() => undefined} />);
     const section = await screen.findByTestId("member-line-notify");
     expect(section).toHaveTextContent("LINE 通知");
     expect(section).toHaveTextContent("預約通知");
-    expect(section).toHaveTextContent("預約成立、店家確認、改時間、取消時，用 LINE 通知你。");
-    expect(section).not.toHaveTextContent("優惠通知");
-    expect(within(section).getAllByRole("switch")).toHaveLength(1);
-    expect(within(section).getByRole("switch")).toHaveAttribute("aria-checked", "true");
+    expect(section).toHaveTextContent("預約成立、確認、改時間、取消等通知，以及聯絡人申請。");
+    expect(section).toHaveTextContent("優惠通知");
+    expect(section).toHaveTextContent("店家的優惠活動與生日禮通知。");
+    expect(within(section).getAllByRole("switch")).toHaveLength(2);
+    expect(within(section).getByRole("switch", { name: "預約通知" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(section).getByRole("switch", { name: "優惠通知" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
     expect(screen.queryByTestId("member-line-notify-not-friend")).toBeNull();
+  });
+
+  it("切「優惠通知」⇒ 只送 notifyPromo;「預約通知」不受影響", async () => {
+    state.prefs = ok();
+    state.setResult = ok({ notify_promo: false });
+    wrap(<MemberLineNotifySection slug="demo" onSessionLost={() => undefined} />);
+    const section = await screen.findByTestId("member-line-notify");
+    const promo = within(section).getByRole("switch", { name: "優惠通知" });
+    await userEvent.click(promo);
+    await waitFor(() => expect(promo).toHaveAttribute("aria-checked", "false"));
+    expect(state.setCalls).toEqual([{ notifyPromo: false }]);
+    expect(within(section).getByRole("switch", { name: "預約通知" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("確定沒加好友 ⇒ 常駐黃色 ! + 加入好友連結", async () => {
@@ -142,7 +165,9 @@ describe("C5-M02 ⑪-1「LINE 通知」區塊", () => {
     state.prefs = ok();
     state.setResult = ok({ notify_booking: false });
     wrap(<MemberLineNotifySection slug="demo" onSessionLost={() => undefined} />);
-    const sw = within(await screen.findByTestId("member-line-notify")).getByRole("switch");
+    const sw = within(await screen.findByTestId("member-line-notify")).getByRole("switch", {
+      name: "預約通知",
+    });
     await userEvent.click(sw);
     await waitFor(() => expect(sw).toHaveAttribute("aria-checked", "false"));
     expect(state.setCalls).toEqual([{ notifyBooking: false }]);
@@ -154,7 +179,9 @@ describe("C5-M02 ⑪-1「LINE 通知」區塊", () => {
     state.prefs = ok();
     state.setError = true;
     wrap(<MemberLineNotifySection slug="demo" onSessionLost={() => undefined} />);
-    const sw = within(await screen.findByTestId("member-line-notify")).getByRole("switch");
+    const sw = within(await screen.findByTestId("member-line-notify")).getByRole("switch", {
+      name: "預約通知",
+    });
     await userEvent.click(sw);
     await waitFor(() => expect(state.toasts).toEqual(["儲存失敗，請稍後再試"]));
     expect(sw).toHaveAttribute("aria-checked", "true");

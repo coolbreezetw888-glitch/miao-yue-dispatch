@@ -20,6 +20,7 @@ import type {
   PendingLineNotificationPreview,
 } from "./types";
 import { LINE_LOG_CUSTOMER_CATEGORY_FILTER } from "./types";
+import { parseLineMarketingPreview, type LineMarketingPreview } from "./marketingPreview";
 
 // =========================================================================
 // 3.1~3.3:LINE 官方帳號串接憑證管理(規則 2.1,僅商家管理員)。
@@ -518,6 +519,42 @@ export function useMarketableMembers(
     queryKey: ["line-notifications-module", "marketable-members", merchantId],
     queryFn: () => fetchMarketableMembers(merchantId as string),
     enabled: Boolean(merchantId),
+  });
+}
+
+/**
+ * 客戶端第 5 批 5-B(C5-P01):選到的會員會收到幾則(權限同行銷:管理員或 line_marketing 客服)。
+ * 不回 LINE userId,只回每位會員收得到幾人與合計。
+ */
+export async function previewLineMarketingRecipients(
+  merchantId: string,
+  memberIds: string[],
+): Promise<LineMarketingPreview> {
+  const { data, error } = await (
+    supabase.rpc.bind(supabase) as unknown as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => PromiseLike<{ data: unknown; error: unknown }>
+  )("preview_line_marketing_recipients", {
+    p_merchant_id: merchantId,
+    p_member_ids: memberIds,
+  });
+  if (error) throw error;
+  return parseLineMarketingPreview(data);
+}
+
+export function useLineMarketingPreview(
+  merchantId: string | null | undefined,
+  memberIds: string[],
+  enabled: boolean,
+): UseQueryResult<LineMarketingPreview> {
+  const sorted = [...memberIds].sort();
+  return useQuery({
+    queryKey: ["line-notifications-module", "marketing-preview", merchantId, sorted],
+    queryFn: () => previewLineMarketingRecipients(merchantId as string, sorted),
+    enabled: Boolean(merchantId) && enabled && sorted.length > 0 && sorted.length <= 5000,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
 }
 

@@ -95,3 +95,57 @@ Deno.test(
     assertEquals(skippedBlacklisted[0].memberId, "m4-blacklisted");
   },
 );
+
+// =========================================================================
+// 客戶端第 5-B 批 C5-P01(#1047):照每位聯絡人的「優惠通知」開關發
+// =========================================================================
+const CONTACT_MEMBERS: MarketingMemberRow[] = [
+  {
+    id: "c1", name: "公司會員", line_bound: false, line_user_id: null, is_blacklisted: false,
+    contacts: [
+      { user_id: "u-primary", line_user_id: "Uprimary", notify_promo: true, friend_status: "unknown" },
+      { user_id: "u-second", line_user_id: "Usecond", notify_promo: true, friend_status: "friend" },
+      { user_id: "u-off", line_user_id: "Uoff", notify_promo: false, friend_status: "friend" },
+      { user_id: "u-block", line_user_id: "Ublock", notify_promo: true, friend_status: "not_friend" },
+      { user_id: "u-otherch", line_user_id: null, notify_promo: true, friend_status: "unknown" },
+    ],
+  },
+  {
+    id: "c2-blacklisted", name: "黑名單公司", line_bound: false, line_user_id: null, is_blacklisted: true,
+    contacts: [{ user_id: "u-x", line_user_id: "Ux", notify_promo: true, friend_status: "friend" }],
+  },
+  { id: "c3-legacy-blocked", name: "舊綁定封鎖", line_bound: true, line_user_id: "Ulegacy", is_blacklisted: false, contacts: [], legacy_friend_status: "not_friend" },
+  { id: "c4-legacy", name: "舊綁定", line_bound: true, line_user_id: "Ulegacy4", is_blacklisted: false, contacts: [], legacy_friend_status: "unknown" },
+];
+
+Deno.test("C5-P01-1 多聯絡人:開著的各一則;關掉 ⇒ opted_out;已知非好友 ⇒ not_friend;沒有這間店身分 ⇒ not_bound", () => {
+  const plan = buildMarketingDispatchPlan(["c1"], CONTACT_MEMBERS);
+  assertEquals(plan.map((p) => `${p.targetUserId}:${p.status}:${p.lineUserId}`), [
+    "u-primary:will_send:Uprimary",
+    "u-second:will_send:Usecond",
+    "u-off:skipped_opted_out:null",
+    "u-block:skipped_not_friend:null",
+    "u-otherch:skipped_not_bound:null",
+  ]);
+  assertEquals(plan.every((p) => p.memberId === "c1" && p.name === "公司會員"), true);
+});
+
+Deno.test("C5-P01-2 黑名單仍然優先擋(即使聯絡人都開著優惠通知)", () => {
+  const plan = buildMarketingDispatchPlan(["c2-blacklisted"], CONTACT_MEMBERS);
+  assertEquals(plan.length, 1);
+  assertEquals(plan[0].status, "skipped_blacklisted");
+  assertEquals(plan[0].lineUserId, null);
+});
+
+Deno.test("C5-P01-3 沒有聯絡人的舊綁定碼會員:照舊發;已知非好友 ⇒ not_friend", () => {
+  const plan = buildMarketingDispatchPlan(["c3-legacy-blocked", "c4-legacy"], CONTACT_MEMBERS);
+  assertEquals(plan.map((p) => `${p.memberId}:${p.status}:${p.lineUserId}:${p.targetUserId}`), [
+    "c3-legacy-blocked:skipped_not_friend:null:null",
+    "c4-legacy:will_send:Ulegacy4:null",
+  ]);
+});
+
+Deno.test("C5-P01-4 混合:則數 = 實際要發的聯絡人數(跟 preview_line_marketing_recipients 規則一致)", () => {
+  const plan = buildMarketingDispatchPlan(["c1", "c2-blacklisted", "c3-legacy-blocked", "c4-legacy", "m1", "missing"], [...CONTACT_MEMBERS, ...MEMBERS]);
+  assertEquals(plan.filter((p) => p.status === "will_send").length, 4);
+});

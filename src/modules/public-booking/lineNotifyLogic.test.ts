@@ -55,12 +55,10 @@ describe("C5-M01 ⑧ 提示卡顯示條件(全部成立才顯示)", () => {
     expect(home && "lineNotify" in home ? home.lineNotify.available : null).toBe(false);
   });
 
-  it("文案:標題帶店名、說明不提 5-B 才有的服務前提醒", () => {
+  it("文案:標題帶店名;不承諾預設關的服務前提醒(主腦裁決 #7)", () => {
     expect(addFriendCardTitle("涼風工匠")).toBe("加入「涼風工匠」LINE 好友");
-    expect(ADD_FRIEND_CARD_BODY).toBe("預約確認、改時間、取消都會用 LINE 通知你。");
-    expect(ADD_FRIEND_CARD_BODY).not.toContain("提醒");
-    expect(BOOKING_SWITCH_DESCRIPTION).not.toContain("提醒");
-    expect(BOOKING_SWITCH_DESCRIPTION).not.toContain("聯絡人申請");
+    expect(ADD_FRIEND_CARD_BODY).toBe("預約確認、改時間等消息都會用 LINE 通知你。");
+    expect(BOOKING_SWITCH_DESCRIPTION).toBe("預約成立、確認、改時間、取消等通知，以及聯絡人申請。");
   });
 });
 
@@ -137,8 +135,8 @@ describe("C5-M02 ⑪-1 區塊顯示規則", () => {
     expect(shouldShowNotFriendNote(prefs({ friend_status: "friend" }))).toBe(false);
   });
 
-  it("5-A 不顯示「優惠通知」開關(照開關發送是 5-B)", () => {
-    expect(PROMO_SWITCH_VISIBLE).toBe(false);
+  it("5-B 起顯示「優惠通知」開關(行銷 / 生日禮照開關發送)", () => {
+    expect(PROMO_SWITCH_VISIBLE).toBe(true);
   });
 });
 

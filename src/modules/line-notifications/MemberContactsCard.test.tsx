@@ -208,22 +208,21 @@ describe("C5-F03 聯絡人卡多「LINE 好友 / 預約通知 / 優惠通知」(
     renderCard();
     const rows = await screen.findAllByTestId("member-contacts-card-row");
     expect(within(rows[0]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
-      "LINE 好友：已加入・預約通知：開",
+      "LINE 好友：已加入・預約通知：開・優惠通知：關",
     );
     expect(within(rows[1]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
-      "LINE 好友：未加入・預約通知：關",
+      "LINE 好友：未加入・預約通知：關・優惠通知：開",
     );
-    // 唯讀:沒有任何開關;「優惠通知」5-A 不顯示(跟客人端 PROMO_SWITCH_VISIBLE 連動)。
+    // 唯讀:沒有任何開關;「優惠通知」5-B 起跟客人端一起顯示(PROMO_SWITCH_VISIBLE)。
     expect(screen.queryByRole("switch")).toBeNull();
-    expect(PROMO_SWITCH_VISIBLE).toBe(false);
-    expect(screen.getByTestId("member-contacts-card")).not.toHaveTextContent("優惠通知");
+    expect(PROMO_SWITCH_VISIBLE).toBe(true);
   });
 
   it("舊版回傳(沒有這三個欄位)⇒ 不確定 / 開", async () => {
     renderCard();
     const rows = await screen.findAllByTestId("member-contacts-card-row");
     expect(within(rows[0]!).getByTestId("member-contacts-card-notify")).toHaveTextContent(
-      "LINE 好友：不確定・預約通知：開",
+      "LINE 好友：不確定・預約通知：開・優惠通知：開",
     );
   });
 

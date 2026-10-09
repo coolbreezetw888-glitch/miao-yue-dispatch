@@ -377,7 +377,8 @@ test("C5-M01 ⑧ 加好友提示卡:網址、稍後再說、已加好友就不�
   await page.goto(`/booking/${c1.slugA}/me`);
   const card = page.getByTestId("member-home-add-friend");
   await expect(card).toContainText(`加入「${SHOP_A_NAME}」LINE 好友`, { timeout: LOAD_TIMEOUT });
-  await expect(card).toContainText("預約確認、改時間、取消都會用 LINE 通知你。");
+  // 主腦裁決 #7:服務前提醒預設關,文案不承諾會發。
+  await expect(card).toContainText("預約確認、改時間等消息都會用 LINE 通知你。");
   await expect(card.getByTestId("member-home-add-friend-go")).toHaveAttribute(
     "href",
     ADD_FRIEND_URL,
@@ -415,10 +416,11 @@ test("C5-M02 ⑪-1 主要聯絡人:沒加好友黃 !、切預約通知寫進自�
   await expect(page.getByTestId("member-line-notify-not-friend")).toContainText(
     "你還沒有加入店家的 LINE 好友，開著也收不到通知。",
   );
-  await expect(section).not.toContainText("優惠通知");
+  // 5-B(#1047)起「優惠通知」開關一起出現。
+  await expect(section).toContainText("優惠通知");
   await shot(page, "c5a-05-profile-primary-not-friend");
 
-  const sw = section.getByRole("switch");
+  const sw = section.getByRole("switch", { name: "預約通知" });
   await expect(sw).toHaveAttribute("aria-checked", "true");
   await sw.click();
   await expect(sw).toHaveAttribute("aria-checked", "false", { timeout: LOAD_TIMEOUT });
@@ -428,11 +430,9 @@ test("C5-M02 ⑪-1 主要聯絡人:沒加好友黃 !、切預約通知寫進自�
     .toBe(false);
   expect(contactPrefs().find((c) => c.user_id === userB)?.notify_booking).toBe(true);
   await page.reload();
-  await expect(page.getByTestId("member-line-notify").getByRole("switch")).toHaveAttribute(
-    "aria-checked",
-    "false",
-    { timeout: LOAD_TIMEOUT },
-  );
+  await expect(
+    page.getByTestId("member-line-notify").getByRole("switch", { name: "預約通知" }),
+  ).toHaveAttribute("aria-checked", "false", { timeout: LOAD_TIMEOUT });
   // 預約通知關掉 ⇒ 首頁不再出現加好友卡。
   await page.goto(`/booking/${c1.slugA}/me`);
   await expect(page.getByTestId("member-home-greeting")).toBeVisible({ timeout: LOAD_TIMEOUT });
@@ -442,7 +442,7 @@ test("C5-M02 ⑪-1 主要聯絡人:沒加好友黃 !、切預約通知寫進自�
   // 開回來;好友狀態改回「不確定」⇒ 沒有黃 !
   setFriend(SUB_A, null);
   await page.goto(`/booking/${c1.slugA}/me/profile`);
-  const sw2 = page.getByTestId("member-line-notify").getByRole("switch");
+  const sw2 = page.getByTestId("member-line-notify").getByRole("switch", { name: "預約通知" });
   await sw2.click({ timeout: LOAD_TIMEOUT });
   await expect(sw2).toHaveAttribute("aria-checked", "true", { timeout: LOAD_TIMEOUT });
   await expect(page.getByTestId("member-line-notify-not-friend")).toHaveCount(0);
@@ -464,7 +464,7 @@ test("C5-M02 ⑪-1 第二聯絡人:只改到自己那列", async ({ page }) => {
   await asCustomer(page, SUB_B, LINE_B);
   await page.goto(`/booking/${c1.slugA}/me/profile`);
   await expect(page.getByTestId("member-profile-readonly")).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const sw = page.getByTestId("member-line-notify").getByRole("switch");
+  const sw = page.getByTestId("member-line-notify").getByRole("switch", { name: "預約通知" });
   await expect(sw).toHaveAttribute("aria-checked", "true", { timeout: LOAD_TIMEOUT });
   await shot(page, "c5a-07-profile-secondary");
   await sw.click();
@@ -490,8 +490,9 @@ test("C5-K01 / K02 後台「通知客人」卡:改開關 / 範本 / 恢復預設
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByTestId("customer-line-not-connected")).toHaveCount(0);
-  await expect(card.getByRole("switch")).toHaveCount(6);
-  await expect(card).not.toContainText("服務前提醒");
+  // 5-B(#1047)加服務前提醒、服務完成、聯絡人申請與移除 ⇒ 9 種。
+  await expect(card.getByRole("switch")).toHaveCount(9);
+  await expect(card).toContainText("服務前提醒");
   for (const t of ["booking_created", "booking_confirmed", "booking_cancelled"]) {
     await expect(
       page.getByTestId(`line-event-card-${t}`).getByRole("button", { name: /會員/ }),
@@ -750,7 +751,7 @@ test("C5-K03 發送記錄「通知客人」+ C5-F03 會員聯絡人卡 + 額度�
     insert into public.user_notifications (user_id, merchant_id, target_type, target_id, event_type, title, body)
     values ('${uuid(c1.userId)}', '${m}', 'admin', '${uuid(adminRow.data!.id as string)}', 'line_quota_exhausted',
       'LINE 訊息額度已用完',
-      'LINE 官方帳號本月訊息額度已用完，這個月的 LINE 通知(包含員工通知)都會發送失敗，下個月 1 日自動恢復。');
+      'LINE 官方帳號本月訊息額度已用完，這個月的 LINE 通知（包含員工通知）都會發送失敗，下個月 1 日自動恢復。');
   `);
 
   await asAdmin(page);

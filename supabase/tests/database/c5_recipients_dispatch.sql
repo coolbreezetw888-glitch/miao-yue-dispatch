@@ -189,7 +189,8 @@ update merchant_customer_line_settings set on_confirmed = true where merchant_id
 select pg_temp.ob('00326', 'customer_confirmed', '00201', '{}', 'pending');
 select is(public.internal_prepare_customer_line_job('c5b00000-0000-4000-8000-000000000326') ->> 'state', 'not_claimed', 'S05-14 沒領取的列不能準備');
 select pg_temp.ob('00327', 'customer_reminder', '00201');
-select is(public.internal_prepare_customer_line_job('c5b00000-0000-4000-8000-000000000327') ->> 'reason', 'unsupported', 'S05-15 5-B 的種類這批不發');
+select is(public.internal_prepare_customer_line_job('c5b00000-0000-4000-8000-000000000327') ->> 'reason', 'event_disabled',
+          'S05-15 (5-B 起)提醒不再標 unsupported;店家沒開「服務前提醒」(Q1=A 預設關)⇒ 安靜結束');
 select pg_temp.ob('00328', 'customer_cancelled_by_customer', '00210', '{"actor_user_id":"c5b00000-0000-4000-8000-000000000013"}');
 select is(public.internal_prepare_customer_line_job('c5b00000-0000-4000-8000-000000000328') -> 'variables' ->> 'contact_name', E'會計\n小姐',
           'S05-16 客人取消:contact_name = 取消那位的 LINE 顯示名(換行由 Edge 代入時處理)');

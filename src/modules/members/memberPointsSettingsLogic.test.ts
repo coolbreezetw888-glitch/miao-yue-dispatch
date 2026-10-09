@@ -297,7 +297,7 @@ describe("§4.3 點數使用:驗證 + 範例試算(對齊 compute_booking_redeem
 });
 
 describe("§4.5 生日獎勵", () => {
-  it("v2.4 第 20 條:7 種 LINE 狀態都有中文標籤,兩個新略過狀態用指定文案", () => {
+  it("v2.4 第 20 條 + 客戶端 5-B:8 種 LINE 狀態都有中文標籤,略過狀態用指定文案", () => {
     const all: BirthdayLineStatus[] = [
       "pending",
       "sent",
@@ -306,6 +306,7 @@ describe("§4.5 生日獎勵", () => {
       "skipped_not_connected",
       "skipped_member_removed",
       "skipped_merchant_disabled",
+      "skipped_opted_out",
     ];
     expect(Object.keys(BIRTHDAY_LINE_STATUS_LABELS).sort()).toEqual([...all].sort());
     expect(BIRTHDAY_LINE_STATUS_LABELS).toEqual({
@@ -316,6 +317,7 @@ describe("§4.5 生日獎勵", () => {
       skipped_not_connected: "商家未連線略過",
       skipped_member_removed: "會員已下架，未發送",
       skipped_merchant_disabled: "商家已停用，未發送",
+      skipped_opted_out: "未發送（客人關閉優惠通知）",
     });
   });
   it("狀態顏色:已發送綠、待發送黃、失敗紅、各種略過灰", () => {
@@ -324,6 +326,8 @@ describe("§4.5 生日獎勵", () => {
     expect(birthdayLineStatusTone("failed")).toBe("danger");
     expect(birthdayLineStatusTone("skipped_member_removed")).toBe("neutral");
     expect(birthdayLineStatusTone("skipped_merchant_disabled")).toBe("neutral");
+    // 客戶端第 5-B 批:客人關閉優惠通知 = 略過(灰),不是失敗。
+    expect(birthdayLineStatusTone("skipped_opted_out")).toBe("neutral");
   });
   it("字數照資料庫 char_length:emoji 算 1 個字", () => {
     expect(countMessageChars("生日快樂🎂")).toBe(5);

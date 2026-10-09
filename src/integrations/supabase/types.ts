@@ -2108,6 +2108,7 @@ export type Database = {
           on_scheduled_by_store: boolean
           on_submitted: boolean
           quota_blocked_until: string | null
+          quota_checked_at: string | null
           quota_warned_month: string | null
           reminder_hours_before: number
           templates: Json
@@ -2128,6 +2129,7 @@ export type Database = {
           on_scheduled_by_store?: boolean
           on_submitted?: boolean
           quota_blocked_until?: string | null
+          quota_checked_at?: string | null
           quota_warned_month?: string | null
           reminder_hours_before?: number
           templates?: Json
@@ -2148,6 +2150,7 @@ export type Database = {
           on_scheduled_by_store?: boolean
           on_submitted?: boolean
           quota_blocked_until?: string | null
+          quota_checked_at?: string | null
           quota_warned_month?: string | null
           reminder_hours_before?: number
           templates?: Json
@@ -4394,6 +4397,10 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      get_customer_line_usage: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
       get_customer_related_bookings: {
         Args: {
           p_customer_phone: string
@@ -4741,6 +4748,18 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      internal_line_marketing_candidates: {
+        Args: { p_member_ids: string[]; p_merchant_id: string }
+        Returns: Json
+      }
+      internal_line_quota_check_due: {
+        Args: { p_merchant_id: string }
+        Returns: boolean
+      }
+      internal_line_quota_warning: {
+        Args: { p_limit: number; p_merchant_id: string; p_used: number }
+        Returns: boolean
+      }
       internal_prepare_customer_line_job: {
         Args: { p_outbox_id: string }
         Returns: Json
@@ -4941,6 +4960,10 @@ export type Database = {
           p_tax_mode: string
           p_tax_value: number
         }
+        Returns: Json
+      }
+      preview_line_marketing_recipients: {
+        Args: { p_member_ids: string[]; p_merchant_id: string }
         Returns: Json
       }
       preview_line_notification_targets: {
@@ -5285,6 +5308,10 @@ export type Database = {
           p_merchant_id: string
         }
         Returns: undefined
+      }
+      set_customer_line_monthly_cap: {
+        Args: { p_merchant_id: string; p_monthly_cap: number | null }
+        Returns: Json
       }
       set_merchant_line_login_config: {
         Args: {

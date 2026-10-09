@@ -236,6 +236,11 @@ verify_jwt = false
 [functions.customer-line-notify-dispatch]
 verify_jwt = false
 
+# 客戶端第 5-B 批 C5-Q02:後台額度區由登入的管理員 / 客服呼叫,帶使用者 JWT ⇒ verify_jwt = true(明寫,不靠預設值);
+# 權限在資料庫 get_customer_line_usage 裡擋(can_manage_line_notification)。
+[functions.line-quota-status]
+verify_jwt = true
+
 [analytics]
 enabled = false
 port = 54327

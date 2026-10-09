@@ -3,8 +3,7 @@
 //
 // ・伺服器回的 line_notify / 通知偏好一律在這裡白名單 parse;看不懂的欄位當「不能用」處理
 //   (寧可不顯示,也不要在畫面承諾做不到的事,鐵律「不承諾做不到的功能」)。
-// ・🔴 不承諾 5-B 才有的功能:服務前提醒、服務完成、聯絡人申請通知、優惠通知照開關發送,這批都還沒有
-//   ⇒ 說明文字不提「服務前提醒」「聯絡人申請」;「優惠通知」開關先不顯示(PROMO_SWITCH_VISIBLE)。
+// ・5-A 時拿掉的「服務前提醒」「聯絡人申請」說明與「優惠通知」開關,5-B(#1047)功能做好後加回(規格原句)。
 // ・「稍後再說」記在瀏覽器 7 天(C5-M01 ⚠️);讀不到就再顯示一次(可接受)。
 
 export type LineFriendStatus = "friend" | "not_friend" | "unknown";
@@ -25,13 +24,13 @@ export interface MemberNotifyPrefs extends MemberLineNotify {
   notifyPromo: boolean;
 }
 
-/** 「優惠通知」開關要不要顯示(5-A = false;值放在 src/lib/customerLinePromo.ts,後台聯絡人卡共用)。 */
+/** 「優惠通知」開關要不要顯示(5-B 起 true;值放在 src/lib/customerLinePromo.ts,後台聯絡人卡共用)。 */
 export { PROMO_SWITCH_VISIBLE } from "@/lib/customerLinePromo";
 
 export const LINE_NOTIFY_SECTION_TITLE = "LINE 通知";
 export const BOOKING_SWITCH_TITLE = "預約通知";
-/** 5-A 版說明(拿掉 5-B 才有的「服務前提醒」「聯絡人申請」)。 */
-export const BOOKING_SWITCH_DESCRIPTION = "預約成立、店家確認、改時間、取消時，用 LINE 通知你。";
+/** C5-M02(主腦 2026-10-09 裁決 #7:服務前提醒預設關,固定文案不承諾會發 ⇒ 用「等通知」)。 */
+export const BOOKING_SWITCH_DESCRIPTION = "預約成立、確認、改時間、取消等通知，以及聯絡人申請。";
 export const PROMO_SWITCH_TITLE = "優惠通知";
 export const PROMO_SWITCH_DESCRIPTION = "店家的優惠活動與生日禮通知。";
 export const NOT_FRIEND_NOTE = "你還沒有加入店家的 LINE 好友，開著也收不到通知。";
@@ -42,8 +41,8 @@ export const ADD_FRIEND_AFTER_NOTE = "加好友後回到這裡重新整理就好
 export function addFriendCardTitle(merchantName: string): string {
   return `加入「${merchantName}」LINE 好友`;
 }
-/** ⑧ 提示卡說明(5-A 版,不提「服務前提醒」)。 */
-export const ADD_FRIEND_CARD_BODY = "預約確認、改時間、取消都會用 LINE 通知你。";
+/** ⑧ 提示卡說明(C5-M01;主腦裁決 #7:不寫「服務前提醒」,那是店家可關、預設關的)。 */
+export const ADD_FRIEND_CARD_BODY = "預約確認、改時間等消息都會用 LINE 通知你。";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

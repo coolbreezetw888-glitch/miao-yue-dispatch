@@ -1,14 +1,15 @@
-// 客戶端第 5 批 5-A(C5-K02,不含上限欄位;C5-Q03 用量小字):「LINE 通知事件」頁最上方的「通知客人」卡。
+// 客戶端第 5 批(C5-K02、C5-Q01~Q03):「LINE 通知事件」頁最上方的「通知客人」卡。
 // 規格:.project/specs/客戶端第5批-LINE通知與綁定.md;純邏輯在 customerLineSettingsLogic.ts。
 //
 // ・權限跟這一頁一樣(管理員 + 有 LINE 通知權限的客服,頁面外層 RequireLineNotificationAccess 已擋;
-//   資料庫函式也擋)。5-A 沒有「每月上限」,所以管理員 / 客服看到的一樣。
+//   資料庫函式也擋)。
 // ・每種通知一列:開關(切換立即儲存)+ 何時發 + 大約用幾則 +「編輯文字」(展開文字框 + 變數按鈕 + 即時預覽)。
 //   文字改過才出現「恢復預設」;沒改時「儲存文字」停用並常駐黃色 !(ui-overlay-patterns 二之三)。
 // ・同一頁很多張一樣的卡,儲存鈕一律用次要(skill 二之三例外條款)。
-// ・🔴 5-B 的東西(服務前提醒、服務完成、聯絡人通知、每月上限、本月已用幾則)這裡都不放。
+// ・5-B(#1047):額度區(本月已用幾則、停發中紅字)+ 每月客人通知上限(只有管理員看得到、改得到)、
+//   服務前提醒(含「服務前 N 小時」下拉,改了立即儲存)、服務完成、聯絡人申請與移除。
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -25,8 +26,11 @@ import {
   CardAlertDialogHeader,
   CardAlertDialogTitle,
   ErrorState,
+  FieldInput,
+  FieldNativeSelect,
   FieldTextarea,
   FormField,
+  HelpToggle,
   LoadingSkeleton,
   SwitchRow,
 } from "@/components/patterns";
@@ -37,8 +41,11 @@ import { useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
   customerLineSettingsQueryKey,
+  lineQuotaStatusQueryKey,
+  setCustomerLineMonthlyCap,
   updateCustomerLineSettings,
   useCustomerLineSettings,
+  useLineQuotaStatus,
   type CustomerLineSettingsPatch,
 } from "./customerLineSettingsApi";
 import {
@@ -51,8 +58,19 @@ import {
   customerLineSampleValues,
   customerLineTemplateVariables,
   effectiveCustomerLineTemplate,
+  formatMonthlyCapReadonly,
+  formatQuotaSummary,
+  isQuotaBlocked,
   LINE_LOGIN_OFF_NOTE,
+  MONTHLY_CAP_HELP,
+  MONTHLY_CAP_INVALID_MESSAGE,
+  monthlyCapToInput,
   NOT_CONNECTED_NOTE,
+  parseMonthlyCapInput,
+  QUOTA_BLOCKED_NOTE,
+  QUOTA_HELP,
+  QUOTA_LINE_UNAVAILABLE_NOTE,
+  REMINDER_HOURS_OPTIONS,
   renderCustomerLineTemplate,
   validateCustomerLineTemplate,
   type CustomerLineKindDefinition,
@@ -76,6 +94,7 @@ export function CustomerLineSettingsCard(props: CustomerLineSettingsCardProps) {
   const { data: role } = useCurrentMerchantRole();
   const { data: settings, isLoading, isError, refetch } = useCustomerLineSettings(merchantId);
   const [savingSwitch, setSavingSwitch] = useState<CustomerLineSwitchKey | null>(null);
+  const [savingHours, setSavingHours] = useState(false);
 
   async function save(patch: CustomerLineSettingsPatch): Promise<boolean> {
     try {
@@ -105,6 +124,26 @@ export function CustomerLineSettingsCard(props: CustomerLineSettingsCardProps) {
     }
     setSavingSwitch(null);
   }
+
+  async function changeReminderHours(hours: number) {
+    if (!settings || savingHours || hours === settings.reminderHoursBefore) return;
+    const before = settings;
+    queryClient.setQueryData<CustomerLineSettings>(customerLineSettingsQueryKey(merchantId), {
+      ...before,
+      reminderHoursBefore: hours,
+    });
+    setSavingHours(true);
+    const ok = await save({ reminderHoursBefore: hours });
+    if (!ok) {
+      queryClient.setQueryData(customerLineSettingsQueryKey(merchantId), before);
+    } else {
+      toast.success("已儲存提醒時間");
+    }
+    setSavingHours(false);
+  }
+
+  // 每月上限只有管理員(伺服器回的 is_admin 為準;沒回時看目前角色)。
+  const isAdmin = settings ? (settings.isAdmin ?? role === "admin") : false;
 
   return (
     <Card data-testid="customer-line-card">
@@ -156,6 +195,15 @@ export function CustomerLineSettingsCard(props: CustomerLineSettingsCardProps) {
               {CUSTOMER_LINE_USAGE.quotaNote}
             </p>
 
+            <QuotaSection
+              merchantId={merchantId}
+              settings={settings}
+              isAdmin={isAdmin}
+              onSaved={(next) =>
+                queryClient.setQueryData(customerLineSettingsQueryKey(merchantId), next)
+              }
+            />
+
             <div className="flex flex-col gap-3">
               {CUSTOMER_LINE_KINDS.map((kind) => (
                 <KindRow
@@ -164,6 +212,8 @@ export function CustomerLineSettingsCard(props: CustomerLineSettingsCardProps) {
                   settings={settings}
                   saving={savingSwitch === kind.key}
                   onToggle={(v) => void toggle(kind.key, v)}
+                  savingHours={savingHours}
+                  onChangeHours={(h) => void changeReminderHours(h)}
                   onSaveTemplate={save}
                   cardProps={props}
                 />
@@ -185,6 +235,8 @@ function KindRow({
   settings,
   saving,
   onToggle,
+  savingHours,
+  onChangeHours,
   onSaveTemplate,
   cardProps,
 }: {
@@ -192,6 +244,8 @@ function KindRow({
   settings: CustomerLineSettings;
   saving: boolean;
   onToggle: (value: boolean) => void;
+  savingHours: boolean;
+  onChangeHours: (hours: number) => void;
   onSaveTemplate: (patch: CustomerLineSettingsPatch) => Promise<boolean>;
   cardProps: CustomerLineSettingsCardProps;
 }) {
@@ -219,6 +273,32 @@ function KindRow({
         <p className="text-xs leading-snug text-muted-foreground" data-testid="customer-line-usage">
           {`大約用量：${kind.usage}`}
         </p>
+        {kind.key === "on_reminder" ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label
+              htmlFor="customer-line-reminder-hours"
+              className="text-[13px] font-semibold text-foreground"
+            >
+              服務前
+            </label>
+            <FieldNativeSelect
+              id="customer-line-reminder-hours"
+              className="w-24"
+              value={String(settings.reminderHoursBefore)}
+              disabled={savingHours}
+              onChange={(e) => onChangeHours(Number(e.target.value))}
+              options={REMINDER_HOURS_OPTIONS.map((h) => ({ value: String(h), label: String(h) }))}
+              data-testid="customer-line-reminder-hours"
+            />
+            <span className="text-[13px] text-foreground">小時提醒</span>
+            {savingHours ? (
+              <Loader2
+                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+                aria-hidden="true"
+              />
+            ) : null}
+          </div>
+        ) : null}
         <Button
           type="button"
           variant="text"
@@ -431,5 +511,161 @@ function TemplateEditor({
         </CardAlertDialogContent>
       </CardAlertDialog>
     </div>
+  );
+}
+
+// =========================================================================
+// 5-B 額度區(C5-Q02)+ 每月客人通知上限(C5-Q01,只有管理員看得到、改得到)
+// =========================================================================
+
+function QuotaSection({
+  merchantId,
+  settings,
+  isAdmin,
+  onSaved,
+}: {
+  merchantId: string;
+  settings: CustomerLineSettings;
+  isAdmin: boolean;
+  onSaved: (next: CustomerLineSettings) => void;
+}) {
+  const queryClient = useQueryClient();
+  // 沒接上官方帳號就不查 LINE(查不到,也不會有用量)。
+  const quota = useLineQuotaStatus(merchantId, settings.isConnected);
+  const blockedUntil = settings.quotaBlockedUntil ?? quota.data?.blockedUntil ?? null;
+  const blocked = isQuotaBlocked(blockedUntil);
+
+  const [capText, setCapText] = useState(monthlyCapToInput(settings.monthlyCap));
+  const [savingCap, setSavingCap] = useState(false);
+  useEffect(() => {
+    setCapText(monthlyCapToInput(settings.monthlyCap));
+  }, [settings.monthlyCap]);
+
+  const parsed = parseMonthlyCapInput(capText);
+  const invalid = !parsed.ok;
+  const dirty = parsed.ok ? parsed.value !== settings.monthlyCap : true;
+
+  async function saveCap() {
+    if (!parsed.ok || savingCap || !dirty) return;
+    setSavingCap(true);
+    try {
+      const next = await setCustomerLineMonthlyCap(merchantId, parsed.value);
+      onSaved(next);
+      setCapText(monthlyCapToInput(next.monthlyCap));
+      toast.success(next.monthlyCap === null ? "已改成不限制" : "已儲存每月上限");
+      void queryClient.invalidateQueries({ queryKey: lineQuotaStatusQueryKey(merchantId) });
+    } catch (err) {
+      toast.error("儲存失敗", { description: customerLineSaveErrorMessage(err) });
+    } finally {
+      setSavingCap(false);
+    }
+  }
+
+  // 客服 + 沒接上官方帳號:沒有用量可看、也不能改上限 ⇒ 整區不出現。
+  if (!settings.isConnected && !isAdmin) return null;
+
+  return (
+    <section
+      className="flex flex-col gap-3 rounded-lg border border-border px-3.5 py-3"
+      data-testid="customer-line-quota"
+    >
+      {settings.isConnected ? (
+        <div className="flex flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5">
+            <p className="text-sm font-semibold text-foreground">本月訊息額度</p>
+            <HelpToggle label="說明：本月訊息額度怎麼算">{QUOTA_HELP}</HelpToggle>
+          </div>
+          {quota.isLoading ? (
+            <LoadingSkeleton variant="cards" rows={1} />
+          ) : quota.isError || !quota.data ? (
+            <div className="flex flex-wrap items-center gap-x-1">
+              <p
+                className="text-[13px] leading-relaxed text-muted-foreground"
+                data-testid="customer-line-quota-error"
+              >
+                暫時查不到本月用量。
+              </p>
+              <Button
+                type="button"
+                variant="text"
+                size="card"
+                className="px-1.5"
+                onClick={() => void quota.refetch()}
+              >
+                重新查詢
+              </Button>
+            </div>
+          ) : (
+            <>
+              <p
+                className="break-words text-[13px] leading-relaxed tabular-nums text-foreground"
+                data-testid="customer-line-quota-summary"
+              >
+                {formatQuotaSummary(quota.data)}
+              </p>
+              {quota.data.used === null ? (
+                <p className="text-xs leading-snug text-muted-foreground">
+                  {QUOTA_LINE_UNAVAILABLE_NOTE}
+                </p>
+              ) : null}
+            </>
+          )}
+          {blocked ? (
+            <p
+              className="text-[13px] font-semibold leading-relaxed text-destructive"
+              data-testid="customer-line-quota-blocked"
+            >
+              {QUOTA_BLOCKED_NOTE}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isAdmin ? (
+        <div className="flex flex-col gap-2" data-testid="customer-line-monthly-cap">
+          <FormField
+            label="每月客人通知上限"
+            htmlFor="customer-line-monthly-cap"
+            help={MONTHLY_CAP_HELP}
+            helpLabel="說明：每月客人通知上限是什麼"
+            error={invalid ? MONTHLY_CAP_INVALID_MESSAGE : null}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <FieldInput
+                id="customer-line-monthly-cap"
+                inputMode="numeric"
+                className="w-32"
+                placeholder="不限制"
+                value={capText}
+                disabled={savingCap}
+                onChange={(e) => setCapText(e.target.value)}
+                data-testid="customer-line-monthly-cap-input"
+              />
+              <span className="text-[13px] text-foreground">則（留空 = 不限制）</span>
+            </div>
+          </FormField>
+          {!dirty ? <AlertNote>還沒有修改上限。</AlertNote> : null}
+          <Button
+            type="button"
+            variant="neutral"
+            size="card"
+            className="self-start"
+            disabled={savingCap || !dirty || invalid}
+            onClick={() => void saveCap()}
+            data-testid="customer-line-monthly-cap-save"
+          >
+            {savingCap ? "儲存中⋯" : "儲存上限"}
+          </Button>
+        </div>
+      ) : (
+        // c5-contract 5B-1:客服看得到上限數字,但不能改(只有管理員能改)。
+        <p
+          className="text-[13px] leading-relaxed text-foreground"
+          data-testid="customer-line-monthly-cap-readonly"
+        >
+          {formatMonthlyCapReadonly(settings.monthlyCap)}
+        </p>
+      )}
+    </section>
   );
 }

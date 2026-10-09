@@ -1,4 +1,4 @@
-// 客戶端第 5 批 5-A(C5-K02 / N13 / K03):「通知客人」設定 parse、範本代入規則(要跟 Edge 一致)、發送記錄文字。
+// 客戶端第 5 批(C5-K02 / N13 / K03;5-B 加 Q01 / Q02、提醒 / 完成 / 聯絡人):「通知客人」設定 parse、範本代入規則(要跟 Edge 一致)、發送記錄文字。
 import { describe, expect, it } from "vitest";
 
 import { toServerPatch } from "./customerLineSettingsApi";
@@ -11,7 +11,12 @@ import {
   customerLineTemplateVariables,
   defaultCustomerLineTemplate,
   effectiveCustomerLineTemplate,
+  formatQuotaSummary,
+  isQuotaBlocked,
   parseCustomerLineSettings,
+  parseLineQuotaStatus,
+  parseMonthlyCapInput,
+  quotaUsedRatio,
   renderCustomerLineTemplate,
   validateCustomerLineTemplate,
 } from "./customerLineSettingsLogic";
@@ -34,20 +39,20 @@ const CONTRACT_SAMPLE = {
     on_rescheduled: true,
     on_cancelled_by_store: true,
     on_cancelled_by_customer: true,
-    on_reminder: false,
+    on_reminder: true,
     on_completed: false,
     on_contact_events: true,
-    reminder_hours_before: 24,
-    monthly_cap: null,
-    quota_blocked_until: null,
+    reminder_hours_before: 12,
+    monthly_cap: 150,
+    quota_blocked_until: "2026-10-31T16:00:00Z",
     updated_at: null,
   },
-  templates: { confirmed: "店家改過的文字", reminder: "5-B 的", bogus: "不認得" },
+  templates: { confirmed: "店家改過的文字", reminder: "店家改過的提醒", bogus: "不認得" },
   default_templates: { submitted_pending: "伺服器預設" },
 };
 
 describe("parseCustomerLineSettings(c5-contract 2-1)", () => {
-  it("讀 connected / line_login_enabled / is_on_site / 6 個 5-A 開關 / 店家改過的範本", () => {
+  it("讀 connected / line_login_enabled / is_on_site / is_admin / 9 個開關 / 提醒時數 / 上限 / 停發 / 範本", () => {
     const s = parseCustomerLineSettings(CONTRACT_SAMPLE);
     expect(s.isConnected).toBe(true);
     expect(s.lineLoginEnabled).toBe(false);
@@ -59,9 +64,16 @@ describe("parseCustomerLineSettings(c5-contract 2-1)", () => {
       on_rescheduled: true,
       on_cancelled_by_store: true,
       on_cancelled_by_customer: true,
+      on_reminder: true,
+      on_completed: false,
+      on_contact_events: true,
     });
-    // 5-B 的範本代碼與不認得的鍵都不收。
-    expect(s.templates).toEqual({ confirmed: "店家改過的文字" });
+    expect(s.isAdmin).toBe(true);
+    expect(s.reminderHoursBefore).toBe(12);
+    expect(s.monthlyCap).toBe(150);
+    expect(s.quotaBlockedUntil).toBe("2026-10-31T16:00:00Z");
+    // 不認得的鍵不收。
+    expect(s.templates).toEqual({ confirmed: "店家改過的文字", reminder: "店家改過的提醒" });
     expect(s.serverDefaults).toEqual({ submitted_pending: "伺服器預設" });
   });
 
@@ -71,6 +83,23 @@ describe("parseCustomerLineSettings(c5-contract 2-1)", () => {
     expect(s.isOnSite).toBeNull();
     expect(s.switches).toEqual(CUSTOMER_LINE_SWITCH_DEFAULTS);
     expect(CUSTOMER_LINE_SWITCH_DEFAULTS.on_scheduled_by_store).toBe(false);
+    // Q1 = A:提醒、完成預設關;聯絡人申請預設開。Q2 預設 24 小時;Q3 預設不設上限。
+    expect(CUSTOMER_LINE_SWITCH_DEFAULTS.on_reminder).toBe(false);
+    expect(CUSTOMER_LINE_SWITCH_DEFAULTS.on_completed).toBe(false);
+    expect(CUSTOMER_LINE_SWITCH_DEFAULTS.on_contact_events).toBe(true);
+    expect(s.reminderHoursBefore).toBe(24);
+    expect(s.monthlyCap).toBeNull();
+    expect(s.quotaBlockedUntil).toBeNull();
+    expect(s.isAdmin).toBeNull();
+  });
+
+  it("看不懂的提醒時數 / 上限 ⇒ 預設(24 / 不限制)", () => {
+    const s = parseCustomerLineSettings({
+      settings: { reminder_hours_before: 5, monthly_cap: 0, quota_blocked_until: "亂寫" },
+    });
+    expect(s.reminderHoursBefore).toBe(24);
+    expect(s.monthlyCap).toBeNull();
+    expect(s.quotaBlockedUntil).toBeNull();
   });
 
   it("生效文字:店家改過的 > 伺服器預設 > 前端預設(到府加「（預計抵達時間）」)", () => {
@@ -97,6 +126,7 @@ describe("parseCustomerLineSettings(c5-contract 2-1)", () => {
     expect(toServerPatch({ templates: { confirmed: "" } })).toEqual({
       templates: { confirmed: "" },
     });
+    expect(toServerPatch({ reminderHoursBefore: 6 })).toEqual({ reminder_hours_before: 6 });
   });
 
   it("錯誤 hint ⇒ 固定中文,不顯示資料庫原文", () => {
@@ -105,6 +135,12 @@ describe("parseCustomerLineSettings(c5-contract 2-1)", () => {
     );
     expect(customerLineSaveErrorMessage({ code: "22023", hint: "template_too_long" })).toBe(
       "通知文字最多 500 字。",
+    );
+    expect(customerLineSaveErrorMessage({ code: "22023", hint: "reminder_hours_invalid" })).toBe(
+      "提醒時間只能選 2、3、6、12、24 或 48 小時。",
+    );
+    expect(customerLineSaveErrorMessage({ code: "22023", hint: "monthly_cap_invalid" })).toBe(
+      "每月上限請填 1 到 100,000 的整數，留空代表不限制。",
     );
     expect(customerLineSaveErrorMessage(new Error("raw db text"))).not.toContain("raw");
   });
@@ -123,6 +159,7 @@ describe("C5-N13 範本代入(c5-contract 2-3,跟 Edge 同規則)", () => {
     merchant_phone: "0223456789",
     member_center_url: "https://example.com/booking/demo/me/bookings",
     contact_name: "王太太",
+    booking_day_word: "明天",
   };
 
   it("預設文案逐字(店家確認)", () => {
@@ -184,8 +221,8 @@ describe("C5-N13 範本代入(c5-contract 2-3,跟 Edge 同規則)", () => {
   });
 });
 
-describe("C5-K02 卡片內容只有 5-A 的 6 種通知", () => {
-  it("6 種、不含服務前提醒 / 服務完成 / 聯絡人通知", () => {
+describe("C5-K02 卡片內容:9 種通知(5-B 加提醒 / 完成 / 聯絡人)", () => {
+  it("順序與範本", () => {
     expect(CUSTOMER_LINE_KINDS.map((k) => k.key)).toEqual([
       "on_submitted",
       "on_scheduled_by_store",
@@ -193,11 +230,123 @@ describe("C5-K02 卡片內容只有 5-A 的 6 種通知", () => {
       "on_rescheduled",
       "on_cancelled_by_store",
       "on_cancelled_by_customer",
+      "on_reminder",
+      "on_completed",
+      "on_contact_events",
     ]);
-    const all = JSON.stringify(CUSTOMER_LINE_KINDS);
-    expect(all).not.toContain("提醒");
-    expect(all).not.toContain("服務完成");
+    const contact = CUSTOMER_LINE_KINDS.find((k) => k.key === "on_contact_events");
+    expect(contact?.templates.map((t) => t.code)).toEqual([
+      "contact_request",
+      "contact_removed",
+      "contact_approved",
+      "contact_rejected",
+    ]);
     expect(CUSTOMER_LINE_USAGE.quotaNote).toContain("200 則");
+  });
+
+  it("5-B 預設文案逐字(跟資料庫 customer_line_default_templates 一致);到府提醒加「（預計抵達時間）」", () => {
+    expect(defaultCustomerLineTemplate("reminder", false)).toBe(
+      "提醒你：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
+    );
+    expect(defaultCustomerLineTemplate("reminder", true)).toContain(
+      "{{booking_day_word}} {{booking_time}}（預計抵達時間） 在",
+    );
+    expect(defaultCustomerLineTemplate("completed", true)).toBe(
+      "謝謝你今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
+    );
+    expect(defaultCustomerLineTemplate("contact_rejected", false)).toBe(
+      "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
+    );
+    // QA #1:電話那句獨立一行(比照店家取消)⇒ 店家沒填電話時整行拿掉,不留空尾巴。
+    expect(
+      renderCustomerLineTemplate(defaultCustomerLineTemplate("contact_rejected", false), {
+        merchant_name: "涼風工匠",
+        merchant_phone: "",
+      }),
+    ).toBe("你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
+    expect(
+      renderCustomerLineTemplate(defaultCustomerLineTemplate("contact_rejected", false), {
+        merchant_name: "涼風工匠",
+        merchant_phone: "0223456789",
+      }),
+    ).toBe("你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789");
+  });
+
+  it("提醒可用「今天／明天」;聯絡人通知沒有日期、時間、服務項目", () => {
+    const keys = (code: Parameters<typeof customerLineTemplateVariables>[0]) =>
+      customerLineTemplateVariables(code).map((v) => v.key);
+    expect(keys("reminder")).toContain("booking_day_word");
+    expect(keys("confirmed")).not.toContain("booking_day_word");
+    expect(keys("contact_request")).toContain("contact_name");
+    for (const code of [
+      "contact_request",
+      "contact_removed",
+      "contact_approved",
+      "contact_rejected",
+    ] as const) {
+      expect(keys(code)).not.toContain("booking_date");
+      expect(keys(code)).not.toContain("service_items");
+      expect(keys(code)).toContain("member_center_url");
+    }
+  });
+});
+
+describe("C5-Q01 每月客人通知上限輸入", () => {
+  it("空白 = 不限制;1~100,000 整數(可有逗號);其他不收", () => {
+    expect(parseMonthlyCapInput("")).toEqual({ ok: true, value: null });
+    expect(parseMonthlyCapInput("  ")).toEqual({ ok: true, value: null });
+    expect(parseMonthlyCapInput("150")).toEqual({ ok: true, value: 150 });
+    expect(parseMonthlyCapInput("1,000")).toEqual({ ok: true, value: 1000 });
+    expect(parseMonthlyCapInput("100000")).toEqual({ ok: true, value: 100000 });
+    expect(parseMonthlyCapInput("0")).toEqual({ ok: false });
+    expect(parseMonthlyCapInput("100001")).toEqual({ ok: false });
+    expect(parseMonthlyCapInput("1.5")).toEqual({ ok: false });
+    expect(parseMonthlyCapInput("-3")).toEqual({ ok: false });
+    expect(parseMonthlyCapInput("abc")).toEqual({ ok: false });
+  });
+});
+
+describe("C5-Q02 本月額度", () => {
+  const base = {
+    plan_limit: 200,
+    used: 132,
+    by_category: { customer: 80, store: 40, marketing: 12, birthday: 0 },
+    cap: null,
+    blocked_until: null,
+  };
+
+  it("查得到上限 ⇒「本月已用 132／200 則（客人通知 80、員工通知 40、行銷 12）」;生日禮有發才列", () => {
+    expect(formatQuotaSummary(parseLineQuotaStatus(base))).toBe(
+      "本月已用 132／200 則（客人通知 80、員工通知 40、行銷 12）",
+    );
+    expect(
+      formatQuotaSummary(
+        parseLineQuotaStatus({ ...base, by_category: { ...base.by_category, birthday: 3 } }),
+      ),
+    ).toBe("本月已用 132／200 則（客人通知 80、員工通知 40、行銷 12、生日禮 3）");
+    expect(quotaUsedRatio(parseLineQuotaStatus(base))).toBeCloseTo(0.66);
+  });
+
+  it("方案沒上限 / LINE 查不到 / 什麼都沒回", () => {
+    expect(
+      formatQuotaSummary(parseLineQuotaStatus({ ...base, plan_limit: null, used: 3200 })),
+    ).toBe("本月已用 3,200 則，你的方案沒有每月上限（客人通知 80、員工通知 40、行銷 12）");
+    const unknown = parseLineQuotaStatus({ ...base, plan_limit: null, used: null });
+    expect(formatQuotaSummary(unknown)).toBe(
+      "秒約本月已發 132 則（客人通知 80、員工通知 40、行銷 12）",
+    );
+    expect(quotaUsedRatio(unknown)).toBeNull();
+    expect(formatQuotaSummary(parseLineQuotaStatus(null))).toBe(
+      "秒約本月已發 0 則（客人通知 0、員工通知 0、行銷 0）",
+    );
+  });
+
+  it("停發中:停發時間還沒過才算", () => {
+    const now = Date.UTC(2026, 9, 20);
+    expect(isQuotaBlocked("2026-10-31T16:00:00Z", now)).toBe(true);
+    expect(isQuotaBlocked("2026-09-30T16:00:00Z", now)).toBe(false);
+    expect(isQuotaBlocked(null, now)).toBe(false);
+    expect(isQuotaBlocked("亂寫", now)).toBe(false);
   });
 });
 

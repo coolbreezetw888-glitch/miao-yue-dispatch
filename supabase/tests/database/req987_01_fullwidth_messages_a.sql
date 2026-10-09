@@ -25,6 +25,8 @@ begin
   select replace(prosrc, E'\r\n', E'\n') into v_src from pg_proc where oid = pg_temp.req987_oid(p_sig);
   -- 客戶端第 4-B 批 C4-H11:unbind_line_account 的 member 分支多一段「清掉全部聯絡人」(有 [c4b] 標記),先拿掉再比對改前指紋。
   v_src := regexp_replace(v_src, E'    -- \\[c4b\\] C4-H11.*?and status = ''active'';\\n', '', 'g');
+  -- 客戶端第 5-B 批 C5-P02:claim_birthday_line_pending 多一段「主要聯絡人關掉優惠通知 ⇒ 略過」(有 [c5b] 標記),先拿掉再比對改前指紋。
+  v_src := regexp_replace(v_src, E'    -- \\[c5b\\] C5-P02.*?continue;\\n    end if;\\n\\n', '', 'g');
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;
