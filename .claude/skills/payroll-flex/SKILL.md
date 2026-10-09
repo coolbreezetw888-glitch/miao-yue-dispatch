@@ -43,3 +43,32 @@ description: 秒約「彈性計薪」(#1035)的規則與已知坑:月薪獎金�
 - 方案名稱不分版本,改名後過去月份明細顯示新名。
 - 區間中途從月薪改抽成的人,明細列獎金欄為空但總數含前面月份(跟月薪基本額慣例相同)。
 - 單月舊版 `get_merchant_billing_summary` 不算獎金(前端已不用)。
+
+---
+
+## B 批「日薪/時薪」(2026-10-09,commit afa6865,migration `20261010170000_req1035b_wage_schema`、`20261010170100_req1035b_wage_functions`)
+
+### 資料
+- 計酬類型 check 擴成四種:`piece_rate`、`monthly_salary`、`daily_wage`、`hourly_wage`。
+- `staff_wage_settings`(金額)→ trigger 同步進歷史表 `wage_amount`(舊列 null,sync 比對時當 0)。
+- `staff_work_day_records`(唯一 staff_id+work_date):每日凍結的上工分鐘/金額/原因。cron `staff-work-day-freeze`(`15 16 * * *` UTC = 台北 00:15)凍結前一天。
+
+### 算法鐵律
+1. 上工分鐘 = (每週時段 ∩ 營業時間 − 單日例外關掉的格子) ∪ 這人當主要或跟場的未取消訂單;用 int4multirange,重疊只算一次;跨午夜切兩天;24:00 = 1440。
+2. 請假那天 = 0。時段外的「開放」格不加分鐘(#1023)。
+3. 日薪有上工就算一整天;時薪每天四捨五入到元。
+4. 報表每天標 settled(已凍結)/ unsettled(過去但沒紀錄)/ estimated(今天),未來不算。
+5. **凍結後只在這些情況重算那天**(都會用「現在的」每週範本):訂單新增/刪除、改時間、換主要服務人員、變成或離開 cancelled;請假新增/改/刪;單日例外變動;`recompute_staff_work_day`。其他訂單狀態變化(例如 confirmed→completed)**不重算**。改每週範本不影響已凍結日子。
+6. 4 支 AFTER trigger 掛在 bookings / booking_assistants / staff_availability_overrides / staff_leave_records:今天/未來直接略過;沒有工資歷史的人經 `staff_has_wage_history` 快速略過。不吞錯。
+7. Q4:日薪/時薪的人 `can_self_manage_availability` = false(DB 與前端都擋)。
+8. 店家報表:`wage_feature_used` 決定是否顯示;明細在主名單後補「區間內有工資的日薪/時薪人員」(中途改制者在原列帶 wage_amount 等 4 欄,月底前離職者另加一列),保證「明細工資加總 = total_wage_payout」且每人只一列。
+9. `get_staff_wage_by_range` 查不到人也回 42501(不洩漏 id)。
+
+### 指紋(B 批上線後)
+sync 5b85b194、as_of 4e155840、get_merchant_billing_summary_by_range 0cd65c0a、create_staff_leave 18fe6df2、tg_bookings_refreeze_work_day 887ac4ea、get_staff_wage_by_range 73067e23。as_of 現有 7 支呼叫者;C 批要再改時以這版為底。
+
+### B 批已知限制
+- 硬刪有跟場的過去訂單時,跟場那天不重算(跟場資料先被連帶刪掉;目前只有匯入還原會硬刪)。
+- 訂單詳情「沒有抽成紀錄」改成通用說法(`get_booking_commission_summary` 不能動,不回計酬類型)。
+- 服務人員報表版面看「目前」的計酬方式;改制後回看過去月份看不到工資明細(合計有算)。
+- staff_payroll_status_history 沒有 merchant_id 索引(體檢時加)。
