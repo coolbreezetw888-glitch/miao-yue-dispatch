@@ -60,3 +60,10 @@ description: 秒約服務人員端行事曆「即時同步」(Supabase Realtime 
 ## 上線
 - 照母版 `.project/notes/2026-10-01-即時同步上線清單.md`。重點:先請使用者在 Supabase 後台 Realtime Settings 關掉「Allow public access」,再套 migration,指紋與政策數核對過才推前端。
 - 連線數:約 400 位服務人員前要升 Pro,每月看 Connected Clients(#901)。
+
+## #1049/#1050 行事曆格子(2026-10-10,commit 5c1a8d6)
+- 重抓清單新增第 7 把 `["staff-portal-module","my-availability-windows"]`(服務人員讀自己每週時段改走 `get_my_staff_availability_windows`,只回本人、檢查 `staff_portal` 開關;`staff_availability_windows` RLS 沒放寬)。
+- 日時間軸兩端一律 00:00～24:00,格子狀態用共用 `classifyDayCell`(`src/modules/booking/daySlotGrid.ts`):全天休假 > 外店佔用 > 單日例外 > 營業時間外(深色,可設定)> 時段內可預約(自訂色)> 時段外白色。改任一端都要兩端一起改。
+- 無時段限制(unlimited_backend_edit)要獨立 prop 傳進 `MyCalendarTimelineView`,不可依附 orderActions(唯讀畫法也要用)。
+- 自動捲動 `useDayGridInitialScroll`:記「日期+捲動框」,換日或新框才捲;即時同步/資料更新不拉回。e2e 第 0 格 = 00:00。
+- `merchant_calendar_state_styles` 有 `opacity`(10~100,乘在既有 alpha 上;100 = 改版前逐字相同),state_type 5 種(含 `outside_business_hours` 預設 #334155)。
