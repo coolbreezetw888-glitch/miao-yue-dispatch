@@ -4,10 +4,13 @@
 // 每一條都斷言「這一頁只打本機」(request-guard)。
 //
 // fixture:月薪人員 M 今天完成 13 單(冷氣 13 台 + 水管 1 份)。
+//   A1c 還沒指派方案:服務人員本人的「我的薪資報表」預設照舊(本月 1 號到今天、按日期)
 //   A1 抽成與薪資設定:空狀態 → 新增方案(每單 100 + 只算冷氣、超過 10 台每台 300)→ 試算 2,200 → 儲存
 //   A2 月薪人員「獎金方案」下拉指派 → 資料庫歷史開新列
 //   A3 店家報表:「月薪獎金」卡 2,200、淨利 = 原算法 − 2,200;切到自訂區間(不完整月份)⇒ 說明文字
 //   A4 服務人員報表(商家視角)看到獎金明細「第 11～13 份，共 3 份」;服務人員本人的「我的薪資報表」也看得到
+//      (#1035 追加:方案本月才指派 ⇒ 預設不跳,照舊本月 1 號到今天)
+//   A4b 上個月月底就有方案 ⇒ 預設跳到上個月整月、按月份,一進來就看到獎金區塊(測完還原)
 //   A5 改規則選「從下個月起」⇒ 本月報表不變、卡片標「下個月起另有設定」
 //   A6 手機 375 寬:設定頁、編輯器、報表不爆版(沒有橫向捲動)
 // 截圖存 test-results/req1035a-shots(1280 / 375)。
@@ -66,6 +69,19 @@ async function noHorizontalOverflow(page: Page) {
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
   expect(overflow).toBeLessThanOrEqual(0);
+}
+
+/** 本機時間(瀏覽器跟 Node 跑在同一台、同一個時區)的今天 / 本月 / 上個月,格式跟日期欄位一致。 */
+function localDates() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ym = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return {
+    today: `${ym(now)}-${pad(now.getDate())}`,
+    thisMonth: ym(now),
+    previousMonth: ym(prev),
+  };
 }
 
 async function summary() {
@@ -174,6 +190,29 @@ test("A1b 四種規則的摘要句與試算(截圖用,不存檔)", async ({ page
   expectOnlyLocalRequests(recorder);
 });
 
+test("A1c 還沒指派方案的月薪人員:我的薪資報表預設照舊(本月 1 號到今天、按日期)", async ({
+  browser,
+}) => {
+  const staffPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  const recorder = recordRequestHosts(staffPage);
+  await injectSession(staffPage, fixture.staffSession);
+  await primeStaffCurrentMerchant(staffPage, LOAD_TIMEOUT);
+  await staffPage.goto("/app/my-payroll");
+  const { today, thisMonth } = localDates();
+  await expect(staffPage.getByRole("radio", { name: "按日期" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+    {
+      timeout: LOAD_TIMEOUT,
+    },
+  );
+  await expect(staffPage.locator("#date-range-start")).toHaveValue(`${thisMonth}-01`);
+  await expect(staffPage.locator("#date-range-end")).toHaveValue(today);
+  await expect(staffPage.getByTestId("staff-bonus-details")).toHaveCount(0);
+  expectOnlyLocalRequests(recorder);
+  await staffPage.close();
+});
+
 test("A2 月薪人員下拉指派方案 → 歷史開新列", async ({ page }) => {
   const recorder = recordRequestHosts(page);
   await openAsAdmin(page, "/app/payroll-settings");
@@ -256,13 +295,20 @@ test("A4 服務人員報表(商家視角)與服務人員本人的我的薪資報
   await primeStaffCurrentMerchant(staffPage, LOAD_TIMEOUT);
   await staffPage.goto("/app/my-payroll");
   const mine = staffPage.getByTestId("staff-bonus-details");
-  // 預設區間是本月 1 號到今天(不是完整月份)⇒ 只顯示「不是完整月份，不計算獎金」;切到「按月份」才算本月。
+  // #1035 追加(主腦裁決):fixture 的方案是「這個月」才指派的,上個月沒有方案 ⇒ 預設不跳,
+  // 照舊是本月 1 號到今天、按日期(不是完整月份)⇒ 只顯示「不是完整月份，不計算獎金」;切到「按月份」才算本月。
+  const { today, thisMonth } = localDates();
   await expect(mine).toContainText("這幾個月不是完整月份，不計算獎金", { timeout: LOAD_TIMEOUT });
+  await expect(staffPage.getByRole("radio", { name: "按日期" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(staffPage.locator("#date-range-start")).toHaveValue(`${thisMonth}-01`);
+  await expect(staffPage.locator("#date-range-end")).toHaveValue(today);
   await shot(staffPage, "08a_my_payroll_partial_1280");
   await staffPage.getByRole("radio", { name: "按月份" }).click();
   const endMonth = staffPage.locator("#date-range-end");
   // 原生月份欄位填同一個值不會觸發 change ⇒ 先填下個月、再填回本月(兩次都會把訖日換成該月最後一天)。
-  const thisMonth = await endMonth.inputValue();
   const [ty, tm] = thisMonth.split("-").map(Number);
   const nextMonth = tm === 12 ? `${ty! + 1}-01` : `${ty}-${String(tm! + 1).padStart(2, "0")}`;
   await endMonth.fill(nextMonth);
@@ -273,6 +319,89 @@ test("A4 服務人員報表(商家視角)與服務人員本人的我的薪資報
   await shot(staffPage, "08_my_payroll_bonus_1280");
   expectOnlyLocalRequests(recorder2);
   await staffPage.close();
+});
+
+test("A4b 上個月月底就有方案 ⇒ 我的薪資報表預設跳到上個月整月(按月份)、一進來就看到獎金", async ({
+  browser,
+}) => {
+  // 暫時加一列「上個月就已經套用方案」的薪資狀態歷史(蓋住上個月月底)+ 上個月生效的規則版本;
+  // 測完刪掉,其他測試看到的資料跟原本一樣。只動本次 fixture 的服務人員 / 方案。
+  const svc = serviceClient();
+  const hist = await svc
+    .from("staff_payroll_status_history")
+    .select("effective_from, bonus_plan_id, merchant_id, monthly_base_salary")
+    .eq("staff_id", fixture.staffId)
+    .order("effective_from", { ascending: true });
+  expect(hist.error).toBeNull();
+  const rows = hist.data ?? [];
+  const planId = rows.map((r) => r.bonus_plan_id as string | null).find((v) => v) ?? null;
+  expect(planId).toMatch(/^[0-9a-f-]{36}$/);
+  const earliest = rows[0]!;
+  const { previousMonth } = localDates();
+  // 上個月 1 號(台北)前一天開始,到最早那列開始為止。
+  const from = new Date(`${previousMonth}-01T00:00:00+08:00`);
+  from.setUTCDate(from.getUTCDate() - 1);
+  const ins = await svc
+    .from("staff_payroll_status_history")
+    .insert({
+      staff_id: fixture.staffId,
+      merchant_id: earliest.merchant_id,
+      compensation_type: "monthly_salary",
+      status: "active",
+      monthly_base_salary: earliest.monthly_base_salary,
+      bonus_plan_id: planId,
+      effective_from: from.toISOString(),
+      effective_to: earliest.effective_from,
+      is_backfill_seed: false,
+    })
+    .select("id")
+    .single();
+  expect(ins.error).toBeNull();
+  const ver = await svc
+    .from("staff_bonus_plan_versions")
+    .select("merchant_id, rules")
+    .eq("plan_id", planId!)
+    .order("effective_month", { ascending: true })
+    .limit(1)
+    .single();
+  expect(ver.error).toBeNull();
+  const verIns = await svc
+    .from("staff_bonus_plan_versions")
+    .insert({
+      plan_id: planId,
+      merchant_id: ver.data!.merchant_id,
+      effective_month: `${previousMonth}-01`,
+      rules: ver.data!.rules,
+    })
+    .select("id")
+    .single();
+  expect(verIns.error).toBeNull();
+
+  try {
+    const staffPage = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const recorder = recordRequestHosts(staffPage);
+    await injectSession(staffPage, fixture.staffSession);
+    await primeStaffCurrentMerchant(staffPage, LOAD_TIMEOUT);
+    await staffPage.goto("/app/my-payroll");
+    await expect(staffPage.getByRole("radio", { name: "按月份" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+      { timeout: LOAD_TIMEOUT },
+    );
+    await expect(staffPage.locator("#date-range-start")).toHaveValue(previousMonth);
+    await expect(staffPage.locator("#date-range-end")).toHaveValue(previousMonth);
+    const mine = staffPage.getByTestId("staff-bonus-details");
+    await expect(mine).toBeVisible({ timeout: LOAD_TIMEOUT });
+    await expect(mine).toContainText("這個月獎金");
+    await expect(mine).not.toContainText("這幾個月不是完整月份");
+    await expect(mine).not.toContainText(PLAN_NAME);
+    await shot(staffPage, "08b_my_payroll_default_previous_month_1280");
+    expectOnlyLocalRequests(recorder);
+    await staffPage.close();
+  } finally {
+    await svc.from("staff_bonus_plan_versions").delete().eq("id", verIns.data!.id);
+    await svc.from("staff_payroll_status_history").delete().eq("id", ins.data!.id);
+  }
 });
 
 test("A5 改規則選「從下個月起」⇒ 本月不變、卡片標「下個月起另有設定」", async ({ page }) => {

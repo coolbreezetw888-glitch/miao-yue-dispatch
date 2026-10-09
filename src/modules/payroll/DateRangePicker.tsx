@@ -57,13 +57,16 @@ export function DateRangePicker({
   endDate,
   onStartDateChange,
   onEndDateChange,
+  initialGranularity = "day",
 }: {
   startDate: string;
   endDate: string;
   onStartDateChange: (v: string) => void;
   onEndDateChange: (v: string) => void;
+  /** #1035 追加:一開始的區間單位(只在第一次掛上時生效;預設「按日期」,店家帳務報表不傳)。 */
+  initialGranularity?: DateRangeGranularity;
 }) {
-  const [granularity, setGranularity] = useState<DateRangeGranularity>("day");
+  const [granularity, setGranularity] = useState<DateRangeGranularity>(initialGranularity);
   const error = validateDateRange(startDate, endDate);
 
   return (

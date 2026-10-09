@@ -685,9 +685,12 @@ export function useStaffBonusByRange(
   staffId: string | null | undefined,
   startDate: string | null | undefined,
   endDate: string | null | undefined,
+  /** #1035 追加:服務人員端判斷預設區間用 retry:false(失敗立刻照舊預設,不卡骨架);其他呼叫者不傳 = 照舊。 */
+  options?: { retry?: boolean },
 ): UseQueryResult<StaffBonusByRange> {
   return useQuery({
     queryKey: ["payroll-module", "staff-bonus-range", staffId, startDate, endDate],
+    ...(options?.retry === undefined ? {} : { retry: options.retry }),
     queryFn: () =>
       fetchStaffBonusByRange(staffId as string, startDate as string, endDate as string),
     enabled:

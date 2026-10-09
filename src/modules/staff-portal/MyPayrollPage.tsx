@@ -8,22 +8,54 @@
 // 同一套 DateRangePicker 元件跟同一套一年上限規則——原本的 MyYearMonthSwitcher.tsx 已經被這次
 // 的區間篩選取代並移除,不留下死掉的舊元件。
 
+//
+// #1035 追加(使用者 2026-10-09 選 B、主腦裁決):目前月薪制、而且上個月(月底當時)有獎金方案的人,
+// 預設區間改成「上個月整月」(按月份),一進來就看得到獎金;其他人照舊(本月 1 號到今天、按日期)。判斷邏輯見 myPayrollDefaultRange.ts。
+// 先等「有沒有方案」查完才掛上區間篩選與報表(避免先顯示本月、再跳到上個月,也避免多打一輪報表查詢)。
+
+import { useState } from "react";
+
 import { LoadingSkeleton } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { useStaffBonusByRange } from "@/modules/payroll/api";
 import { MonthlySalaryStaffReport, PieceRateStaffReport } from "@/modules/payroll/StaffReportPage";
 import { DateRangePicker, useDateRangeState } from "@/modules/payroll/DateRangePicker";
 import { WageStaffReport } from "@/modules/payroll/WageStaffReport";
 import { isWageCompensationType } from "@/modules/staff-agent/types";
 
 import { useActiveMyStaffRecord } from "./context";
+import {
+  bonusPlanProbeRange,
+  myPayrollInitialRange,
+  shouldProbeBonusPlan,
+  type MyPayrollInitialRange,
+} from "./myPayrollDefaultRange";
 import { RequireStaffPayrollAccess } from "./RequireStaffPayrollAccess";
+
+type ActiveStaffRow = NonNullable<ReturnType<typeof useActiveMyStaffRecord>["data"]>;
 
 function MyPayrollPageInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const { data: staffRow } = useActiveMyStaffRecord(merchantId);
-  const { startDate, endDate, setStartDate, setEndDate } = useDateRangeState();
-  const dateRange = { startDate, endDate };
+  const needsProbe = shouldProbeBonusPlan(staffRow?.compensation_type);
+  // 只在第一次進頁面時算一次(之後切換日期不會再改預設)。查的是上個月整月。
+  const [probeRange] = useState(() => bonusPlanProbeRange());
+  const probe = useStaffBonusByRange(
+    needsProbe ? staffRow?.id : null,
+    probeRange.startDate,
+    probeRange.endDate,
+    { retry: false },
+  );
+  // 查詢失敗就當沒有方案(維持原本預設),不擋住整頁;不重試,免得骨架卡好幾秒。
+  const probeSettled = !needsProbe || probe.isSuccess || probe.isError;
+  const initialRange =
+    staffRow && probeSettled
+      ? myPayrollInitialRange({
+          compensationType: staffRow.compensation_type,
+          hasBonusPlan: probe.data?.has_any_plan === true,
+        })
+      : null;
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12">
@@ -37,17 +69,40 @@ function MyPayrollPageInner() {
         </p>
       </div>
 
+      {!staffRow || !initialRange ? (
+        /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
+        <LoadingSkeleton variant="lines" rows={3} />
+      ) : (
+        <MyPayrollReportSection staffRow={staffRow} initialRange={initialRange} />
+      )}
+    </main>
+  );
+}
+
+function MyPayrollReportSection({
+  staffRow,
+  initialRange,
+}: {
+  staffRow: ActiveStaffRow;
+  initialRange: MyPayrollInitialRange;
+}) {
+  const { startDate, endDate, setStartDate, setEndDate } = useDateRangeState({
+    startDate: initialRange.startDate,
+    endDate: initialRange.endDate,
+  });
+  const dateRange = { startDate, endDate };
+
+  return (
+    <>
       <DateRangePicker
         startDate={startDate}
         endDate={endDate}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
+        initialGranularity={initialRange.granularity}
       />
 
-      {!staffRow ? (
-        /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
-        <LoadingSkeleton variant="lines" rows={3} />
-      ) : staffRow.compensation_type === "monthly_salary" ? (
+      {staffRow.compensation_type === "monthly_salary" ? (
         <MonthlySalaryStaffReport
           staffId={staffRow.id}
           staffName={staffRow.name}
@@ -71,7 +126,7 @@ function MyPayrollPageInner() {
           showSummaryCards={true}
         />
       )}
-    </main>
+    </>
   );
 }
 
