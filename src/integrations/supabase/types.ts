@@ -5388,6 +5388,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      preview_bonus_formula: {
+        Args: {
+          p_merchant_id: string
+          p_month?: string
+          p_sample?: Json
+          p_staff_id?: string
+          p_text: string
+        }
+        Returns: Json
+      }
       preview_booking_points: {
         Args: {
           p_booking_id: string

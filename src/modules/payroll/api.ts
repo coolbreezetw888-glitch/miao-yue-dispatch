@@ -31,6 +31,7 @@ import type {
   StaffSalarySettings,
   StaffBonusByRange,
   StaffMonthlyBonus,
+  BonusFormulaPreview,
   StaffServiceCommissionRate,
   StaffWageByRange,
   StaffWageSetting,
@@ -631,6 +632,38 @@ export async function previewStaffBonus(input: {
   });
   if (error) throw error;
   return data as unknown as StaffMonthlyBonus;
+}
+
+/**
+ * #1035 C 批 PC-E04:自訂公式的檢查 / 試算(資料庫編譯與計算,前端不做任何公式求值)。
+ *   - 只給 text ⇒ 只檢查(value = null)
+ *   - 給 staffId + month(YYYY-MM-01)⇒ 用那人那月的實際數字
+ *   - 給 sample ⇒ 用範例數字(orders / units / revenue / salary / leave_days)
+ * 公式寫錯時資料庫回 ok = false(不丟錯);權限、月份、範例格式錯才丟錯。
+ */
+export async function previewBonusFormula(input: {
+  merchantId: string;
+  text: string;
+  staffId?: string | null;
+  month?: string | null;
+  sample?: Partial<Record<"orders" | "units" | "revenue" | "salary" | "leave_days", number>> | null;
+}): Promise<BonusFormulaPreview> {
+  const args: {
+    p_merchant_id: string;
+    p_text: string;
+    p_staff_id?: string;
+    p_month?: string;
+    p_sample?: Json;
+  } = { p_merchant_id: input.merchantId, p_text: input.text };
+  if (input.staffId) {
+    args.p_staff_id = input.staffId;
+    if (input.month) args.p_month = input.month;
+  } else if (input.sample) {
+    args.p_sample = input.sample as unknown as Json;
+  }
+  const { data, error } = await supabase.rpc("preview_bonus_formula", args);
+  if (error) throw error;
+  return data as unknown as BonusFormulaPreview;
 }
 
 export async function fetchStaffBonusByRange(

@@ -209,8 +209,8 @@ select throws_ok(
 );
 select throws_ok(
   $$select public.save_staff_bonus_plan('f1035a00-0000-4000-8000-000000000020', null, '冷氣組',
-      '[{"key":"r1","label":"x","kind":"formula","threshold":0,"amount":1}]', 'this_month')$$,
-  '22023', '第 1 條規則的「給什麼」不正確。', 'D2 A 批不收自訂公式(formula)'
+      '[{"key":"r1","label":"x","kind":"bogus","threshold":0,"amount":1}]', 'this_month')$$,
+  '22023', '第 1 條規則的「給什麼」不正確。', 'D2 不認得的「給什麼」⇒ 拒收(#1035 C 批起 formula 是合法種類,見 p1035c_formula)'
 );
 select throws_ok(
   $$select public.save_staff_bonus_plan('f1035a00-0000-4000-8000-000000000020', null, '冷氣組',

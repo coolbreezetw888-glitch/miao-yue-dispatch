@@ -235,17 +235,20 @@ export interface MerchantBillingSummary {
 // #1035 彈性計薪 A 批:月薪獎金方案(規格書 PA-R01 / PA-F01~F06)
 // =========================================================================
 
-/** 「給什麼」:每單加錢 / 每份加錢 / 業績百分比 / 達標給一筆。 */
-export type BonusRuleKind = "per_order" | "per_unit" | "percent" | "lump_sum";
+/** 「給什麼」:每單加錢 / 每份加錢 / 業績百分比 / 達標給一筆(A 批四種)。 */
+export type BonusStandardRuleKind = "per_order" | "per_unit" | "percent" | "lump_sum";
+
+/** 「給什麼」全部種類:A 批四種 + C 批「自訂公式」(formula)。 */
+export type BonusRuleKind = BonusStandardRuleKind | "formula";
 
 /** 「用什麼量判斷達標」:單數 / 份數 / 業績(元)。 */
 export type BonusMetric = "orders" | "units" | "revenue";
 
-/** 資料庫存的一條規則(public.save_staff_bonus_plan 驗證、正規化後的形狀)。 */
-export interface BonusRule {
+/** 資料庫存的一條規則(public.save_staff_bonus_plan 驗證、正規化後的形狀)—— A 批四種。 */
+export interface BonusStandardRule {
   key: string;
   label: string;
-  kind: BonusRuleKind;
+  kind: BonusStandardRuleKind;
   metric: BonusMetric;
   service_item_ids: string[];
   threshold: number;
@@ -254,6 +257,20 @@ export interface BonusRule {
   percent: number | null;
   retroactive: boolean;
 }
+
+/**
+ * #1035 C 批 PC-E03:自訂公式規則。送出時只送 key / label / kind / text;
+ * 資料庫一律用 text 重新編譯出 ast(前端送來的 ast 會被忽略),讀回來時會帶 ast(前端不使用、不求值)。
+ */
+export interface BonusFormulaRule {
+  key: string;
+  label: string;
+  kind: "formula";
+  text: string;
+  ast?: unknown;
+}
+
+export type BonusRule = BonusStandardRule | BonusFormulaRule;
 
 export interface BonusPlanVersion {
   /** YYYY-MM-01 */
@@ -295,17 +312,20 @@ export interface BonusRuleResult {
   key: string;
   label: string;
   kind: BonusRuleKind;
-  metric: BonusMetric;
-  /** 這條規則看的量(單數 / 份數 / 業績元)。 */
-  quantity: number;
-  /** 實際計入的量(單 / 份:計入幾個;業績:計入多少元;達標給一筆:1 = 有給、0 = 沒給)。 */
-  counted_quantity: number;
+  /** 自訂公式規則是 null。 */
+  metric: BonusMetric | null;
+  /** 這條規則看的量(單數 / 份數 / 業績元);自訂公式規則是 null。 */
+  quantity: number | null;
+  /** 實際計入的量(單 / 份:計入幾個;業績:計入多少元;達標給一筆:1 = 有給、0 = 沒給);自訂公式規則是 null。 */
+  counted_quantity: number | null;
   /** 每單 / 每份:計入的是第幾個到第幾個(沒有計入時 null)。 */
   range_start: number | null;
   range_end: number | null;
   /** 只有「達標給一筆」才有值。 */
   achieved: boolean | null;
   amount: number;
+  /** #1035 C 批:只有自訂公式規則才有(division_by_zero / overflow / negative_clamped / capped)。 */
+  flags?: string[];
 }
 
 /** private.compute_staff_monthly_bonus / preview_staff_bonus 回傳形狀(服務人員本人看時沒有方案欄位)。 */
@@ -319,8 +339,29 @@ export interface StaffMonthlyBonus {
   version_effective_month?: string | null;
   amount: number;
   rules: BonusRuleResult[];
-  /** 目前只有 "capped"(合計超過 1,000,000 封頂)。 */
+  /** "capped"(合計或某條公式超過 1,000,000 封頂);C 批起另有自訂公式的 division_by_zero / overflow / negative_clamped。 */
   flags: string[];
+}
+
+/** #1035 C 批 PC-E04:public.preview_bonus_formula 回傳形狀。 */
+export interface BonusFormulaPreview {
+  ok: boolean;
+  /** ok = false 時的白話錯誤(含「第幾個字附近」)。 */
+  message: string | null;
+  /** 錯誤位置(原文第幾個字,1 起算);沒有位置時 null。 */
+  position: number | null;
+  /** 只檢查(沒有選人、沒有範例)時是 null。 */
+  value: number | null;
+  flags: string[];
+  vars_used: {
+    orders: number;
+    units: number;
+    revenue: number;
+    salary: number;
+    leave_days: number;
+    items: Array<{ id: string; name: string; units: number; revenue: number }>;
+  } | null;
+  normalized_text: string | null;
 }
 
 // =========================================================================

@@ -5,8 +5,8 @@
 //   - 方案清單一律 ListCard;「編輯」是主要動作;「封存」不可逆 ⇒ 收進 ⋯、紅字、分隔線下方,再跳確認窗。
 //   - 編輯器開在全頁層(規則多、有試算,要捲動);有「按儲存才寫入」的欄位 ⇒ 傳 dirty。
 //   - 「下個月起另有設定」是屬性(方角灰底);「這次只會改本月」這種「狀態跟你以為的不一樣」⇒ `!` 常駐。
-// 🔴 A 批不出現「自訂公式」選項(C 批才加),也不寫任何「即將推出」。
-// 🔴 前端不算獎金:試算一律呼叫資料庫 preview_staff_bonus(跟報表同一套算法)。
+// 🔴 C 批(PC-U01)起「給什麼」多「自訂公式（進階）」;公式欄位在 BonusFormulaFields.tsx。
+// 🔴 前端不算獎金:試算一律呼叫資料庫 preview_staff_bonus / preview_bonus_formula(跟報表同一套算法)。
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -61,21 +61,24 @@ import {
 import {
   BONUS_METRIC_OPTIONS,
   BONUS_PLAN_NAME_MAX,
-  BONUS_RULE_KIND_OPTIONS,
+  BONUS_EDITOR_KIND_OPTIONS,
   BONUS_RULE_LABEL_MAX,
   BONUS_RULE_MAX_COUNT,
-  BONUS_CAPPED_NOTE,
   bonusDraftUnit,
+  bonusFlagNotes,
   bonusRulesFromDrafts,
   createBonusRuleDraft,
   describeBonusRuleDraft,
   describeBonusRuleResult,
   draftFromBonusRule,
   formatBonusNumber,
+  formulaSaveBlocker,
   summarizeBonusPlanRules,
+  type BonusFormulaCheckState,
   type BonusRuleDraft,
   type BonusRuleDraftField,
 } from "./bonusRuleLogic";
+import { BonusFormulaFields } from "./BonusFormulaFields";
 import type {
   BonusMetric,
   BonusPlan,
@@ -366,6 +369,10 @@ function BonusPlanEditor({
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  // #1035 C 批:每條公式規則的即時檢查結果(key → 狀態),決定存檔按鈕擋不擋。
+  const [formulaChecks, setFormulaChecks] = useState<
+    Record<string, BonusFormulaCheckState | undefined>
+  >({});
 
   const formDirty = useFormDirty({ name, drafts, effective });
   const markFormClean = formDirty.markClean;
@@ -381,6 +388,7 @@ function BonusPlanEditor({
     [drafts, serviceNameOf],
   );
   const errorsByIndex = !parsed.ok && showErrors ? parsed.errorsByIndex : [];
+  const saveBlocker = formulaSaveBlocker(drafts, formulaChecks);
 
   function updateDraft(index: number, patch: Partial<BonusRuleDraft>) {
     setDrafts((prev) => prev.map((d, i) => (i === index ? { ...d, ...patch } : d)));
@@ -413,7 +421,7 @@ function BonusPlanEditor({
           : null;
     setNameError(nameProblem);
     setShowErrors(true);
-    if (nameProblem || !parsed.ok || drafts.length === 0) return;
+    if (nameProblem || !parsed.ok || drafts.length === 0 || saveBlocker) return;
     setSaving(true);
     try {
       await saveStaffBonusPlan({
@@ -451,23 +459,28 @@ function BonusPlanEditor({
         title={plan ? `編輯「${plan.name}」` : "新增獎金方案"}
         subtitle={EDITOR_SUBTITLE}
         footer={
-          <ActionBar>
-            <FullPageLayerClose asChild>
-              <Button type="button" variant="neutral" size="touch" disabled={saving}>
-                取消
+          <div className="flex flex-col gap-2">
+            {saveBlocker ? (
+              <AlertNote data-testid="bonus-plan-save-blocker">{saveBlocker}</AlertNote>
+            ) : null}
+            <ActionBar>
+              <FullPageLayerClose asChild>
+                <Button type="button" variant="neutral" size="touch" disabled={saving}>
+                  取消
+                </Button>
+              </FullPageLayerClose>
+              <Button
+                type="submit"
+                form={EDITOR_FORM_ID}
+                variant="primary"
+                size="touch"
+                disabled={saving || saveBlocker !== null}
+                data-testid="bonus-plan-save"
+              >
+                {saving ? "儲存中⋯" : "儲存"}
               </Button>
-            </FullPageLayerClose>
-            <Button
-              type="submit"
-              form={EDITOR_FORM_ID}
-              variant="primary"
-              size="touch"
-              disabled={saving}
-              data-testid="bonus-plan-save"
-            >
-              {saving ? "儲存中⋯" : "儲存"}
-            </Button>
-          </ActionBar>
+            </ActionBar>
+          </div>
         }
       >
         {/* 全頁層寬度對齊頁面內容欄(這一頁 max-w-3xl,#1010),放不下左右兩欄 ⇒ 試算一律接在規則下面。 */}
@@ -502,6 +515,12 @@ function BonusPlanEditor({
                   errors={errorsByIndex[index] ?? {}}
                   serviceOptions={serviceOptions}
                   serviceNameOf={serviceNameOf}
+                  merchantId={merchantId}
+                  monthlyStaff={monthlyStaff}
+                  thisMonth={listing.this_month}
+                  onFormulaCheck={(state) =>
+                    setFormulaChecks((prev) => ({ ...prev, [draft.key]: state }))
+                  }
                   onChange={(patch) => updateDraft(index, patch)}
                   onMove={(delta) => moveDraft(index, delta)}
                   onRemove={() => removeDraft(index)}
@@ -563,6 +582,10 @@ function BonusRuleCard({
   errors,
   serviceOptions,
   serviceNameOf,
+  merchantId,
+  monthlyStaff,
+  thisMonth,
+  onFormulaCheck,
   onChange,
   onMove,
   onRemove,
@@ -573,6 +596,10 @@ function BonusRuleCard({
   errors: Partial<Record<BonusRuleDraftField, string>>;
   serviceOptions: Array<{ value: string; label: string; removed: boolean }>;
   serviceNameOf: (id: string) => string | undefined;
+  merchantId: string;
+  monthlyStaff: MerchantStaff[];
+  thisMonth: string;
+  onFormulaCheck: (state: BonusFormulaCheckState | undefined) => void;
   onChange: (patch: Partial<BonusRuleDraft>) => void;
   onMove: (delta: -1 | 1) => void;
   onRemove: () => void;
@@ -582,6 +609,7 @@ function BonusRuleCard({
   const summary = describeBonusRuleDraft(draft, serviceNameOf);
   const selected = useMemo(() => new Set(draft.serviceItemIds), [draft.serviceItemIds]);
   const isLump = draft.kind === "lump_sum";
+  const isFormula = draft.kind === "formula";
 
   return (
     <div
@@ -627,12 +655,28 @@ function BonusRuleCard({
         <ChoiceChipGroup<BonusRuleKind>
           aria-label={`第 ${index + 1} 條給什麼`}
           value={draft.kind}
-          onValueChange={(kind) =>
-            onChange({ kind, retroactive: kind === "lump_sum" ? false : draft.retroactive })
-          }
-          options={BONUS_RULE_KIND_OPTIONS}
+          onValueChange={(kind) => {
+            onChange({ kind, retroactive: kind === "lump_sum" ? false : draft.retroactive });
+            if (kind !== "formula") onFormulaCheck(undefined);
+          }}
+          options={BONUS_EDITOR_KIND_OPTIONS}
         />
       </FormField>
+
+      {isFormula ? (
+        <BonusFormulaFields
+          index={index}
+          ruleKey={draft.key}
+          text={draft.formulaText}
+          draftError={errors.formula}
+          merchantId={merchantId}
+          monthlyStaff={monthlyStaff}
+          thisMonth={thisMonth}
+          serviceOptions={serviceOptions}
+          onTextChange={(formulaText) => onChange({ formulaText })}
+          onCheckChange={onFormulaCheck}
+        />
+      ) : null}
 
       {isLump ? (
         <FormField label="用什麼量判斷達標" required>
@@ -645,109 +689,113 @@ function BonusRuleCard({
         </FormField>
       ) : null}
 
-      <FormField label="只算這些服務">
-        <FieldMultiSelect
-          id={`${prefix}-services`}
-          aria-label={`第 ${index + 1} 條只算這些服務`}
-          options={serviceOptions}
-          selected={selected}
-          placeholder="全部服務"
-          onToggle={(value, next) => {
-            const set = new Set(draft.serviceItemIds);
-            if (next) set.add(value);
-            else set.delete(value);
-            onChange({ serviceItemIds: [...set] });
-          }}
-          testIdPrefix={`${prefix}-services`}
-        />
-      </FormField>
+      {!isFormula ? (
+        <>
+          <FormField label="只算這些服務">
+            <FieldMultiSelect
+              id={`${prefix}-services`}
+              aria-label={`第 ${index + 1} 條只算這些服務`}
+              options={serviceOptions}
+              selected={selected}
+              placeholder="全部服務"
+              onToggle={(value, next) => {
+                const set = new Set(draft.serviceItemIds);
+                if (next) set.add(value);
+                else set.delete(value);
+                onChange({ serviceItemIds: [...set] });
+              }}
+              testIdPrefix={`${prefix}-services`}
+            />
+          </FormField>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          label={isLump ? `達到多少就給（${unit}）` : `超過多少後才開始算（${unit}）`}
-          htmlFor={`${prefix}-threshold`}
-          required
-          error={errors.threshold}
-          helpLabel={
-            draft.kind === "percent" || (isLump && draft.lumpSumMetric === "revenue")
-              ? "說明：業績怎麼算"
-              : undefined
-          }
-          help={
-            draft.kind === "percent" || (isLump && draft.lumpSumMetric === "revenue")
-              ? REVENUE_HELP
-              : undefined
-          }
-        >
-          <FieldInput
-            id={`${prefix}-threshold`}
-            inputMode="decimal"
-            className="tabular-nums"
-            value={draft.threshold}
-            onChange={(e) => onChange({ threshold: e.target.value })}
-          />
-        </FormField>
-        <FormField
-          label={`算到多少為止（${unit}，選填）`}
-          htmlFor={`${prefix}-cap`}
-          error={errors.cap}
-        >
-          <FieldInput
-            id={`${prefix}-cap`}
-            inputMode="decimal"
-            className="tabular-nums"
-            placeholder="不設上限"
-            value={draft.cap}
-            onChange={(e) => onChange({ cap: e.target.value })}
-          />
-        </FormField>
-      </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField
+              label={isLump ? `達到多少就給（${unit}）` : `超過多少後才開始算（${unit}）`}
+              htmlFor={`${prefix}-threshold`}
+              required
+              error={errors.threshold}
+              helpLabel={
+                draft.kind === "percent" || (isLump && draft.lumpSumMetric === "revenue")
+                  ? "說明：業績怎麼算"
+                  : undefined
+              }
+              help={
+                draft.kind === "percent" || (isLump && draft.lumpSumMetric === "revenue")
+                  ? REVENUE_HELP
+                  : undefined
+              }
+            >
+              <FieldInput
+                id={`${prefix}-threshold`}
+                inputMode="decimal"
+                className="tabular-nums"
+                value={draft.threshold}
+                onChange={(e) => onChange({ threshold: e.target.value })}
+              />
+            </FormField>
+            <FormField
+              label={`算到多少為止（${unit}，選填）`}
+              htmlFor={`${prefix}-cap`}
+              error={errors.cap}
+            >
+              <FieldInput
+                id={`${prefix}-cap`}
+                inputMode="decimal"
+                className="tabular-nums"
+                placeholder="不設上限"
+                value={draft.cap}
+                onChange={(e) => onChange({ cap: e.target.value })}
+              />
+            </FormField>
+          </div>
 
-      {draft.kind === "percent" ? (
-        <FormField
-          label="百分比（%）"
-          htmlFor={`${prefix}-percent`}
-          required
-          error={errors.percent}
-        >
-          <FieldInput
-            id={`${prefix}-percent`}
-            inputMode="decimal"
-            className="tabular-nums"
-            value={draft.percent}
-            onChange={(e) => onChange({ percent: e.target.value })}
-          />
-        </FormField>
-      ) : (
-        <FormField
-          label={
-            isLump
-              ? "給多少（元）"
-              : draft.kind === "per_order"
-                ? "每單加多少（元）"
-                : "每份加多少（元）"
-          }
-          htmlFor={`${prefix}-amount`}
-          required
-          error={errors.amount}
-        >
-          <FieldAmountInput
-            id={`${prefix}-amount`}
-            value={draft.amount}
-            onChange={(e) => onChange({ amount: e.target.value })}
-          />
-        </FormField>
-      )}
+          {draft.kind === "percent" ? (
+            <FormField
+              label="百分比（%）"
+              htmlFor={`${prefix}-percent`}
+              required
+              error={errors.percent}
+            >
+              <FieldInput
+                id={`${prefix}-percent`}
+                inputMode="decimal"
+                className="tabular-nums"
+                value={draft.percent}
+                onChange={(e) => onChange({ percent: e.target.value })}
+              />
+            </FormField>
+          ) : (
+            <FormField
+              label={
+                isLump
+                  ? "給多少（元）"
+                  : draft.kind === "per_order"
+                    ? "每單加多少（元）"
+                    : "每份加多少（元）"
+              }
+              htmlFor={`${prefix}-amount`}
+              required
+              error={errors.amount}
+            >
+              <FieldAmountInput
+                id={`${prefix}-amount`}
+                value={draft.amount}
+                onChange={(e) => onChange({ amount: e.target.value })}
+              />
+            </FormField>
+          )}
 
-      {!isLump ? (
-        <SwitchRow
-          title="達標後整月都算"
-          description={RETROACTIVE_HELP}
-          descriptionMode="popover"
-          helpLabel="說明：達標後整月都算是什麼"
-          checked={draft.retroactive}
-          onCheckedChange={(retroactive) => onChange({ retroactive })}
-        />
+          {!isLump ? (
+            <SwitchRow
+              title="達標後整月都算"
+              description={RETROACTIVE_HELP}
+              descriptionMode="popover"
+              helpLabel="說明：達標後整月都算是什麼"
+              checked={draft.retroactive}
+              onCheckedChange={(retroactive) => onChange({ retroactive })}
+            />
+          ) : null}
+        </>
       ) : null}
 
       <FormField
@@ -759,7 +807,7 @@ function BonusRuleCard({
         <FieldInput
           id={`${prefix}-label`}
           value={draft.label}
-          placeholder="空白時用下面這句話當名稱"
+          placeholder={isFormula ? "空白時名稱是「自訂公式」" : "空白時用下面這句話當名稱"}
           onChange={(e) => onChange({ label: e.target.value })}
         />
       </FormField>
@@ -885,9 +933,9 @@ function BonusPreviewPanel({
                   </DetailRow>
                 ))}
                 <DetailRow label="合計">{`${formatBonusNumber(Number(result.amount))} 元`}</DetailRow>
-                {result.flags.includes("capped") ? (
-                  <AlertNote>{BONUS_CAPPED_NOTE}</AlertNote>
-                ) : null}
+                {bonusFlagNotes(result.flags).map((n) => (
+                  <AlertNote key={`preview-flag-${n}`}>{n}</AlertNote>
+                ))}
               </DetailSection>
             </div>
           ) : null}

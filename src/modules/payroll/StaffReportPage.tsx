@@ -48,7 +48,7 @@ import {
   useStaffMonthlyPayrollSummaryByRange,
 } from "./api";
 import {
-  BONUS_CAPPED_NOTE,
+  bonusFlagNotes,
   buildStaffBonusCsvRows,
   describeBonusRuleResult,
   formatBonusMonthLabel,
@@ -567,7 +567,9 @@ function StaffBonusDetails({ bonus }: { bonus: StaffBonusByRange }) {
               ))
             )}
             <DetailRow label="這個月獎金">{`${formatBonusNumber(Number(m.amount))} 元`}</DetailRow>
-            {m.flags.includes("capped") ? <AlertNote>{BONUS_CAPPED_NOTE}</AlertNote> : null}
+            {bonusFlagNotes(m.flags).map((n) => (
+              <AlertNote key={`bonus-flag-${m.month}-${n}`}>{n}</AlertNote>
+            ))}
           </DetailSection>
         ))}
       </CardContent>
