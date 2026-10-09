@@ -61,6 +61,7 @@ import {
   platformSetGroupAdmin,
 } from "./api";
 import { getErrorMessage } from "./getErrorMessage";
+import { MerchantFeatureGrantsCard } from "./MerchantFeatureGrantsCard";
 import { agentJobTitle, personDisplayName, personLoginEmail } from "./personDisplay";
 import { PlatformAdminShell } from "./PlatformAdminShell";
 
@@ -384,6 +385,9 @@ export default function MerchantDetailPage() {
             </form>
           </CardContent>
         </Card>
+
+        {/* SPECS-INDEX #1025 FG1-U03 / U05:這間店的平台功能開關 + 最近變更紀錄(放在「基本資料」卡下面)。 */}
+        <MerchantFeatureGrantsCard merchantId={merchant.id} />
 
         <Card>
           <CardHeader>

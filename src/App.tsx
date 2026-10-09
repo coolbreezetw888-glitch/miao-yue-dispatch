@@ -51,6 +51,8 @@ import ImportWizardPage from "@/modules/data-tools/ImportWizardPage";
 import ImportHistoryPage from "@/modules/data-tools/ImportHistoryPage";
 import ReportExportCenterPage from "@/modules/data-tools/ReportExportCenterPage";
 import IndustryTransferWizardPage from "@/modules/data-tools/IndustryTransferWizardPage";
+import { MERCHANT_FEATURE_KEYS } from "@/modules/merchant/features";
+import { RequireMerchantFeature } from "@/modules/merchant/RequireMerchantFeature";
 import PushEventSettingsPage from "@/modules/push-notifications/PushEventSettingsPage";
 import PushLogsPage from "@/modules/push-notifications/PushLogsPage";
 import PublicBookingPage from "@/modules/public-booking/PublicBookingPage";
@@ -125,9 +127,31 @@ export default function App() {
           <Route path="/app/line-marketing" element={<LineMarketingPage />} />
           <Route path="/app/push-events" element={<PushEventSettingsPage />} />
           <Route path="/app/push-logs" element={<PushLogsPage />} />
-          <Route path="/app/data-import" element={<ImportWizardPage />} />
-          <Route path="/app/data-import/history" element={<ImportHistoryPage />} />
-          <Route path="/app/reports" element={<ReportExportCenterPage />} />
+          {/* SPECS-INDEX #1025 FG1-U06:平台沒開通這個功能 ⇒ 整個看不到,直接打網址導回功能頁。 */}
+          <Route
+            path="/app/data-import"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.dataImport}>
+                <ImportWizardPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/data-import/history"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.dataImport}>
+                <ImportHistoryPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/reports"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.reportExport}>
+                <ReportExportCenterPage />
+              </RequireMerchantFeature>
+            }
+          />
           <Route path="/app/industry-transfer" element={<IndustryTransferWizardPage />} />
         </Route>
         <Route path="/app/onboarding" element={<OnboardingPage />} />

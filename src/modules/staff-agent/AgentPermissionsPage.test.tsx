@@ -36,6 +36,21 @@ vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => ({ merchant: { id: "merchant-1" }, isLoading: false }),
 }));
 
+// SPECS-INDEX #1025:平台功能開關。這支測的不是開關本身 ⇒ 一律當作全開(開關關掉的情況另有 features 相關測試)。
+vi.mock("@/modules/merchant/features", () => ({
+  MERCHANT_FEATURE_KEYS: {
+    onlineBooking: "online_booking",
+    dataImport: "data_import",
+    reportExport: "report_export",
+  },
+  useMerchantFeatures: () => ({
+    features: [],
+    hasFeature: () => true,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("./RequireMerchantAdmin", () => ({
   RequireMerchantAdmin: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

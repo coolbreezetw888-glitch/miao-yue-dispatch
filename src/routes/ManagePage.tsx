@@ -94,6 +94,7 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { updateMyAdminProfile } from "@/modules/merchant/api";
 import { useCurrentMerchant, useMyAdminProfile } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 // 2026-09-24:updateMyAgentProfile 已經不再 import——update_merchant_agent 補上 p_job_title 之後
 // 它能寫的 nickname/job_title 都被涵蓋了,這裡收斂成單一呼叫(那支函式本身依主腦指示先保留不刪)。
 import { clearAgentPendingLoginEmail, updateMerchantAgent } from "@/modules/staff-agent/api";
@@ -591,6 +592,13 @@ export default function ManagePage() {
   // 卡片入口已移除,見下面 cards 陣列的說明,路由/函式/測試本身完全不動。
   const { data: canExportReports } = useAgentPermission("report_export");
   const showReportExportCard = isAdmin || canExportReports === true;
+  // SPECS-INDEX #1025 FG1-U06 第 1 點:平台沒開通的功能,卡片整個不顯示(管理員、客服一律,沒有例外)。
+  // 讀取中 / 讀取失敗 hasFeature 回 undefined ⇒ `=== true` 不成立 ⇒ 先不顯示(不閃一下),資料庫端本來就會擋。
+  const { hasFeature } = useMerchantFeatures();
+  const dataImportFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.dataImport) === true;
+  const reportExportFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.reportExport) === true;
+  // 「客戶線上預約」沒開通 ⇒ 下面的「預約網址」卡也不顯示(off_impact:商家後台看不到預約網址)。
+  const onlineBookingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.onlineBooking) === true;
   // 模組 10(會員與紅利)§10.5(#617):member-points 卡片沿用跟「會員管理」相同的 members
   // section_key——點數餘額檢視/兌換/手動調整這些操作性質上跟既有會員管理權限邊界一致,不新增
   // 權限項目(規格書「涉及元件」一節明講由 engineer 決定歸在 members 還是 member_settings,
@@ -797,7 +805,7 @@ export default function ManagePage() {
       label: "資料匯入",
       description: "把舊系統的會員/歷史訂單資料匯入到秒約(含匯入紀錄與一鍵復原)",
       icon: Upload,
-      visible: isAdmin,
+      visible: isAdmin && dataImportFeatureOn,
     },
     {
       key: "reports",
@@ -805,7 +813,7 @@ export default function ManagePage() {
       label: "報表匯出中心",
       description: "統一匯出訂單/會員/抽成/請假四種報表 CSV",
       icon: Download,
-      visible: showReportExportCard,
+      visible: showReportExportCard && reportExportFeatureOn,
     },
     {
       key: "settings",
@@ -925,8 +933,9 @@ export default function ManagePage() {
         </div>
       )}
 
-      {/* 使用者決策(2026-09-23):「預約網址」獨立卡片。 */}
-      <BookingUrlCard />
+      {/* 使用者決策(2026-09-23):「預約網址」獨立卡片。
+          SPECS-INDEX #1025:平台沒開通「客戶線上預約」⇒ 整張不顯示(讀取中也先不顯示,避免閃一下)。 */}
+      {onlineBookingFeatureOn ? <BookingUrlCard /> : null}
 
       {/* 模組 11(LINE 通知)§4.5:「我的 LINE 綁定」個人設定區塊,商家管理員/客服都會經過這個
           頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上

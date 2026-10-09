@@ -232,9 +232,13 @@ select ok(
   and (select enabled = false from merchant_feature_flags where merchant_id = 'f9760000-0000-4000-8000-000000000020' and feature_key = 'material_cost_enabled'),
   '⑰ C-1:mc 客服改嚴格工時衝突影響 0 列(仍是 bh 設的 false);mc 自己改的料錢總開關生效(false)'
 );
-select lives_ok(
+-- SPECS-INDEX #1025 ⚠️2(FG1-A07,20261010150000):merchant_feature_flags 加了 CHECK,只允許
+-- material_cost_enabled / strict_conflict_check 兩種 key。商家管理員仍過得了 RLS(所以拿到的是 23514 CHECK 錯誤,
+-- 不是 42501),但不能再寫其他名稱。
+select throws_ok(
   $$insert into merchant_feature_flags (merchant_id, feature_key, enabled) values ('f9760000-0000-4000-8000-000000000020', 'some_other_flag', true)$$,
-  '⑰b C-1:商家管理員照舊可以寫任何功能開關'
+  '23514', null,
+  '⑰b C-1:商家管理員過得了 RLS,但其他名稱被 #1025 ⚠️2 的 CHECK 擋下(23514)'
 );
 
 -- =========================================================================

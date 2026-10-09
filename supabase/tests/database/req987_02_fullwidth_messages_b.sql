@@ -23,6 +23,8 @@ declare
   v_src text;
 begin
   select replace(prosrc, E'\r\n', E'\n') into v_src from pg_proc where oid = pg_temp.req987_oid(p_sig);
+  -- SPECS-INDEX #1025 FG1-F02:import_members_batch / import_historical_bookings_batch 多一段資料匯入功能開關(有 [req1025 begin/end] 標記),先拿掉再比對改前指紋。
+  v_src := regexp_replace(v_src, '  -- \[req1025 begin\].*?-- \[req1025 end\]\n', '', 'g');
   -- 第 22 批 #1023:set_staff_day_override 多了一段「時段外不能開放」(有標記),先拿掉再換回舊訊息比對改前指紋。
   v_src := regexp_replace(v_src, '  -- \[req1023-batch22 begin\].*?-- \[req1023-batch22 end\]\n\n', '', 'g');
   -- 客戶端第 3 批 C3-E01:get_my_booking_schedule 每筆多回 source / is_guest_booking(只加這幾行),先拿掉再比對改前指紋。

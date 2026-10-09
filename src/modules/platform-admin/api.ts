@@ -8,8 +8,11 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { IndustryType } from "@/modules/merchant/types";
+import type { MerchantFeatureRow } from "@/modules/merchant/features";
 import type {
   IndustryFeaturePresetRow,
+  MerchantFeatureLogRow,
+  PlatformFeatureRow,
   PlatformAgentRow,
   PlatformGroupRow,
   PlatformMerchantRow,
@@ -230,34 +233,75 @@ export async function fetchIndustryFeaturePresets(): Promise<IndustryFeaturePres
   return (data ?? []) as IndustryFeaturePresetRow[];
 }
 
-/** 介面 4.6:新增一項產業預設功能組合。受功能 3.8 的 RLS 政策保護(只有平台管理員能寫入)。 */
-export async function createIndustryFeaturePreset(input: {
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #1025 功能開關 第 1 批(FG1-U02 / U03 / U05)。
+// 原本的「新增一項(手打 key)」「刪除」兩支已拿掉(T8:功能清單由程式維護,畫面只能開關)。
+// ---------------------------------------------------------------------------
+
+/** 功能清單(platform_features),依 sort_order 排序。所有登入者可讀(不是機密)。 */
+export async function fetchPlatformFeatures(): Promise<PlatformFeatureRow[]> {
+  const { data, error } = await supabase
+    .from("platform_features")
+    .select("key, name, description, off_impact, parent_key, sort_order, default_enabled")
+    .order("sort_order", { ascending: true })
+    .order("key", { ascending: true });
+  if (error) throwSupabaseError(error);
+  return (data ?? []) as PlatformFeatureRow[];
+}
+
+/** FG1-U02:設定某個產業某個功能的預設值(切換即存)。直接 upsert,既有 RLS 只有超級管理員能寫。 */
+export async function upsertIndustryFeaturePreset(input: {
   industryType: IndustryType;
   featureKey: string;
   defaultEnabled: boolean;
 }): Promise<void> {
-  const { error } = await supabase.from("industry_feature_presets").insert({
-    industry_type: input.industryType,
-    feature_key: input.featureKey.trim(),
-    default_enabled: input.defaultEnabled,
+  const { error } = await supabase.from("industry_feature_presets").upsert(
+    {
+      industry_type: input.industryType,
+      feature_key: input.featureKey,
+      default_enabled: input.defaultEnabled,
+    },
+    { onConflict: "industry_type,feature_key" },
+  );
+  if (error) throwSupabaseError(error);
+}
+
+/** FG1-U03:讀單一商家每個功能的開關(get_merchant_features,超級管理員可讀任何一間)。 */
+export async function platformFetchMerchantFeatures(
+  merchantId: string,
+): Promise<MerchantFeatureRow[]> {
+  const { data, error } = await supabase.rpc("get_merchant_features", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throwSupabaseError(error);
+  return (data ?? []) as MerchantFeatureRow[];
+}
+
+/** FG1-U03:開關單一商家的某個功能(platform_set_merchant_feature,函式第一行檢查超級管理員)。 */
+export async function platformSetMerchantFeature(input: {
+  merchantId: string;
+  featureKey: string;
+  enabled: boolean;
+  note?: string | null;
+}): Promise<void> {
+  const { error } = await supabase.rpc("platform_set_merchant_feature", {
+    p_merchant_id: input.merchantId,
+    p_feature_key: input.featureKey,
+    p_enabled: input.enabled,
+    p_note: input.note ?? null,
   });
   if (error) throwSupabaseError(error);
 }
 
-/** 介面 4.6:切換某一項預設值的開關。受功能 3.8 的 RLS 政策保護。 */
-export async function updateIndustryFeaturePresetEnabled(
-  id: string,
-  defaultEnabled: boolean,
-): Promise<void> {
-  const { error } = await supabase
-    .from("industry_feature_presets")
-    .update({ default_enabled: defaultEnabled })
-    .eq("id", id);
+/** FG1-U05(⚠️1):某間商家最近的功能開關變更紀錄(預設 20 筆)。 */
+export async function platformListMerchantFeatureLogs(
+  merchantId: string,
+  limit = 20,
+): Promise<MerchantFeatureLogRow[]> {
+  const { data, error } = await supabase.rpc("platform_list_merchant_feature_logs", {
+    p_merchant_id: merchantId,
+    p_limit: limit,
+  });
   if (error) throwSupabaseError(error);
-}
-
-/** 介面 4.6:刪除一項產業預設功能組合。規則 2.6 判斷結論:不算危險操作,不需要 JSON 備份。 */
-export async function deleteIndustryFeaturePreset(id: string): Promise<void> {
-  const { error } = await supabase.from("industry_feature_presets").delete().eq("id", id);
-  if (error) throwSupabaseError(error);
+  return (data ?? []) as MerchantFeatureLogRow[];
 }

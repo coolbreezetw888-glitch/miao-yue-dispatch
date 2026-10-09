@@ -95,15 +95,16 @@ select is(
 
 -- ----- public.apply_industry_preset(p_merchant_id uuid) -----
 -- 客戶端第 1 批 C1-F03(20261008160000):ACL 的 PUBLIC(=X)已收回,期望值同步更新(函式本體未改)。
+-- SPECS-INDEX #1025 FG1-A06(20261010150000):本體改成寫 merchant_feature_grants、comment 同步改寫 ⇒ ① ② 期望值同步更新(只改這一支)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.apply_industry_preset(p_merchant_id uuid)$m$, array[
     $m$'找不到指定的商家：%'$m$, $m$'找不到指定的商家: %'$m$
   ])),
-  $m$1a46e154d9bd17a713273905040ab126$m$,
+  $m$ffa7cc2b98f1f85ebf2ba9aaf56ec837$m$,
   $m$public.apply_industry_preset(p_merchant_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.apply_industry_preset(p_merchant_id uuid)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,service_role=X/postgres}$m$, $m$依商家的 industry_type 讀取 industry_feature_presets,批次寫入 merchant_feature_flags。目前 industry_feature_presets 是空表,此函式會正常寫入 0 筆,見規格書 1.6/3.4。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,service_role=X/postgres}$m$, $m$依商家的 industry_type 讀取 industry_feature_presets,批次寫入 merchant_feature_grants(SPECS-INDEX #1025 FG1-A06 起改寫平台功能開關表，不再寫 merchant_feature_flags)。功能清單每一項都寫一列，值 = 該產業的預設，沒設產業預設就用 platform_features.default_enabled;on conflict do nothing。只在開店 / 開分店時呼叫一次(T2:之後改產業預設不影響已開好的商家;T3:商家切換產業也不重套)。$m$],
   $m$public.apply_industry_preset(p_merchant_id uuid) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$public.apply_industry_preset(p_merchant_id uuid)$m$),

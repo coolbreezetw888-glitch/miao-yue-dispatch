@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 
 import {
@@ -159,6 +160,12 @@ function AgentPermissionsInner() {
     void commit([change]);
   }
 
+  // SPECS-INDEX #1025 FG1-U06 第 4 點:平台沒開通「報表匯出中心」⇒ 那一個權限開關整列不顯示
+  // (值保留不改 —— T9,重新開通後原值直接生效)。讀取中 / 讀取失敗先不顯示這一列。
+  const { hasFeature } = useMerchantFeatures();
+  const isSectionFeatureVisible = (sectionKey: string): boolean =>
+    sectionKey !== "report_export" || hasFeature(MERCHANT_FEATURE_KEYS.reportExport) === true;
+
   const copy = confirm ? DEPENDENCY_CONFIRM_COPY[confirm.mode] : null;
   const effects =
     confirm?.mode === "disable" ? AGENT_PERMISSION_REVOKE_EFFECTS : AGENT_PERMISSION_GRANT_EFFECTS;
@@ -190,38 +197,40 @@ function AgentPermissionsInner() {
                保留 <ul><li> 結構(e2e 用 `main ul > li` 數列數);SwitchRow 也讓每個開關有正確的無障礙名稱。
                第 11 批 E:相依提醒放在 SwitchRow 的 children 插槽(仍在同一個 li 內,列數不變)。 */
             <ul className="space-y-2">
-              {visibleAgentPermissionSections().map((section) => {
-                const notes = dependencyAware
-                  ? legacyDependencyNotes(section.key, effective, isHidden)
-                  : [];
-                return (
-                  <li key={section.key}>
-                    <SwitchRow
-                      id={`agent-permission-switch-${section.key}`}
-                      className="rounded-md px-3 py-2"
-                      title={section.label}
-                      description={section.description}
-                      descriptionMode="popover"
-                      helpLabel={`說明：${section.label}`}
-                      helpTriggerTestId={`permission-help-trigger-${section.key}`}
-                      helpPopoverTestId="permission-help-popover"
-                      titleTestId="permission-switch-title"
-                      checked={effective(section.key)}
-                      disabled={writing}
-                      onCheckedChange={(v) => handleToggle(section.key, v)}
-                    >
-                      {notes.length > 0 ? (
-                        /* skill 二:「現在的狀態跟你以為的不一樣」⇒ 常駐黃色 `!`(比照 #977,不用紅色)。 */
-                        <AlertNote data-testid={`permission-dependency-note-${section.key}`}>
-                          {notes.map((note) => (
-                            <p key={note}>{note}</p>
-                          ))}
-                        </AlertNote>
-                      ) : null}
-                    </SwitchRow>
-                  </li>
-                );
-              })}
+              {visibleAgentPermissionSections()
+                .filter((section) => isSectionFeatureVisible(section.key))
+                .map((section) => {
+                  const notes = dependencyAware
+                    ? legacyDependencyNotes(section.key, effective, isHidden)
+                    : [];
+                  return (
+                    <li key={section.key}>
+                      <SwitchRow
+                        id={`agent-permission-switch-${section.key}`}
+                        className="rounded-md px-3 py-2"
+                        title={section.label}
+                        description={section.description}
+                        descriptionMode="popover"
+                        helpLabel={`說明：${section.label}`}
+                        helpTriggerTestId={`permission-help-trigger-${section.key}`}
+                        helpPopoverTestId="permission-help-popover"
+                        titleTestId="permission-switch-title"
+                        checked={effective(section.key)}
+                        disabled={writing}
+                        onCheckedChange={(v) => handleToggle(section.key, v)}
+                      >
+                        {notes.length > 0 ? (
+                          /* skill 二:「現在的狀態跟你以為的不一樣」⇒ 常駐黃色 `!`(比照 #977,不用紅色)。 */
+                          <AlertNote data-testid={`permission-dependency-note-${section.key}`}>
+                            {notes.map((note) => (
+                              <p key={note}>{note}</p>
+                            ))}
+                          </AlertNote>
+                        ) : null}
+                      </SwitchRow>
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </CardContent>

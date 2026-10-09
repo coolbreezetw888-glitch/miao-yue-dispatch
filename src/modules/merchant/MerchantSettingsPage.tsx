@@ -93,6 +93,7 @@ import { RequireMerchantAdmin } from "@/modules/staff-agent/RequireMerchantAdmin
 
 import { updateMerchantSettings, uploadMerchantLogo } from "./api";
 import { useCurrentMerchant, useRefetchAccessibleMerchants } from "./context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "./features";
 import { LogoUploader } from "./LogoUploader";
 import { MerchantAdminList } from "./MerchantAdminList";
 import { useMerchantLineLoginStatus } from "@/modules/line-notifications/lineLoginApi";
@@ -248,6 +249,11 @@ function MerchantSettingsPageInner() {
     if (!hasUnsavedChanges) return;
     return acquireBottomActionBarSlot();
   }, [hasUnsavedChanges]);
+
+  // SPECS-INDEX #1025 FG1-U06 第 5 點:平台沒開通「客戶線上預約」⇒「預約網址」區塊整個不顯示。
+  // 讀取中 / 讀取失敗也先不顯示(`=== true`),避免閃一下。
+  const { hasFeature } = useMerchantFeatures();
+  const onlineBookingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.onlineBooking) === true;
 
   if (isLoading) {
     // skill 二之八:載入中用灰色骨架,不要用「載入中⋯」四個字。
@@ -447,17 +453,19 @@ function MerchantSettingsPageInner() {
               />
             </FormField>
 
-            <FormField
-              label="預約網址"
-              help="顧客預約用的專屬連結。客人可以看服務、選時間並送出預約。網址代碼由系統自動產生，目前不開放自行修改。"
-              helpLabel="說明：預約網址是什麼、可以改嗎"
-            >
-              {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
+            {onlineBookingFeatureOn ? (
+              <FormField
+                label="預約網址"
+                help="顧客預約用的專屬連結。客人可以看服務、選時間並送出預約。網址代碼由系統自動產生，目前不開放自行修改。"
+                helpLabel="說明：預約網址是什麼、可以改嗎"
+              >
+                {/* 唯讀的事實,不是可編輯欄位 ⇒ 用灰底區塊表示「看得到但動不了」,不做成 disabled
                   輸入框(disabled 的輸入框會讓人一直想點它)。 */}
-              <p className="break-all rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-sm text-muted-foreground">
-                {merchant.booking_slug ?? "尚未產生"}
-              </p>
-            </FormField>
+                <p className="break-all rounded-md border border-border bg-muted px-3 py-2.5 font-mono text-sm text-muted-foreground">
+                  {merchant.booking_slug ?? "尚未產生"}
+                </p>
+              </FormField>
+            ) : null}
           </CardContent>
         </Card>
 

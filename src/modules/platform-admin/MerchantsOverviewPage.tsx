@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { disableMerchant, enableMerchant } from "@/modules/merchant/api";
-import { INDUSTRY_TYPE_LABELS } from "@/modules/merchant/types";
+import { INDUSTRY_TYPE_LABELS, INDUSTRY_TYPES } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
 
 import { platformFetchAllMerchants } from "./api";
@@ -111,8 +111,12 @@ export default function MerchantsOverviewPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL_INDUSTRY}>全部產業</SelectItem>
-              <SelectItem value="on_site_dispatch">到府派工</SelectItem>
-              <SelectItem value="in_store_beauty">美業到店</SelectItem>
+              {/* SPECS-INDEX #1025 ⚠️3(FG1-U07):兩個選項改用 INDUSTRY_TYPE_LABELS,不寫死文字(原本漏改「美業到店」)。 */}
+              {INDUSTRY_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {INDUSTRY_TYPE_LABELS[t]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

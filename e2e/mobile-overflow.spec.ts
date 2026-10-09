@@ -385,7 +385,8 @@ test.describe("超級管理員後台(需要預先設定好的平台管理員測�
 
   test("產業預設功能組合編輯器 /platform-admin/industry-presets", async ({ page }) => {
     await page.goto("/platform-admin/industry-presets");
-    await expect(page.getByRole("heading", { name: "產業預設功能組合" })).toBeVisible({
+    // SPECS-INDEX #1025 FG1-U01:頁面標題改名「功能開關」(網址不變)。
+    await expect(page.getByRole("heading", { name: "功能開關" })).toBeVisible({
       timeout: LOAD_TIMEOUT,
     });
     await assertNoHorizontalOverflow(page, "超級管理員後台(產業預設功能組合編輯器)");

@@ -1,5 +1,5 @@
 // 對應規格書 4.2:超級管理員後台外殼與導覽。
-// 純功能性的簡單頂部導覽(集團與商家 / 產業預設功能組合),沿用既有的 src/components/ui/ 元件庫，
+// 純功能性的簡單頂部導覽(集團與商家 / 功能開關),沿用既有的 src/components/ui/ 元件庫，
 // 不另外設計一套視覺系統——這是內部維運工具，不是賣給商家的產品功能，UI 打磨留到最後。
 
 import { Link, useLocation } from "react-router-dom";
@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { to: "/platform-admin", label: "集團與商家" },
-  { to: "/platform-admin/industry-presets", label: "產業預設功能組合" },
+  // SPECS-INDEX #1025 FG1-U01:頁籤改名「功能開關」;網址不變(避免書籤失效)。
+  { to: "/platform-admin/industry-presets", label: "功能開關" },
 ];
 
 export function PlatformAdminShell({ children }: { children: ReactNode }) {

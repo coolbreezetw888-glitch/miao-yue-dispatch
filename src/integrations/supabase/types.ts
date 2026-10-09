@@ -947,7 +947,15 @@ export type Database = {
           id?: string
           industry_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "industry_feature_presets_feature_key_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "platform_features"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       leave_type_deduction_rules: {
         Row: {
@@ -2202,6 +2210,96 @@ export type Database = {
           },
         ]
       }
+      merchant_feature_grant_logs: {
+        Row: {
+          changed_by: string
+          created_at: string
+          feature_key: string
+          id: string
+          is_bulk: boolean
+          merchant_id: string
+          new_enabled: boolean
+          note: string | null
+          old_enabled: boolean | null
+        }
+        Insert: {
+          changed_by: string
+          created_at?: string
+          feature_key: string
+          id?: string
+          is_bulk?: boolean
+          merchant_id: string
+          new_enabled: boolean
+          note?: string | null
+          old_enabled?: boolean | null
+        }
+        Update: {
+          changed_by?: string
+          created_at?: string
+          feature_key?: string
+          id?: string
+          is_bulk?: boolean
+          merchant_id?: string
+          new_enabled?: boolean
+          note?: string | null
+          old_enabled?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_feature_grant_logs_feature_key_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "platform_features"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "merchant_feature_grant_logs_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_feature_grants: {
+        Row: {
+          enabled: boolean
+          feature_key: string
+          merchant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled: boolean
+          feature_key: string
+          merchant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          feature_key?: string
+          merchant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_feature_grants_feature_key_fkey"
+            columns: ["feature_key"]
+            isOneToOne: false
+            referencedRelation: "platform_features"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "merchant_feature_grants_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_leave_types: {
         Row: {
           created_at: string
@@ -3021,6 +3119,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      platform_features: {
+        Row: {
+          created_at: string
+          default_enabled: boolean
+          description: string
+          key: string
+          name: string
+          off_impact: string
+          parent_key: string | null
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          default_enabled: boolean
+          description: string
+          key: string
+          name: string
+          off_impact: string
+          parent_key?: string | null
+          sort_order: number
+        }
+        Update: {
+          created_at?: string
+          default_enabled?: boolean
+          description?: string
+          key?: string
+          name?: string
+          off_impact?: string
+          parent_key?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_features_parent_key_fkey"
+            columns: ["parent_key"]
+            isOneToOne: false
+            referencedRelation: "platform_features"
+            referencedColumns: ["key"]
+          },
+        ]
       }
       push_event_subscriptions: {
         Row: {
@@ -4557,6 +4696,20 @@ export type Database = {
         Args: { p_date: string; p_merchant_id: string }
         Returns: Json
       }
+      get_merchant_features: {
+        Args: { p_merchant_id: string }
+        Returns: {
+          description: string
+          effective: boolean
+          feature_key: string
+          granted: boolean | null
+          name: string
+          off_impact: string
+          parent_key: string | null
+          preset_enabled: boolean | null
+          sort_order: number
+        }[]
+      }
       get_merchant_line_bot_public_info: {
         Args: { p_merchant_id: string }
         Returns: Json
@@ -4932,6 +5085,19 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      platform_list_merchant_feature_logs: {
+        Args: { p_limit?: number; p_merchant_id: string }
+        Returns: {
+          changed_by_email: string | null
+          created_at: string
+          feature_key: string
+          feature_name: string
+          is_bulk: boolean
+          new_enabled: boolean
+          note: string | null
+          old_enabled: boolean | null
+        }[]
+      }
       platform_purge_merchant_members_and_points: {
         Args: { p_merchant_id: string }
         Returns: undefined
@@ -4942,6 +5108,15 @@ export type Database = {
       }
       platform_set_group_admin: {
         Args: { p_group_id: string; p_user_email: string }
+        Returns: undefined
+      }
+      platform_set_merchant_feature: {
+        Args: {
+          p_enabled: boolean
+          p_feature_key: string
+          p_merchant_id: string
+          p_note?: string | null
+        }
         Returns: undefined
       }
       preview_booking_points: {

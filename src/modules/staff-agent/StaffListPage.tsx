@@ -89,6 +89,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import {
   getServiceItem,
   useMerchantServiceCategories,
@@ -191,6 +192,12 @@ const EMPTY_FORM: StaffFormState = {
   //    不夠直覺)。資料庫存的值仍然是英文 'piece_rate',只有前端顯示文字改,不動資料庫。
   compensationType: "piece_rate",
 };
+
+/** SPECS-INDEX #1025 ⚠️6:只對「客戶線上預約」有作用的兩個開關(另外兩個數字欄位是 STAFF_NUMBER_PERMISSION_FIELDS 整組)。 */
+const ONLINE_BOOKING_ONLY_STAFF_FIELDS: ReadonlySet<string> = new Set([
+  "no_time_slot_limit",
+  "auto_accept_booking",
+]);
 
 function staffToFormState(staff: MerchantStaff): StaffFormState {
   return {
@@ -400,6 +407,12 @@ export function StaffFormDialog({
   //    遮罩蓋在小卡窗上面 ⇒ 按鈕點不到。換 key = 上一組整個丟掉、重新掛載,遮罩與本體一起重新插入。
   const [orderSwitchDialogSeq, setOrderSwitchDialogSeq] = useState(0);
   const queryClient = useQueryClient();
+  // SPECS-INDEX #1025 FG1-U06 第 5 點(⚠️6):平台沒開通「客戶線上預約」⇒ 只跟線上預約有關的 4 個欄位
+  // (最少要提前幾天、最遠可以預約到幾天後、客戶預約無時段限制、客戶預約自動接受)整個不顯示。
+  // 值保留不洗掉(T9):做法是「原值送回」—— form 一開始就從資料庫灌進這 4 個值,畫面藏起來後沒有任何地方能改它,
+  // 存檔時 updateMerchantStaff(staff.id, form) 照樣把原值送回去。新增服務人員時則是送出跟資料庫預設一樣的空值 / false。
+  const { hasFeature } = useMerchantFeatures();
+  const onlineBookingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.onlineBooking) === true;
 
   const staffServiceItemsQueryKey = ["staff-agent-module", "staff-service-items", staff?.id];
 
@@ -753,28 +766,29 @@ export function StaffFormDialog({
             {/* 2026-09-24 使用者裁決:三個「預約天數」欄位收斂成兩個(見 types.ts
                 STAFF_NUMBER_PERMISSION_FIELDS 上方的完整裁決註解)。欄位數從 3 變 2,所以格線
                 也從 sm:grid-cols-3 改成 sm:grid-cols-2,兩欄才不會留下一格空白。 */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              {STAFF_NUMBER_PERMISSION_FIELDS.map((field) => {
-                // 明確窄化成兩個具體欄位(而不是用泛型 toCamel),避免 form[key] 的型別被推成
-                // StaffFormState 全部欄位型別的聯集(含 boolean),導致 <input value> 型別檢查出錯。
-                const numberKey: "advanceBookingDays" | "bookingWindowMaxDays" =
-                  field.key === "advance_booking_days"
-                    ? "advanceBookingDays"
-                    : "bookingWindowMaxDays";
-                return (
-                  <FormField
-                    key={field.key}
-                    label={
-                      <>
-                        {field.label}
-                        {field.comingSoon ? <ComingSoonTag /> : null}
-                      </>
-                    }
-                    htmlFor={`staff-${field.key}`}
-                    helpLabel={`說明：${field.label}怎麼填`}
-                    help={field.description}
-                  >
-                    {/* min/max:刻意跟資料庫端的 CHECK 約束對齊(常數都在 types.ts,兩邊共用同一份)。
+            {onlineBookingFeatureOn ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {STAFF_NUMBER_PERMISSION_FIELDS.map((field) => {
+                  // 明確窄化成兩個具體欄位(而不是用泛型 toCamel),避免 form[key] 的型別被推成
+                  // StaffFormState 全部欄位型別的聯集(含 boolean),導致 <input value> 型別檢查出錯。
+                  const numberKey: "advanceBookingDays" | "bookingWindowMaxDays" =
+                    field.key === "advance_booking_days"
+                      ? "advanceBookingDays"
+                      : "bookingWindowMaxDays";
+                  return (
+                    <FormField
+                      key={field.key}
+                      label={
+                        <>
+                          {field.label}
+                          {field.comingSoon ? <ComingSoonTag /> : null}
+                        </>
+                      }
+                      htmlFor={`staff-${field.key}`}
+                      helpLabel={`說明：${field.label}怎麼填`}
+                      help={field.description}
+                    >
+                      {/* min/max:刻意跟資料庫端的 CHECK 約束對齊(常數都在 types.ts,兩邊共用同一份)。
                         ・「最少要提前幾天」:min=0,對應資料庫的 advance_booking_days >= 0。
                           這條約束是 2026-09-24 資料庫工程師主動補的——原本這欄完全沒有約束,
                           打 -5 會被靜默存進資料庫,之後實作預約邏輯的人就會拿到一個荒謬的值。
@@ -789,37 +803,41 @@ export function StaffFormDialog({
                         placeholder:兩個欄位留空時會套用的預設值不一樣(0 天 vs 180 天),光靠下方
                         說明文字容易被略過,所以直接把留空時會用的數字顯示在空白輸入框裡。文案句型
                         跟說明文字統一成「留空 = N 天」(2026-09-24 主腦裁決),兩欄一致。 */}
-                    <FieldInput
-                      id={`staff-${field.key}`}
-                      type="number"
-                      inputMode="numeric"
-                      className="tabular-nums"
-                      min={
-                        field.key === "advance_booking_days"
-                          ? MIN_ADVANCE_BOOKING_DAYS_LIMIT
-                          : MIN_BOOKING_DAYS_AHEAD_LIMIT
-                      }
-                      max={
-                        field.key === "advance_booking_days"
-                          ? undefined
-                          : MAX_BOOKING_DAYS_AHEAD_LIMIT
-                      }
-                      placeholder={
-                        field.key === "advance_booking_days"
-                          ? `留空 = ${DEFAULT_MIN_ADVANCE_BOOKING_DAYS} 天`
-                          : `留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天`
-                      }
-                      value={form[numberKey] ?? ""}
-                      onChange={(e) =>
-                        setField(numberKey, e.target.value === "" ? null : Number(e.target.value))
-                      }
-                    />
-                  </FormField>
-                );
-              })}
-            </div>
+                      <FieldInput
+                        id={`staff-${field.key}`}
+                        type="number"
+                        inputMode="numeric"
+                        className="tabular-nums"
+                        min={
+                          field.key === "advance_booking_days"
+                            ? MIN_ADVANCE_BOOKING_DAYS_LIMIT
+                            : MIN_BOOKING_DAYS_AHEAD_LIMIT
+                        }
+                        max={
+                          field.key === "advance_booking_days"
+                            ? undefined
+                            : MAX_BOOKING_DAYS_AHEAD_LIMIT
+                        }
+                        placeholder={
+                          field.key === "advance_booking_days"
+                            ? `留空 = ${DEFAULT_MIN_ADVANCE_BOOKING_DAYS} 天`
+                            : `留空 = ${DEFAULT_MAX_BOOKING_DAYS_AHEAD} 天`
+                        }
+                        value={form[numberKey] ?? ""}
+                        onChange={(e) =>
+                          setField(numberKey, e.target.value === "" ? null : Number(e.target.value))
+                        }
+                      />
+                    </FormField>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="flex flex-col gap-2">
-              {STAFF_BOOLEAN_PERMISSION_FIELDS.map((field) => (
+              {STAFF_BOOLEAN_PERMISSION_FIELDS.filter(
+                (field) =>
+                  onlineBookingFeatureOn || !ONLINE_BOOKING_ONLY_STAFF_FIELDS.has(field.key),
+              ).map((field) => (
                 <SwitchRow
                   key={field.key}
                   id={`staff-switch-${field.key}`}

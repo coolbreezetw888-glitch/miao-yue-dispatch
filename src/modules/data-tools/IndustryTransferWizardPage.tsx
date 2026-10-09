@@ -43,6 +43,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant, useRefetchAccessibleMerchants } from "@/modules/merchant/context";
 import { createMerchantInGroup } from "@/modules/merchant/api";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import {
   MerchantIntakeForm,
   type MerchantIntakeFormValues,
@@ -50,11 +51,17 @@ import {
 import { useMerchantMembersList } from "@/modules/members/api";
 
 import { transferMembersToMerchant } from "./api";
+import { emptyActiveMembersDescription } from "./industryTransferCopy";
 import { RequireDataImportAccess } from "./RequireDataImportAccess";
 
 type Step = "new-merchant" | "select-members" | "confirm" | "result";
 
 function IndustryTransferWizardPageInner() {
+  // SPECS-INDEX #1025 FG1-U06 第 3 點:結果頁的「報表匯出中心」提及與連結,只在平台開通時顯示。
+  const { hasFeature } = useMerchantFeatures();
+  const reportExportFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.reportExport) === true;
+  // 「選會員」空狀態:平台沒開通「資料匯入」⇒ 說明不提資料匯入(QA L1)。
+  const dataImportFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.dataImport) === true;
   const { merchant } = useCurrentMerchant();
   const sourceMerchantId = merchant!.id;
   const refetchAccessibleMerchants = useRefetchAccessibleMerchants();
@@ -176,7 +183,7 @@ function IndustryTransferWizardPageInner() {
             {!membersLoading && !membersError && activeMembers.length === 0 ? (
               <EmptyState
                 title="這間商家目前沒有上架中的會員可以搬遷"
-                description="只有「上架中」的會員可以搬到新商家。要先在會員管理把會員上架，或是先用資料匯入把客戶匯進來。"
+                description={emptyActiveMembersDescription(dataImportFeatureOn)}
                 action={
                   <Button asChild variant="primary" size="touch">
                     <Link to="/app/members">去看會員管理</Link>
@@ -299,13 +306,23 @@ function IndustryTransferWizardPageInner() {
             {/* 🟡 常駐 `!`:現在的狀態跟使用者以為的不一樣(老闆會以為整間店都搬過去了)。 */}
             <AlertNote>
               <strong>服務人員、服務項目、收費設定這次不會自動搬遷。</strong>
-              如果新商家需要參考舊資料，請到「報表匯出中心」或各自模組的頁面自行匯出留存，再到新商家
-              手動重新設定。
+              {/* SPECS-INDEX #1025 FG1-U06 第 3 點:平台沒開通「報表匯出中心」⇒ 不提它、也不顯示連結。 */}
+              {reportExportFeatureOn ? (
+                <>
+                  如果新商家需要參考舊資料，請到「報表匯出中心」或各自模組的頁面自行匯出留存，再到新商家手動重新設定。
+                </>
+              ) : (
+                <>
+                  如果新商家需要參考舊資料，請到各自模組的頁面自行匯出留存，再到新商家手動重新設定。
+                </>
+              )}
             </AlertNote>
             <div className="flex justify-end gap-2 pt-1">
-              <Button asChild variant="neutral" size="touch">
-                <Link to="/app/reports">前往報表匯出中心</Link>
-              </Button>
+              {reportExportFeatureOn ? (
+                <Button asChild variant="neutral" size="touch">
+                  <Link to="/app/reports">前往報表匯出中心</Link>
+                </Button>
+              ) : null}
               {/* 這個步驟唯一的 ① 主要按鈕。 */}
               <Button asChild variant="primary" size="touch">
                 <Link to="/app">回到首頁</Link>

@@ -73,3 +73,26 @@ export interface IndustryFeaturePresetRow {
   feature_key: string;
   default_enabled: boolean;
 }
+
+/** SPECS-INDEX #1025 FG1-U02:功能清單的一列(platform_features)。 */
+export interface PlatformFeatureRow {
+  key: string;
+  name: string;
+  description: string;
+  off_impact: string;
+  parent_key: string | null;
+  sort_order: number;
+  default_enabled: boolean;
+}
+
+/** SPECS-INDEX #1025 FG1-U05(⚠️1):功能開關變更紀錄的一列(platform_list_merchant_feature_logs)。 */
+export interface MerchantFeatureLogRow {
+  created_at: string;
+  feature_key: string;
+  feature_name: string;
+  old_enabled: boolean | null;
+  new_enabled: boolean;
+  note: string | null;
+  is_bulk: boolean;
+  changed_by_email: string | null;
+}

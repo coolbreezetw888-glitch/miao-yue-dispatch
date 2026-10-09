@@ -1,255 +1,174 @@
-// 對應規格書 4.6:產業預設功能組合編輯器(`/platform-admin/industry-presets`)。
-// feature_key 用 <datalist> 列出目前資料庫裡已經出現過的 key 當自動完成建議，不做強制白名單
-// (見規格書 4.6 邊界情況說明)。刪除前用一般的 AlertDialog「確定要刪除嗎」對話框，比照規則 2.6
-// 的判斷結論(不算危險操作，不需要 JSON 備份)。
+// SPECS-INDEX #1025 功能開關 FG1-U02:「功能開關」頁(原「產業預設功能組合」改寫,網址 /platform-admin/industry-presets 不變)。
+// 規格書 .project/specs/功能開關.md(第 2 版)FG1-U02。
+//
+// 一張表:列 = 功能清單(主功能一列,細部功能縮排在它下面;依 sort_order),欄 = 功能 / 到府派工 / 到店服務。
+// 每格一個開關,切換即存(直接 upsert industry_feature_presets,既有 RLS 只有超級管理員能寫)。
+// 這裡只決定「之後新開的商家」預設開哪些(T2);已經開好的商家到「集團與商家」點進去個別調整。
+//
+// 原本的「新增一項(手打 key)」表單與「刪除」按鈕 / 刪除確認窗已拿掉(T8:功能清單由程式維護,
+// 憑空新增的名稱不會有任何作用)。
+// ⚠️5(F6 批次開關 + 統計欄)這次不做。
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-// ui-v1-full 第二階段第 1 批(盤點 P2):刪除確認窗改用 ui-overlay-patterns 的小卡窗殼
-// (CardAlertDialog)。只換外殼與按鈕階層(確認鈕白底紅字,skill 二之三:危險動作不做實心紅),
-// 觸發條件、handleDelete 的行為完全沒動。
-import {
-  CardAlertDialog,
-  CardAlertDialogAction,
-  CardAlertDialogCancel,
-  CardAlertDialogContent,
-  CardAlertDialogDescription,
-  CardAlertDialogFooter,
-  CardAlertDialogHeader,
-  CardAlertDialogTitle,
-  CardAlertDialogTrigger,
-  LoadingSkeleton,
-} from "@/components/patterns";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ErrorState, HelpPopover, LoadingSkeleton } from "@/components/patterns";
+import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 import { INDUSTRY_TYPE_LABELS, INDUSTRY_TYPES } from "@/modules/merchant/types";
 import type { IndustryType } from "@/modules/merchant/types";
 
 import {
-  createIndustryFeaturePreset,
-  deleteIndustryFeaturePreset,
   fetchIndustryFeaturePresets,
-  updateIndustryFeaturePresetEnabled,
+  fetchPlatformFeatures,
+  upsertIndustryFeaturePreset,
 } from "./api";
+import { orderFeaturesForDisplay } from "./featureDisplay";
 import { getErrorMessage } from "./getErrorMessage";
 import { PlatformAdminShell } from "./PlatformAdminShell";
 
 const PRESETS_QUERY_KEY = ["platform-admin", "industry-feature-presets"] as const;
-const FEATURE_KEY_DATALIST_ID = "existing-feature-keys";
+const FEATURES_QUERY_KEY = ["platform-admin", "platform-features"] as const;
+
+/** 一格的識別:產業 + 功能。 */
+const cellKey = (industryType: IndustryType, featureKey: string) => `${industryType}:${featureKey}`;
 
 export default function IndustryPresetsPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<IndustryType>("on_site_dispatch");
-  const [newFeatureKey, setNewFeatureKey] = useState("");
-  const [newDefaultEnabled, setNewDefaultEnabled] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingCell, setSavingCell] = useState<string | null>(null);
 
-  const {
-    data: presets,
-    isLoading,
-    error,
-  } = useQuery({
+  const featuresQuery = useQuery({ queryKey: FEATURES_QUERY_KEY, queryFn: fetchPlatformFeatures });
+  const presetsQuery = useQuery({
     queryKey: PRESETS_QUERY_KEY,
     queryFn: fetchIndustryFeaturePresets,
   });
 
-  const existingFeatureKeys = useMemo(
-    () => Array.from(new Set((presets ?? []).map((p) => p.feature_key))),
-    [presets],
+  const features = useMemo(
+    () => orderFeaturesForDisplay(featuresQuery.data ?? []),
+    [featuresQuery.data],
+  );
+  const presetMap = useMemo(
+    () =>
+      new Map(
+        (presetsQuery.data ?? []).map((p) => [
+          cellKey(p.industry_type, p.feature_key),
+          p.default_enabled,
+        ]),
+      ),
+    [presetsQuery.data],
   );
 
-  const presetsForActiveTab = useMemo(
-    () => (presets ?? []).filter((p) => p.industry_type === activeTab),
-    [presets, activeTab],
-  );
-
-  async function refetchPresets() {
-    await queryClient.invalidateQueries({ queryKey: PRESETS_QUERY_KEY });
+  /** 這一格目前的值:有產業預設用產業預設,沒有就用功能清單的預設(= 新商家實際會拿到的值)。 */
+  function cellValue(industryType: IndustryType, featureKey: string, fallback: boolean): boolean {
+    return presetMap.get(cellKey(industryType, featureKey)) ?? fallback;
   }
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    if (!newFeatureKey.trim()) return;
-    setCreating(true);
+  async function handleToggle(industryType: IndustryType, featureKey: string, next: boolean) {
+    const key = cellKey(industryType, featureKey);
+    setSavingCell(key);
     try {
-      await createIndustryFeaturePreset({
-        industryType: activeTab,
-        featureKey: newFeatureKey,
-        defaultEnabled: newDefaultEnabled,
-      });
-      setNewFeatureKey("");
-      setNewDefaultEnabled(true);
-      await refetchPresets();
-      toast.success("已新增一項預設功能");
-    } catch (err) {
-      toast.error("新增失敗", { description: getErrorMessage(err) });
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleToggle(id: string, nextEnabled: boolean) {
-    setTogglingId(id);
-    try {
-      await updateIndustryFeaturePresetEnabled(id, nextEnabled);
-      await refetchPresets();
+      await upsertIndustryFeaturePreset({ industryType, featureKey, defaultEnabled: next });
+      await queryClient.invalidateQueries({ queryKey: PRESETS_QUERY_KEY });
+      toast.success("已更新預設值。");
     } catch (err) {
       toast.error("更新失敗", { description: getErrorMessage(err) });
     } finally {
-      setTogglingId(null);
+      setSavingCell(null);
     }
   }
 
-  async function handleDelete(id: string) {
-    setDeletingId(id);
-    try {
-      await deleteIndustryFeaturePreset(id);
-      await refetchPresets();
-      toast.success("已刪除");
-    } catch (err) {
-      toast.error("刪除失敗", { description: getErrorMessage(err) });
-    } finally {
-      setDeletingId(null);
-    }
-  }
+  const isLoading = featuresQuery.isLoading || presetsQuery.isLoading;
+  const error = featuresQuery.error ?? presetsQuery.error;
 
   return (
     <PlatformAdminShell>
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="feature-presets-page">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">產業預設功能組合</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">功能開關</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            新商家建立時，會依照選的產業自動套用這裡設定的預設值。修改這裡不會影響已經建立的商家。
+            設定新開的商家預設開哪些功能。這裡只影響之後新開的商家；已經開好的商家，請到「集團與商家」點進那間商家個別調整。
           </p>
         </div>
 
         {error ? (
-          <p className="text-sm text-destructive">載入失敗：{(error as Error).message}</p>
+          <ErrorState
+            title="讀不到功能清單"
+            reason={getErrorMessage(error)}
+            onRetry={() => {
+              void featuresQuery.refetch();
+              void presetsQuery.refetch();
+            }}
+          />
         ) : (
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as IndustryType)}>
-            <TabsList>
-              {INDUSTRY_TYPES.map((t) => (
-                <TabsTrigger key={t} value={t}>
-                  {INDUSTRY_TYPE_LABELS[t]}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            {INDUSTRY_TYPES.map((t) => (
-              <TabsContent key={t} value={t}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>{INDUSTRY_TYPE_LABELS[t]}</CardTitle>
-                    <CardDescription>目前設定的預設功能開關</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {isLoading ? (
-                      /* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */
-                      <LoadingSkeleton variant="lines" rows={3} />
-                    ) : (
-                      <ul className="space-y-2">
-                        {presetsForActiveTab.map((preset) => (
-                          <li
-                            key={preset.id}
-                            className="flex items-start justify-between gap-3 rounded-md border border-border px-3 py-2"
+          <Card>
+            <CardContent className="p-0">
+              {/* 標題列:功能 / 到府派工 / 到店服務。窄螢幕時兩個產業欄的標題自動折成兩行,整頁不橫向捲動。 */}
+              <div
+                className="grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-end gap-x-3 border-b border-border px-4 py-3 text-[13px] font-semibold text-muted-foreground sm:grid-cols-[minmax(0,1fr)_6rem_6rem]"
+                aria-hidden="true"
+              >
+                <span>功能</span>
+                {INDUSTRY_TYPES.map((t) => (
+                  <span key={t} className="text-center leading-snug">
+                    {INDUSTRY_TYPE_LABELS[t]}
+                  </span>
+                ))}
+              </div>
+              {isLoading ? (
+                <div className="p-4">
+                  {/* skill 二之八:載入中用灰色骨架,不用「載入中⋯」四個字。 */}
+                  <LoadingSkeleton variant="lines" rows={3} />
+                </div>
+              ) : (
+                <ul>
+                  {features.map((feature) => {
+                    const isChild = feature.parent_key !== null;
+                    return (
+                      <li
+                        key={feature.key}
+                        data-testid={`feature-preset-row-${feature.key}`}
+                        className="grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-3 border-b border-border px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_6rem_6rem]"
+                      >
+                        <div className={cn("flex min-w-0 items-center gap-1", isChild && "pl-5")}>
+                          <span className="min-w-0 break-words text-sm font-semibold text-foreground">
+                            {feature.name}
+                          </span>
+                          <HelpPopover
+                            label={`說明：${feature.name}`}
+                            triggerTestId={`feature-preset-help-${feature.key}`}
+                            popoverTestId="feature-preset-help-popover"
                           >
-                            <span className="min-w-0 break-words font-mono text-sm text-foreground">
-                              {preset.feature_key}
-                            </span>
-                            <div className="flex shrink-0 items-center gap-3">
+                            {feature.description}
+                          </HelpPopover>
+                        </div>
+                        {INDUSTRY_TYPES.map((t) => {
+                          const key = cellKey(t, feature.key);
+                          return (
+                            <div key={t} className="flex justify-center">
                               <Switch
-                                checked={preset.default_enabled}
-                                disabled={togglingId === preset.id}
-                                onCheckedChange={(checked) => handleToggle(preset.id, checked)}
+                                aria-label={`${INDUSTRY_TYPE_LABELS[t]}新開商家預設開啟「${feature.name}」`}
+                                data-testid={`feature-preset-switch-${t}-${feature.key}`}
+                                checked={cellValue(t, feature.key, feature.default_enabled)}
+                                disabled={savingCell === key}
+                                onCheckedChange={(checked) =>
+                                  void handleToggle(t, feature.key, checked)
+                                }
+                                className="data-[state=checked]:bg-brand"
                               />
-                              <CardAlertDialog>
-                                <CardAlertDialogTrigger asChild>
-                                  <Button
-                                    variant="danger"
-                                    size="card"
-                                    disabled={deletingId === preset.id}
-                                  >
-                                    刪除
-                                  </Button>
-                                </CardAlertDialogTrigger>
-                                <CardAlertDialogContent>
-                                  <CardAlertDialogHeader>
-                                    <CardAlertDialogTitle>
-                                      確定要刪除這一項嗎？
-                                    </CardAlertDialogTitle>
-                                    <CardAlertDialogDescription className="break-all">
-                                      刪除「{preset.feature_key}」不會影響已經建立的商家目前的功能
-                                      開關，只影響之後新建商家的預設值。
-                                    </CardAlertDialogDescription>
-                                  </CardAlertDialogHeader>
-                                  <CardAlertDialogFooter>
-                                    <CardAlertDialogCancel>取消</CardAlertDialogCancel>
-                                    <CardAlertDialogAction
-                                      tone="danger"
-                                      onClick={() => handleDelete(preset.id)}
-                                    >
-                                      確定刪除
-                                    </CardAlertDialogAction>
-                                  </CardAlertDialogFooter>
-                                </CardAlertDialogContent>
-                              </CardAlertDialog>
                             </div>
-                          </li>
-                        ))}
-                        {presetsForActiveTab.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">目前沒有設定任何預設功能</p>
-                        ) : null}
-                      </ul>
-                    )}
-
-                    <form
-                      onSubmit={handleCreate}
-                      className="flex items-end gap-3 border-t border-border pt-4"
-                    >
-                      <div className="flex-1">
-                        <Label htmlFor="new-feature-key">新增一項(功能鍵值)</Label>
-                        <Input
-                          id="new-feature-key"
-                          className="mt-2"
-                          list={FEATURE_KEY_DATALIST_ID}
-                          value={newFeatureKey}
-                          onChange={(e) => setNewFeatureKey(e.target.value)}
-                          placeholder="例如 online_booking"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2 pb-2">
-                        <Label htmlFor="new-feature-enabled">預設開啟</Label>
-                        <Switch
-                          id="new-feature-enabled"
-                          checked={newDefaultEnabled}
-                          onCheckedChange={setNewDefaultEnabled}
-                        />
-                      </div>
-                      <Button type="submit" disabled={creating || !newFeatureKey.trim()}>
-                        {creating ? "新增中⋯" : "新增"}
-                      </Button>
-                    </form>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            ))}
-          </Tabs>
+                          );
+                        })}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         )}
-
-        <datalist id={FEATURE_KEY_DATALIST_ID}>
-          {existingFeatureKeys.map((key) => (
-            <option key={key} value={key} />
-          ))}
-        </datalist>
       </div>
     </PlatformAdminShell>
   );
