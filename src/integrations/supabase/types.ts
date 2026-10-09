@@ -3508,6 +3508,141 @@ export type Database = {
           },
         ]
       }
+      staff_bonus_assignments: {
+        Row: {
+          created_at: string
+          merchant_id: string
+          plan_id: string | null
+          staff_id: string
+          updated_at: string
+          updated_by_user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          merchant_id: string
+          plan_id?: string | null
+          staff_id: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          merchant_id?: string
+          plan_id?: string | null
+          staff_id?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_bonus_assignments_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_bonus_assignments_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "staff_bonus_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_bonus_assignments_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_bonus_plan_versions: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          effective_month: string
+          id: string
+          merchant_id: string
+          plan_id: string
+          rules: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          effective_month: string
+          id?: string
+          merchant_id: string
+          plan_id: string
+          rules: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          effective_month?: string
+          id?: string
+          merchant_id?: string
+          plan_id?: string
+          rules?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_bonus_plan_versions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_bonus_plan_versions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "staff_bonus_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_bonus_plans: {
+        Row: {
+          created_at: string
+          created_by_user_id: string | null
+          id: string
+          merchant_id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          merchant_id: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string | null
+          id?: string
+          merchant_id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_bonus_plans_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_leave_records: {
         Row: {
           cancelled_at: string | null
@@ -3570,6 +3705,7 @@ export type Database = {
       }
       staff_payroll_status_history: {
         Row: {
+          bonus_plan_id: string | null
           compensation_type: string
           created_at: string
           effective_from: string
@@ -3582,6 +3718,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          bonus_plan_id?: string | null
           compensation_type: string
           created_at?: string
           effective_from?: string
@@ -3594,6 +3731,7 @@ export type Database = {
           status: string
         }
         Update: {
+          bonus_plan_id?: string | null
           compensation_type?: string
           created_at?: string
           effective_from?: string
@@ -3821,6 +3959,10 @@ export type Database = {
       am_i_platform_admin: { Args: never; Returns: boolean }
       apply_industry_preset: {
         Args: { p_merchant_id: string }
+        Returns: undefined
+      }
+      archive_staff_bonus_plan: {
+        Args: { p_plan_id: string }
         Returns: undefined
       }
       batch_apply_staff_service_commission_rates: {
@@ -4774,6 +4916,10 @@ export type Database = {
           status: string
         }[]
       }
+      get_staff_bonus_by_range: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: Json
+      }
       get_staff_commission_summary: {
         Args: { p_month: number; p_staff_id: string; p_year: number }
         Returns: Json
@@ -4957,6 +5103,7 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      list_staff_bonus_plans: { Args: { p_merchant_id: string }; Returns: Json }
       list_staff_bookable_start_times: {
         Args: {
           p_date: string
@@ -5143,6 +5290,15 @@ export type Database = {
       }
       preview_line_notification_targets: {
         Args: { p_booking_id: string; p_event_type: string }
+        Returns: Json
+      }
+      preview_staff_bonus: {
+        Args: {
+          p_merchant_id: string
+          p_month: string
+          p_rules: Json
+          p_staff_id: string
+        }
         Returns: Json
       }
       preview_staff_leave_conflicts: {
@@ -5374,6 +5530,16 @@ export type Database = {
         Args: { p_run_date?: string }
         Returns: number
       }
+      save_staff_bonus_plan: {
+        Args: {
+          p_effective?: string
+          p_merchant_id: string
+          p_name: string
+          p_plan_id: string
+          p_rules: Json
+        }
+        Returns: string
+      }
       search_members_by_contact_phone: {
         Args: { p_merchant_id: string; p_term: string }
         Returns: Json
@@ -5498,6 +5664,10 @@ export type Database = {
       }
       set_merchant_line_login_enabled: {
         Args: { p_enabled: boolean; p_merchant_id: string }
+        Returns: undefined
+      }
+      set_staff_bonus_plan: {
+        Args: { p_plan_id: string; p_staff_id: string }
         Returns: undefined
       }
       set_staff_day_override: {

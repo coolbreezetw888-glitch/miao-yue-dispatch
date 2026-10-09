@@ -334,7 +334,45 @@ export const BILLING_SUMMARY_LABELS = {
   netMargin: "商家總淨利",
   /** 紅利系統重構 §3.15 / §4.10(#848):卡片標題與 CSV「項目」欄共用。紅利功能關閉時兩邊都不出現。 */
   pointsRedeemAmount: "紅利折抵金額",
+  /** #1035 A 批 PA-B02:卡片標題與 CSV「項目」欄共用。整店沒有任何獎金方案時兩邊都不出現。 */
+  monthlyBonus: "月薪獎金",
 } as const;
+
+/** #1035 A 批 PA-B02:「商家總淨利」`?` 說明多的那一句(有獎金方案的店才加)。 */
+export const NET_MARGIN_BONUS_HELP = "月薪獎金也會從商家總淨利扣掉。";
+
+/** #1035 A 批 PA-B02:店家報表 CSV 明細最後多的一欄。 */
+export const BONUS_CSV_COLUMN_LABEL = "獎金";
+
+/**
+ * #1035 A 批 PA-B02:「月薪獎金」卡 / CSV 那一列要不要出現 —— 只看報表函式回傳的 bonus_feature_used
+ * (這間店有任何獎金方案,含已封存)。舊資料庫回應沒有這個 key ⇒ 不出現(fail-closed)。
+ */
+export function shouldShowMonthlyBonus(
+  summary: Pick<MerchantBillingSummary, "bonus_feature_used"> | undefined,
+): boolean {
+  return summary?.bonus_feature_used === true;
+}
+
+/**
+ * 明細表月薪列「獎金」那一段 / CSV「獎金」欄。跟月薪同一個判斷來源(resolveSalaryDisplay):
+ * 不是完整月份 ⇒ 說明文字,不是 0;非月薪列 ⇒ 畫面不顯示、CSV 空白。
+ */
+export function bonusCsvCell(
+  salaryApplicable: boolean | undefined,
+  row: Pick<StaffBreakdownRow, "compensation_type" | "bonus_amount">,
+): string | number {
+  if (row.compensation_type !== "monthly_salary") return "";
+  return salaryCsvValue(salaryApplicable, row.bonus_amount ?? null);
+}
+
+export function bonusCellText(
+  salaryApplicable: boolean | undefined,
+  bonusAmount: number | null | undefined,
+): string {
+  const display = resolveSalaryDisplay(salaryApplicable, bonusAmount);
+  return display.kind === "value" ? `獎金 ${display.value} 元` : `獎金：${display.text}`;
+}
 
 /** #985 第 8 批 8-10:CSV 尾端兩列資訊列的「項目」文字。刻意不放進 BILLING_SUMMARY_LABELS
  * (那一組是「畫面卡片標題 = CSV 項目」一對一對應,這兩列只出現在 CSV)。 */
@@ -430,6 +468,8 @@ export type BillingCsvSummaryFields = Pick<
   | "total_points_redeem_amount"
   | "commission_orders_material_deducted_count"
   | "commission_orders_material_not_deducted_count"
+  | "bonus_feature_used"
+  | "total_monthly_bonus"
 >;
 
 /** 總計區塊的一個項目:左邊是畫面上那張卡的標題,右邊是數字或「算不出來」的說明文字。 */
@@ -494,6 +534,16 @@ export function buildBillingCsvSummaryItems(
     // #985 第 8 批 8-10:兩列資訊列一律接在最尾端(紅利那一列之後),不插在中間、不改既有列。
     // 舊資料庫回應沒有這兩個 key ⇒ 不輸出。
     ...commissionMaterialCsvItems(summary),
+    // #1035 A 批 PA-B02:有獎金方案的店多一列「月薪獎金」,放最後(既有列順序不動 ⚠️);
+    // 不是完整月份時寫說明文字(跟月薪那幾格同一個判斷來源)。
+    ...(shouldShowMonthlyBonus(summary)
+      ? [
+          {
+            label: BILLING_SUMMARY_LABELS.monthlyBonus,
+            value: salaryCsvValue(salaryApplicable, summary.total_monthly_bonus ?? null),
+          },
+        ]
+      : []),
   ];
 }
 

@@ -579,9 +579,13 @@ describe("CSV 總計區塊:項目與順序", () => {
     // 斷言等於同時釘住「畫面改了文案、CSV 卻留著舊名稱」這種漂移。
     // 紅利系統重構 批次 7:BILLING_SUMMARY_LABELS 多了「紅利折抵金額」,它只在紅利功能開啟時才輸出
     // (這組 fixture 是關閉),所以比對時把它排除;開啟時的完整比對在檔尾那一組。
+    // #1035 A 批:「月薪獎金」同理,只在店裡有獎金方案(bonus_feature_used)時才輸出,完整比對在
+    // billingReportBonus.test.ts。
     expect(labels).toEqual(
       Object.values(BILLING_SUMMARY_LABELS).filter(
-        (label) => label !== BILLING_SUMMARY_LABELS.pointsRedeemAmount,
+        (label) =>
+          label !== BILLING_SUMMARY_LABELS.pointsRedeemAmount &&
+          label !== BILLING_SUMMARY_LABELS.monthlyBonus,
       ),
     );
   });
@@ -759,7 +763,12 @@ describe("紅利折抵金額(#848):顯示條件只看報表函式回傳的 point
       total_points_redeem_amount: 35,
     });
     const labels = buildBillingCsvSummaryItems(summary).map((item) => item.label);
-    expect(labels).toEqual(Object.values(BILLING_SUMMARY_LABELS));
+    // #1035 A 批:「月薪獎金」只在 bonus_feature_used 時輸出(這組 fixture 沒有),比對時排除。
+    expect(labels).toEqual(
+      Object.values(BILLING_SUMMARY_LABELS).filter(
+        (label) => label !== BILLING_SUMMARY_LABELS.monthlyBonus,
+      ),
+    );
     expect(labels[labels.length - 1]).toBe("紅利折抵金額");
     expect(csvSummaryValue(summary, BILLING_SUMMARY_LABELS.pointsRedeemAmount)).toBe(35);
   });

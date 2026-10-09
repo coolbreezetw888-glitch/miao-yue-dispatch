@@ -15,7 +15,10 @@
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import type {
+  BonusPlansListing,
+  BonusRule,
   BookingCommissionRecord,
   CommissionBasisType,
   CommissionMode,
@@ -26,6 +29,8 @@ import type {
   StaffCommissionSummary,
   StaffMonthlyPayrollSummary,
   StaffSalarySettings,
+  StaffBonusByRange,
+  StaffMonthlyBonus,
   StaffServiceCommissionRate,
 } from "./types";
 import { validateDateRange } from "./dateRangeUtils";
@@ -537,6 +542,119 @@ export function useStaffMonthlyPayrollSummaryByRange(
         startDate as string,
         endDate as string,
       ),
+    enabled:
+      Boolean(staffId) &&
+      Boolean(startDate) &&
+      Boolean(endDate) &&
+      validateDateRange(startDate as string, endDate as string) === null,
+  });
+}
+
+// =========================================================================
+// #1035 彈性計薪 A 批:月薪獎金方案(規格書 PA-F01~F06)。全部走 SECURITY DEFINER RPC,
+// 三張新表 0 policy、前端不能直接讀寫。
+// =========================================================================
+
+export const staffBonusPlansQueryKey = (merchantId: string | null | undefined) =>
+  ["payroll-module", "staff-bonus-plans", merchantId] as const;
+
+/** PA-F01:方案清單 + 每位服務人員目前的指派 + 本店全部服務項目(含已下架)。 */
+export async function fetchStaffBonusPlans(merchantId: string): Promise<BonusPlansListing> {
+  const { data, error } = await supabase.rpc("list_staff_bonus_plans", {
+    p_merchant_id: merchantId,
+  });
+  if (error) throw error;
+  return data as unknown as BonusPlansListing;
+}
+
+export function useStaffBonusPlans(
+  merchantId: string | null | undefined,
+): UseQueryResult<BonusPlansListing> {
+  return useQuery({
+    queryKey: staffBonusPlansQueryKey(merchantId),
+    queryFn: () => fetchStaffBonusPlans(merchantId as string),
+    enabled: Boolean(merchantId),
+  });
+}
+
+export type BonusPlanEffective = "this_month" | "next_month";
+
+/** PA-F02:新增(planId = null)或修改方案 + 寫版本;回方案 id。 */
+export async function saveStaffBonusPlan(input: {
+  merchantId: string;
+  planId: string | null;
+  name: string;
+  rules: BonusRule[];
+  effective: BonusPlanEffective;
+}): Promise<string> {
+  const { data, error } = await supabase.rpc("save_staff_bonus_plan", {
+    p_merchant_id: input.merchantId,
+    // 產生的型別把 p_plan_id 標成 string(資料庫參數本身允許 null = 新增)。
+    p_plan_id: input.planId as string,
+    p_name: input.name,
+    p_rules: input.rules as unknown as Json,
+    p_effective: input.effective,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** PA-F03:指派 / 取消指派(planId = null = 不給獎金)。 */
+export async function setStaffBonusPlan(staffId: string, planId: string | null): Promise<void> {
+  const { error } = await supabase.rpc("set_staff_bonus_plan", {
+    p_staff_id: staffId,
+    p_plan_id: planId as string,
+  });
+  if (error) throw error;
+}
+
+/** PA-F04:封存(有人正在用時資料庫會擋下並說是誰)。 */
+export async function archiveStaffBonusPlan(planId: string): Promise<void> {
+  const { error } = await supabase.rpc("archive_staff_bonus_plan", { p_plan_id: planId });
+  if (error) throw error;
+}
+
+/** PA-F05:用還沒存檔的規則對某人某月試算(month = YYYY-MM-01)。 */
+export async function previewStaffBonus(input: {
+  merchantId: string;
+  rules: BonusRule[];
+  staffId: string;
+  month: string;
+}): Promise<StaffMonthlyBonus> {
+  const { data, error } = await supabase.rpc("preview_staff_bonus", {
+    p_merchant_id: input.merchantId,
+    p_rules: input.rules as unknown as Json,
+    p_staff_id: input.staffId,
+    p_month: input.month,
+  });
+  if (error) throw error;
+  return data as unknown as StaffMonthlyBonus;
+}
+
+export async function fetchStaffBonusByRange(
+  staffId: string,
+  startDate: string,
+  endDate: string,
+): Promise<StaffBonusByRange> {
+  const { data, error } = await supabase.rpc("get_staff_bonus_by_range", {
+    p_staff_id: staffId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return data as unknown as StaffBonusByRange;
+}
+
+/** PA-F06:某位服務人員區間內完整月份的獎金(服務人員本人看時沒有方案資訊)。 */
+export function useStaffBonusByRange(
+  staffId: string | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): UseQueryResult<StaffBonusByRange> {
+  return useQuery({
+    queryKey: ["payroll-module", "staff-bonus-range", staffId, startDate, endDate],
+    queryFn: () =>
+      fetchStaffBonusByRange(staffId as string, startDate as string, endDate as string),
     enabled:
       Boolean(staffId) &&
       Boolean(startDate) &&

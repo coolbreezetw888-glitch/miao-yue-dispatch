@@ -37,6 +37,7 @@ import {
   ErrorState,
   FieldAmountInput,
   FieldInput,
+  FieldSelect,
   FormField,
   FullPageLayer,
   FullPageLayerClose,
@@ -53,6 +54,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import {
@@ -72,10 +74,13 @@ import type { ServiceItem } from "@/modules/service-items/types";
 import {
   batchApplyStaffServiceCommissionRates,
   fetchStaffServiceCommissionRates,
+  setStaffBonusPlan,
+  staffBonusPlansQueryKey,
   staffServiceCommissionRatesQueryKey,
   upsertStaffSalarySettings,
   upsertStaffServiceCommissionRate,
   useMerchantPayrollSettings,
+  useStaffBonusPlans,
   useStaffSalarySettings,
   useStaffServiceCommissionRates,
 } from "./api";
@@ -86,10 +91,13 @@ import {
 import { previewServiceCommission, calculateDayRate, getDaysInMonth } from "./previewCalculators";
 import {
   COMMISSION_MODE_LABELS,
+  type BonusPlansListing,
   type CommissionMode,
   type StaffServiceCommissionRate,
 } from "./types";
 import { RequireCommissionSettingsAccess } from "./RequireCommissionSettingsAccess";
+// #1035 彈性計薪 A 批(PA-U01~U04):月薪獎金方案區塊 + 月薪人員指派方案下拉。
+import { BonusPlanSection } from "./BonusPlanSection";
 
 const payrollSettingsQueryKey = (merchantId: string) =>
   ["payroll-module", "merchant-payroll-settings", merchantId] as const;
@@ -859,6 +867,9 @@ function MonthlySalaryStaffSection({
   const monthlySalaryStaff = (staffList ?? []).filter(
     (s) => s.compensation_type === "monthly_salary",
   );
+  // #1035 A 批 PA-U04:有任何使用中的獎金方案時,每位月薪人員多一個「獎金方案」下拉。
+  const { data: bonusListing } = useStaffBonusPlans(merchantId);
+  const hasActiveBonusPlan = (bonusListing?.plans ?? []).some((p) => p.status === "active");
 
   function refetch() {
     return queryClient.invalidateQueries({ queryKey: ["payroll-module", "staff-salary-settings"] });
@@ -869,6 +880,9 @@ function MonthlySalaryStaffSection({
       <CardHeader>
         <CardTitle>月薪制服務人員</CardTitle>
         <CardDescription>逐位設定月薪金額與月休天數(參考用)</CardDescription>
+        {hasActiveBonusPlan ? (
+          <p className="text-sm text-muted-foreground">{BONUS_ASSIGN_NOTE}</p>
+        ) : null}
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -895,8 +909,10 @@ function MonthlySalaryStaffSection({
             {monthlySalaryStaff.map((staff) => (
               <MonthlySalaryStaffRow
                 key={staff.id}
+                merchantId={merchantId}
                 staff={staff}
                 payDaysPerMonth={payDaysPerMonth}
+                bonusListing={bonusListing}
                 onSaved={refetch}
               />
             ))}
@@ -907,17 +923,80 @@ function MonthlySalaryStaffSection({
   );
 }
 
+const BONUS_ASSIGN_NOTE = "這個月要用哪個獎金方案，以月底當時的選擇為準。";
+const NO_BONUS_VALUE = "__no_bonus__";
+
+/** #1035 A 批 PA-U04:月薪人員的「獎金方案」下拉,改完立刻存(呼叫 set_staff_bonus_plan)。 */
+function StaffBonusPlanSelect({
+  merchantId,
+  staff,
+  listing,
+}: {
+  merchantId: string;
+  staff: MerchantStaff;
+  listing: BonusPlansListing;
+}) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const current = listing.assignments.find((a) => a.staff_id === staff.id)?.plan_id ?? null;
+  const activePlans = listing.plans.filter((p) => p.status === "active");
+  const options = [
+    { value: NO_BONUS_VALUE, label: "不給獎金" },
+    ...activePlans.map((p) => ({ value: p.id, label: p.name })),
+  ];
+  const selectId = `staff-bonus-plan-${staff.id}`;
+
+  async function handleChange(value: string) {
+    const planId = value === NO_BONUS_VALUE ? null : value;
+    if (planId === current) return;
+    setSaving(true);
+    try {
+      await setStaffBonusPlan(staff.id, planId);
+      toast.success(
+        planId
+          ? `已把「${staff.name}」套用到「${activePlans.find((p) => p.id === planId)?.name ?? ""}」`
+          : `「${staff.name}」改成不給獎金`,
+      );
+      await queryClient.invalidateQueries({ queryKey: staffBonusPlansQueryKey(merchantId) });
+    } catch (err) {
+      toast.error("更新獎金方案失敗", { description: getErrorMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <FormField label="獎金方案" htmlFor={selectId} className="mt-3 sm:max-w-xs">
+      <FieldSelect
+        id={selectId}
+        value={current ?? NO_BONUS_VALUE}
+        disabled={saving}
+        onValueChange={guardPhantomEmptyChange((v: string) => void handleChange(v))}
+        options={options}
+      />
+    </FormField>
+  );
+}
+
 function MonthlySalaryStaffRow({
+  merchantId,
   staff,
   payDaysPerMonth,
+  bonusListing,
   onSaved,
 }: {
+  merchantId: string;
   staff: MerchantStaff;
   payDaysPerMonth: number;
+  bonusListing: BonusPlansListing | undefined;
   onSaved: () => void;
 }) {
   const { data: settings } = useStaffSalarySettings(staff.id);
   const [editOpen, setEditOpen] = useState(false);
+  const showBonusSelect =
+    bonusListing !== undefined &&
+    (bonusListing.plans.some((p) => p.status === "active") ||
+      bonusListing.assignments.some((a) => a.staff_id === staff.id));
 
   return (
     <li>
@@ -937,7 +1016,11 @@ function MonthlySalaryStaffRow({
             編輯
           </Button>
         }
-      />
+      >
+        {showBonusSelect && bonusListing ? (
+          <StaffBonusPlanSelect merchantId={merchantId} staff={staff} listing={bonusListing} />
+        ) : null}
+      </ListCard>
       <StaffSalarySettingsDialog
         staff={staff}
         payDaysPerMonth={payDaysPerMonth}
@@ -947,6 +1030,15 @@ function MonthlySalaryStaffRow({
       />
     </li>
   );
+}
+
+/** PA-U01:月薪獎金方案區塊(放在月薪制區塊上方);試算要用在職的月薪人員名單。 */
+function BonusPlanSectionWithStaff({ merchantId }: { merchantId: string }) {
+  const { data: staffList } = useMerchantStaffList(merchantId);
+  const monthlyStaff = (staffList ?? []).filter(
+    (s) => s.compensation_type === "monthly_salary" && s.status === "active",
+  );
+  return <BonusPlanSection merchantId={merchantId} monthlyStaff={monthlyStaff} />;
 }
 
 // =========================================================================
@@ -969,11 +1061,12 @@ function PayrollSettingsPageInner() {
         backTo="/app/manage"
         helpMode
         title="抽成與薪資設定"
-        description={`「${merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪制服務人員薪資設定。`}
+        description={`「${merchant!.name}」的抽成計算基準、抽成制服務人員的服務項目抽成、月薪獎金方案、月薪制服務人員薪資設定。`}
       />
 
       <MerchantPayrollSettingsCard merchantId={merchantId} />
       <PieceRateStaffSection merchantId={merchantId} />
+      <BonusPlanSectionWithStaff merchantId={merchantId} />
       <MonthlySalaryStaffSection merchantId={merchantId} payDaysPerMonth={payDaysPerMonth} />
     </main>
   );

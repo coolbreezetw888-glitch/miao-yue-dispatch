@@ -48,10 +48,14 @@ import { useMerchantBillingSummaryByRange } from "./api";
 // 點畫面幾乎不可能發現,必須有測試釘住。
 import {
   BILLING_SUMMARY_LABELS,
+  BONUS_CSV_COLUMN_LABEL,
+  NET_MARGIN_BONUS_HELP,
   NET_MARGIN_MATERIAL_COST_HELP,
   POINTS_REDEEM_AMOUNT_DESCRIPTION,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
+  bonusCellText,
+  bonusCsvCell,
   buildBillingCsvSummarySection,
   commissionCellText,
   commissionCsvValue,
@@ -66,6 +70,7 @@ import {
   salaryDisplayValue,
   shouldShowResignedBadge,
   shouldShowPointsRedeemAmount,
+  shouldShowMonthlyBonus,
   shouldShowSalaryUnavailableNotice,
 } from "./billingReportDisplay";
 import { buildCsvContentFromRows, downloadCsv } from "./csvExport";
@@ -103,6 +108,9 @@ function BillingReportPageInner() {
   // 下面的 JSX 只負責挑要印哪一個 <p>。
   const netMarginDisplay = resolveSalaryDisplay(salaryApplicable, summary?.estimated_net_margin);
 
+  // #1035 A 批 PA-B02:整店沒有任何獎金方案(含已封存)⇒ 卡片、說明、CSV 都跟改版前一樣。
+  const showBonus = shouldShowMonthlyBonus(summary);
+
   // §一 §3.3 折衷方案的「查看明細 →」連結需要帶一個具體的年/月給服務人員報表頁(那個頁面這次不在
   // §3.6 範圍內,繼續用單一年月),這裡用區間結束日期所在的年月當作連結目標,是最貼近「使用者
   // 目前在看哪一段期間」的合理落點。
@@ -130,7 +138,16 @@ function BillingReportPageInner() {
     // 自己在 Excel 對帳),那個情境下使用者看不到畫面上的「已離職」標籤,離職人員的數字就跟現職
     // 人員混在一起,完全無法分辨,等於把「以為系統出錯」這個困惑原封不動搬到一個更難查證的地方
     // (在 Excel 裡沒辦法點回來看)。而且 CSV 沒有版面寬度的限制,多一欄的成本是 0。
-    const headers = ["姓名", "計酬類型", "在職狀態", "訂單筆數", "抽成金額", "月薪淨額"];
+    // #1035 A 批 PA-B02:有獎金方案的店明細多一欄「獎金」,放最後(既有欄位順序不動 ⚠️)。
+    const headers = [
+      "姓名",
+      "計酬類型",
+      "在職狀態",
+      "訂單筆數",
+      "抽成金額",
+      "月薪淨額",
+      ...(showBonus ? [BONUS_CSV_COLUMN_LABEL] : []),
+    ];
     const rows = summary.per_staff_breakdown.map((row) => [
       row.staff_name,
       compensationTypeText(row),
@@ -146,6 +163,7 @@ function BillingReportPageInner() {
       // 會重演「商家以為這段期間沒有月薪成本」這個誤會。判斷條件跟下面明細那一欄走同一支純函式,
       // 讓畫面跟匯出檔永遠一致。
       monthlySalaryCsvCell(salaryApplicable, row),
+      ...(showBonus ? [bonusCsvCell(salaryApplicable, row)] : []),
     ]);
     downloadCsv(
       `店家報表_${startDate}_${endDate}.csv`,
@@ -235,6 +253,15 @@ function BillingReportPageInner() {
               value={netMonthlySalary}
               unavailableText={SALARY_UNAVAILABLE_TEXT}
             />
+            {/* #1035 A 批 PA-B02:「月薪獎金」卡接在「月薪實發」後面;整店沒有任何獎金方案時不顯示。
+                不是完整月份時跟月薪三張卡一樣顯示說明文字(不是 0)。 */}
+            {showBonus ? (
+              <SummaryCard
+                label={BILLING_SUMMARY_LABELS.monthlyBonus}
+                value={salaryCardValue(salaryApplicable, summary.total_monthly_bonus)}
+                unavailableText={SALARY_UNAVAILABLE_TEXT}
+              />
+            ) : null}
             {/* 紅利系統重構 §4.10(#848):統計卡 grid 的最後一格,刻意不插進下面「稅金小計 + 商家總淨利」
                 那一組(2026-09-22 §3.5 刻意成組)。顯示條件只看報表函式回傳的 points_feature_enabled
                 (判斷 13:只有 billing 鑰匙的客服讀不到設定表);關閉時整張不渲染,不是顯示 0。
@@ -292,12 +319,16 @@ function BillingReportPageInner() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
                 <HelpToggle label="說明：料錢跟抽成怎麼算進商家總淨利">
-                  {NET_MARGIN_MATERIAL_COST_HELP}
+                  {showBonus
+                    ? `${NET_MARGIN_MATERIAL_COST_HELP}${NET_MARGIN_BONUS_HELP}`
+                    : NET_MARGIN_MATERIAL_COST_HELP}
                 </HelpToggle>
               </div>
               <CardDescription>
                 {/* 第 21 批:寫成字串,避免 JSX 跨行在「只是」「概估」中間多出空白。 */}
-                {"總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。" +
+                {(showBonus
+                  ? "總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)− 月薪獎金。"
+                  : "總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。") +
                   "只是概估，不含房租/水電等其他營運成本，不是完整的財務損益表。"}
               </CardDescription>
             </CardHeader>
@@ -363,6 +394,9 @@ function BillingReportPageInner() {
                             {row.compensation_type === "monthly_salary"
                               ? monthlySalaryCellText(salaryApplicable, row.net_pay)
                               : commissionCellText(row)}
+                            {showBonus && row.compensation_type === "monthly_salary"
+                              ? ` ・ ${bonusCellText(salaryApplicable, row.bonus_amount)}`
+                              : null}
                           </>
                         }
                         primaryAction={

@@ -163,7 +163,8 @@ select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public
   array['K3', 'K5', 'K1', 'K2'], 'H04-6 帳單報表(自訂區間)服務人員明細依順位');
 select is((select array_agg(k order by k) from jsonb_array_elements(public.get_merchant_billing_summary_by_range('c3d00000-0000-4000-8000-000000000021',
              (now() at time zone 'Asia/Taipei')::date, (now() at time zone 'Asia/Taipei')::date) -> 'per_staff_breakdown') e, jsonb_object_keys(e) k
-           where e ->> 'staff_name' = 'K3'),
+           -- #1035 A 批 PA-B01:自訂區間版每列多一個 bonus_amount(單月舊版 Q11 不改),比對時排除。
+           where e ->> 'staff_name' = 'K3' and k <> 'bonus_amount'),
           (select array_agg(k order by k) from jsonb_array_elements(public.get_merchant_billing_summary('c3d00000-0000-4000-8000-000000000021',
              extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int) -> 'per_staff_breakdown') e, jsonb_object_keys(e) k
            where e ->> 'staff_name' = 'K3'),

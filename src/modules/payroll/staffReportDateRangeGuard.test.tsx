@@ -42,6 +42,13 @@ vi.mock("./api", () => ({
   }),
   useStaffCommissionSummaryByRange: (...args: unknown[]) => commissionRangeMock(...args),
   useStaffMonthlyPayrollSummaryByRange: (...args: unknown[]) => payrollRangeMock(...args),
+  // #1035 A 批:月薪制報表多查一次獎金;這組測試不測獎金,一律回「沒有資料」。
+  useStaffBonusByRange: () => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("@/modules/merchant/context", () => ({

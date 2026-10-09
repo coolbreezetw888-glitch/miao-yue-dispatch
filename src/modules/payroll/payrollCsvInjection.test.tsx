@@ -66,6 +66,8 @@ vi.mock("./api", () => ({
   useStaffCommissionSummaryByRange: () => okQuery(COMMISSION_SUMMARY),
   useStaffMonthlyPayrollSummaryByRange: () => okQuery(PAYROLL_SUMMARY),
   useMerchantBillingSummaryByRange: (...args: unknown[]) => billingMock(...args),
+  // #1035 A 批:月薪制報表多查一次獎金;這組測試不測獎金(獎金 CSV 的注入防護在 bonusRuleLogic.test.ts)。
+  useStaffBonusByRange: () => okQuery(undefined),
 }));
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => ({ merchant: { id: "m1", name: "測試商家" }, isLoading: false }),

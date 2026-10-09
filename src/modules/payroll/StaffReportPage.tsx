@@ -40,19 +40,29 @@ import { useMerchantStaffList } from "@/modules/staff-agent/context";
 import { formatAmount } from "@/modules/booking/orderAmount";
 
 import {
+  useStaffBonusByRange,
   useStaffCommissionSummary,
   useStaffCommissionSummaryByRange,
   useStaffMonthlyPayrollSummary,
   useStaffMonthlyPayrollSummaryByRange,
 } from "./api";
-import { buildCsvContent, downloadCsv } from "./csvExport";
+import {
+  BONUS_CAPPED_NOTE,
+  buildStaffBonusCsvRows,
+  describeBonusRuleResult,
+  formatBonusMonthLabel,
+  formatBonusNumber,
+  partialMonthsNotice,
+  shouldShowStaffBonusSection,
+} from "./bonusRuleLogic";
+import { buildCsvContent, buildCsvContentFromRows, downloadCsv } from "./csvExport";
 import { validateDateRange } from "./dateRangeUtils";
 import {
   MATERIAL_COST_DEDUCTED_LABEL,
   materialCostDeductedCsvValue,
   materialCostDeductedText,
 } from "./materialCostDeductedDisplay";
-import { formatStaffCommissionItemBreakdown } from "./types";
+import { formatStaffCommissionItemBreakdown, type StaffBonusByRange } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
 
@@ -357,6 +367,16 @@ export function MonthlySalaryStaffReport({
   );
   const { data: summary, isLoading, error, refetch } = dateRange ? rangeQuery : monthQuery;
 
+  // #1035 A 批 PA-B03:月薪獎金(只算區間內完整月份)。商家視角傳 year/month ⇒ 換成那個月的 1 號到月底。
+  const bonusRange = dateRange ?? monthRangeOf(year, month);
+  const bonusQuery = useStaffBonusByRange(
+    staffId,
+    bonusRange ? bonusRange.startDate : null,
+    bonusRange ? bonusRange.endDate : null,
+  );
+  const bonus = bonusQuery.data;
+  const showBonus = shouldShowStaffBonusSection(bonus);
+
   function handleExportCsv() {
     if (!summary) return;
     const headers = ["假別", "天數", "扣款模式", "扣款金額"];
@@ -369,7 +389,15 @@ export function MonthlySalaryStaffReport({
     const periodLabel = dateRange
       ? `${dateRange.startDate}_${dateRange.endDate}`
       : `${year}-${String(month).padStart(2, "0")}`;
-    downloadCsv(`服務人員報表_${staffName}_${periodLabel}.csv`, buildCsvContent(headers, rows));
+    // #1035 A 批:有獎金時在假別明細下面接一段獎金明細(PX-04:規則名稱一律走共用 CSV 跳脫);
+    // 沒有獎金時跟改版前一字不差。
+    const bonusRows = buildStaffBonusCsvRows(bonus);
+    downloadCsv(
+      `服務人員報表_${staffName}_${periodLabel}.csv`,
+      bonusRows.length > 0
+        ? buildCsvContentFromRows([headers, ...rows, ...bonusRows])
+        : buildCsvContent(headers, rows),
+    );
   }
 
   // 🔴 SPECS-INDEX #861(2026-09-30 使用者實機巡檢):日期填反時,DateRangePicker 底下已經有
@@ -421,6 +449,16 @@ export function MonthlySalaryStaffReport({
         <StatCard label="月薪基本額" value={`${summary.monthly_base_salary} 元`} />
         <StatCard label="總扣款" value={`${summary.total_deduction_amount} 元`} />
         <StatCard label="實發淨額" value={`${summary.net_pay} 元`} />
+        {/* #1035 A 批 PA-B03:「實發淨額」維持原意(月薪 − 扣款);獎金另一張卡,再加一張「合計(含獎金)」⚠️。 */}
+        {showBonus && bonus ? (
+          <>
+            <StatCard label="獎金" value={`${formatBonusNumber(Number(bonus.total_amount))} 元`} />
+            <StatCard
+              label="合計（含獎金）"
+              value={`${formatBonusNumber(Number(summary.net_pay) + Number(bonus.total_amount))} 元`}
+            />
+          </>
+        ) : null}
       </div>
 
       {/* skill 二:「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐。 */}
@@ -437,6 +475,8 @@ export function MonthlySalaryStaffReport({
           這段期間早於系統開始記錄薪資歷史的時間，月薪基本額是用最早的已知薪資回推估算，僅供參考。
         </AlertNote>
       ) : null}
+
+      {showBonus && bonus ? <StaffBonusDetails bonus={bonus} /> : null}
 
       <Card>
         <CardHeader>
@@ -463,6 +503,73 @@ export function MonthlySalaryStaffReport({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/** 商家視角的單一年月 → 那個月的 1 號到月底(YYYY-MM-DD)。 */
+function monthRangeOf(
+  year: number | undefined,
+  month: number | undefined,
+): { startDate: string; endDate: string } | null {
+  if (!year || !month) return null;
+  const mm = String(month).padStart(2, "0");
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return {
+    startDate: `${year}-${mm}-01`,
+    endDate: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+/** #1035 A 批 PA-B03:獎金明細 —— 每月一塊,每條規則「名稱|算了多少|金額」。 */
+function StaffBonusDetails({ bonus }: { bonus: StaffBonusByRange }) {
+  const notice = partialMonthsNotice(bonus.partial_months);
+  const years = new Set(bonus.months.map((m) => m.month.slice(0, 4)));
+  // 跨年時每個月都帶年份(參考年給 0 ⇒ 一定不同)。
+  const refYear = years.size === 1 ? Number([...years][0]) : 0;
+  return (
+    <Card data-testid="staff-bonus-details">
+      <CardHeader>
+        <CardTitle>獎金明細</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {notice ? <AlertNote>{notice}</AlertNote> : null}
+        {bonus.months.map((m) => (
+          <DetailSection
+            key={m.month}
+            tone="amount"
+            className="gap-1.5"
+            label={
+              m.plan_name
+                ? `${formatBonusMonthLabel(m.month, refYear)}・${m.plan_name}${m.plan_status === "archived" ? "（已封存）" : ""}`
+                : formatBonusMonthLabel(m.month, refYear)
+            }
+          >
+            {m.rules.length === 0 ? (
+              <p className="text-[13px] text-muted-foreground">
+                {m.has_plan ? "這個月的方案還沒有生效的規則。" : "這個月沒有套用獎金方案。"}
+              </p>
+            ) : (
+              m.rules.map((r) => (
+                <DetailRow
+                  key={r.key}
+                  size="sm"
+                  label={
+                    <>
+                      <span className="block font-semibold text-foreground">{r.label}</span>
+                      <span className="block">{describeBonusRuleResult(r)}</span>
+                    </>
+                  }
+                >
+                  {`${formatBonusNumber(Number(r.amount))} 元`}
+                </DetailRow>
+              ))
+            )}
+            <DetailRow label="這個月獎金">{`${formatBonusNumber(Number(m.amount))} 元`}</DetailRow>
+            {m.flags.includes("capped") ? <AlertNote>{BONUS_CAPPED_NOTE}</AlertNote> : null}
+          </DetailSection>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

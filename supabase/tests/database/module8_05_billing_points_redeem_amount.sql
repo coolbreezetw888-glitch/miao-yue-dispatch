@@ -251,8 +251,9 @@ select is(
 select is(
   (select count(*)::int from jsonb_object_keys(get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', '2026-08-01', '2026-08-31'))),
   -- #985 第 8 批 8-8:尾端再加 3 個資訊鍵(material_cost_affects_commission_now + 兩個計數),鍵數預期 12 → 15;既有鍵逐鍵相等另由 req985_02 驗。
-  15,
-  '§3.15:按區間版同樣回傳 15 個鍵'
+  -- #1035 A 批 PA-B01:區間版再加 2 個鍵(total_monthly_bonus、bonus_feature_used),15 → 17(單月舊版 Q11 不改,仍 15)。
+  17,
+  '§3.15:按區間版回傳 17 個鍵(#1035 A 批多 2 個)'
 );
 
 -- ④ points_feature_enabled

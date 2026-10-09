@@ -170,6 +170,10 @@ export interface MerchantBillingSummary {
      * salary_applicable=false 時也是 null。 */
     net_pay: number | null;
     commission_amount: number | null;
+    /** #1035 A 批 PA-B01:月薪獎金(區間內完整月份的合計)。月薪列在 salary_applicable=true 時是數字
+     * (沒有方案 = 0);月薪列在 salary_applicable=false 時、以及非月薪列一律 null。
+     * 資料庫先上、前端後上的過渡期間舊回應沒有這個 key ⇒ optional。 */
+    bonus_amount?: number | null;
     /** 這個人**現在**是否仍在職。false = 現在已離職,但在查詢的那個期間是在職的,所以他的數字
      * 照算、照出現在明細裡。
      *
@@ -206,4 +210,110 @@ export interface MerchantBillingSummary {
   commission_orders_material_deducted_count?: number;
   /** 期間內抽成沒有扣料錢的訂單筆數。 */
   commission_orders_material_not_deducted_count?: number;
+  /** #1035 A 批 PA-B01:月薪獎金合計。跟月薪同一個「完整月份」條件:salary_applicable=false 時是
+   * **null(不是 0)**;沒有任何方案的店是 0。estimated_net_margin 已經扣掉它。 */
+  total_monthly_bonus?: number | null;
+  /** #1035 A 批 PA-B02:這間店有沒有任何獎金方案(含已封存)。false ⇒ 「月薪獎金」卡與 CSV 那一列都不出現。 */
+  bonus_feature_used?: boolean;
+}
+
+// =========================================================================
+// #1035 彈性計薪 A 批:月薪獎金方案(規格書 PA-R01 / PA-F01~F06)
+// =========================================================================
+
+/** 「給什麼」:每單加錢 / 每份加錢 / 業績百分比 / 達標給一筆。 */
+export type BonusRuleKind = "per_order" | "per_unit" | "percent" | "lump_sum";
+
+/** 「用什麼量判斷達標」:單數 / 份數 / 業績(元)。 */
+export type BonusMetric = "orders" | "units" | "revenue";
+
+/** 資料庫存的一條規則(public.save_staff_bonus_plan 驗證、正規化後的形狀)。 */
+export interface BonusRule {
+  key: string;
+  label: string;
+  kind: BonusRuleKind;
+  metric: BonusMetric;
+  service_item_ids: string[];
+  threshold: number;
+  cap: number | null;
+  amount: number | null;
+  percent: number | null;
+  retroactive: boolean;
+}
+
+export interface BonusPlanVersion {
+  /** YYYY-MM-01 */
+  effective_month: string;
+  rules: BonusRule[];
+}
+
+export interface BonusPlan {
+  id: string;
+  name: string;
+  status: "active" | "archived";
+  created_at: string;
+  /** 目前在職的月薪人員中,指派這個方案的人數 / 姓名。 */
+  staff_count: number;
+  staff_names: string[];
+  /** effective_month ≤ 本月的最新一版;方案選「從下個月起」建立時本月是 null。 */
+  current_version: BonusPlanVersion | null;
+  /** 下個月起另有設定(有的話)。 */
+  next_version: BonusPlanVersion | null;
+}
+
+export interface BonusServiceItemOption {
+  id: string;
+  name: string;
+  status: string;
+}
+
+/** public.list_staff_bonus_plans 回傳形狀。 */
+export interface BonusPlansListing {
+  /** 台北時間本月 1 號(YYYY-MM-DD)。 */
+  this_month: string;
+  plans: BonusPlan[];
+  assignments: Array<{ staff_id: string; plan_id: string }>;
+  service_items: BonusServiceItemOption[];
+}
+
+/** 一條規則算出來的結果(報表 / 試算明細)。 */
+export interface BonusRuleResult {
+  key: string;
+  label: string;
+  kind: BonusRuleKind;
+  metric: BonusMetric;
+  /** 這條規則看的量(單數 / 份數 / 業績元)。 */
+  quantity: number;
+  /** 實際計入的量(單 / 份:計入幾個;業績:計入多少元;達標給一筆:1 = 有給、0 = 沒給)。 */
+  counted_quantity: number;
+  /** 每單 / 每份:計入的是第幾個到第幾個(沒有計入時 null)。 */
+  range_start: number | null;
+  range_end: number | null;
+  /** 只有「達標給一筆」才有值。 */
+  achieved: boolean | null;
+  amount: number;
+}
+
+/** private.compute_staff_monthly_bonus / preview_staff_bonus 回傳形狀(服務人員本人看時沒有方案欄位)。 */
+export interface StaffMonthlyBonus {
+  /** YYYY-MM-01 */
+  month: string;
+  has_plan: boolean;
+  plan_id?: string | null;
+  plan_name?: string | null;
+  plan_status?: "active" | "archived" | null;
+  version_effective_month?: string | null;
+  amount: number;
+  rules: BonusRuleResult[];
+  /** 目前只有 "capped"(合計超過 1,000,000 封頂)。 */
+  flags: string[];
+}
+
+/** public.get_staff_bonus_by_range 回傳形狀。 */
+export interface StaffBonusByRange {
+  months: StaffMonthlyBonus[];
+  total_amount: number;
+  /** 區間裡不是完整月份、所以沒有計算獎金的月份(YYYY-MM-01)。 */
+  partial_months: string[];
+  has_any_plan: boolean;
 }
