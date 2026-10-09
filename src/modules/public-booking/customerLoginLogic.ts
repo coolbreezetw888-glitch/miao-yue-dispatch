@@ -370,7 +370,7 @@ export function completeProfileErrorMessage(hint: string | null): string {
     case "retry":
       return "系統忙碌，請稍後再試一次。";
     default:
-      return "送出失敗，請稍後再試。你填的資料沒有遺失。";
+      return "送出失敗，請稍後再試。您填的資料沒有遺失。";
   }
 }
 

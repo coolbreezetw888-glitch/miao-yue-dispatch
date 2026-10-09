@@ -214,7 +214,7 @@ select is(:'r_j'::jsonb -> 'variables' ->> 'booking_day_word',
                     when 0 then '今天' when 1 then '明天' when 2 then '後天' end
            from bookings where id = 'c5c00000-0000-4000-8000-000000000120'),
           'N07-2 {{booking_day_word}} 依台北日期 = 今天 / 明天');
-select ok(:'r_j'::jsonb ->> 'template' like '提醒你：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。%', 'N07-3 用預設提醒範本');
+select ok(:'r_j'::jsonb ->> 'template' like '提醒您：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。%', 'N07-3 用預設提醒範本');
 update customer_line_outbox set created_at = now() - interval '7 hours' where id = 'c5c00000-0000-4000-8000-000000000301';
 select is(public.internal_prepare_customer_line_job('c5c00000-0000-4000-8000-000000000301') ->> 'state', 'send', 'N07-4 提醒不套「建立超過 6 小時就過時」');
 select pg_temp.claim_ob('00120', 'customer_reminder', '{"start_at":"2026-01-01T00:00:00Z"}', '00302');
@@ -262,7 +262,7 @@ select is(pg_temp.kinds('c5c00000-0000-4000-8000-000000000134'), array[]::text[]
 update customer_line_outbox set status = 'processing', claimed_at = now() where booking_id = 'c5c00000-0000-4000-8000-000000000132';
 select public.internal_prepare_customer_line_job(id) as j from customer_line_outbox where booking_id = 'c5c00000-0000-4000-8000-000000000132' \gset c_
 select is(array[:'c_j'::jsonb ->> 'state', :'c_j'::jsonb ->> 'template_code', :'c_j'::jsonb ->> 'template'],
-          array['send', 'completed', '謝謝你今天光臨「{{merchant_name}}」！' || E'\n' || '查看紀錄：{{member_center_url}}'],
+          array['send', 'completed', '謝謝您今天光臨「{{merchant_name}}」！' || E'\n' || '查看紀錄：{{member_center_url}}'],
           'N08-8 prepare:範本 completed');
 update customer_line_outbox set status = 'processing', claimed_at = now() where booking_id = 'c5c00000-0000-4000-8000-000000000130';
 select is((select public.internal_prepare_customer_line_job(id) ->> 'state' from customer_line_outbox where booking_id = 'c5c00000-0000-4000-8000-000000000130'),

@@ -132,7 +132,7 @@ describe("C4-H06 邀請落地頁", () => {
     renderAt(`/booking/cool-shop/invite/${TOKEN}`);
     expect(window.location.pathname).toBe("/booking/cool-shop/invite");
     const landing = await screen.findByTestId("contact-invite-landing");
-    expect(landing).toHaveTextContent("你被邀請成為「涼風工匠」會員的聯絡人");
+    expect(landing).toHaveTextContent("您被邀請成為「涼風工匠」會員的聯絡人");
     expect(landing).toHaveTextContent("加入後可以一起查看預約、取消預約、查看紅利點數。");
     expect(document.body.textContent).not.toContain(TOKEN);
     expect(state.peekCalls).toEqual([{ slug: "cool-shop", token: TOKEN }]);
@@ -170,7 +170,7 @@ describe("C4-H07 接受邀請", () => {
     const user = userEvent.setup();
     renderAt("/booking/cool-shop/invite");
     const screenEl = await screen.findByTestId("contact-invite-accept-screen");
-    expect(screenEl).toHaveTextContent("店家可以用這支電話找到你們的會員資料。");
+    expect(screenEl).toHaveTextContent("店家可以用這支電話找到您的會員資料。");
     expect(screen.getByTestId("contact-invite-accept")).toBeDisabled();
     expect(screen.getByTestId("contact-invite-blocked")).toHaveTextContent("請先勾選同意");
     await user.click(screen.getByTestId("contact-invite-consent"));
@@ -188,7 +188,7 @@ describe("C4-H07 接受邀請", () => {
     state.acceptResult = { state: "linked", phoneResult: "in_use" };
     const user = userEvent.setup();
     renderAt(`/booking/cool-shop/invite/${TOKEN}`);
-    await user.type(await screen.findByLabelText(/你的電話/), "0912345678");
+    await user.type(await screen.findByLabelText(/您的電話/), "0912345678");
     await user.click(screen.getByTestId("contact-invite-consent"));
     await user.click(screen.getByTestId("contact-invite-accept"));
     await screen.findByTestId("member-center-probe");
@@ -202,7 +202,7 @@ describe("C4-H07 接受邀請", () => {
   });
 
   it.each([
-    ["already_member_elsewhere", "你的 LINE 已經是這間店另一位會員的聯絡人，要先退出才能加入。"],
+    ["already_member_elsewhere", "您的 LINE 已經是這間店另一位會員的聯絡人，要先退出才能加入。"],
     ["contact_limit", "這位會員的聯絡人已經額滿，請聯絡店家。"],
   ])("%s ⇒ 固定句子,不能再按加入", async (result, text) => {
     state.session = { state: "needs_profile", lineDisplayName: "小李", linePictureUrl: null };

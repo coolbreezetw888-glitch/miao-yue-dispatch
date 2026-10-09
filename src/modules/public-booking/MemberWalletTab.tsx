@@ -58,6 +58,7 @@ export function MemberWalletTab({ ctx }: { ctx: MemberCenterContext }) {
     return (
       <div data-testid="member-center-error">
         <ErrorState
+          honorific
           title="讀不到點數紀錄"
           reason="可能是網路不穩"
           onRetry={() => void walletQuery.refetch()}

@@ -114,6 +114,7 @@ export default function ContactInvitePage() {
     return (
       <PublicShell header={<TitleOnlyHeader title="聯絡人邀請" />}>
         <ErrorState
+          honorific
           title="讀取失敗，請稍後再試"
           reason="可能是網路不穩"
           onRetry={() => void pageQuery.refetch()}
@@ -213,6 +214,7 @@ function InviteFlow({
     return (
       <PublicShell header={<TitleOnlyHeader title={page.merchant.name} />}>
         <ErrorState
+          honorific
           title={rateLimited ? "操作太頻繁，請稍後再試" : "讀取失敗，請稍後再試"}
           reason={rateLimited ? "短時間內查詢次數太多，等幾分鐘再按重新整理" : "可能是網路不穩"}
           onRetry={() => {
@@ -452,7 +454,7 @@ function InviteAccept({
               onClick={() => void onSignedOut()}
               data-testid="contact-invite-switch"
             >
-              不是你？改用其他 LINE 帳號
+              不是您？改用其他 LINE 帳號
             </button>
           </div>
         </div>
@@ -474,7 +476,7 @@ function InviteAccept({
         ) : (
           <>
             <FormField
-              label="你的電話（選填）"
+              label="您的電話（選填）"
               htmlFor="contact-invite-phone"
               error={phoneTouched ? phoneError : null}
             >

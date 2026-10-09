@@ -29,19 +29,19 @@ const USER_B = "Ufedcba9876543210fedcba9876543210";
 
 // ---------- 預設範本(跟 private.customer_line_default_templates(false) 逐字相同)----------
 const T = {
-  submitted_pending: "「{{merchant_name}}」已收到你的預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n店家確認後會再用 LINE 通知你。\n查看預約：{{member_center_url}}",
+  submitted_pending: "「{{merchant_name}}」已收到您的預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n店家確認後會再用 LINE 通知您。\n查看預約：{{member_center_url}}",
   submitted_accepted: "「{{merchant_name}}」預約成功：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
-  scheduled_by_store: "「{{merchant_name}}」已為你安排預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n查看預約：{{member_center_url}}",
-  confirmed: "「{{merchant_name}}」已確認你的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
-  rescheduled: "「{{merchant_name}}」調整了你的預約時間：\n原本：{{old_booking_date}} {{old_booking_time}}\n改為：{{booking_date}} {{booking_time}}\n如果時間不方便，請聯絡店家：{{merchant_phone}}",
-  cancelled_by_store: "「{{merchant_name}}」取消了你 {{booking_date}} {{booking_time}} 的預約。\n有問題請聯絡店家：{{merchant_phone}}",
-  cancelled_by_customer: "你們在「{{merchant_name}}」{{booking_date}} {{booking_time}} 的預約已由 {{contact_name}} 取消。",
-  reminder: "提醒你：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
-  completed: "謝謝你今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
-  contact_request: "{{contact_name}} 申請成為你在「{{merchant_name}}」會員的聯絡人，請到會員中心同意或拒絕：{{member_center_url}}",
-  contact_removed: "你已不是「{{merchant_name}}」會員「{{member_name}}」的聯絡人，之後不會再收到這位會員的預約通知。",
-  contact_approved: "你已成為「{{merchant_name}}」會員「{{member_name}}」的聯絡人，可以到會員中心查看預約：{{member_center_url}}",
-  contact_rejected: "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
+  scheduled_by_store: "「{{merchant_name}}」已為您安排預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n查看預約：{{member_center_url}}",
+  confirmed: "「{{merchant_name}}」已確認您的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
+  rescheduled: "「{{merchant_name}}」調整了您的預約時間：\n原本：{{old_booking_date}} {{old_booking_time}}\n改為：{{booking_date}} {{booking_time}}\n如果時間不方便，請聯絡店家：{{merchant_phone}}",
+  cancelled_by_store: "「{{merchant_name}}」取消了您 {{booking_date}} {{booking_time}} 的預約。\n有問題請聯絡店家：{{merchant_phone}}",
+  cancelled_by_customer: "您在「{{merchant_name}}」{{booking_date}} {{booking_time}} 的預約已由 {{contact_name}} 取消。",
+  reminder: "提醒您：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
+  completed: "謝謝您今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
+  contact_request: "{{contact_name}} 申請成為您在「{{merchant_name}}」會員的聯絡人，請到會員中心同意或拒絕：{{member_center_url}}",
+  contact_removed: "您已不是「{{merchant_name}}」會員「{{member_name}}」的聯絡人，之後不會再收到這位會員的預約通知。",
+  contact_approved: "您已成為「{{merchant_name}}」會員「{{member_name}}」的聯絡人，可以到會員中心查看預約：{{member_center_url}}",
+  contact_rejected: "您申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
 };
 
 const VARS: Record<string, string> = {
@@ -61,19 +61,19 @@ const VARS: Record<string, string> = {
 
 Deno.test("N13-1 每個預設範本代入結果逐字比對", () => {
   const expected: Record<keyof typeof T, string> = {
-    submitted_pending: "「涼風工匠」已收到你的預約：\n10月13日（二） 10:00\n室內機清洗 ×2、加價項目 ×1\n店家確認後會再用 LINE 通知你。\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    submitted_pending: "「涼風工匠」已收到您的預約：\n10月13日（二） 10:00\n室內機清洗 ×2、加價項目 ×1\n店家確認後會再用 LINE 通知您。\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
     submitted_accepted: "「涼風工匠」預約成功：\n10月13日（二） 10:00\n室內機清洗 ×2、加價項目 ×1\n服務人員：阿明\n查看或取消：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    scheduled_by_store: "「涼風工匠」已為你安排預約：\n10月13日（二） 10:00\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    confirmed: "「涼風工匠」已確認你的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    rescheduled: "「涼風工匠」調整了你的預約時間：\n原本：10月12日（一） 09:00\n改為：10月13日（二） 10:00\n如果時間不方便，請聯絡店家：0223456789",
-    cancelled_by_store: "「涼風工匠」取消了你 10月13日（二） 10:00 的預約。\n有問題請聯絡店家：0223456789",
-    cancelled_by_customer: "你們在「涼風工匠」10月13日（二） 10:00 的預約已由 王太太 取消。",
-    reminder: "提醒你：明天 10:00 在「涼風工匠」有預約。\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    completed: "謝謝你今天光臨「涼風工匠」！\n查看紀錄：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    contact_request: "王太太 申請成為你在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    contact_removed: "你已不是「涼風工匠」會員「王小明」的聯絡人，之後不會再收到這位會員的預約通知。",
-    contact_approved: "你已成為「涼風工匠」會員「王小明」的聯絡人，可以到會員中心查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
-    contact_rejected: "你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789",
+    scheduled_by_store: "「涼風工匠」已為您安排預約：\n10月13日（二） 10:00\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    confirmed: "「涼風工匠」已確認您的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    rescheduled: "「涼風工匠」調整了您的預約時間：\n原本：10月12日（一） 09:00\n改為：10月13日（二） 10:00\n如果時間不方便，請聯絡店家：0223456789",
+    cancelled_by_store: "「涼風工匠」取消了您 10月13日（二） 10:00 的預約。\n有問題請聯絡店家：0223456789",
+    cancelled_by_customer: "您在「涼風工匠」10月13日（二） 10:00 的預約已由 王太太 取消。",
+    reminder: "提醒您：明天 10:00 在「涼風工匠」有預約。\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    completed: "謝謝您今天光臨「涼風工匠」！\n查看紀錄：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    contact_request: "王太太 申請成為您在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    contact_removed: "您已不是「涼風工匠」會員「王小明」的聯絡人，之後不會再收到這位會員的預約通知。",
+    contact_approved: "您已成為「涼風工匠」會員「王小明」的聯絡人，可以到會員中心查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings",
+    contact_rejected: "您申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789",
   };
   for (const code of Object.keys(T) as (keyof typeof T)[]) {
     assertEquals(renderCustomerLineMessage(T[code], VARS), expected[code], code);
@@ -82,10 +82,10 @@ Deno.test("N13-1 每個預設範本代入結果逐字比對", () => {
 
 Deno.test("N13-2 店家沒填電話 ⇒ 含 {{merchant_phone}} 的那一整行拿掉(不留空尾巴)", () => {
   const vars = { ...VARS, merchant_phone: "" };
-  assertEquals(renderCustomerLineMessage(T.rescheduled, vars), "「涼風工匠」調整了你的預約時間：\n原本：10月12日（一） 09:00\n改為：10月13日（二） 10:00");
-  assertEquals(renderCustomerLineMessage(T.cancelled_by_store, vars), "「涼風工匠」取消了你 10月13日（二） 10:00 的預約。");
+  assertEquals(renderCustomerLineMessage(T.rescheduled, vars), "「涼風工匠」調整了您的預約時間：\n原本：10月12日（一） 09:00\n改為：10月13日（二） 10:00");
+  assertEquals(renderCustomerLineMessage(T.cancelled_by_store, vars), "「涼風工匠」取消了您 10月13日（二） 10:00 的預約。");
   // QA #1:電話那句是獨立一行 ⇒ 店家沒電話時仍會發出前半句(不再整則空白)
-  assertEquals(renderCustomerLineMessage(T.contact_rejected, vars), "你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
+  assertEquals(renderCustomerLineMessage(T.contact_rejected, vars), "您申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
 });
 
 Deno.test("N13-3 姓名換行換成空白;變數只代入一次(不遞迴);不認得的原樣保留;截 5000 字", () => {
@@ -240,7 +240,7 @@ Deno.test("S05-5 成功:每位收件人一則(帶該店 token + retry key)、寫
   assertEquals(w.lineCalls[0].auth, `Bearer ${TOKEN}`);
   assertEquals(w.lineCalls[0].retryKey, await lineRetryKey("ob-1", USER_A));
   assertEquals(w.lineCalls[0].body.messages[0].text,
-    "「涼風工匠」已確認你的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://miaoyue.example/booking/coolbreeze/me/bookings");
+    "「涼風工匠」已確認您的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://miaoyue.example/booking/coolbreeze/me/bookings");
   assertEquals(w.logs.map((l) => `${l.status}:${l.target_user_id}:${l.skip_reason}`), [
     "skipped:user-c:customer_opted_out", "sent:user-a:null", "sent:user-b:null",
   ]);
@@ -516,8 +516,8 @@ Deno.test("N07/N08/N09~N11 提醒、完成、聯絡人通知:照一般流程發(
   const res = await handleRequest(req(), deps(w));
   assertEquals((await res.json()).sent, 3);
   const texts = w.lineCalls.map((c) => c.body.messages[0].text);
-  assert(texts.includes("提醒你：明天 10:00 在「涼風工匠」有預約。\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings"));
-  assert(texts.includes("王太太 申請成為你在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings"));
+  assert(texts.includes("提醒您：明天 10:00 在「涼風工匠」有預約。\n室內機清洗 ×2、加價項目 ×1\n查看預約：https://miaoyue.example/booking/coolbreeze/me/bookings"));
+  assert(texts.includes("王太太 申請成為您在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings"));
   assertEquals([...new Set(w.logs.map((l) => l.event_type))].sort(), ["customer_completed", "customer_contact_request", "customer_reminder"]);
   assert(w.logs.filter((l) => l.event_type === "customer_contact_request").every((l) => l.booking_id === null));
 });

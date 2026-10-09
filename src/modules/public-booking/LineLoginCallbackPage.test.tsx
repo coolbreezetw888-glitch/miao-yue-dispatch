@@ -115,7 +115,7 @@ describe("C2-B02 callback 頁", () => {
     expect(state.completeCalls).toEqual([]);
     expect(screen.queryByRole("button", { name: "回店家首頁" })).toBeNull();
     expect(screen.getByTestId("line-callback-no-shop")).toHaveTextContent(
-      "請回到店家給你的預約連結重新操作。",
+      "請回到店家給您的預約連結重新操作。",
     );
   });
 
@@ -137,7 +137,7 @@ describe("C2-B02 callback 頁", () => {
     );
     expect(screen.queryByRole("button", { name: "回店家首頁" })).toBeNull();
     expect(screen.getByTestId("line-callback-no-shop")).toHaveTextContent(
-      "請回到店家給你的預約連結重新操作。",
+      "請回到店家給您的預約連結重新操作。",
     );
   });
 

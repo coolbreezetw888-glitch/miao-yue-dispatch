@@ -300,11 +300,11 @@ test("C3-H05 / E03:商家設定「線上預約」卡兩個完成頁文字欄,存
   });
   await expect(card.locator("#settings-completion-message-member")).toHaveAttribute(
     "placeholder",
-    "店家確認後會通知你。",
+    "店家確認後會通知您。",
   );
   await expect(card.locator("#settings-completion-message-guest")).toHaveAttribute(
     "placeholder",
-    "店家確認後會與你聯絡。",
+    "店家確認後會與您聯絡。",
   );
   await card.locator("#settings-completion-message-guest").fill("  店家會在一天內打電話給你。  ");
   await expect(card).toContainText("13 / 200");

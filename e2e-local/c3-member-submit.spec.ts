@@ -117,7 +117,7 @@ test("C3-D02 / D06:新客人 LINE 登入 ⇒ ⑥-2「送出預約」⇒ 接上�
   await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 4／5");
   await expect(page.getByTestId("public-booking-step-label")).toContainText("下一步：登入／電話");
   await expect(page.getByTestId("public-booking-next-step-hint")).toHaveText(
-    "下一步會請你用 LINE 登入或填寫電話。",
+    "下一步會請您用 LINE 登入或填寫電話。",
   );
   await shotBoth(page, "member-00-form-hint");
   await page.getByTestId("public-booking-submit").click();
@@ -137,7 +137,7 @@ test("C3-D02 / D06:新客人 LINE 登入 ⇒ ⑥-2「送出預約」⇒ 接上�
   await expect(done).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(done).toHaveAttribute("data-kind", "member_pending");
   await expect(page.getByTestId("booking-complete-title")).toHaveText("已送出，等待店家確認");
-  await expect(page.getByTestId("booking-complete-message")).toHaveText("店家確認後會通知你。");
+  await expect(page.getByTestId("booking-complete-message")).toHaveText("店家確認後會通知您。");
   // 零之零 Q5:不指定也顯示被排到的那位(顯示名)
   await expect(page.getByTestId("booking-complete-staff")).not.toHaveText("由店家安排");
   // 第 4 批(C4-B04)起:會員完成頁的取消說明改成會員中心自己取消 +「前往會員中心」主要按鈕

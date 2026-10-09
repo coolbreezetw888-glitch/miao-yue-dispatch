@@ -773,7 +773,7 @@ export function profileSaveErrorMessage(hint: string | null): string {
     case "not_primary":
       return NOT_PRIMARY_NOTE;
     default:
-      return "儲存失敗，請稍後再試。你填的資料沒有遺失。";
+      return "儲存失敗，請稍後再試。您填的資料沒有遺失。";
   }
 }
 

@@ -246,6 +246,7 @@ function LoadErrorState({
   return (
     <div data-testid="public-booking-error">
       <ErrorState
+        honorific
         title={rateLimited ? PUBLIC_RATE_LIMITED_MESSAGE : "讀取失敗，請稍後再試"}
         reason={rateLimited ? "短時間內查詢次數太多，等幾分鐘再按重新整理" : "可能是網路不穩"}
         onRetry={onRetry}
@@ -951,7 +952,7 @@ function BookingFlow({ page, slug }: { page: PublicBookingPageOk; slug: string }
       <div className="flex flex-col gap-4">
         {returnNotice === "cancelled" ? (
           <AlertNote data-testid="public-booking-line-cancelled">
-            你取消了 LINE 登入。填好的資料都還在，可以再按「確定預約」。
+            您取消了 LINE 登入。填好的資料都還在，可以再按「確定預約」。
           </AlertNote>
         ) : returnNotice === "failed" ? (
           <AlertNote data-testid="public-booking-line-failed">

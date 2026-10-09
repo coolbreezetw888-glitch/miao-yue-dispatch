@@ -258,7 +258,7 @@ test("C4-B03 / C02:已接上的客人登入 ⇒ /me +「已登入」;首頁最�
   await mockLineLogin(page, fixture.c2, { sub: SUB, displayName: LINE_NAME });
   await page.goto(`/booking/${c1.slugA}/me`);
   await page.getByTestId("member-center-login-button").click({ timeout: LOAD_TIMEOUT });
-  await expect(page.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，你好`, {
+  await expect(page.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，您好`, {
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByText(`已登入「${SHOP_A_NAME}」會員中心`)).toBeVisible();

@@ -63,7 +63,7 @@ export const LINE_GREEN_BUTTON_CLASS =
   "h-12 w-full rounded-lg border border-transparent bg-[#06C755] text-base font-semibold text-white shadow-sm hover:bg-[#06C755]/90";
 
 /** 零之二第 3 點:電話欄說明。 */
-const CUSTOMER_PHONE_HELP = "店家會用這支電話跟你聯絡服務細節（公司可填市話）。";
+const CUSTOMER_PHONE_HELP = "店家會用這支電話跟您聯絡服務細節（公司可填市話）。";
 
 // =========================================================================
 // 共用小元件
@@ -294,7 +294,7 @@ export function CustomerLoginBar({
       >
         {memberName}
       </span>
-      <span className="text-muted-foreground">（不是你？</span>
+      <span className="text-muted-foreground">（不是您？</span>
       <button
         type="button"
         onClick={onLogout}
@@ -373,7 +373,7 @@ export function LineLoginScreen({
             {/* 主腦 10/9:不寫第 4、5 批才有的事(會員中心查看 / 取消、LINE 通知),只講現在做得到的。 */}
             {"下次預約不用再填電話，"}
             <br />
-            {"店家也能用會員資料更快跟你聯絡。"}
+            {"店家也能用會員資料更快跟您聯絡。"}
           </p>
         </div>
         {notice ? (
@@ -677,11 +677,11 @@ export function LinkedConfirmScreen({
       <div className="flex flex-col gap-4" data-testid="customer-linked">
         {linkNotice === "existing" ? (
           <HelpPanel data-testid="customer-linked-existing">
-            {`這支電話已經是「${merchantName}」的會員，已幫你接上原本的資料。`}
+            {`這支電話已經是「${merchantName}」的會員，已幫您接上原本的資料。`}
           </HelpPanel>
         ) : linkNotice === "created" ? (
           <HelpPanel data-testid="customer-linked-created">
-            {`已完成登入，你現在是「${merchantName}」的會員。`}
+            {`已完成登入，您現在是「${merchantName}」的會員。`}
           </HelpPanel>
         ) : null}
         <CustomerLoginBar memberName={memberName} onLogout={onLogout} />
@@ -880,7 +880,7 @@ export function GuestScreen({
                 className="mb-2 text-center text-sm font-semibold text-foreground"
                 data-testid="customer-guest-turnstile-hint"
               >
-                請勾選，確認你不是機器人
+                請勾選，確認您不是機器人
               </p>
             ) : null}
             <TurnstileWidget ref={turnstileRef} siteKey={siteKey} onStatusChange={setCheckStatus} />

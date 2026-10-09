@@ -97,16 +97,16 @@ export function parseInvitePeek(raw: unknown): InvitePeekResult | null {
   return null;
 }
 
-export const INVITE_TITLE = (merchantName: string) => `你被邀請成為「${merchantName}」會員的聯絡人`;
+export const INVITE_TITLE = (merchantName: string) => `您被邀請成為「${merchantName}」會員的聯絡人`;
 export const INVITE_BODY = "加入後可以一起查看預約、取消預約、查看紅利點數。";
 /** c4-contract B4-4 逐字。 */
 export const INVITE_INVALID_MESSAGE = "這個邀請連結已經失效，請向主要聯絡人索取新的連結。";
 /** 重新整理後記憶體裡的邀請碼沒了 / LINE 登入取消或失敗(邀請碼已經不在伺服器,c4-contract B4-4)。 */
 export const INVITE_MISSING_MESSAGE = "請重新打開邀請連結再試一次。";
 export const INVITE_CONTACT_LIMIT_MESSAGE = "這位會員的聯絡人已經額滿，請聯絡店家。";
-export const INVITE_PHONE_HELP = "店家可以用這支電話找到你們的會員資料。";
+export const INVITE_PHONE_HELP = "店家可以用這支電話找到您的會員資料。";
 export const ALREADY_MEMBER_ELSEWHERE_MESSAGE =
-  "你的 LINE 已經是這間店另一位會員的聯絡人，要先退出才能加入。";
+  "您的 LINE 已經是這間店另一位會員的聯絡人，要先退出才能加入。";
 
 export type AcceptPhoneResult = "none" | "saved" | "same_as_member" | "in_use";
 
@@ -162,9 +162,9 @@ export function acceptInviteErrorMessage(hint: string | null): string {
 
 /** C4-H04(主腦 10/9 裁決:不暗示即時通知;LINE 通知是第 5 批)。 */
 export const JOIN_PENDING_MESSAGE =
-  "這支電話已經是會員。主要聯絡人打開會員中心時會看到你的申請，同意後你就能使用會員中心。";
-export const JOIN_REJECTED_MESSAGE = "主要聯絡人沒有同意你的申請，請改用其他電話，或聯絡店家。";
-export const JOIN_EXPIRED_MESSAGE = "你的申請已經過期，請重新填寫電話，或聯絡店家。";
+  "這支電話已經是會員。主要聯絡人打開會員中心時會看到您的申請，同意後您就能使用會員中心。";
+export const JOIN_REJECTED_MESSAGE = "主要聯絡人沒有同意您的申請，請改用其他電話，或聯絡店家。";
+export const JOIN_EXPIRED_MESSAGE = "您的申請已經過期，請重新填寫電話，或聯絡店家。";
 
 // =========================================================================
 // 聯絡人清單(C4-H09)
@@ -305,11 +305,11 @@ export function removeContactConfirmText(name: string): string {
 }
 
 export const LEAVE_CONFIRM_TEXT =
-  "退出後你的 LINE 不能再查看這位會員的預約，會回到會員中心登入頁。之後要再加入，請主要聯絡人重新邀請。";
+  "退出後您的 LINE 不能再查看這位會員的預約，會回到會員中心登入頁。之後要再加入，請主要聯絡人重新邀請。";
 export const LEAVE_SOLO_CONFIRM_TEXT =
-  "你是這位會員唯一的聯絡人。退出後這位會員就沒有任何 LINE 帳號可以登入會員中心，之後可以用同一支電話重新加入。";
+  "您是這位會員唯一的聯絡人。退出後這位會員就沒有任何 LINE 帳號可以登入會員中心，之後可以用同一支電話重新加入。";
 export const LEAVE_PRIMARY_BLOCKED = "請先把主要聯絡人轉給別人，才能退出。";
-export const SOLO_CONTACT_TEXT = "目前只有你一位聯絡人";
+export const SOLO_CONTACT_TEXT = "目前只有您一位聯絡人";
 
 /** 「10月8日」(台北時區;聯絡人加入時間、申請時間)。 */
 export function formatContactDate(iso: string | null): string {
@@ -389,7 +389,7 @@ export function parseCreateInviteResult(
 
 /** C4-H03 逐字:「邀請你成為『店名』會員『王小明』的聯絡人：<網址>(72 小時內有效)」。 */
 export function inviteShareText(merchantName: string, memberName: string, url: string): string {
-  return `邀請你成為「${merchantName}」會員「${memberName}」的聯絡人：${url}（72 小時內有效）`;
+  return `邀請您成為「${merchantName}」會員「${memberName}」的聯絡人：${url}（72 小時內有效）`;
 }
 
 /** LINE 官方「分享文字」網址(developers.line.biz → Using LINE URL scheme:text 要 UTF-8 百分比編碼)。 */
@@ -451,7 +451,7 @@ export function contactErrorMessage(hint: string | null): string {
 // 第二聯絡人自己的電話(C4-H08)
 // =========================================================================
 
-export const MY_PHONE_HELP = "店家可以用這支電話找到你們的會員資料。留空表示不留自己的電話。";
+export const MY_PHONE_HELP = "店家可以用這支電話找到您的會員資料。留空表示不留自己的電話。";
 export const MY_PHONE_IN_USE_MESSAGE = "這支電話已經是其他會員的電話，沒有加上。";
 export const MY_PHONE_SAME_AS_MEMBER_NOTE = "跟會員電話相同，不用另外加上。";
 

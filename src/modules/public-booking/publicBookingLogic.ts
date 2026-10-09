@@ -421,9 +421,9 @@ export function formNextStepHint(input: {
   linked: boolean;
 }): string | null {
   if (input.linked && input.lineLoginEnabled) return null;
-  if (input.lineLoginEnabled && input.allowGuest) return "下一步會請你用 LINE 登入或填寫電話。";
-  if (input.lineLoginEnabled) return "下一步會請你用 LINE 登入。";
-  if (input.allowGuest) return "下一步會請你填寫電話。";
+  if (input.lineLoginEnabled && input.allowGuest) return "下一步會請您用 LINE 登入或填寫電話。";
+  if (input.lineLoginEnabled) return "下一步會請您用 LINE 登入。";
+  if (input.allowGuest) return "下一步會請您填寫電話。";
   return null;
 }
 

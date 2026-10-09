@@ -299,7 +299,7 @@ select is(pg_temp.rc(public.internal_prepare_customer_line_job((select id from c
 -- QA #1 / #5:預設範本 contact_rejected 電話獨立一行;額度用完鈴鐺全形括號
 -- =========================================================================
 select is(private.customer_line_default_templates(false) ->> 'contact_rejected',
-          '你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。' || E'\n' || '有問題請聯絡店家：{{merchant_phone}}',
+          '您申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。' || E'\n' || '有問題請聯絡店家：{{merchant_phone}}',
           'QA1-1 contact_rejected:電話那句是獨立一行(店家沒電話時只拿掉那行)');
 select is(private.customer_line_default_templates(true) ->> 'contact_rejected', private.customer_line_default_templates(false) ->> 'contact_rejected',
           'QA1-2 到府 / 非到府同一句');

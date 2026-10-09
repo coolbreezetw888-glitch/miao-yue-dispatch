@@ -310,13 +310,13 @@ test("C4-H03 / H06 / H07:邀請連結 ⇒ 第二位用 LINE 登入加入 ⇒ 兩
   await asCustomer(page, SUB_A, LINE_A);
   await page.goto(`/booking/${c1.slugA}/me/profile`);
   const solo = page.getByTestId("member-contacts-solo");
-  await expect(solo).toContainText("目前只有你一位聯絡人", { timeout: LOAD_TIMEOUT });
+  await expect(solo).toContainText("目前只有您一位聯絡人", { timeout: LOAD_TIMEOUT });
   await shot(page, "c4b-01-contacts-solo");
 
   await solo.getByTestId("member-contacts-invite").click();
   const message = page.getByTestId("member-contacts-invite-message");
   await expect(message).toContainText(
-    `邀請你成為「${SHOP_A_NAME}」會員「${MEMBER_NAME}」的聯絡人：`,
+    `邀請您成為「${SHOP_A_NAME}」會員「${MEMBER_NAME}」的聯絡人：`,
     {
       timeout: LOAD_TIMEOUT,
     },
@@ -335,7 +335,7 @@ test("C4-H03 / H06 / H07:邀請連結 ⇒ 第二位用 LINE 登入加入 ⇒ 兩
   const login = await mockInviteLogin(pageB, SUB_B, LINE_B);
   await pageB.goto(url!);
   const landing = pageB.getByTestId("contact-invite-landing");
-  await expect(landing).toContainText(`你被邀請成為「${SHOP_A_NAME}」會員的聯絡人`, {
+  await expect(landing).toContainText(`您被邀請成為「${SHOP_A_NAME}」會員的聯絡人`, {
     timeout: LOAD_TIMEOUT,
   });
   await expect(landing).toContainText("加入後可以一起查看預約、取消預約、查看紅利點數。");
@@ -350,12 +350,12 @@ test("C4-H03 / H06 / H07:邀請連結 ⇒ 第二位用 LINE 登入加入 ⇒ 兩
   for (const body of login.responseBodies) {
     expect(body).not.toContain(String(login.startBodies[0]!["invite_token"]));
   }
-  await expect(accept).toContainText("店家可以用這支電話找到你們的會員資料。");
+  await expect(accept).toContainText("店家可以用這支電話找到您的會員資料。");
   await shot(pageB, "c4b-04-invite-accept");
   await pageB.locator("#contact-invite-phone").fill(phoneB);
   await pageB.getByTestId("contact-invite-consent").click();
   await pageB.getByTestId("contact-invite-accept").click();
-  await expect(pageB.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，你好`, {
+  await expect(pageB.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，您好`, {
     timeout: LOAD_TIMEOUT,
   });
   await expect(pageB.getByText(`已加入「${SHOP_A_NAME}」會員`)).toBeVisible();
@@ -493,7 +493,7 @@ test("C4-H04 / H05:同一支電話申請 ⇒ 申請已送出 ⇒ 主要聯絡人
   await pageC.getByTestId("customer-profile-submit").click();
   const pending = pageC.getByTestId("customer-join-pending");
   await expect(pending).toContainText(
-    "這支電話已經是會員。主要聯絡人打開會員中心時會看到你的申請，同意後你就能使用會員中心。",
+    "這支電話已經是會員。主要聯絡人打開會員中心時會看到您的申請，同意後您就能使用會員中心。",
     { timeout: LOAD_TIMEOUT },
   );
   await expect(pending).not.toContainText(MEMBER_NAME);
@@ -531,7 +531,7 @@ test("C4-H04 / H05:同一支電話申請 ⇒ 申請已送出 ⇒ 主要聯絡人
   await expect(primary.getByTestId("member-contact-row")).toHaveCount(3);
 
   await pageC.reload();
-  await expect(pageC.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，你好`, {
+  await expect(pageC.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，您好`, {
     timeout: LOAD_TIMEOUT,
   });
   userC =

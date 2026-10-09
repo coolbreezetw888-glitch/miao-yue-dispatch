@@ -161,6 +161,7 @@ export function MemberBookingsTab({ ctx }: { ctx: MemberCenterContext }) {
       ) : listQuery.isError ? (
         <div data-testid="member-center-error">
           <ErrorState
+            honorific
             title="讀不到預約紀錄"
             reason="可能是網路不穩"
             onRetry={() => void listQuery.refetch()}

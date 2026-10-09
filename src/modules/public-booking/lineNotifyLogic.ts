@@ -33,7 +33,7 @@ export const BOOKING_SWITCH_TITLE = "預約通知";
 export const BOOKING_SWITCH_DESCRIPTION = "預約成立、確認、改時間、取消等通知，以及聯絡人申請。";
 export const PROMO_SWITCH_TITLE = "優惠通知";
 export const PROMO_SWITCH_DESCRIPTION = "店家的優惠活動與生日禮通知。";
-export const NOT_FRIEND_NOTE = "你還沒有加入店家的 LINE 好友，開著也收不到通知。";
+export const NOT_FRIEND_NOTE = "您還沒有加入店家的 LINE 好友，開著也收不到通知。";
 export const PREFS_SAVE_FAILED_MESSAGE = "儲存失敗，請稍後再試";
 export const ADD_FRIEND_AFTER_NOTE = "加好友後回到這裡重新整理就好。";
 
@@ -42,7 +42,7 @@ export function addFriendCardTitle(merchantName: string): string {
   return `加入「${merchantName}」LINE 好友`;
 }
 /** ⑧ 提示卡說明(C5-M01;主腦裁決 #7:不寫「服務前提醒」,那是店家可關、預設關的)。 */
-export const ADD_FRIEND_CARD_BODY = "預約確認、改時間等消息都會用 LINE 通知你。";
+export const ADD_FRIEND_CARD_BODY = "預約確認、改時間等消息都會用 LINE 通知您。";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

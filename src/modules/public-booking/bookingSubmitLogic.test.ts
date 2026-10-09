@@ -80,7 +80,7 @@ describe("parseSubmitResponse(C3-A05)", () => {
       created({ status: "accepted" }, { completion_message: undefined }),
     );
     expect(accepted?.kind === "created" && accepted.booking.completionMessage).toBe(
-      "服務前店家可能會再跟你聯絡確認。",
+      "服務前店家可能會再跟您聯絡確認。",
     );
   });
 
@@ -113,7 +113,7 @@ describe("submitFailureView(C3-D05)", () => {
       "這個時段剛剛被約走了，請重新選一個時間。",
     );
     expect(submitFailureView("too_many_open", ctx)).toMatchObject({
-      message: "你目前已有 3 筆尚未完成的預約，請等服務完成後再預約，或直接聯絡店家。",
+      message: "您目前已有 3 筆尚未完成的預約，請等服務完成後再預約，或直接聯絡店家。",
       showContacts: true,
     });
     expect(submitFailureView("contact_store", ctx)).toMatchObject({
@@ -127,7 +127,7 @@ describe("submitFailureView(C3-D05)", () => {
     expect(submitFailureView("unavailable", ctx).message).toContain("這間店目前暫停線上預約");
     expect(submitFailureView("rate_limited", ctx).message).toBe("操作太頻繁，請稍後再試。");
     expect(submitFailureView("network", ctx).message).toBe(
-      "送出時發生問題，請稍後再試。你填的資料沒有遺失。",
+      "送出時發生問題，請稍後再試。您填的資料沒有遺失。",
     );
   });
 
@@ -155,7 +155,7 @@ describe("submitFailureView(C3-D05)", () => {
     );
     expect(submitFailureView("duration_too_long", ctx)).toMatchObject({ showContacts: true });
     expect(submitFailureView("invalid_request", ctx).message).toBe(
-      "送出時發生問題，請稍後再試。你填的資料沒有遺失。",
+      "送出時發生問題，請稍後再試。您填的資料沒有遺失。",
     );
     expect(toSubmitInvalidHint("no_primary_item")).toBe("no_primary_item");
     expect(toSubmitInvalidHint("weird")).toBe("invalid_request");

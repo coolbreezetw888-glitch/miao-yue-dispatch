@@ -57,7 +57,7 @@ describe("C5-M01 ⑧ 提示卡顯示條件(全部成立才顯示)", () => {
 
   it("文案:標題帶店名;不承諾預設關的服務前提醒(主腦裁決 #7)", () => {
     expect(addFriendCardTitle("涼風工匠")).toBe("加入「涼風工匠」LINE 好友");
-    expect(ADD_FRIEND_CARD_BODY).toBe("預約確認、改時間等消息都會用 LINE 通知你。");
+    expect(ADD_FRIEND_CARD_BODY).toBe("預約確認、改時間等消息都會用 LINE 通知您。");
     expect(BOOKING_SWITCH_DESCRIPTION).toBe("預約成立、確認、改時間、取消等通知，以及聯絡人申請。");
   });
 });
@@ -174,7 +174,7 @@ describe("C5-M04 完成頁保底句(伺服器沒給 completion_message 時)", ()
     },
   };
 
-  it("店家能用 LINE 通知 ⇒「店家確認後會用 LINE 通知你。」;否則維持原句", () => {
+  it("店家能用 LINE 通知 ⇒「店家確認後會用 LINE 通知您。」;否則維持原句", () => {
     const withLine = parseSubmitResponse(created, { lineNotifyAvailable: true });
     const without = parseSubmitResponse(created, { lineNotifyAvailable: false });
     const legacy = parseSubmitResponse(created);
@@ -200,7 +200,7 @@ describe("C5-M04 完成頁保底句(伺服器沒給 completion_message 時)", ()
       { lineNotifyAvailable: true },
     );
     expect(guest?.kind === "created" && guest.booking.completionMessage).toBe(
-      "店家確認後會與你聯絡。",
+      "店家確認後會與您聯絡。",
     );
   });
 });

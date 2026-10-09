@@ -303,7 +303,7 @@ describe("C4-H04 加入聯絡人申請(join_pending)", () => {
     await user.click(screen.getByTestId("customer-profile-submit"));
     const pending = await screen.findByTestId("customer-join-pending");
     expect(pending).toHaveTextContent(
-      "這支電話已經是會員。主要聯絡人打開會員中心時會看到你的申請，同意後你就能使用會員中心。",
+      "這支電話已經是會員。主要聯絡人打開會員中心時會看到您的申請，同意後您就能使用會員中心。",
     );
     expect(pending).not.toHaveTextContent("王小明");
     expect(within(pending).getByTestId("public-booking-contacts")).toBeInTheDocument();
@@ -321,8 +321,8 @@ describe("C4-H04 加入聯絡人申請(join_pending)", () => {
   });
 
   it.each([
-    ["rejected", "主要聯絡人沒有同意你的申請，請改用其他電話，或聯絡店家。"],
-    ["expired", "你的申請已經過期，請重新填寫電話，或聯絡店家。"],
+    ["rejected", "主要聯絡人沒有同意您的申請，請改用其他電話，或聯絡店家。"],
+    ["expired", "您的申請已經過期，請重新填寫電話，或聯絡店家。"],
   ])("申請被%s ⇒ ⑥-2 上方說明 + 聯絡按鈕", async (status, text) => {
     state.session = {
       state: "needs_profile",
@@ -369,7 +369,7 @@ describe("C4-H09 聯絡人區塊:主要聯絡人", () => {
     const rows = within(section).getAllByTestId("member-contact-row");
     expect(rows[0]).toHaveTextContent("小明");
     expect(rows[0]).toHaveTextContent("主要聯絡人");
-    expect(rows[0]).toHaveTextContent("（你）");
+    expect(rows[0]).toHaveTextContent("（您）");
     expect(rows[1]).toHaveTextContent("小李");
     expect(rows[1]).toHaveTextContent("0933111222");
     // 主要聯絡人有其他聯絡人 ⇒ 不能退出,常駐 !
@@ -409,7 +409,7 @@ describe("C4-H09 聯絡人區塊:主要聯絡人", () => {
     await user.click(await screen.findByTestId("member-contacts-invite"));
     const panel = await screen.findByTestId("member-contacts-invite-panel");
     const url = `${window.location.origin}/booking/cool-shop/invite/${"A".repeat(32)}`;
-    const message = `邀請你成為「涼風工匠」會員「王小明」的聯絡人：${url}（72 小時內有效）`;
+    const message = `邀請您成為「涼風工匠」會員「王小明」的聯絡人：${url}（72 小時內有效）`;
     expect(within(panel).getByTestId("member-contacts-invite-message")).toHaveTextContent(message);
     expect(within(panel).getByTestId("member-contacts-invite-line")).toHaveAttribute(
       "href",
@@ -459,11 +459,11 @@ describe("C4-H09 聯絡人區塊:主要聯絡人", () => {
     expect(calls("removeContact")[0]).toEqual(["removeContact", "cool-shop", "c2"]);
   });
 
-  it("只有自己一位 ⇒「目前只有你一位聯絡人」+「邀請聯絡人」", async () => {
+  it("只有自己一位 ⇒「目前只有您一位聯絡人」+「邀請聯絡人」", async () => {
     state.contacts = { ...PRIMARY_VIEW, contacts: [contact({})], requests: [], invites: [] };
     renderAt("/booking/cool-shop/me/profile");
     const solo = await screen.findByTestId("member-contacts-solo");
-    expect(solo).toHaveTextContent("目前只有你一位聯絡人");
+    expect(solo).toHaveTextContent("目前只有您一位聯絡人");
     expect(within(solo).getByTestId("member-contacts-invite")).toBeEnabled();
   });
 });
@@ -497,7 +497,7 @@ describe("C4-H09 聯絡人區塊:第二聯絡人", () => {
     renderAt("/booking/cool-shop/me/profile");
     await user.click(await screen.findByTestId("member-contact-leave"));
     const dialog = await screen.findByTestId("member-contacts-confirm");
-    expect(dialog).toHaveTextContent("退出後你的 LINE 不能再查看這位會員的預約");
+    expect(dialog).toHaveTextContent("退出後您的 LINE 不能再查看這位會員的預約");
     expect(within(dialog).getByTestId("member-contacts-confirm-ok")).not.toHaveClass(
       /text-destructive/,
     );
@@ -524,7 +524,7 @@ describe("C4-H09 聯絡人區塊:第二聯絡人", () => {
     expect(calls("setMyContactPhone")[0]).toEqual(["setMyContactPhone", "cool-shop", "0922000111"]);
     await user.clear(input);
     await user.click(within(form).getByTestId("member-contacts-my-phone-save"));
-    await waitFor(() => expect(state.toasts).toContain("已清除你的電話"));
+    await waitFor(() => expect(state.toasts).toContain("已清除您的電話"));
     expect(calls("setMyContactPhone")[1]).toEqual(["setMyContactPhone", "cool-shop", ""]);
   });
 });
@@ -549,7 +549,7 @@ describe("C4-F05 客人可輸入的文字一律純文字(QA 4-A 低項)", () => 
     expect((window as unknown as { __pwned?: number }).__pwned).toBeUndefined();
     cleanup();
     renderAt("/booking/cool-shop/me");
-    expect(await screen.findByTestId("member-home-greeting")).toHaveTextContent(`${evil}，你好`);
+    expect(await screen.findByTestId("member-home-greeting")).toHaveTextContent(`${evil}，您好`);
     expect(document.querySelector("script")).toBeNull();
   });
 });

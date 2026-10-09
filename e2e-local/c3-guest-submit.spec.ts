@@ -98,7 +98,7 @@ test("C3-D04 / D06 ⑦-3 / C4-B03:A 店訪客送出 ⇒ 完成頁;再用 LINE �
 
   const done = page.getByTestId("booking-complete");
   await expect(done).toHaveAttribute("data-kind", "guest", { timeout: LOAD_TIMEOUT });
-  await expect(page.getByTestId("booking-complete-message")).toHaveText("店家確認後會與你聯絡。");
+  await expect(page.getByTestId("booking-complete-message")).toHaveText("店家確認後會與您聯絡。");
   await expect(page.getByTestId("booking-complete-phone")).toHaveText(phone);
   await expect(page.getByTestId("booking-complete-join")).toBeVisible();
   await shotBoth(page, "guest-02-complete-with-line");

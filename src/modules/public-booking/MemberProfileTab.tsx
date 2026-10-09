@@ -95,6 +95,7 @@ export function MemberProfileTab({ ctx }: { ctx: MemberCenterContext }) {
     body = (
       <div data-testid="member-center-error">
         <ErrorState
+          honorific
           title="讀不到會員資料"
           reason="可能是網路不穩"
           onRetry={() => void profileQuery.refetch()}

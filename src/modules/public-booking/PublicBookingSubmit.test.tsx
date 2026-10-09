@@ -189,7 +189,7 @@ function createdResult(extra: Record<string, unknown> = {}) {
       phone: null,
       estimatedAmount: 2500,
       isGuest: false,
-      completionMessage: "店家確認後會通知你。",
+      completionMessage: "店家確認後會通知您。",
       ...extra,
     },
   };
@@ -290,7 +290,7 @@ describe("C3-D03 已登入確認送出 → ⑦-1 / ⑦-2", () => {
     await user.click(screen.getByTestId("public-booking-submit"));
     const linked = await screen.findByTestId("customer-linked");
     expect(within(linked).getByTestId("customer-login-bar")).toHaveTextContent(
-      "已用 LINE 登入：王小明（不是你？登出）",
+      "已用 LINE 登入：王小明（不是您？登出）",
     );
     expect(within(linked).getByTestId("public-booking-summary")).toHaveTextContent(
       "台北市信義區松仁路 58 號",
@@ -438,7 +438,7 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
       createdResult({
         isGuest: true,
         phone: "0912-345-678",
-        completionMessage: "店家確認後會與你聯絡。",
+        completionMessage: "店家確認後會與您聯絡。",
       }),
     ];
     const user = userEvent.setup();
@@ -449,7 +449,7 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
     const done = await screen.findByTestId("booking-complete");
     expect(done).toHaveAttribute("data-kind", "guest");
     expect(screen.getByTestId("booking-complete-message")).toHaveTextContent(
-      "店家確認後會與你聯絡。",
+      "店家確認後會與您聯絡。",
     );
     expect(screen.getByTestId("booking-complete-phone")).toHaveTextContent("0912-345-678");
     expect(screen.getByTestId("booking-complete-join")).toBeInTheDocument();
@@ -503,7 +503,7 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
   });
 
   it.each([
-    ["too_many_open", "你目前已有 3 筆尚未完成的預約", true],
+    ["too_many_open", "您目前已有 3 筆尚未完成的預約", true],
     ["contact_store", "這支電話需要店家協助處理，請直接聯絡店家。", true],
     ["bot_check_failed", "安全檢查沒有通過，請重新整理後再試一次。", true],
     ["rate_limited", "操作太頻繁，請稍後再試。", false],
@@ -534,7 +534,7 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
     expect(await screen.findByTestId("customer-line-login")).toBeInTheDocument();
   });
 
-  it("Turnstile 需要勾選 ⇒ 顯示「請勾選，確認你不是機器人」", async () => {
+  it("Turnstile 需要勾選 ⇒ 顯示「請勾選，確認您不是機器人」", async () => {
     state.turnstile = "interactive";
     const user = userEvent.setup();
     renderPage();
@@ -542,7 +542,7 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
     await fillGuest(user);
     await user.click(screen.getByTestId("customer-guest-submit"));
     expect(await screen.findByTestId("customer-guest-turnstile-hint")).toHaveTextContent(
-      "請勾選，確認你不是機器人",
+      "請勾選，確認您不是機器人",
     );
     expect(state.submitCalls).toHaveLength(0);
   });
@@ -642,7 +642,7 @@ describe("2026-10-09 使用者新增:步驟條 5 步、填資料頁下一步提�
       /步驟 4／5\s*填資料\s*下一步：登入／電話/,
     );
     expect(screen.getByTestId("public-booking-next-step-hint")).toHaveTextContent(
-      "下一步會請你用 LINE 登入或填寫電話。",
+      "下一步會請您用 LINE 登入或填寫電話。",
     );
     await user.click(screen.getByTestId("public-booking-submit"));
     await screen.findByTestId("customer-line-login");
@@ -672,8 +672,8 @@ describe("2026-10-09 使用者新增:步驟條 5 步、填資料頁下一步提�
 
   it("只有 LINE 登入 / 只允許不登入 / 兩個都沒開 ⇒ 各自的提示句", async () => {
     const cases: [Partial<PublicBookingPageOk["booking_settings"]>, string | null][] = [
-      [{ allow_guest_booking: false }, "下一步會請你用 LINE 登入。"],
-      [{ line_login_enabled: false }, "下一步會請你填寫電話。"],
+      [{ allow_guest_booking: false }, "下一步會請您用 LINE 登入。"],
+      [{ line_login_enabled: false }, "下一步會請您填寫電話。"],
       [{ line_login_enabled: false, allow_guest_booking: false }, null],
     ];
     for (const [settings, text] of cases) {

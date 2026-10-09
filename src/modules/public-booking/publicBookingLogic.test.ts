@@ -344,9 +344,9 @@ describe("2026-10-09 使用者新增:步驟條 5 步 + 填資料頁下一步提�
   it("姓名欄上方的提示句(依店家設定與登入狀態)", () => {
     const hint = (lineLoginEnabled: boolean, allowGuest: boolean, linked = false) =>
       formNextStepHint({ lineLoginEnabled, allowGuest, linked });
-    expect(hint(true, true)).toBe("下一步會請你用 LINE 登入或填寫電話。");
-    expect(hint(true, false)).toBe("下一步會請你用 LINE 登入。");
-    expect(hint(false, true)).toBe("下一步會請你填寫電話。");
+    expect(hint(true, true)).toBe("下一步會請您用 LINE 登入或填寫電話。");
+    expect(hint(true, false)).toBe("下一步會請您用 LINE 登入。");
+    expect(hint(false, true)).toBe("下一步會請您填寫電話。");
     expect(hint(false, false)).toBeNull();
     expect(hint(true, true, true)).toBeNull();
     expect(hint(true, false, true)).toBeNull();

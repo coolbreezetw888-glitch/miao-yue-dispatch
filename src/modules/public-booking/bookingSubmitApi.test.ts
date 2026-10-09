@@ -114,7 +114,7 @@ describe("submitCustomerBooking", () => {
         estimated_amount: 5000,
         is_guest: false,
       },
-      completion_message: "服務前店家可能會再跟你聯絡確認。",
+      completion_message: "服務前店家可能會再跟您聯絡確認。",
     });
     const r = await submitCustomerBooking({
       slug: "shop",
@@ -123,7 +123,7 @@ describe("submitCustomerBooking", () => {
       guest: null,
     });
     expect(r.kind === "created" && r.booking.completionMessage).toBe(
-      "服務前店家可能會再跟你聯絡確認。",
+      "服務前店家可能會再跟您聯絡確認。",
     );
   });
 });

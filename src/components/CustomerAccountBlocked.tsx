@@ -16,7 +16,7 @@ export function CustomerAccountBlocked() {
       <div className="flex w-full max-w-sm flex-col gap-4">
         <AlertNote tone="danger">
           <p className="font-semibold">{CUSTOMER_ACCOUNT_BLOCKED_MESSAGE}</p>
-          <p className="mt-1">已經幫你登出後台。如果你是店家，請用店家帳號重新登入。</p>
+          <p className="mt-1">已經幫您登出後台。如果您是店家，請用店家帳號重新登入。</p>
         </AlertNote>
         <Button asChild variant="primary" size="touch" className="w-full">
           <Link to="/signin" replace>

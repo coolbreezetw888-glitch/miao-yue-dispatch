@@ -170,7 +170,7 @@ export default function LineLoginCallbackPage() {
               className="text-center text-sm leading-relaxed text-muted-foreground"
               data-testid="line-callback-no-shop"
             >
-              {"請回到店家給你的預約連結重新操作。"}
+              {"請回到店家給您的預約連結重新操作。"}
             </p>
           )}
         </div>

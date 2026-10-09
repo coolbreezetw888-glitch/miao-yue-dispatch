@@ -196,7 +196,7 @@ insert into bookings (id, merchant_id, staff_id, start_at, end_at, customer_name
   ('c3d00000-0000-4000-8000-0000000000b2', 'c3d00000-0000-4000-8000-000000000021', 'c3d00000-0000-4000-8000-000000000031', now() + interval '4 days', now() + interval '4 days 1 hour', 'x', '0912330002', 'customer', 'pending_confirmation', 'customer', true);
 select is(array[private.customer_booking_result('c3d00000-0000-4000-8000-0000000000b1') ->> 'completion_message',
                 private.customer_booking_result('c3d00000-0000-4000-8000-0000000000b2') ->> 'completion_message'],
-  array[E'我們會盡快確認\n謝謝！', '店家確認後會與你聯絡。'], 'H05-5 完成頁文字:會員用店家自訂;訪客沒填 ⇒ 預設句');
+  array[E'我們會盡快確認\n謝謝！', '店家確認後會與您聯絡。'], 'H05-5 完成頁文字:會員用店家自訂;訪客沒填 ⇒ 預設句');
 
 select * from finish();
 rollback;

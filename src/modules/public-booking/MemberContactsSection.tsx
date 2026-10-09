@@ -258,6 +258,7 @@ export function MemberContactsSection({
   } else if (contactsQuery.isError) {
     body = (
       <ErrorState
+        honorific
         title="讀不到聯絡人"
         reason="可能是網路不穩"
         onRetry={() => void contactsQuery.refetch()}
@@ -435,7 +436,7 @@ function ContactsBody({
                     {c.lineDisplayName}
                   </span>
                   {c.isPrimary ? <StatusTag tone="success">主要聯絡人</StatusTag> : null}
-                  {c.isMe ? <span className="text-xs text-muted-foreground">（你）</span> : null}
+                  {c.isMe ? <span className="text-xs text-muted-foreground">（您）</span> : null}
                 </p>
                 <p className="text-[12.5px] tabular-nums text-muted-foreground">
                   {[c.contactPhone, c.joinedAt ? `${formatContactDate(c.joinedAt)}加入` : null]
@@ -696,7 +697,7 @@ function MyContactPhone({
       if (phone.trim() !== "" && outcome.contactPhone === null) {
         toast.success(MY_PHONE_SAME_AS_MEMBER_NOTE);
       } else {
-        toast.success(phone.trim() === "" ? "已清除你的電話" : "已更新你的電話");
+        toast.success(phone.trim() === "" ? "已清除您的電話" : "已更新您的電話");
       }
       onSaved();
     } catch (err) {

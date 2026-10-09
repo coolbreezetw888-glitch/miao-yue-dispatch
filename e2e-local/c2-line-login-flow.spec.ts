@@ -337,7 +337,7 @@ test("零之二:既有會員(沒人接上)⇒ 直接接上 + 店家鈴鐺;會員
   await other.getByTestId("customer-profile-consent").click();
   await other.getByTestId("customer-profile-submit").click();
   const taken = other.getByTestId("customer-join-pending");
-  await expect(taken).toContainText("這支電話已經是會員。主要聯絡人打開會員中心時會看到你的申請", {
+  await expect(taken).toContainText("這支電話已經是會員。主要聯絡人打開會員中心時會看到您的申請", {
     timeout: LOAD_TIMEOUT,
   });
   await expect(taken.getByTestId("public-booking-contacts")).toBeVisible();
@@ -476,7 +476,7 @@ test("C2-B04:在 LINE 按取消 ⇒ 回到 ⑤,資料都在 + 提示", async ({ 
   await walkToForm(page, fixture.c1.slugA, "取消測試");
   await loginWithLine(page);
   await expect(page.getByTestId("public-booking-line-cancelled")).toContainText(
-    "你取消了 LINE 登入",
+    "您取消了 LINE 登入",
     { timeout: LOAD_TIMEOUT },
   );
   await expect(page.locator("#public-booking-name")).toHaveValue("取消測試");
@@ -510,7 +510,7 @@ test("C2-E02 / E06 + C3-D01 / D04:⑥-4 沒勾 / 沒填 ⇒ 停用 + 原因,填�
   await page.getByTestId("public-booking-submit").click();
   await page.getByTestId("customer-guest-button").click();
   await expect(page.getByTestId("customer-guest")).toContainText(
-    "店家會用這支電話跟你聯絡服務細節（公司可填市話）。",
+    "店家會用這支電話跟您聯絡服務細節（公司可填市話）。",
   );
   // 沒勾同意 / 沒填電話 ⇒ 停用 + 常駐原因(C3-D04)
   await expect(page.getByTestId("customer-guest-submit")).toBeDisabled();

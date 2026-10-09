@@ -330,7 +330,7 @@ describe("C2-E06 / C3-D04 ⑥-4 不登入預約", () => {
     await user.click(await screen.findByTestId("customer-guest-button"));
     const guest = await screen.findByTestId("customer-guest");
     expect(within(guest).getByTestId("public-booking-summary")).toHaveTextContent("王小明");
-    expect(guest).toHaveTextContent("店家會用這支電話跟你聯絡服務細節（公司可填市話）。");
+    expect(guest).toHaveTextContent("店家會用這支電話跟您聯絡服務細節（公司可填市話）。");
     expect(screen.getByTestId("customer-guest-note")).toHaveTextContent(
       "不登入的預約都要等店家確認。之後想加入會員，隨時可以用 LINE 登入，下次預約不用再填電話。",
     );
@@ -424,12 +424,12 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     state.session = { state: "join_pending", lineDisplayName: "小李", linePictureUrl: null };
     await user.click(screen.getByTestId("customer-profile-submit"));
     const pending = await screen.findByTestId("customer-join-pending");
-    expect(pending).toHaveTextContent("同意後你就能使用會員中心");
+    expect(pending).toHaveTextContent("同意後您就能使用會員中心");
     await user.click(within(pending).getByTestId("customer-join-pending-guest"));
     expect(await screen.findByTestId("customer-guest")).toBeInTheDocument();
   });
 
-  it("接上既有會員 ⇒ 自動送出;送出沒成功(too_many_open)⇒ 確認畫面 +「已幫你接上原本的資料」;登出 ⇒ 回 ⑥-1", async () => {
+  it("接上既有會員 ⇒ 自動送出;送出沒成功(too_many_open)⇒ 確認畫面 +「已幫您接上原本的資料」;登出 ⇒ 回 ⑥-1", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };
     state.profileResult = { kind: "linked", created: false, existing: true };
     restoreLoggedIn();
@@ -440,11 +440,11 @@ describe("C2-E04 ⑥-2 登入回來填電話(零之二)", () => {
     state.session = { state: "linked", memberName: "王大明", memberPhone: "0223456789" };
     await user.click(screen.getByTestId("customer-profile-submit"));
     expect(await screen.findByTestId("customer-linked-existing")).toHaveTextContent(
-      "這支電話已經是「涼風工匠」的會員，已幫你接上原本的資料。",
+      "這支電話已經是「涼風工匠」的會員，已幫您接上原本的資料。",
     );
     expect(screen.getByTestId("customer-linked-name")).toHaveTextContent("王大明");
     expect(screen.getByTestId("customer-submit-error-message")).toHaveTextContent(
-      "你目前已有 3 筆尚未完成的預約",
+      "您目前已有 3 筆尚未完成的預約",
     );
     expect(screen.getByTestId("customer-linked-submit")).toBeEnabled();
     expect(screen.getByTestId("public-booking-summary")).toHaveTextContent("單色凝膠 ×1");
@@ -508,7 +508,7 @@ describe("C2-E07 / B04 登入回來與取消", () => {
     });
     renderPage();
     expect(await screen.findByTestId("public-booking-line-cancelled")).toHaveTextContent(
-      "你取消了 LINE 登入",
+      "您取消了 LINE 登入",
     );
     expect(screen.getByLabelText(/姓名/)).toHaveValue("王小明");
     expect(screen.getByLabelText(/備註/)).toHaveValue("門口有狗");
@@ -522,7 +522,7 @@ describe("C2-E07 / B04 登入回來與取消", () => {
     await user.type(screen.getByLabelText(/姓名/), "王小明");
     await user.click(screen.getByTestId("public-booking-submit"));
     expect(await screen.findByTestId("customer-linked")).toHaveTextContent(
-      "已用 LINE 登入：王小明（不是你？登出）",
+      "已用 LINE 登入：王小明（不是您？登出）",
     );
     expect(screen.queryByTestId("customer-linked-existing")).toBeNull();
   });

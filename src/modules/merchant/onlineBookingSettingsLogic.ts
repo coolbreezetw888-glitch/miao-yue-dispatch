@@ -109,8 +109,8 @@ export function parseTravelBufferMinutes(raw: string): IntegerFieldCheck {
 
 export const COMPLETION_MESSAGE_MAX = 200;
 /** 留空時客人看到的預設句(跟伺服器 coalesce 的預設一致;畫面當 placeholder)。 */
-export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知你。";
-export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與你聯絡。";
+export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知您。";
+export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與您聯絡。";
 
 /** 字數(用字元算,跟資料庫 char_length 一致;emoji 算 1 個字)。 */
 export function countCompletionMessageChars(raw: string): number {

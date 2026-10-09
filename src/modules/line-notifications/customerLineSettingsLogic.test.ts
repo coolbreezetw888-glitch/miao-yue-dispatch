@@ -164,7 +164,7 @@ describe("C5-N13 範本代入(c5-contract 2-3,跟 Edge 同規則)", () => {
 
   it("預設文案逐字(店家確認)", () => {
     expect(renderCustomerLineTemplate(CUSTOMER_LINE_DEFAULT_TEMPLATES.confirmed, values)).toBe(
-      "「涼風工匠」已確認你的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://example.com/booking/demo/me/bookings",
+      "「涼風工匠」已確認您的預約：\n10月13日（二） 10:00\n服務人員：阿明\n查看或取消：https://example.com/booking/demo/me/bookings",
     );
   });
 
@@ -173,7 +173,7 @@ describe("C5-N13 範本代入(c5-contract 2-3,跟 Edge 同規則)", () => {
       ...values,
       merchant_phone: "  ",
     });
-    expect(out).toBe("「涼風工匠」取消了你 10月13日（二） 10:00 的預約。");
+    expect(out).toBe("「涼風工匠」取消了您 10月13日（二） 10:00 的預約。");
   });
 
   it("值裡的換行換成空白、去頭尾空白;單次替換不遞迴;不認得的原樣", () => {
@@ -246,16 +246,16 @@ describe("C5-K02 卡片內容:9 種通知(5-B 加提醒 / 完成 / 聯絡人)", 
 
   it("5-B 預設文案逐字(跟資料庫 customer_line_default_templates 一致);到府提醒加「（預計抵達時間）」", () => {
     expect(defaultCustomerLineTemplate("reminder", false)).toBe(
-      "提醒你：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
+      "提醒您：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
     );
     expect(defaultCustomerLineTemplate("reminder", true)).toContain(
       "{{booking_day_word}} {{booking_time}}（預計抵達時間） 在",
     );
     expect(defaultCustomerLineTemplate("completed", true)).toBe(
-      "謝謝你今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
+      "謝謝您今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
     );
     expect(defaultCustomerLineTemplate("contact_rejected", false)).toBe(
-      "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
+      "您申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
     );
     // QA #1:電話那句獨立一行(比照店家取消)⇒ 店家沒填電話時整行拿掉,不留空尾巴。
     expect(
@@ -263,13 +263,13 @@ describe("C5-K02 卡片內容:9 種通知(5-B 加提醒 / 完成 / 聯絡人)", 
         merchant_name: "涼風工匠",
         merchant_phone: "",
       }),
-    ).toBe("你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
+    ).toBe("您申請成為「涼風工匠」會員聯絡人的要求沒有被同意。");
     expect(
       renderCustomerLineTemplate(defaultCustomerLineTemplate("contact_rejected", false), {
         merchant_name: "涼風工匠",
         merchant_phone: "0223456789",
       }),
-    ).toBe("你申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789");
+    ).toBe("您申請成為「涼風工匠」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：0223456789");
   });
 
   it("提醒可用「今天／明天」;聯絡人通知沒有日期、時間、服務項目", () => {

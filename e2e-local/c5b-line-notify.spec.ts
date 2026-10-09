@@ -323,7 +323,7 @@ test("C5-K02 9 種通知、服務前 N 小時、提醒範本預覽", async ({ pa
   await reminderRow.getByTestId("customer-line-edit-toggle").click();
   const editor = reminderRow.getByTestId("customer-line-template-reminder");
   await expect(editor).toContainText("客人實際會收到");
-  await expect(editor).toContainText(`提醒你：明天 10:00`);
+  await expect(editor).toContainText(`提醒您：明天 10:00`);
   await expect(editor).toContainText(`在「${SHOP_A_NAME}」有預約。`);
   await reminderRow.scrollIntoViewIfNeeded();
   await shotElement(page, "customer-line-kind-on_reminder", "c5b-02-reminder-row-editor");
@@ -340,7 +340,7 @@ test("C5-K02 9 種通知、服務前 N 小時、提醒範本預覽", async ({ pa
     await expect(contactRow.getByTestId(`customer-line-template-${code}`)).toBeVisible();
   }
   await expect(contactRow.getByTestId("customer-line-template-contact_request")).toContainText(
-    "王太太 申請成為你在",
+    "王太太 申請成為您在",
   );
   await contactRow.getByTestId("customer-line-edit-toggle").click();
   await reminderRow.getByTestId("customer-line-edit-toggle").click();
@@ -428,7 +428,7 @@ test("C5-M01 / M02 會員中心:⑧ 文案(裁決 #7);⑪-1 主要 / 第二聯�
   await asCustomer(page, SUB_A, LINE_A);
   await page.goto(`/booking/${c1.slugA}/me`);
   const addFriend = page.getByTestId("member-home-add-friend");
-  await expect(addFriend).toContainText("預約確認、改時間等消息都會用 LINE 通知你。", {
+  await expect(addFriend).toContainText("預約確認、改時間等消息都會用 LINE 通知您。", {
     timeout: LOAD_TIMEOUT,
   });
   await shot(page, "c5b-07-home-add-friend");

@@ -97,7 +97,7 @@ describe("邀請(B4)", () => {
   it("分享文字逐字 + LINE 官方分享網址(UTF-8 百分比編碼)", () => {
     const text = inviteShareText("涼風工匠", "王小明", "https://x.test/a");
     expect(text).toBe(
-      "邀請你成為「涼風工匠」會員「王小明」的聯絡人：https://x.test/a（72 小時內有效）",
+      "邀請您成為「涼風工匠」會員「王小明」的聯絡人：https://x.test/a（72 小時內有效）",
     );
     expect(lineShareUrl("a b&c")).toBe("https://line.me/R/share?text=a%20b%26c");
   });

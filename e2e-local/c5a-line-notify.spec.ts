@@ -347,7 +347,7 @@ test("店家沒接上官方帳號 ⇒ 會員中心不承諾 LINE 通知;後台�
   expect(outboxOf(booking1), "沒接上時下的單不寫待發列").toEqual([]);
   await asCustomer(page, SUB_A, LINE_A);
   await page.goto(`/booking/${c1.slugA}/me`);
-  await expect(page.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，你好`, {
+  await expect(page.getByTestId("member-home-greeting")).toHaveText(`${MEMBER_NAME}，您好`, {
     timeout: LOAD_TIMEOUT,
   });
   await expect(page.getByTestId("member-home-add-friend")).toHaveCount(0);
@@ -378,7 +378,7 @@ test("C5-M01 ⑧ 加好友提示卡:網址、稍後再說、已加好友就不�
   const card = page.getByTestId("member-home-add-friend");
   await expect(card).toContainText(`加入「${SHOP_A_NAME}」LINE 好友`, { timeout: LOAD_TIMEOUT });
   // 主腦裁決 #7:服務前提醒預設關,文案不承諾會發。
-  await expect(card).toContainText("預約確認、改時間等消息都會用 LINE 通知你。");
+  await expect(card).toContainText("預約確認、改時間等消息都會用 LINE 通知您。");
   await expect(card.getByTestId("member-home-add-friend-go")).toHaveAttribute(
     "href",
     ADD_FRIEND_URL,
@@ -414,7 +414,7 @@ test("C5-M02 ⑪-1 主要聯絡人:沒加好友黃 !、切預約通知寫進自�
   const section = page.getByTestId("member-line-notify");
   await expect(section).toContainText("預約通知", { timeout: LOAD_TIMEOUT });
   await expect(page.getByTestId("member-line-notify-not-friend")).toContainText(
-    "你還沒有加入店家的 LINE 好友，開著也收不到通知。",
+    "您還沒有加入店家的 LINE 好友，開著也收不到通知。",
   );
   // 5-B(#1047)起「優惠通知」開關一起出現。
   await expect(section).toContainText("優惠通知");
@@ -526,7 +526,7 @@ test("C5-K01 / K02 後台「通知客人」卡:改開關 / 範本 / 恢復預設
   await row.getByTestId("customer-line-edit-toggle").click();
   const editor = row.getByTestId("customer-line-template-confirmed");
   const textarea = editor.getByRole("textbox");
-  await expect(textarea).toHaveValue(/已確認你的預約/);
+  await expect(textarea).toHaveValue(/已確認您的預約/);
   await textarea.fill("「{{merchant_name}}」確認了，{{member_name}} 到時見！");
   await expect(editor).toContainText(`「${SHOP_A_NAME}」確認了，王小明 到時見！`);
   await shot(page, "c5a-09-admin-template-edit");
@@ -552,7 +552,7 @@ test("C5-K01 / K02 後台「通知客人」卡:改開關 / 範本 / 恢復預設
   await restoreDialog.getByTestId("customer-line-template-restore-confirm").click();
   await expect(restoreDialog).toHaveCount(0, { timeout: LOAD_TIMEOUT });
   await expect.poll(confirmedTemplate).toBe("(預設)");
-  await expect(textarea).toHaveValue(/已確認你的預約/);
+  await expect(textarea).toHaveValue(/已確認您的預約/);
 
   // 有自訂文字時,清空按「儲存文字」⇒ 一樣跳確認窗 ⇒ 確認 ⇒ 資料庫回預設。
   await textarea.fill("自訂文字，等一下清空");
@@ -565,7 +565,7 @@ test("C5-K01 / K02 後台「通知客人」卡:改開關 / 範本 / 恢復預設
   await restoreDialog.getByTestId("customer-line-template-restore-confirm").click();
   await expect(restoreDialog).toHaveCount(0, { timeout: LOAD_TIMEOUT });
   await expect.poll(confirmedTemplate).toBe("(預設)");
-  await expect(textarea).toHaveValue(/已確認你的預約/);
+  await expect(textarea).toHaveValue(/已確認您的預約/);
 
   // 客服視角(有 LINE 通知權限):看得到同一張卡
   const agentPage = await newPage(browser);

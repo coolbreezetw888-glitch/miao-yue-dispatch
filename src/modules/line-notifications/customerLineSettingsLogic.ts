@@ -162,30 +162,30 @@ export const CUSTOMER_LINE_KINDS: CustomerLineKindDefinition[] = [
 /** 範本裡的換行一律用 \n(畫面上 `<br>` 的意思)。 */
 export const CUSTOMER_LINE_DEFAULT_TEMPLATES: Record<CustomerLineTemplateCode, string> = {
   submitted_pending:
-    "「{{merchant_name}}」已收到你的預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n店家確認後會再用 LINE 通知你。\n查看預約：{{member_center_url}}",
+    "「{{merchant_name}}」已收到您的預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n店家確認後會再用 LINE 通知您。\n查看預約：{{member_center_url}}",
   submitted_accepted:
     "「{{merchant_name}}」預約成功：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
   scheduled_by_store:
-    "「{{merchant_name}}」已為你安排預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n查看預約：{{member_center_url}}",
+    "「{{merchant_name}}」已為您安排預約：\n{{booking_date}} {{booking_time}}\n{{service_items}}\n查看預約：{{member_center_url}}",
   confirmed:
-    "「{{merchant_name}}」已確認你的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
+    "「{{merchant_name}}」已確認您的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
   rescheduled:
-    "「{{merchant_name}}」調整了你的預約時間：\n原本：{{old_booking_date}} {{old_booking_time}}\n改為：{{booking_date}} {{booking_time}}\n如果時間不方便，請聯絡店家：{{merchant_phone}}",
+    "「{{merchant_name}}」調整了您的預約時間：\n原本：{{old_booking_date}} {{old_booking_time}}\n改為：{{booking_date}} {{booking_time}}\n如果時間不方便，請聯絡店家：{{merchant_phone}}",
   cancelled_by_store:
-    "「{{merchant_name}}」取消了你 {{booking_date}} {{booking_time}} 的預約。\n有問題請聯絡店家：{{merchant_phone}}",
+    "「{{merchant_name}}」取消了您 {{booking_date}} {{booking_time}} 的預約。\n有問題請聯絡店家：{{merchant_phone}}",
   cancelled_by_customer:
-    "你們在「{{merchant_name}}」{{booking_date}} {{booking_time}} 的預約已由 {{contact_name}} 取消。",
+    "您在「{{merchant_name}}」{{booking_date}} {{booking_time}} 的預約已由 {{contact_name}} 取消。",
   reminder:
-    "提醒你：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
-  completed: "謝謝你今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
+    "提醒您：{{booking_day_word}} {{booking_time}} 在「{{merchant_name}}」有預約。\n{{service_items}}\n查看預約：{{member_center_url}}",
+  completed: "謝謝您今天光臨「{{merchant_name}}」！\n查看紀錄：{{member_center_url}}",
   contact_request:
-    "{{contact_name}} 申請成為你在「{{merchant_name}}」會員的聯絡人，請到會員中心同意或拒絕：{{member_center_url}}",
+    "{{contact_name}} 申請成為您在「{{merchant_name}}」會員的聯絡人，請到會員中心同意或拒絕：{{member_center_url}}",
   contact_removed:
-    "你已不是「{{merchant_name}}」會員「{{member_name}}」的聯絡人，之後不會再收到這位會員的預約通知。",
+    "您已不是「{{merchant_name}}」會員「{{member_name}}」的聯絡人，之後不會再收到這位會員的預約通知。",
   contact_approved:
-    "你已成為「{{merchant_name}}」會員「{{member_name}}」的聯絡人，可以到會員中心查看預約：{{member_center_url}}",
+    "您已成為「{{merchant_name}}」會員「{{member_name}}」的聯絡人，可以到會員中心查看預約：{{member_center_url}}",
   contact_rejected:
-    "你申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
+    "您申請成為「{{merchant_name}}」會員聯絡人的要求沒有被同意。\n有問題請聯絡店家：{{merchant_phone}}",
 };
 
 /** 到府產業:預設文案 {{booking_time}} 後面多一句(C5-N13 ⚠️)。 */

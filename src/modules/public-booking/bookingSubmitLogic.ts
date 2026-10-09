@@ -78,11 +78,11 @@ export type SubmitOutcome =
   { kind: "created"; booking: SubmittedBooking } | { kind: "rejected"; state: SubmitRejectState };
 
 /** 零之零 C3-A05 / c3-contract 1-2:店家沒填時的預設句(由伺服器決定;這裡只是伺服器沒給時的保底)。 */
-export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知你。";
+export const DEFAULT_MEMBER_COMPLETION_MESSAGE = "店家確認後會通知您。";
 /** 第 5 批 C5-M04:店家能用 LINE 通知客人時的會員待確認預設句(伺服器沒給時的保底)。 */
-export const DEFAULT_MEMBER_COMPLETION_MESSAGE_LINE = "店家確認後會用 LINE 通知你。";
-export const DEFAULT_MEMBER_ACCEPTED_COMPLETION_MESSAGE = "服務前店家可能會再跟你聯絡確認。";
-export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與你聯絡。";
+export const DEFAULT_MEMBER_COMPLETION_MESSAGE_LINE = "店家確認後會用 LINE 通知您。";
+export const DEFAULT_MEMBER_ACCEPTED_COMPLETION_MESSAGE = "服務前店家可能會再跟您聯絡確認。";
+export const DEFAULT_GUEST_COMPLETION_MESSAGE = "店家確認後會與您聯絡。";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -193,7 +193,7 @@ export function submitFailureView(
     case "too_many_open":
       return {
         ...base,
-        message: "你目前已有 3 筆尚未完成的預約，請等服務完成後再預約，或直接聯絡店家。",
+        message: "您目前已有 3 筆尚未完成的預約，請等服務完成後再預約，或直接聯絡店家。",
         showContacts: true,
       };
     case "contact_store":
@@ -243,7 +243,7 @@ export function submitFailureView(
     case "network":
     case "server_error":
     default:
-      return { ...base, message: "送出時發生問題，請稍後再試。你填的資料沒有遺失。" };
+      return { ...base, message: "送出時發生問題，請稍後再試。您填的資料沒有遺失。" };
   }
 }
 

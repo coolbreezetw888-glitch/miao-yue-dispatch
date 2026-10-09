@@ -306,7 +306,7 @@ describe("C4-B02 / B03 狀態機", () => {
     state.session = LINKED;
     putPendingDraft("cool-shop", { outcome: "logged_in", draft: null });
     renderAt("/booking/cool-shop/me");
-    expect(await screen.findByTestId("member-home-greeting")).toHaveTextContent("王小明，你好");
+    expect(await screen.findByTestId("member-home-greeting")).toHaveTextContent("王小明，您好");
     await waitFor(() => expect(state.toasts).toEqual(["已登入「涼風工匠」會員中心"]));
   });
 

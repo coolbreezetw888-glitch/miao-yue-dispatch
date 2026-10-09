@@ -196,6 +196,11 @@ interface ErrorStateProps {
   /** 要自訂下一步按鈕時用這個取代 onRetry。 */
   action?: React.ReactNode | undefined;
   className?: string | undefined;
+  /**
+   * #1048:客戶端(公開預約頁、會員中心、聯絡人邀請頁)一律稱呼「您」。
+   * 傳 true 時固定那句改成「您的資料沒有遺失。」;後台不傳,維持原本的字。
+   */
+  honorific?: boolean | undefined;
 }
 
 export function ErrorState({
@@ -205,6 +210,7 @@ export function ErrorState({
   retryLabel = "重試",
   action,
   className,
+  honorific = false,
 }: ErrorStateProps) {
   return (
     <div
@@ -223,7 +229,8 @@ export function ErrorState({
       <div>
         <p className="text-[15px] font-semibold text-destructive-strong">{title}</p>
         <p className="mt-1 text-[13px] leading-relaxed text-destructive-strong/80">
-          {reason ? <>{reason}。</> : null}你的資料沒有遺失。
+          {reason ? <>{reason}。</> : null}
+          {honorific ? "您的資料沒有遺失。" : "你的資料沒有遺失。"}
         </p>
       </div>
       {action ??

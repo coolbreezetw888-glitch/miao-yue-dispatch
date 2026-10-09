@@ -104,11 +104,11 @@ test("C1-D01 / D02:預設值、四個欄位改完儲存、重新整理仍是新�
   await expect(card.getByText("這個設定會在登入功能推出後才生效。")).toHaveCount(0);
   await expect(card.locator("#settings-completion-message-member")).toHaveAttribute(
     "placeholder",
-    "店家確認後會通知你。",
+    "店家確認後會通知您。",
   );
   await expect(card.locator("#settings-completion-message-guest")).toHaveAttribute(
     "placeholder",
-    "店家確認後會與你聯絡。",
+    "店家確認後會與您聯絡。",
   );
   await card.scrollIntoViewIfNeeded();
   await card.screenshot({

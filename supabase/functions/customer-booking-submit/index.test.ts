@@ -31,7 +31,7 @@ const CREATED = {
     estimated_amount: 1000,
     is_guest: true,
   },
-  completion_message: "店家確認後會與你聯絡。",
+  completion_message: "店家確認後會與您聯絡。",
 };
 
 interface Fake {

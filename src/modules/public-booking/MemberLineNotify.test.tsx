@@ -66,7 +66,7 @@ describe("C5-M01 ⑧ 加好友提示卡", () => {
     wrap(<MemberAddFriendCard slug="demo" merchantName="涼風工匠" lineNotify={ln} />);
     const card = screen.getByTestId("member-home-add-friend");
     expect(card).toHaveTextContent("加入「涼風工匠」LINE 好友");
-    expect(card).toHaveTextContent("預約確認、改時間等消息都會用 LINE 通知你。");
+    expect(card).toHaveTextContent("預約確認、改時間等消息都會用 LINE 通知您。");
     const go = within(card).getByRole("link", { name: /加入好友/ });
     expect(go).toHaveAttribute("href", URL_OK);
     expect(go).toHaveAttribute("target", "_blank");
@@ -157,7 +157,7 @@ describe("C5-M02 ⑪-1「LINE 通知」區塊", () => {
     state.prefs = ok({ friend_status: "not_friend" });
     wrap(<MemberLineNotifySection slug="demo" onSessionLost={() => undefined} />);
     const note = await screen.findByTestId("member-line-notify-not-friend");
-    expect(note).toHaveTextContent("你還沒有加入店家的 LINE 好友，開著也收不到通知。");
+    expect(note).toHaveTextContent("您還沒有加入店家的 LINE 好友，開著也收不到通知。");
     expect(within(note).getByRole("link", { name: "加入好友" })).toHaveAttribute("href", URL_OK);
   });
 

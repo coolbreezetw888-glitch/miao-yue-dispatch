@@ -476,7 +476,7 @@ describe("我的資料(C4-E02 / E03,Q3=A 生日鎖定)", () => {
   it("儲存被擋 ⇒ 依 hint 的固定句子(不顯示資料庫原文)", () => {
     expect(profileSaveErrorMessage("birthday_locked")).toBe(BIRTHDAY_LOCKED_NOTE);
     expect(profileSaveErrorMessage("invalid_name")).toBe("請填寫姓名（最多 50 字）。");
-    expect(profileSaveErrorMessage("whatever")).toBe("儲存失敗，請稍後再試。你填的資料沒有遺失。");
+    expect(profileSaveErrorMessage("whatever")).toBe("儲存失敗，請稍後再試。您填的資料沒有遺失。");
   });
 
   it("4-A 主要聯絡人才能改;can_edit 沒給時看 is_primary", () => {

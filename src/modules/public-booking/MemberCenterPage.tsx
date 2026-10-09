@@ -155,6 +155,7 @@ export default function MemberCenterPage({ tab }: { tab: MemberCenterTab }) {
       <PublicShell header={<TitleOnlyHeader title="會員中心" />}>
         <div data-testid="member-center-error">
           <ErrorState
+            honorific
             title={rateLimited ? PUBLIC_RATE_LIMITED_MESSAGE : "讀取失敗，請稍後再試"}
             reason={rateLimited ? "短時間內查詢次數太多，等幾分鐘再按重新整理" : "可能是網路不穩"}
             onRetry={() => void pageQuery.refetch()}
@@ -296,6 +297,7 @@ function MemberCenterFlow({
       <PublicShell header={<TitleOnlyHeader title={merchant.name} />}>
         <div data-testid="member-center-error">
           <ErrorState
+            honorific
             title="讀取失敗，請稍後再試"
             reason="可能是網路不穩"
             onRetry={() => void sessionQuery.refetch()}
@@ -551,6 +553,7 @@ function MemberCenterBody({
     content = (
       <div data-testid="member-center-error">
         <ErrorState
+          honorific
           title="讀不到會員資料"
           reason="可能是網路不穩"
           onRetry={() => void homeQuery.refetch()}
@@ -654,7 +657,7 @@ function MemberHomeTab({ ctx, home }: { ctx: MemberCenterContext; home: MemberHo
         className="break-words px-0.5 pt-0.5 text-lg font-bold text-foreground"
         data-testid="member-home-greeting"
       >
-        {`${home.memberName}，你好`}
+        {`${home.memberName}，您好`}
       </p>
 
       {next && status ? (
@@ -728,7 +731,7 @@ function MemberHomeTab({ ctx, home }: { ctx: MemberCenterContext; home: MemberHo
         >
           <p className="text-[15px] font-semibold text-foreground">{missingTitle}</p>
           <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
-            資料完整一點，店家服務時更方便跟你聯絡。
+            資料完整一點，店家服務時更方便跟您聯絡。
           </p>
           <div className="mt-2.5 flex gap-2">
             <Button

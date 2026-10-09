@@ -153,7 +153,7 @@ delete from customer_line_friendships where merchant_id = 'c5b00000-0000-4000-80
 select public.internal_prepare_customer_line_job('c5b00000-0000-4000-8000-000000000301') as j \gset p1_
 select is(:'p1_j'::jsonb ->> 'state', 'send', 'S05-1 正常 ⇒ send');
 select is(:'p1_j'::jsonb ->> 'channel_access_token', 'C5B-A-TOKEN-SENTINEL', 'S05-2 用這張單那間店的 token(X04)');
-select is(:'p1_j'::jsonb ->> 'template', E'「{{merchant_name}}」已確認你的預約：\n{{booking_date}} {{booking_time}}（預計抵達時間）\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}',
+select is(:'p1_j'::jsonb ->> 'template', E'「{{merchant_name}}」已確認您的預約：\n{{booking_date}} {{booking_time}}（預計抵達時間）\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}',
           'S05-3 沒改過 ⇒ 預設範本(到府產業加「（預計抵達時間）」)');
 select is(:'p1_j'::jsonb -> 'variables',
           '{"member_name":"個人會員","merchant_name":"涼風C5B","booking_date":"10月13日（二）","booking_time":"10:00","old_booking_date":"","old_booking_time":"","service_items":"室內機清洗 ×2、加價項目 ×1","staff_name":"阿明","merchant_phone":"0223456789","contact_name":""}'::jsonb,

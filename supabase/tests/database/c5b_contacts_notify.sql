@@ -124,7 +124,7 @@ select is(pg_temp.rc(:'q_j'::jsonb), array['to:11'], 'N09-7 收件人 = 主要�
 select is(array[:'q_j'::jsonb -> 'variables' ->> 'contact_name', :'q_j'::jsonb -> 'variables' ->> 'merchant_name',
                 :'q_j'::jsonb -> 'variables' ->> 'merchant_phone', :'q_j'::jsonb -> 'variables' ->> 'booking_date'],
           array[E'申請\n人', 'C5D聯絡人店', '0223456789', ''], 'N09-8 變數:contact_name = 申請人 LINE 顯示名(換行由 Edge 處理)、沒有預約類資料');
-select ok(:'q_j'::jsonb ->> 'template' like '{{contact_name}} 申請成為你在「{{merchant_name}}」會員的聯絡人%', 'N09-9 預設範本');
+select ok(:'q_j'::jsonb ->> 'template' like '{{contact_name}} 申請成為您在「{{merchant_name}}」會員的聯絡人%', 'N09-9 預設範本');
 update customer_line_outbox set status = 'processing' where kind = 'customer_contact_request' and member_id = pg_temp.u('41');
 update member_customer_contacts set notify_booking = false where id = pg_temp.u('71');
 select is(pg_temp.rc(public.internal_prepare_customer_line_job((select id from customer_line_outbox where kind = 'customer_contact_request' and member_id = pg_temp.u('41')))),

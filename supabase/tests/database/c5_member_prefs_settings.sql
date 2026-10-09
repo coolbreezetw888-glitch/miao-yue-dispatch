@@ -158,14 +158,14 @@ select pg_temp.as_postgres();
 -- =========================================================================
 select is((public.get_public_booking_page('pgtap-c5c') -> 'booking_settings' ->> 'line_notify_available'), 'true', 'M04-1 公開頁 line_notify_available = true');
 select is((public.get_public_booking_page('pgtap-c5c-x') -> 'booking_settings' ->> 'line_notify_available'), 'false', 'M04-2 沒接上的店 ⇒ false');
-select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'pending_confirmation'), '店家確認後會用 LINE 通知你。',
-          'M04-3 能用 LINE 通知 + 店家確認開著 ⇒「會用 LINE 通知你」');
-select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'accepted'), '服務前店家可能會再跟你聯絡確認。',
+select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'pending_confirmation'), '店家確認後會用 LINE 通知您。',
+          'M04-3 能用 LINE 通知 + 店家確認開著 ⇒「會用 LINE 通知您」');
+select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'accepted'), '服務前店家可能會再跟您聯絡確認。',
           'M04-4 直接成立的句子不變');
-select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000032', 'pending_confirmation'), '店家確認後會通知你。',
+select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000032', 'pending_confirmation'), '店家確認後會通知您。',
           'M04-5 沒接上官方帳號 ⇒ 維持原句');
 insert into merchant_customer_line_settings (merchant_id, on_confirmed) values ('c5c00000-0000-4000-8000-000000000031', false);
-select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'pending_confirmation'), '店家確認後會通知你。',
+select is(private.default_member_completion_message('c5c00000-0000-4000-8000-000000000031', 'pending_confirmation'), '店家確認後會通知您。',
           'M04-6 「店家確認」通知關掉 ⇒ 維持原句');
 update merchant_customer_line_settings set on_confirmed = true where merchant_id = 'c5c00000-0000-4000-8000-000000000031';
 -- 完成頁實際輸出(會員待確認 / 店家自訂不動)
@@ -174,7 +174,7 @@ insert into merchant_staff (id, merchant_id, name, status, login_status, phone) 
 insert into bookings (id, merchant_id, staff_id, member_id, start_at, end_at, customer_name, customer_phone, source, created_by_role, status) values
   ('c5c00000-0000-4000-8000-000000000201', 'c5c00000-0000-4000-8000-000000000031', 'c5c00000-0000-4000-8000-000000000051', 'c5c00000-0000-4000-8000-000000000041',
    now() + interval '2 days', now() + interval '2 days 1 hour', '客', '0912530001', 'customer', 'customer', 'pending_confirmation');
-select is(private.customer_booking_result('c5c00000-0000-4000-8000-000000000201') ->> 'completion_message', '店家確認後會用 LINE 通知你。', 'M04-7 完成頁:會員待確認 ⇒ 新預設句');
+select is(private.customer_booking_result('c5c00000-0000-4000-8000-000000000201') ->> 'completion_message', '店家確認後會用 LINE 通知您。', 'M04-7 完成頁:會員待確認 ⇒ 新預設句');
 insert into merchant_booking_settings (merchant_id, completion_message_member) values ('c5c00000-0000-4000-8000-000000000031', '店家自訂完成句');
 select is(private.customer_booking_result('c5c00000-0000-4000-8000-000000000201') ->> 'completion_message', '店家自訂完成句', 'M04-8 店家自訂的文字不動');
 

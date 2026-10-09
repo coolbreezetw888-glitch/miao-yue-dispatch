@@ -284,7 +284,7 @@ test("C1-A02~A09 + C3-D01(1280):①~⑤ 走完,時長 / 金額、日期狀態、
   await expect(page.getByTestId("public-booking-step-label")).toContainText("步驟 4／5");
   await expect(page.getByTestId("public-booking-step-label")).toContainText("下一步：登入／電話");
   await expect(page.getByTestId("public-booking-next-step-hint")).toHaveText(
-    "下一步會請你填寫電話。",
+    "下一步會請您填寫電話。",
   );
   const summary = page.getByTestId("public-booking-summary");
   await expect(summary).toContainText(STAFF_MING);

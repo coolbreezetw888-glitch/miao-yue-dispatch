@@ -200,7 +200,7 @@ select throws_ok($$insert into bookings (merchant_id, staff_id, start_at, end_at
 select is(pg_temp.sub('m-ok', 'pgtap-c3-shop', 'c3000000-0000-4000-8000-000000000011', null,
             pg_temp.draft(pg_temp.p1(2), 'c3000000-0000-4000-8000-000000000031', 2, '10:00', '王小明') || '{"unit_price":0,"final_amount":0,"status":"accepted","member_id":"c3000000-0000-4000-8000-000000000043","user_id":"c3000000-0000-4000-8000-000000000012"}'::jsonb,
             true, 'c3000000-0000-4000-8000-0000000000a1') - '_internal',
-  jsonb_build_object('state', 'created', 'completion_message', '店家確認後會通知你。', 'booking', jsonb_build_object(
+  jsonb_build_object('state', 'created', 'completion_message', '店家確認後會通知您。', 'booking', jsonb_build_object(
     'status', 'pending_confirmation', 'start_at', pg_temp.ts(2, '10:00'), 'end_at', pg_temp.ts(2, '12:00'),
     'staff_display', '阿明', 'items', jsonb_build_array(jsonb_build_object('name', 'C3主要P1', 'quantity', 2)),
     'address', null, 'phone', null, 'estimated_amount', 2000, 'is_guest', false)),
@@ -242,7 +242,7 @@ select is(pg_temp.sub('m-auto', 'pgtap-c3-shop', 'c3000000-0000-4000-8000-000000
           -> 'booking' ->> 'status',
   'accepted', 'A03-10 指定開了「客戶預約自動接受」的 SB ⇒ 直接成立');
 select is((select result ->> 'completion_message' from c3_results where label = 'm-auto'),
-  '服務前店家可能會再跟你聯絡確認。', 'A05-1 直接成立且店家沒填會員文字 ⇒ 預設「服務前店家可能會再跟你聯絡確認。」(completion_message 在最外層)');
+  '服務前店家可能會再跟您聯絡確認。', 'A05-1 直接成立且店家沒填會員文字 ⇒ 預設「服務前店家可能會再跟您聯絡確認。」(completion_message 在最外層)');
 select is(pg_temp.sub('m-bl', 'pgtap-c3-shop', 'c3000000-0000-4000-8000-000000000012', null,
             pg_temp.draft(pg_temp.p1(), 'c3000000-0000-4000-8000-000000000032', 2, '16:00', '黑名單客'), true, gen_random_uuid())
           -> 'booking' ->> 'status',
@@ -304,7 +304,7 @@ select is(pg_temp.sub_err('pgtap-c3-shop', null, '0912300055',
 select is(pg_temp.sub('g-new', 'pgtap-c3-shop', null, ' 0912-300-061 ',
             pg_temp.draft(pg_temp.p1(), 'c3000000-0000-4000-8000-000000000031', 9, '10:00', '新訪客', null, '請按門鈴'), true,
             'c3000000-0000-4000-8000-0000000000b1') - '_internal',
-  jsonb_build_object('state', 'created', 'completion_message', '店家確認後會與你聯絡。', 'booking', jsonb_build_object(
+  jsonb_build_object('state', 'created', 'completion_message', '店家確認後會與您聯絡。', 'booking', jsonb_build_object(
     'status', 'pending_confirmation', 'start_at', pg_temp.ts(9, '10:00'), 'end_at', pg_temp.ts(9, '11:00'),
     'staff_display', '阿明', 'items', jsonb_build_array(jsonb_build_object('name', 'C3主要P1', 'quantity', 1)),
     'address', null, 'phone', '0912-300-061', 'estimated_amount', 1000, 'is_guest', true)),

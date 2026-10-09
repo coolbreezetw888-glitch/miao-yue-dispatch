@@ -116,7 +116,7 @@ function baseSettings(over: Record<string, unknown> = {}) {
     templates: {},
     default_templates: {
       confirmed:
-        "「{{merchant_name}}」已確認你的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
+        "「{{merchant_name}}」已確認您的預約：\n{{booking_date}} {{booking_time}}\n服務人員：{{staff_name}}\n查看或取消：{{member_center_url}}",
     },
     ...over,
   };
@@ -286,9 +286,9 @@ describe("C5-K02「通知客人」卡", () => {
     await userEvent.click(within(row).getByTestId("customer-line-edit-toggle"));
     const editor = within(row).getByTestId("customer-line-template-confirmed");
     const textarea = within(editor).getByRole("textbox");
-    expect((textarea as HTMLTextAreaElement).value).toContain("已確認你的預約");
+    expect((textarea as HTMLTextAreaElement).value).toContain("已確認您的預約");
     expect(editor).toHaveTextContent("客人實際會收到");
-    expect(editor).toHaveTextContent("「涼風工匠」已確認你的預約：");
+    expect(editor).toHaveTextContent("「涼風工匠」已確認您的預約：");
     expect(editor).toHaveTextContent("還沒有修改文字。");
     expect(within(editor).getByTestId("customer-line-template-save")).toBeDisabled();
     expect(within(editor).queryByTestId("customer-line-template-restore")).toBeNull();
@@ -332,7 +332,7 @@ describe("C5-K02「通知客人」卡", () => {
       p_patch: { templates: { confirmed: "" } },
     });
     await waitFor(() =>
-      expect((textarea as HTMLTextAreaElement).value).toContain("已確認你的預約"),
+      expect((textarea as HTMLTextAreaElement).value).toContain("已確認您的預約"),
     );
   });
 
