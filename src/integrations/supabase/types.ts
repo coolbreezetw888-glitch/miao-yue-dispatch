@@ -3716,6 +3716,7 @@ export type Database = {
           monthly_base_salary: number
           staff_id: string
           status: string
+          wage_amount: number | null
         }
         Insert: {
           bonus_plan_id?: string | null
@@ -3729,6 +3730,7 @@ export type Database = {
           monthly_base_salary?: number
           staff_id: string
           status: string
+          wage_amount?: number | null
         }
         Update: {
           bonus_plan_id?: string | null
@@ -3742,6 +3744,7 @@ export type Database = {
           monthly_base_salary?: number
           staff_id?: string
           status?: string
+          wage_amount?: number | null
         }
         Relationships: [
           {
@@ -3833,6 +3836,120 @@ export type Database = {
           },
           {
             foreignKeyName: "staff_service_commission_rates_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_wage_settings: {
+        Row: {
+          created_at: string
+          merchant_id: string
+          staff_id: string
+          updated_at: string
+          updated_by_user_id: string | null
+          wage_amount: number
+        }
+        Insert: {
+          created_at?: string
+          merchant_id: string
+          staff_id: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+          wage_amount: number
+        }
+        Update: {
+          created_at?: string
+          merchant_id?: string
+          staff_id?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+          wage_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_wage_settings_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_wage_settings_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: true
+            referencedRelation: "merchant_staff"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_work_day_records: {
+        Row: {
+          compensation_type: string
+          created_at: string
+          extra_booking_minutes: number
+          frozen_at: string
+          id: string
+          is_leave: boolean
+          leave_type_name: string | null
+          merchant_id: string
+          pay_amount: number
+          refrozen_reason: string | null
+          shift_minutes: number
+          staff_id: string
+          updated_at: string
+          wage_amount: number
+          work_date: string
+          worked_minutes: number
+        }
+        Insert: {
+          compensation_type: string
+          created_at?: string
+          extra_booking_minutes: number
+          frozen_at?: string
+          id?: string
+          is_leave?: boolean
+          leave_type_name?: string | null
+          merchant_id: string
+          pay_amount: number
+          refrozen_reason?: string | null
+          shift_minutes: number
+          staff_id: string
+          updated_at?: string
+          wage_amount: number
+          work_date: string
+          worked_minutes: number
+        }
+        Update: {
+          compensation_type?: string
+          created_at?: string
+          extra_booking_minutes?: number
+          frozen_at?: string
+          id?: string
+          is_leave?: boolean
+          leave_type_name?: string | null
+          merchant_id?: string
+          pay_amount?: number
+          refrozen_reason?: string | null
+          shift_minutes?: number
+          staff_id?: string
+          updated_at?: string
+          wage_amount?: number
+          work_date?: string
+          worked_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_work_day_records_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_work_day_records_staff_id_fkey"
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "merchant_staff"
@@ -4954,6 +5071,10 @@ export type Database = {
         }
         Returns: Json
       }
+      get_staff_wage_by_range: {
+        Args: { p_end_date: string; p_staff_id: string; p_start_date: string }
+        Returns: Json
+      }
       hard_delete_merchant_agent: {
         Args: { p_agent_id: string }
         Returns: undefined
@@ -5114,6 +5235,7 @@ export type Database = {
         }
         Returns: string[]
       }
+      list_staff_wages: { Args: { p_merchant_id: string }; Returns: Json }
       lookup_user_id_by_email: { Args: { p_email: string }; Returns: string }
       mark_agent_active_if_self: { Args: never; Returns: undefined }
       mark_birthday_line_result: {
@@ -5376,6 +5498,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      recompute_staff_work_day: {
+        Args: { p_date: string; p_staff_id: string }
+        Returns: Json
       }
       record_invited_merchant_agent: {
         Args: {
@@ -5683,6 +5809,10 @@ export type Database = {
       set_staff_permission: {
         Args: { p_granted: boolean; p_section_key: string; p_staff_id: string }
         Returns: undefined
+      }
+      set_staff_wage: {
+        Args: { p_amount: number; p_staff_id: string }
+        Returns: Json
       }
       staff_cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }

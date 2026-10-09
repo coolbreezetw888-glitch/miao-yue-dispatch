@@ -35,6 +35,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { useMerchantStaffList } from "@/modules/staff-agent/context";
+import { isWageCompensationType } from "@/modules/staff-agent/types";
 // 模組 14(服務人員端)v2 §10.4.4:摘要卡片的金額顯示格式,沿用既有的跨模組共用格式化函式
 // (staff-portal 模組已經有 import booking/dateUtils 的既有先例,這裡是同樣的模式)。
 import { formatAmount } from "@/modules/booking/orderAmount";
@@ -64,6 +65,7 @@ import {
 } from "./materialCostDeductedDisplay";
 import { formatStaffCommissionItemBreakdown, type StaffBonusByRange } from "./types";
 import { RequireStaffReportAccess } from "./RequireStaffReportAccess";
+import { WageStaffReport } from "./WageStaffReport";
 import { YearMonthPicker, useYearMonthState } from "./YearMonthPicker";
 
 /** 摘要統計卡(完成訂單 / 我的抽成 / 月薪基本額 …)。 */
@@ -658,6 +660,14 @@ function StaffReportPageInner() {
         <EmptyState title="請選擇服務人員" description="從上方的下拉選單挑一位服務人員。" />
       ) : selectedStaff.compensation_type === "monthly_salary" ? (
         <MonthlySalaryStaffReport
+          staffId={selectedStaff.id}
+          staffName={selectedStaff.name}
+          year={year}
+          month={month}
+        />
+      ) : isWageCompensationType(selectedStaff.compensation_type) ? (
+        // #1035 B 批 PB-B02:日薪／時薪制(依目前的計酬方式切版)。
+        <WageStaffReport
           staffId={selectedStaff.id}
           staffName={selectedStaff.name}
           year={year}

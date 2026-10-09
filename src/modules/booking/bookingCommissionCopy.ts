@@ -7,7 +7,8 @@ export const BOOKING_COMMISSION_COPY = {
   currentLabel: "目前抽成",
   lastComputed: (text: string) => `最後計算：${text}`,
   button: "重新計算抽成",
-  noRecord: "這筆訂單沒有抽成紀錄(月薪制服務人員或完成時沒有產生)，不能重新計算。",
+  noRecord:
+    "這筆訂單沒有抽成紀錄(月薪制、日薪制、時薪制服務人員不計抽成，或完成時沒有產生)，不能重新計算。",
   notPieceRate: "這位服務人員目前不是抽成制，無法重新計算抽成。",
   loadError: "讀不到這筆訂單的抽成",
   confirmTitle: "重新計算這筆訂單的抽成？",

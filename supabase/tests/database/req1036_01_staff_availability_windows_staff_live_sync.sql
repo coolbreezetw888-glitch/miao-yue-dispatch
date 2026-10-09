@@ -176,9 +176,11 @@ select is(
                     order by t.tgname)
    from pg_trigger t join pg_proc p on p.oid = t.tgfoid
    where t.tgrelid = 'public.staff_availability_overrides'::regclass and not t.tgisinternal),
+  -- #1035 B 批 PB-R03:多一個 staff_availability_overrides_refreeze_work_day(過去日子改格子時重算日薪／時薪上工紀錄)。
   array['staff_availability_overrides_notify_merchant_calendar>tg_staff_availability_notify_merchant_calendar>O>after-row-iud',
+        'staff_availability_overrides_refreeze_work_day>tg_staff_availability_overrides_refreeze_work_day>O>after-row-iud',
         'staff_availability_overrides_staff_live_sync>tg_staff_availability_overrides_staff_live_sync>O>after-row-iud'],
-  'A3b 單日例外表:新 trigger 是 AFTER ROW INSERT / UPDATE / DELETE、啟用中;#1003 商家頻道那個照舊(共 2 個)'
+  'A3b 單日例外表:新 trigger 是 AFTER ROW INSERT / UPDATE / DELETE、啟用中;#1003 商家頻道那個照舊;#1035 B 批重算那個(共 3 個)'
 );
 select is(
   (select array_agg(policyname || ':' || cmd || ':' || array_to_string(roles, ',') order by policyname)

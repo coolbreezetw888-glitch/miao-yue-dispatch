@@ -103,18 +103,29 @@ export const LEAVE_RECORD_DISPLAY_STATUS_LABELS: Record<LeaveRecordDisplayStatus
  * ⚠️ 資料庫存的是英文,中文顯示文字(月薪制/抽成制)只在畫面層,不要拿中文來比較。 */
 export const MONTHLY_SALARY_COMPENSATION_TYPE = "monthly_salary";
 
-/** 過濾出「可以登記請假」的服務人員 = 計酬類型是月薪制的人。
+/** #1035 B 批 PB-U03:可以登記請假的計酬類型 = 月薪制、日薪制、時薪制(抽成制照舊不行)。
+ * 跟資料庫 create_staff_leave 的條件同一份清單。 */
+export const LEAVE_ELIGIBLE_COMPENSATION_TYPES: readonly string[] = [
+  MONTHLY_SALARY_COMPENSATION_TYPE,
+  "daily_wage",
+  "hourly_wage",
+];
+
+/** 過濾出「可以登記請假」的服務人員 = 計酬類型是月薪制、日薪制、時薪制的人
+ * (#1035 B 批 PB-U03 起,原本只有月薪制;函式原名 filterMonthlySalaryStaff)。
  *
  * 刻意用泛型 + 最小結構型別(只要求有 compensation_type 這個欄位)而不是直接吃 MerchantStaff:
  * ① 模組 7 不需要為了一個過濾函式去 import 模組 3 的型別(維持模組獨立性);
  * ② 呼叫端傳進去什麼型別,回傳的就是同一個型別,不會在下游丟掉 id/name 這些欄位。
  *
  * 傳 null/undefined(react-query 還沒拿到資料)一律回傳空陣列,呼叫端不用再自己寫 `?? []`。 */
-export function filterMonthlySalaryStaff<T extends { compensation_type: string | null }>(
+export function filterLeaveEligibleStaff<T extends { compensation_type: string | null }>(
   staffList: T[] | null | undefined,
 ): T[] {
   return (staffList ?? []).filter(
-    (staff) => staff.compensation_type === MONTHLY_SALARY_COMPENSATION_TYPE,
+    (staff) =>
+      staff.compensation_type !== null &&
+      LEAVE_ELIGIBLE_COMPENSATION_TYPES.includes(staff.compensation_type),
   );
 }
 

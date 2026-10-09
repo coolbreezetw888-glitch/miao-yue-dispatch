@@ -172,8 +172,9 @@ select is(
 );
 select is(
   (select pg_get_function_result('private.get_staff_payroll_status_as_of(uuid, timestamptz)'::regprocedure)),
-  'TABLE(compensation_type text, status text, monthly_base_salary numeric, is_estimated boolean, existed boolean, bonus_plan_id uuid)',
-  'B5 get_staff_payroll_status_as_of 多回 bonus_plan_id(前五欄不變)'
+  -- #1035 B 批 PB-D03:再多回 wage_amount(放最後,前六欄不變)。
+  'TABLE(compensation_type text, status text, monthly_base_salary numeric, is_estimated boolean, existed boolean, bonus_plan_id uuid, wage_amount numeric)',
+  'B5 get_staff_payroll_status_as_of 多回 bonus_plan_id(前五欄不變;B 批再多 wage_amount)'
 );
 select is(
   (select count(*)::int from pg_proc p where p.pronamespace in ('public'::regnamespace, 'private'::regnamespace)

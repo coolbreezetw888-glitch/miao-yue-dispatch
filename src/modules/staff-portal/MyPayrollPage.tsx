@@ -12,6 +12,8 @@ import { LoadingSkeleton } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MonthlySalaryStaffReport, PieceRateStaffReport } from "@/modules/payroll/StaffReportPage";
 import { DateRangePicker, useDateRangeState } from "@/modules/payroll/DateRangePicker";
+import { WageStaffReport } from "@/modules/payroll/WageStaffReport";
+import { isWageCompensationType } from "@/modules/staff-agent/types";
 
 import { useActiveMyStaffRecord } from "./context";
 import { RequireStaffPayrollAccess } from "./RequireStaffPayrollAccess";
@@ -47,6 +49,14 @@ function MyPayrollPageInner() {
         <LoadingSkeleton variant="lines" rows={3} />
       ) : staffRow.compensation_type === "monthly_salary" ? (
         <MonthlySalaryStaffReport
+          staffId={staffRow.id}
+          staffName={staffRow.name}
+          dateRange={dateRange}
+          showCsvExport={false}
+        />
+      ) : isWageCompensationType(staffRow.compensation_type) ? (
+        // #1035 B 批 PB-B02:日薪／時薪制看自己的上工天數、時數與工資。
+        <WageStaffReport
           staffId={staffRow.id}
           staffName={staffRow.name}
           dateRange={dateRange}

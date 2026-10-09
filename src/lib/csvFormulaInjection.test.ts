@@ -213,6 +213,8 @@ describe("CSV 匯出點盤點守門(#925)", () => {
         "modules/data-tools/ReportExportCenterPage.tsx",
         "modules/payroll/BillingReportPage.tsx",
         "modules/payroll/StaffReportPage.tsx",
+        // #1035 B 批 PB-B02:日薪／時薪服務人員報表(走 ./csvExport 的 buildCsvContent,有公式注入防護)。
+        "modules/payroll/WageStaffReport.tsx",
       ].sort(),
     );
     for (const f of callers) {

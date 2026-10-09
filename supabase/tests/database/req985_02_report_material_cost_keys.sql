@@ -779,7 +779,9 @@ create function pg_temp.strip_bill(j jsonb) returns jsonb language sql as $$
     select jsonb_agg(e - 'bonus_amount' order by ord)
     from jsonb_array_elements(r -> 'per_staff_breakdown') with ordinality as t(e, ord)), '[]'::jsonb)) else r end
   from (select j - 'material_cost_affects_commission_now' - 'commission_orders_material_deducted_count' - 'commission_orders_material_not_deducted_count'
-               - 'total_monthly_bonus' - 'bonus_feature_used' as r) x;
+               - 'total_monthly_bonus' - 'bonus_feature_used'
+               -- #1035 B 批 PB-B01:再多 3 個鍵(這個情境沒有日薪／時薪人員 ⇒ 淨利照舊相等)。
+               - 'total_wage_payout' - 'wage_includes_estimate' - 'wage_feature_used' as r) x;
 $$;
 -- 客戶端第 3 批(主腦裁決):帳單報表 per_staff_breakdown 改依服務人員順位排序(改前複製品依姓名)⇒
 --   比對前兩邊都依 staff_name、staff_id 重新排序,只比內容不比順序(順序由 c3_staff_order H04-5/6 另外測)。

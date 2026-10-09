@@ -255,7 +255,7 @@ describe("K-5 區塊內容", () => {
     );
     renderDialog();
     expect(await screen.findByTestId("booking-commission-no-record")).toHaveTextContent(
-      "這筆訂單沒有抽成紀錄(月薪制服務人員或完成時沒有產生)，不能重新計算。",
+      "這筆訂單沒有抽成紀錄(月薪制、日薪制、時薪制服務人員不計抽成，或完成時沒有產生)，不能重新計算。",
     );
     expect(screen.queryByTestId("booking-commission-recalculate")).toBeNull();
   });

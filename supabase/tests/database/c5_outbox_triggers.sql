@@ -439,8 +439,9 @@ select is((select count(*)::int from customer_line_outbox where merchant_id = 'c
 -- =========================================================================
 select is((select array_agg(tgname::text order by tgname) from pg_trigger where tgrelid = 'public.bookings'::regclass and not tgisinternal),
           array['bookings_check_points_redeemed_requires_member', 'bookings_enqueue_customer_line', 'bookings_notify_merchant_calendar',
-                'bookings_notify_staff_schedule', 'bookings_set_updated_at'],
-          'S02 bookings trigger 清單(既有 4 個 + 新 1 個)');
+                -- #1035 B 批 PB-R03:多一個 bookings_refreeze_work_day(過去日子的訂單異動時重算日薪／時薪上工紀錄)。
+                'bookings_notify_staff_schedule', 'bookings_refreeze_work_day', 'bookings_set_updated_at'],
+          'S02 bookings trigger 清單(既有 4 個 + 新 1 個;#1035 B 批再 + 1 個)');
 select ok((select pg_get_triggerdef(oid) like '%AFTER INSERT OR UPDATE OF status, start_at ON public.bookings FOR EACH ROW%'
            from pg_trigger where tgname = 'bookings_enqueue_customer_line'), 'S02 只在新增 / 改 status、start_at 時觸發');
 select ok((select prosrc not ilike '%channel_access_token%' and prosrc not ilike '%net.http%'

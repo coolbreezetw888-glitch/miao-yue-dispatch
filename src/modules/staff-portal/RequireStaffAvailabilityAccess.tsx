@@ -21,6 +21,8 @@ import { useNavigate } from "react-router-dom";
 
 import { GuardLoading } from "@/components/patterns";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { WAGE_STAFF_AVAILABILITY_NOTE } from "@/modules/payroll/wageLogic";
+import { isWageCompensationType } from "@/modules/staff-agent/types";
 
 import { useActiveMyStaffRecord, useMyStaffPermission } from "./context";
 import { shouldRedirectAwayFromStaffSelfPage } from "./staffSelfAccessLogic";
@@ -49,6 +51,21 @@ export function RequireStaffAvailabilityAccess({ children }: { children: ReactNo
 
   if (loading || !merchant || !isStaffSelf) {
     return <GuardLoading />;
+  }
+
+  // #1035 B 批 PB-U04(Q4 = A):日薪／時薪的人時段 = 薪水,一律不能自己開關(不論有沒有權限),
+  // 直接說明原因,不要叫他去找店家開權限(開了也不能用)。
+  if (isWageCompensationType(staffRow?.compensation_type)) {
+    return (
+      <div className="mx-auto max-w-3xl px-5 py-12">
+        <p
+          className="rounded-md border border-dashed border-border px-3 py-8 text-center text-sm text-muted-foreground"
+          data-testid="staff-availability-wage-note"
+        >
+          {WAGE_STAFF_AVAILABILITY_NOTE}
+        </p>
+      </div>
+    );
   }
 
   if (hasPermission !== true) {

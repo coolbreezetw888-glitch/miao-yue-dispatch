@@ -215,7 +215,7 @@ test("⑤ 月薪制服務人員的已完成訂單:灰字、沒有按鈕", async 
   const page = await newPage(browser, "admin");
   const layer = await openDetail(page, fixture.customerM);
   await expect(layer.getByTestId("booking-commission-no-record")).toHaveText(
-    "這筆訂單沒有抽成紀錄(月薪制服務人員或完成時沒有產生)，不能重新計算。",
+    "這筆訂單沒有抽成紀錄(月薪制、日薪制、時薪制服務人員不計抽成，或完成時沒有產生)，不能重新計算。",
     { timeout: LOAD_TIMEOUT },
   );
   await expect(layer.getByRole("button", { name: "重新計算抽成" })).toHaveCount(0);

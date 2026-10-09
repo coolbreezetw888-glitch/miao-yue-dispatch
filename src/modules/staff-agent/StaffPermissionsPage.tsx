@@ -17,6 +17,7 @@ import { STAFF_PERMISSION_SECTIONS } from "@/modules/staff-portal/types";
 
 import { fetchMerchantStaff } from "./api";
 import { RequireMerchantAdmin } from "./RequireMerchantAdmin";
+import { STAFF_COMPENSATION_TYPE_LABELS, type StaffCompensationType } from "./types";
 
 const permissionsQueryKey = (staffId: string) =>
   ["staff-agent-module", "staff-permissions", staffId] as const;
@@ -104,10 +105,13 @@ function StaffPermissionsInner() {
                     <p className="text-sm font-medium text-foreground">{section.label}</p>
                     <p className="text-xs text-muted-foreground">
                       {section.description}
+                      {/* #1035 B 批 PB-U04:日薪／時薪制也不能自己開關時段(Q4 = A),一樣提醒。 */}
                       {section.key === "staff_availability_self_manage" &&
-                      staff?.compensation_type === "monthly_salary" ? (
+                      staff &&
+                      staff.compensation_type !== "piece_rate" &&
+                      staff.compensation_type in STAFF_COMPENSATION_TYPE_LABELS ? (
                         <span className="ml-1 text-warn">
-                          (這位是月薪制服務人員，即使開啟也不會生效)
+                          {`(這位是${STAFF_COMPENSATION_TYPE_LABELS[staff.compensation_type as StaffCompensationType]}服務人員，即使開啟也不會生效)`}
                         </span>
                       ) : null}
                     </p>

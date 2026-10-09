@@ -33,8 +33,25 @@ export const STAFF_LOGIN_STATUS_LABELS: Record<StaffLoginStatus, string> = {
   active: "已開通登入",
 };
 
-/** 服務人員的計酬類型。資料庫欄位 merchant_staff.compensation_type,CHECK 只允許這兩個值。 */
-export type StaffCompensationType = "monthly_salary" | "piece_rate";
+/** 服務人員的計酬類型。資料庫欄位 merchant_staff.compensation_type。
+ *  #1035 B 批(PB-D01):多了日薪制 daily_wage、時薪制 hourly_wage(上工時間照行事曆自動算)。
+ *  用 `Record<StaffCompensationType, …>` 的地方漏補新值會變成編譯錯誤 —— 這是刻意的。 */
+export type StaffCompensationType = "monthly_salary" | "piece_rate" | "daily_wage" | "hourly_wage";
+
+/** 計酬方式下拉的選項順序(PB-U01):抽成制、月薪制、日薪制、時薪制。 */
+export const STAFF_COMPENSATION_TYPE_OPTIONS: StaffCompensationType[] = [
+  "piece_rate",
+  "monthly_salary",
+  "daily_wage",
+  "hourly_wage",
+];
+
+/** 日薪制或時薪制(PB-R01:上工時間照行事曆自動算)。 */
+export function isWageCompensationType(
+  type: string | null | undefined,
+): type is "daily_wage" | "hourly_wage" {
+  return type === "daily_wage" || type === "hourly_wage";
+}
 
 /** 計酬類型的中文顯示用語(規格書「超級管理員商家詳情強化」#700)。
  *  ⚠️ 2026-09-24 用語統一:`piece_rate` 顯示「抽成制」(舊稱「按件計酬」,不要再用)。
@@ -46,6 +63,8 @@ export type StaffCompensationType = "monthly_salary" | "piece_rate";
 export const STAFF_COMPENSATION_TYPE_LABELS: Record<StaffCompensationType, string> = {
   monthly_salary: "月薪制",
   piece_rate: "抽成制",
+  daily_wage: "日薪制",
+  hourly_wage: "時薪制",
 };
 
 /** 1.1.1 權限功能開關欄位,對應規格表「服務人員-權限功能」逐條(白話文字給 4.2 畫面使用)。 */

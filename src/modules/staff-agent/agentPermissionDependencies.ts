@@ -55,7 +55,8 @@ export const AGENT_PERMISSION_DEPENDENCIES: readonly AgentPermissionDependency[]
 /** §11.5:「一起開啟」時,清單每一項寫的「這位客服會多看到 / 多能做」。 */
 export const AGENT_PERMISSION_GRANT_EFFECTS: Readonly<Record<string, string>> = {
   commission_settings: "會看到所有服務人員的月薪金額與抽成比例，而且可以修改。",
-  team_leave: "會看到所有月薪制服務人員的請假紀錄，可以登記、取消請假，也可以修改假別清單。",
+  team_leave:
+    "會看到所有月薪制、日薪制、時薪制服務人員的請假紀錄，可以登記、取消請假，也可以修改假別清單。",
   material_costs: "可以新增、編輯、下架料錢成本品項，也可以打開或關閉料錢成本功能。",
   member_points:
     "可以修改紅利點數的所有規則，包含核發條件、紅利計算、點數使用、推薦系統與生日獎勵。",

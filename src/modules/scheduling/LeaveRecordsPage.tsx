@@ -64,7 +64,7 @@ import {
 } from "./context";
 import { RequireTeamLeaveAccess } from "./RequireTeamLeaveAccess";
 import {
-  filterMonthlySalaryStaff,
+  filterLeaveEligibleStaff,
   getLeaveRecordDisplayStatus,
   LEAVE_RECORD_DISPLAY_STATUS_LABELS,
   type LeaveRecordDisplayStatus,
@@ -113,8 +113,8 @@ function CreateLeaveDialog({
   const [saving, setSaving] = useState(false);
 
   // 2026-09-24 使用者指定:下拉選單只列月薪制的人,抽成制的人完全不出現(原本是列出來但設成
-  // disabled + 加註記)。過濾規則抽成純函式 filterMonthlySalaryStaff(見 types.ts 的說明)。
-  const monthlySalaryStaff = useMemo(() => filterMonthlySalaryStaff(staffList), [staffList]);
+  // disabled + 加註記)。過濾規則抽成純函式 filterLeaveEligibleStaff(見 types.ts 的說明)。
+  const leaveEligibleStaff = useMemo(() => filterLeaveEligibleStaff(staffList), [staffList]);
 
   // 第 11 批 J(#995):填過資料(跟空白表單不同)⇒ Esc / 上方空白先問放棄。
   // 「仍要建立(有衝突)」那個勾選是送出前的確認,不算填資料。
@@ -208,7 +208,7 @@ function CreateLeaveDialog({
       <FullPageLayerContent
         dirty={formDirty.dirty}
         title="登記請假"
-        subtitle="只有月薪制的服務人員可以登記請假紀錄，建立即生效(這次不做審核流程)。"
+        subtitle="只有月薪制、日薪制、時薪制的服務人員可以登記請假紀錄，建立即生效(這次不做審核流程)。"
         footer={
           <ActionBar>
             <FullPageLayerClose asChild>
@@ -235,11 +235,11 @@ function CreateLeaveDialog({
               value={staffId}
               onValueChange={setStaffId}
               placeholder="請選擇服務人員"
-              options={monthlySalaryStaff.map((s) => ({ value: s.id, label: s.name }))}
+              options={leaveEligibleStaff.map((s) => ({ value: s.id, label: s.name }))}
             >
-              {monthlySalaryStaff.length === 0 ? (
+              {leaveEligibleStaff.length === 0 ? (
                 <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                  目前沒有月薪制的服務人員
+                  {LEAVE_NO_ELIGIBLE_STAFF_TEXT}
                 </div>
               ) : null}
             </FieldSelect>
@@ -249,10 +249,7 @@ function CreateLeaveDialog({
               會變長,而且抽成制本來就永遠不能登記),改在這裡把因果講清楚。
               ui-v1-full:這屬於 skill 二「現在的狀態跟使用者以為的不一樣」⇒ `!` 常駐,不收進 `?`
               (沒有人會為了「怎麼找不到某個人」去點問號)。 */}
-          <AlertNote>
-            這個選單只會列出月薪制的服務人員。找不到某位服務人員，表示他的計酬類型是抽成制——抽成制
-            不需要登記請假，他不接單的時段由他本人在服務人員端的「休假設定」自己設定。
-          </AlertNote>
+          <AlertNote>{LEAVE_STAFF_SELECT_NOTE}</AlertNote>
 
           <FormField label="假別" htmlFor="leave-type" required>
             <FieldSelect
@@ -333,6 +330,12 @@ function CreateLeaveDialog({
   );
 }
 
+// #1035 B 批 PB-U03:日薪／時薪也可以請假(請假那天不計薪;假別扣款規則只套用在月薪制)。
+const LEAVE_WAGE_NOTE = "日薪／時薪的人請假那天不計薪；假別扣款規則只套用在月薪制。";
+const LEAVE_NO_ELIGIBLE_STAFF_TEXT = "目前沒有月薪制、日薪制或時薪制的服務人員";
+const LEAVE_STAFF_SELECT_NOTE =
+  "這個選單只會列出月薪制、日薪制、時薪制的服務人員。找不到某位服務人員，表示他的計酬類型是抽成制——抽成制不需要登記請假，他不接單的時段由他本人在服務人員端的「休假設定」自己設定。";
+
 // =========================================================================
 // 主頁面
 // =========================================================================
@@ -344,7 +347,7 @@ function LeaveRecordsPageInner() {
   const { data: staffList } = useMerchantStaffList(merchantId);
   // 2026-09-24 使用者指定:上方篩選的服務人員下拉選單只列月薪制的人(抽成制的人根本不會有請假
   // 紀錄,列出來只是讓客服多看一堆永遠篩不出東西的選項)。同一條規則跟登記表單共用同一個純函式。
-  const monthlySalaryStaff = useMemo(() => filterMonthlySalaryStaff(staffList), [staffList]);
+  const leaveEligibleStaff = useMemo(() => filterLeaveEligibleStaff(staffList), [staffList]);
   const [filterStaffId, setFilterStaffId] = useState("__all__");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -397,7 +400,7 @@ function LeaveRecordsPageInner() {
         backTo="/app/manage"
         helpMode
         title="請假紀錄"
-        description={`「${merchant!.name}」月薪制服務人員的請假登記。`}
+        description={`「${merchant!.name}」月薪制、日薪制、時薪制服務人員的請假登記。${LEAVE_WAGE_NOTE}`}
         action={
           <Button type="button" variant="primary" size="touch" onClick={() => setCreateOpen(true)}>
             登記請假
@@ -407,7 +410,7 @@ function LeaveRecordsPageInner() {
 
       <Card>
         <CardHeader>
-          <CardTitle>月薪服務人員篩選</CardTitle>
+          <CardTitle>服務人員篩選</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
           <FormField label="服務人員" htmlFor="leave-filter-staff">
@@ -420,8 +423,8 @@ function LeaveRecordsPageInner() {
               value={filterStaffId}
               onValueChange={setFilterStaffId}
               options={[
-                { value: "__all__", label: "全部月薪制服務人員" },
-                ...monthlySalaryStaff.map((s) => ({ value: s.id, label: s.name })),
+                { value: "__all__", label: "全部可請假的服務人員" },
+                ...leaveEligibleStaff.map((s) => ({ value: s.id, label: s.name })),
               ]}
             />
           </FormField>

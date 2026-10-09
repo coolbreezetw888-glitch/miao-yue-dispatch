@@ -143,7 +143,8 @@ describe("第 11 批 G:計酬類型下拉", () => {
     renderDialog(STAFF);
     await user.click(await screen.findByRole("combobox", { name: "計酬類型" }));
     const options = await screen.findAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual(["抽成制", "月薪制"]);
+    // #1035 B 批 PB-U01:多日薪制、時薪制(順序:抽成制、月薪制、日薪制、時薪制)。
+    expect(options.map((o) => o.textContent)).toEqual(["抽成制", "月薪制", "日薪制", "時薪制"]);
     await user.click(screen.getByRole("option", { name: "抽成制" }));
     expect(screen.getByRole("combobox", { name: "計酬類型" })).toHaveTextContent("抽成制");
     await user.click(screen.getByRole("button", { name: "儲存" }));

@@ -32,6 +32,8 @@ import type {
   StaffBonusByRange,
   StaffMonthlyBonus,
   StaffServiceCommissionRate,
+  StaffWageByRange,
+  StaffWageSetting,
 } from "./types";
 import { validateDateRange } from "./dateRangeUtils";
 
@@ -655,6 +657,69 @@ export function useStaffBonusByRange(
     queryKey: ["payroll-module", "staff-bonus-range", staffId, startDate, endDate],
     queryFn: () =>
       fetchStaffBonusByRange(staffId as string, startDate as string, endDate as string),
+    enabled:
+      Boolean(staffId) &&
+      Boolean(startDate) &&
+      Boolean(endDate) &&
+      validateDateRange(startDate as string, endDate as string) === null,
+  });
+}
+
+// =========================================================================
+// #1035 彈性計薪 B 批:日薪／時薪(PB-F01~F03)
+// =========================================================================
+
+export function staffWagesQueryKey(merchantId: string | null | undefined) {
+  return ["payroll-module", "staff-wages", merchantId] as const;
+}
+
+/** PB-F02:目前在職的日薪／時薪人員 + 金額(沒有設定 = 0)。 */
+export async function fetchStaffWages(merchantId: string): Promise<StaffWageSetting[]> {
+  const { data, error } = await supabase.rpc("list_staff_wages", { p_merchant_id: merchantId });
+  if (error) throw error;
+  return (data ?? []) as unknown as StaffWageSetting[];
+}
+
+export function useStaffWages(
+  merchantId: string | null | undefined,
+  enabled = true,
+): UseQueryResult<StaffWageSetting[]> {
+  return useQuery({
+    queryKey: staffWagesQueryKey(merchantId),
+    queryFn: () => fetchStaffWages(merchantId as string),
+    enabled: Boolean(merchantId) && enabled,
+  });
+}
+
+/** PB-F01:設定日薪／時薪金額(資料庫驗證範圍與小數位;錯誤訊息直接給使用者看)。 */
+export async function setStaffWage(staffId: string, amount: number): Promise<void> {
+  const { error } = await supabase.rpc("set_staff_wage", { p_staff_id: staffId, p_amount: amount });
+  if (error) throw error;
+}
+
+/** PB-F03:某位日薪／時薪人員區間內每天的上工時間與工資(只算到今天)。 */
+export async function fetchStaffWageByRange(
+  staffId: string,
+  startDate: string,
+  endDate: string,
+): Promise<StaffWageByRange> {
+  const { data, error } = await supabase.rpc("get_staff_wage_by_range", {
+    p_staff_id: staffId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+  if (error) throw error;
+  return data as unknown as StaffWageByRange;
+}
+
+export function useStaffWageByRange(
+  staffId: string | null | undefined,
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+): UseQueryResult<StaffWageByRange> {
+  return useQuery({
+    queryKey: ["payroll-module", "staff-wage-range", staffId, startDate, endDate],
+    queryFn: () => fetchStaffWageByRange(staffId as string, startDate as string, endDate as string),
     enabled:
       Boolean(staffId) &&
       Boolean(startDate) &&

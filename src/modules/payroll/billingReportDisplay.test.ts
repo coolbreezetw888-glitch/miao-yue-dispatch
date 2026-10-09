@@ -452,11 +452,13 @@ describe("compensationTypeText(「計酬類型」欄:畫面與 CSV 共用同一�
     expect(text).not.toContain("按件計酬");
   });
 
-  it("兩種計酬類型的名稱都不可以是空字串,而且彼此不同", () => {
+  it("四種計酬類型的名稱都不可以是空字串,而且彼此不同(#1035 B 批多日薪制、時薪制)", () => {
     const labels = Object.values(COMPENSATION_TYPE_LABELS);
 
-    expect(labels).toHaveLength(2);
-    expect(new Set(labels).size).toBe(2);
+    expect(labels).toHaveLength(4);
+    expect(new Set(labels).size).toBe(4);
+    expect(COMPENSATION_TYPE_LABELS.daily_wage).toBe("日薪制");
+    expect(COMPENSATION_TYPE_LABELS.hourly_wage).toBe("時薪制");
     for (const label of labels) expect(label.trim()).not.toBe("");
   });
 
@@ -585,7 +587,9 @@ describe("CSV 總計區塊:項目與順序", () => {
       Object.values(BILLING_SUMMARY_LABELS).filter(
         (label) =>
           label !== BILLING_SUMMARY_LABELS.pointsRedeemAmount &&
-          label !== BILLING_SUMMARY_LABELS.monthlyBonus,
+          label !== BILLING_SUMMARY_LABELS.monthlyBonus &&
+          // #1035 B 批:「日薪／時薪支出」只在 wage_feature_used 時輸出(完整比對在 wageReport.test.ts)。
+          label !== BILLING_SUMMARY_LABELS.wagePayout,
       ),
     );
   });
@@ -766,7 +770,9 @@ describe("紅利折抵金額(#848):顯示條件只看報表函式回傳的 point
     // #1035 A 批:「月薪獎金」只在 bonus_feature_used 時輸出(這組 fixture 沒有),比對時排除。
     expect(labels).toEqual(
       Object.values(BILLING_SUMMARY_LABELS).filter(
-        (label) => label !== BILLING_SUMMARY_LABELS.monthlyBonus,
+        (label) =>
+          label !== BILLING_SUMMARY_LABELS.monthlyBonus &&
+          label !== BILLING_SUMMARY_LABELS.wagePayout,
       ),
     );
     expect(labels[labels.length - 1]).toBe("紅利折抵金額");

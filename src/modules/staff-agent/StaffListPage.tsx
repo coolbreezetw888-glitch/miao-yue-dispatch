@@ -109,6 +109,12 @@ import { StaffPushSubscriptionSummary } from "@/modules/push-notifications/Staff
 // Edge Function 包裝(inviteMerchantStaff)。這是本檔案唯一一處依賴模組 14 的地方,方向是
 // 「模組 3 既有畫面疊加模組 14 的功能」,規格書 4.7 明講要在這個既有檔案上擴充,不是另起新檔案。
 import { inviteMerchantStaff } from "@/modules/staff-portal/api";
+import {
+  COMPENSATION_MID_MONTH_NOTE,
+  WAGE_COMPENSATION_HELP,
+  WAGE_TYPE_CHANGED_NOTE,
+  isWageTypeSwitch,
+} from "@/modules/payroll/wageLogic";
 
 import {
   addMerchantStaff,
@@ -155,8 +161,10 @@ import {
   MIN_BOOKING_DAYS_AHEAD_LIMIT,
   STAFF_BOOLEAN_PERMISSION_FIELDS,
   STAFF_COMPENSATION_TYPE_LABELS,
+  STAFF_COMPENSATION_TYPE_OPTIONS,
   STAFF_LOGIN_STATUS_LABELS,
   STAFF_NUMBER_PERMISSION_FIELDS,
+  isWageCompensationType,
   type MerchantStaff,
   type StaffCompensationType,
   type StaffLoginStatus,
@@ -217,7 +225,7 @@ function staffToFormState(staff: MerchantStaff): StaffFormState {
     googleCalendarSyncEnabled: staff.google_calendar_sync_enabled,
     canCreateEditOrders: staff.can_create_edit_orders,
     canUploadConstructionPhotos: staff.can_upload_construction_photos,
-    compensationType: staff.compensation_type as "monthly_salary" | "piece_rate",
+    compensationType: staff.compensation_type as StaffCompensationType,
   };
 }
 
@@ -691,7 +699,7 @@ export function StaffFormDialog({
               label="計酬類型"
               htmlFor="staff-compensation-type"
               helpLabel="說明：計酬類型會影響什麼"
-              help="月薪制服務人員才能登記請假紀錄(見「請假紀錄」功能)；抽成制則是用「可預約時段」調整接單時間。"
+              help="月薪制、日薪制、時薪制的服務人員才能登記請假紀錄(見「請假紀錄」功能)；抽成制則是用「可預約時段」調整接單時間。"
             >
               {/* 第 11 批 G(#994,2026-10-07,使用者指定):兩顆方塊改成下拉(FieldSelect,跟 #979 付款方式一致)。
                   仍是按「儲存」才寫入。標籤「計酬類型」經由 htmlFor 成為下拉的無障礙名稱。
@@ -703,10 +711,33 @@ export function StaffFormDialog({
                 onValueChange={guardStaffCompensationTypeChange((v) =>
                   setField("compensationType", v),
                 )}
-                options={(["piece_rate", "monthly_salary"] as StaffCompensationType[]).map(
-                  (type) => ({ value: type, label: STAFF_COMPENSATION_TYPE_LABELS[type] }),
-                )}
+                options={STAFF_COMPENSATION_TYPE_OPTIONS.map((type) => ({
+                  value: type,
+                  label: STAFF_COMPENSATION_TYPE_LABELS[type],
+                }))}
               />
+              {/* #1035 B 批 PB-U01:選日薪／時薪時下方一行說明;編輯時改了計酬方式再補提醒(⚠️ 風險 2、PB-D02)。 */}
+              {isWageCompensationType(form.compensationType) ? (
+                <p
+                  className="text-[13px] leading-relaxed text-muted-foreground"
+                  data-testid="staff-compensation-wage-help"
+                >
+                  {WAGE_COMPENSATION_HELP}
+                </p>
+              ) : null}
+              {staff && form.compensationType !== staff.compensation_type ? (
+                <p
+                  className="text-[13px] leading-relaxed text-muted-foreground"
+                  data-testid="staff-compensation-change-note"
+                >
+                  {isWageTypeSwitch(
+                    staff.compensation_type as StaffCompensationType,
+                    form.compensationType,
+                  )
+                    ? `${COMPENSATION_MID_MONTH_NOTE}${WAGE_TYPE_CHANGED_NOTE}`
+                    : COMPENSATION_MID_MONTH_NOTE}
+                </p>
+              ) : null}
             </FormField>
           </div>
 

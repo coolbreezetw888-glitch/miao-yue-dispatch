@@ -274,7 +274,7 @@ test.describe("#762 /app/leave-records 請假紀錄", () => {
     await expect(page.getByRole("option", { name: fixture.monthlySalaryStaffName })).toBeVisible();
     await expect(page.getByRole("option", { name: fixture.pieceRateStaffName })).toHaveCount(0);
     // 反向前提:空選單提示不該出現(出現就代表我們其實是在對空選單做斷言)。
-    await expect(page.getByText("目前沒有月薪制的服務人員")).toHaveCount(0);
+    await expect(page.getByText("目前沒有月薪制、日薪制或時薪制的服務人員")).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     // 行為斷言 ②:假別下拉列出三筆預設假別。
@@ -337,7 +337,9 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     await expect(listItems(pieceCard)).toHaveCount(1, { timeout: LOAD_TIMEOUT });
     await expect(listItems(monthlyCard)).toHaveCount(1, { timeout: LOAD_TIMEOUT });
     await expect(page.getByText("目前沒有抽成制的服務人員", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("目前沒有月薪制的服務人員", { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByText("目前沒有月薪制、日薪制或時薪制的服務人員", { exact: true }),
+    ).toHaveCount(0);
 
     // 行為斷言:每位服務人員只出現在自己那張卡片裡(不是整頁 getByText 撈到就算數)。
     // 這條釘住了 PayrollSettingsPage.tsx 依 compensation_type 分流的那兩個 filter。

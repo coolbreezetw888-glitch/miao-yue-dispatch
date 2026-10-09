@@ -31,6 +31,7 @@
 // 檔案,不 import 任何會建立 supabase client 的模組,Vitest 匯入時不會觸發連線初始化。
 
 import type { MerchantBillingSummary } from "./types";
+import { formatWorkedMinutes } from "./wageLogic";
 
 /** 月薪相關數字算不出來時顯示的文字。集中成一個常數,讓四張卡片、說明表格欄位、CSV 的用字完全
  * 一致(同一件事在同一頁出現五次,不能有五種說法)。 */
@@ -159,6 +160,9 @@ export type StaffBreakdownRow = MerchantBillingSummary["per_staff_breakdown"][nu
 export const COMPENSATION_TYPE_LABELS: Record<StaffBreakdownRow["compensation_type"], string> = {
   monthly_salary: "月薪制",
   piece_rate: "抽成制",
+  // #1035 B 批 PB-B02
+  daily_wage: "日薪制",
+  hourly_wage: "時薪制",
 };
 
 /**
@@ -336,6 +340,8 @@ export const BILLING_SUMMARY_LABELS = {
   pointsRedeemAmount: "紅利折抵金額",
   /** #1035 A 批 PA-B02:卡片標題與 CSV「項目」欄共用。整店沒有任何獎金方案時兩邊都不出現。 */
   monthlyBonus: "月薪獎金",
+  /** #1035 B 批 PB-B02(S7 原文):卡片標題與 CSV「項目」欄共用。整店沒有日薪／時薪人員(含歷史)時兩邊都不出現。 */
+  wagePayout: "日薪／時薪支出",
 } as const;
 
 /** #1035 A 批 PA-B02:「商家總淨利」`?` 說明多的那一句(有獎金方案的店才加)。 */
@@ -372,6 +378,102 @@ export function bonusCellText(
 ): string {
   const display = resolveSalaryDisplay(salaryApplicable, bonusAmount);
   return display.kind === "value" ? `獎金 ${display.value} 元` : `獎金：${display.text}`;
+}
+
+// =========================================================================
+// #1035 B 批 PB-B02:日薪／時薪
+// =========================================================================
+
+/** 「商家總淨利」`?` 說明多的那一句(有日薪／時薪人員的店才加)。 */
+export const NET_MARGIN_WAGE_HELP = "日薪／時薪支出也會從商家總淨利扣掉。";
+
+/** 「日薪／時薪支出」卡片下方小字(區間包含今天時)。 */
+export const WAGE_ESTIMATE_NOTE = "含今天的預估";
+
+/** 店家報表 CSV 明細最後多的兩欄(放在獎金欄之後)。 */
+export const WAGE_CSV_COLUMN_LABELS = { wage: "工資", hours: "上工時數" } as const;
+
+/** 明細列標黃的待辦文字(費率 0 / 還沒設定)。 */
+export const WAGE_MISSING_TODO_TEXT = "還沒設定日薪／時薪金額";
+
+export function isWageRow(row: Pick<StaffBreakdownRow, "compensation_type">): boolean {
+  return row.compensation_type === "daily_wage" || row.compensation_type === "hourly_wage";
+}
+
+/**
+ * 「日薪／時薪支出」卡 / CSV 那一列要不要出現 —— 只看報表函式回傳的 wage_feature_used
+ * (這間店歷史上有任何日薪／時薪制的人)。舊資料庫回應沒有這個 key ⇒ 不出現(fail-closed),
+ * 沒用到這個功能的店畫面與 CSV 跟改版前一字不差。
+ */
+export function shouldShowWagePayout(
+  summary: Pick<MerchantBillingSummary, "wage_feature_used"> | undefined,
+): boolean {
+  return summary?.wage_feature_used === true;
+}
+
+/** 明細列(日薪／時薪)那一段文字:「工資 11,160 元（上工 62 小時）」。 */
+export function wageCellText(
+  row: Pick<StaffBreakdownRow, "wage_amount" | "worked_minutes">,
+): string {
+  return `工資 ${Number(row.wage_amount ?? 0).toLocaleString()} 元（上工 ${formatWorkedMinutes(row.worked_minutes)}）`;
+}
+
+/** CSV「工資」欄:日薪／時薪列是數字,其他列空白。 */
+export function wageCsvCell(
+  row: Pick<StaffBreakdownRow, "compensation_type" | "wage_amount">,
+): string | number {
+  return hasWageAmount(row) || isWageRow(row) ? Number(row.wage_amount ?? 0) : "";
+}
+
+/** CSV「上工時數」欄:有工資的列是「X 小時 Y 分」,其他列空白。 */
+export function workedHoursCsvCell(
+  row: Pick<StaffBreakdownRow, "compensation_type" | "worked_minutes" | "wage_amount">,
+): string {
+  return hasWageAmount(row) || isWageRow(row) ? formatWorkedMinutes(row.worked_minutes) : "";
+}
+
+/**
+ * 主腦裁決 M1:區間中途從日薪／時薪改成月薪 / 抽成的人,資料庫在同一列多帶這段區間的工資
+ * (wage_amount 等 key)。這種列畫面要在原本的月薪 / 抽成文字後面再接一段工資。
+ */
+export function hasWageAmount(row: Pick<StaffBreakdownRow, "wage_amount">): boolean {
+  return row.wage_amount !== undefined && row.wage_amount !== null;
+}
+
+/** 月薪 / 抽成列多帶的那一段工資文字;沒有就是 null。 */
+export function extraWageCellText(
+  row: Pick<StaffBreakdownRow, "compensation_type" | "wage_amount" | "worked_minutes">,
+): string | null {
+  return !isWageRow(row) && hasWageAmount(row) ? wageCellText(row) : null;
+}
+
+/**
+ * CSV「抽成金額」欄。日薪／時薪的人不計抽成 ⇒ 空白(不是 0,跟月薪列一樣);
+ * 其他列照舊走 commissionCsvValue(沒有日薪／時薪人員的店輸出一字不差)。
+ */
+export function commissionCsvCell(
+  row: Pick<StaffBreakdownRow, "compensation_type" | "commission_amount">,
+): string | number {
+  return isWageRow(row) ? "" : commissionCsvValue(row);
+}
+
+/** 「商家總淨利」卡下方的算式說明。沒有獎金、沒有工資的店 = 改版前的原字串。 */
+export function netMarginFormulaText(showBonus: boolean, showWage: boolean): string {
+  return (
+    "總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)" +
+    (showBonus ? "− 月薪獎金" : "") +
+    (showWage ? (showBonus ? " − 日薪／時薪支出" : "− 日薪／時薪支出") : "") +
+    "。"
+  );
+}
+
+/** 「商家總淨利」`?` 說明。 */
+export function netMarginHelpText(showBonus: boolean, showWage: boolean): string {
+  return (
+    NET_MARGIN_MATERIAL_COST_HELP +
+    (showBonus ? NET_MARGIN_BONUS_HELP : "") +
+    (showWage ? NET_MARGIN_WAGE_HELP : "")
+  );
 }
 
 /** #985 第 8 批 8-10:CSV 尾端兩列資訊列的「項目」文字。刻意不放進 BILLING_SUMMARY_LABELS
@@ -470,6 +572,8 @@ export type BillingCsvSummaryFields = Pick<
   | "commission_orders_material_not_deducted_count"
   | "bonus_feature_used"
   | "total_monthly_bonus"
+  | "wage_feature_used"
+  | "total_wage_payout"
 >;
 
 /** 總計區塊的一個項目:左邊是畫面上那張卡的標題,右邊是數字或「算不出來」的說明文字。 */
@@ -541,6 +645,15 @@ export function buildBillingCsvSummaryItems(
           {
             label: BILLING_SUMMARY_LABELS.monthlyBonus,
             value: salaryCsvValue(salaryApplicable, summary.total_monthly_bonus ?? null),
+          },
+        ]
+      : []),
+    // #1035 B 批 PB-B02:有日薪／時薪人員(含歷史)的店多一列,放最後(既有列順序不動);按天算,任何區間都有值。
+    ...(shouldShowWagePayout(summary)
+      ? [
+          {
+            label: BILLING_SUMMARY_LABELS.wagePayout,
+            value: Number(summary.total_wage_payout ?? 0),
           },
         ]
       : []),

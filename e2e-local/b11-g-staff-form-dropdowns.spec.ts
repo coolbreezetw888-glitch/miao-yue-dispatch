@@ -171,7 +171,8 @@ test("1. 計酬類型是下拉:選月薪制 → 儲存 → DB → 重開顯示 �
   const originalLabel = originalCompensation === "monthly_salary" ? "月薪制" : "抽成制";
   await expect(select).toHaveText(originalLabel);
   await select.click();
-  await expect(page.getByRole("option")).toHaveText(["抽成制", "月薪制"]);
+  // #1035 B 批 PB-U01:多日薪制、時薪制(順序:抽成制、月薪制、日薪制、時薪制)。
+  await expect(page.getByRole("option")).toHaveText(["抽成制", "月薪制", "日薪制", "時薪制"]);
   await page.getByRole("option", { name: target }).click();
   await page.getByRole("button", { name: "儲存" }).click();
   await expect

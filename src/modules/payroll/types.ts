@@ -4,6 +4,7 @@
 // 設計),不要直接查詢本模組的五張資料表。
 
 import type { Tables } from "@/integrations/supabase/types";
+import type { StaffCompensationType } from "@/modules/staff-agent/types";
 
 /** §1.1 商家層級薪資設定,一商家一列。商家端三項調整規格書 §二 2.2.2 拿掉了
  * default_commission_rate_percentage 這個欄位的使用(改成服務項目層級抽成),但資料庫欄位本身
@@ -164,7 +165,8 @@ export interface MerchantBillingSummary {
   per_staff_breakdown: Array<{
     staff_id: string;
     staff_name: string;
-    compensation_type: "monthly_salary" | "piece_rate";
+    /** #1035 B 批:多了 daily_wage / hourly_wage。 */
+    compensation_type: StaffCompensationType;
     order_count: number;
     /** 月薪制服務人員的月薪淨額。抽成制的人本來就是 null;月薪制的人在
      * salary_applicable=false 時也是 null。 */
@@ -174,6 +176,12 @@ export interface MerchantBillingSummary {
      * (沒有方案 = 0);月薪列在 salary_applicable=false 時、以及非月薪列一律 null。
      * 資料庫先上、前端後上的過渡期間舊回應沒有這個 key ⇒ optional。 */
     bonus_amount?: number | null;
+    /** #1035 B 批 PB-B01:日薪／時薪列才有(其他列沒有這幾個 key)。區間內只算到今天。 */
+    wage_amount?: number | null;
+    worked_minutes?: number | null;
+    work_days?: number | null;
+    /** 區間內有某天費率 0,或目前還沒設定金額 ⇒ 報表標黃「還沒設定日薪／時薪金額」。 */
+    wage_missing?: boolean | null;
     /** 這個人**現在**是否仍在職。false = 現在已離職,但在查詢的那個期間是在職的,所以他的數字
      * 照算、照出現在明細裡。
      *
@@ -215,6 +223,12 @@ export interface MerchantBillingSummary {
   total_monthly_bonus?: number | null;
   /** #1035 A 批 PA-B02:這間店有沒有任何獎金方案(含已封存)。false ⇒ 「月薪獎金」卡與 CSV 那一列都不出現。 */
   bonus_feature_used?: boolean;
+  /** #1035 B 批 PB-B01:日薪／時薪支出合計(按天算,不需要完整月份;只算到今天)。estimated_net_margin 已經扣掉它。 */
+  total_wage_payout?: number | null;
+  /** 區間包含今天 ⇒ true(今天的工資是預估)。 */
+  wage_includes_estimate?: boolean;
+  /** 這間店歷史上有沒有任何日薪／時薪制的人。false ⇒ 「日薪／時薪支出」卡與 CSV 那一列都不出現。 */
+  wage_feature_used?: boolean;
 }
 
 // =========================================================================
@@ -307,6 +321,54 @@ export interface StaffMonthlyBonus {
   rules: BonusRuleResult[];
   /** 目前只有 "capped"(合計超過 1,000,000 封頂)。 */
   flags: string[];
+}
+
+// =========================================================================
+// #1035 彈性計薪 B 批:日薪／時薪(規格書 PB-R04 / PB-F01~F03)
+// =========================================================================
+
+/** 每天明細的狀態:已結算(凍結紀錄)/ 尚未結算(過去日但排程還沒跑,即時算)/ 預估(今天)。 */
+export type WageDayState = "settled" | "unsettled" | "estimated";
+
+/** get_staff_wage_by_range 的一天。 */
+export interface StaffWageDay {
+  date: string;
+  compensation_type: "daily_wage" | "hourly_wage";
+  /** 當天的費率(日薪 = 元/天;時薪 = 元/小時)。 */
+  wage_amount: number;
+  /** 可預約時段(營業時間 ∩ 每週時段 − 關閉的格子)。 */
+  shift_minutes: number;
+  /** 落在時段外的訂單時間。 */
+  extra_booking_minutes: number;
+  /** 合計(重疊只算一次)。 */
+  worked_minutes: number;
+  is_leave: boolean;
+  leave_type_name: string | null;
+  pay_amount: number;
+  state: WageDayState;
+}
+
+/** public.get_staff_wage_by_range 回傳形狀(區間只算到今天)。 */
+export interface StaffWageByRange {
+  total_pay: number;
+  total_worked_minutes: number;
+  /** 有上工(worked_minutes > 0)的天數。 */
+  work_days: number;
+  days: StaffWageDay[];
+  /** 區間內某天費率 0,或目前還沒設定金額。 */
+  wage_missing: boolean;
+  latest_compensation_type: "daily_wage" | "hourly_wage" | null;
+  latest_wage_amount: number | null;
+  includes_estimate: boolean;
+}
+
+/** public.list_staff_wages 的一列(目前在職的日薪／時薪人員)。 */
+export interface StaffWageSetting {
+  staff_id: string;
+  name: string;
+  compensation_type: "daily_wage" | "hourly_wage";
+  wage_amount: number;
+  has_setting: boolean;
 }
 
 /** public.get_staff_bonus_by_range 回傳形狀。 */

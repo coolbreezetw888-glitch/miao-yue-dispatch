@@ -36,6 +36,7 @@ import {
   LoadingSkeleton,
   PageHeader,
   StatusTag,
+  TodoTag,
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,8 +50,6 @@ import { useMerchantBillingSummaryByRange } from "./api";
 import {
   BILLING_SUMMARY_LABELS,
   BONUS_CSV_COLUMN_LABEL,
-  NET_MARGIN_BONUS_HELP,
-  NET_MARGIN_MATERIAL_COST_HELP,
   POINTS_REDEEM_AMOUNT_DESCRIPTION,
   RESIGNED_LABEL,
   SALARY_UNAVAILABLE_TEXT,
@@ -58,7 +57,7 @@ import {
   bonusCsvCell,
   buildBillingCsvSummarySection,
   commissionCellText,
-  commissionCsvValue,
+  commissionCsvCell,
   commissionMaterialNoteText,
   compensationTypeText,
   employmentStatusCsvText,
@@ -72,6 +71,17 @@ import {
   shouldShowPointsRedeemAmount,
   shouldShowMonthlyBonus,
   shouldShowSalaryUnavailableNotice,
+  shouldShowWagePayout,
+  WAGE_CSV_COLUMN_LABELS,
+  WAGE_ESTIMATE_NOTE,
+  WAGE_MISSING_TODO_TEXT,
+  isWageRow,
+  netMarginFormulaText,
+  netMarginHelpText,
+  wageCellText,
+  extraWageCellText,
+  wageCsvCell,
+  workedHoursCsvCell,
 } from "./billingReportDisplay";
 import { buildCsvContentFromRows, downloadCsv } from "./csvExport";
 import { RequireBillingAccess } from "./RequireBillingAccess";
@@ -110,6 +120,8 @@ function BillingReportPageInner() {
 
   // #1035 A 批 PA-B02:整店沒有任何獎金方案(含已封存)⇒ 卡片、說明、CSV 都跟改版前一樣。
   const showBonus = shouldShowMonthlyBonus(summary);
+  // #1035 B 批 PB-B02:整店沒有日薪／時薪人員(含歷史)⇒ 卡片、說明、CSV 都跟改版前一樣。
+  const showWage = shouldShowWagePayout(summary);
 
   // §一 §3.3 折衷方案的「查看明細 →」連結需要帶一個具體的年/月給服務人員報表頁(那個頁面這次不在
   // §3.6 範圍內,繼續用單一年月),這裡用區間結束日期所在的年月當作連結目標,是最貼近「使用者
@@ -147,6 +159,8 @@ function BillingReportPageInner() {
       "抽成金額",
       "月薪淨額",
       ...(showBonus ? [BONUS_CSV_COLUMN_LABEL] : []),
+      // #1035 B 批 PB-B02:有日薪／時薪人員的店明細多「工資」「上工時數」兩欄,放最後。
+      ...(showWage ? [WAGE_CSV_COLUMN_LABELS.wage, WAGE_CSV_COLUMN_LABELS.hours] : []),
     ];
     const rows = summary.per_staff_breakdown.map((row) => [
       row.staff_name,
@@ -158,12 +172,14 @@ function BillingReportPageInner() {
       // 裁決是兩邊統一成 0(沒接單的抽成確實就是 0,是真實數字)。現在 fallback 只存在
       // billingReportDisplay.ts 的 COMMISSION_FALLBACK 一處,畫面那支函式也是呼叫這支拿數字的,
       // 結構上不可能只改一邊。
-      commissionCsvValue(row),
+      // #1035 B 批:日薪／時薪列不計抽成 ⇒ 空白;其他列照舊(commissionCsvValue,null 當 0)。
+      commissionCsvCell(row),
       // 月薪算不出來時寫進說明文字,不留空白格——CSV 的空白格在 Excel 裡看起來跟 0 很像,
       // 會重演「商家以為這段期間沒有月薪成本」這個誤會。判斷條件跟下面明細那一欄走同一支純函式,
       // 讓畫面跟匯出檔永遠一致。
       monthlySalaryCsvCell(salaryApplicable, row),
       ...(showBonus ? [bonusCsvCell(salaryApplicable, row)] : []),
+      ...(showWage ? [wageCsvCell(row), workedHoursCsvCell(row)] : []),
     ]);
     downloadCsv(
       `店家報表_${startDate}_${endDate}.csv`,
@@ -262,6 +278,14 @@ function BillingReportPageInner() {
                 unavailableText={SALARY_UNAVAILABLE_TEXT}
               />
             ) : null}
+            {/* #1035 B 批 PB-B02:「日薪／時薪支出」卡(S7);按天算,任何區間都有值。整店沒有日薪／時薪人員(含歷史)時不顯示。 */}
+            {showWage ? (
+              <SummaryCard
+                label={BILLING_SUMMARY_LABELS.wagePayout}
+                value={Number(summary.total_wage_payout ?? 0)}
+                note={summary.wage_includes_estimate ? WAGE_ESTIMATE_NOTE : null}
+              />
+            ) : null}
             {/* 紅利系統重構 §4.10(#848):統計卡 grid 的最後一格,刻意不插進下面「稅金小計 + 商家總淨利」
                 那一組(2026-09-22 §3.5 刻意成組)。顯示條件只看報表函式回傳的 points_feature_enabled
                 (判斷 13:只有 billing 鑰匙的客服讀不到設定表);關閉時整張不渲染,不是顯示 0。
@@ -319,16 +343,12 @@ function BillingReportPageInner() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <CardTitle>{BILLING_SUMMARY_LABELS.netMargin}</CardTitle>
                 <HelpToggle label="說明：料錢跟抽成怎麼算進商家總淨利">
-                  {showBonus
-                    ? `${NET_MARGIN_MATERIAL_COST_HELP}${NET_MARGIN_BONUS_HELP}`
-                    : NET_MARGIN_MATERIAL_COST_HELP}
+                  {netMarginHelpText(showBonus, showWage)}
                 </HelpToggle>
               </div>
               <CardDescription>
                 {/* 第 21 批:寫成字串,避免 JSX 跨行在「只是」「概估」中間多出空白。 */}
-                {(showBonus
-                  ? "總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)− 月薪獎金。"
-                  : "總營收(未稅)− 總料錢成本 − 總抽成支出 −(月薪基本額合計 − 月薪扣款合計)。") +
+                {netMarginFormulaText(showBonus, showWage) +
                   "只是概估，不含房租/水電等其他營運成本，不是完整的財務損益表。"}
               </CardDescription>
             </CardHeader>
@@ -379,12 +399,21 @@ function BillingReportPageInner() {
                           不顯示 0);抽成制走 commissionCellText(null 一律當 0)——跟 CSV 同一條路徑。 */}
                       <ListCard
                         title={row.staff_name}
-                        state={shouldShowResignedBadge(row) ? "inactive" : "default"}
+                        state={
+                          shouldShowResignedBadge(row)
+                            ? "inactive"
+                            : isWageRow(row) && row.wage_missing === true
+                              ? "attention"
+                              : "default"
+                        }
                         tags={
                           <>
                             <AttributeTag>{compensationTypeText(row)}</AttributeTag>
                             {shouldShowResignedBadge(row) ? (
                               <StatusTag tone="neutral">{RESIGNED_LABEL}</StatusTag>
+                            ) : null}
+                            {isWageRow(row) && row.wage_missing === true ? (
+                              <TodoTag>{WAGE_MISSING_TODO_TEXT}</TodoTag>
                             ) : null}
                           </>
                         }
@@ -393,10 +422,14 @@ function BillingReportPageInner() {
                             訂單 {row.order_count} 筆 ・{" "}
                             {row.compensation_type === "monthly_salary"
                               ? monthlySalaryCellText(salaryApplicable, row.net_pay)
-                              : commissionCellText(row)}
+                              : isWageRow(row)
+                                ? wageCellText(row)
+                                : commissionCellText(row)}
                             {showBonus && row.compensation_type === "monthly_salary"
                               ? ` ・ ${bonusCellText(salaryApplicable, row.bonus_amount)}`
                               : null}
+                            {/* 主腦裁決 M1:區間中途改制的人,同一列多帶這段區間的工資。 */}
+                            {extraWageCellText(row) ? ` ・ ${extraWageCellText(row)}` : null}
                           </>
                         }
                         primaryAction={

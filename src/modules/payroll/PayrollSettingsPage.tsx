@@ -98,6 +98,7 @@ import {
 import { RequireCommissionSettingsAccess } from "./RequireCommissionSettingsAccess";
 // #1035 彈性計薪 A 批(PA-U01~U04):月薪獎金方案區塊 + 月薪人員指派方案下拉。
 import { BonusPlanSection } from "./BonusPlanSection";
+import { WageStaffSection } from "./WageStaffSection";
 
 const payrollSettingsQueryKey = (merchantId: string) =>
   ["payroll-module", "merchant-payroll-settings", merchantId] as const;
@@ -1068,6 +1069,8 @@ function PayrollSettingsPageInner() {
       <PieceRateStaffSection merchantId={merchantId} />
       <BonusPlanSectionWithStaff merchantId={merchantId} />
       <MonthlySalaryStaffSection merchantId={merchantId} payDaysPerMonth={payDaysPerMonth} />
+      {/* #1035 B 批 PB-U02:沒有日薪／時薪人員時整個區塊不顯示。 */}
+      <WageStaffSection merchantId={merchantId} />
     </main>
   );
 }

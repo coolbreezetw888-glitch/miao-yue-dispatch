@@ -14,7 +14,12 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
-import type { MerchantAgent, MerchantAgentPermission, MerchantStaff } from "./types";
+import type {
+  MerchantAgent,
+  MerchantAgentPermission,
+  MerchantStaff,
+  StaffCompensationType,
+} from "./types";
 
 export const STAFF_AVATAR_BUCKET = "staff-avatars";
 /** 規格書 4.2 邊界情況:頭像上傳格式/大小限制比照模組 1 規則 2.6。 */
@@ -93,8 +98,9 @@ export interface UpsertMerchantStaffInput {
   canUploadConstructionPhotos?: boolean;
   /** 模組 7(排班與休假管理)§1.1/§4.1:計酬類型,'monthly_salary'(月薪制)/'piece_rate'
    * (抽成制,資料庫值仍是英文 'piece_rate',2026-09-24 只改中文顯示用語)。
-   * 不指定時資料庫層預設回填 'piece_rate'(第〇節判斷 1)。 */
-  compensationType?: "monthly_salary" | "piece_rate";
+   * 不指定時資料庫層預設回填 'piece_rate'(第〇節判斷 1)。
+   * #1035 B 批:多了 'daily_wage'(日薪制)/ 'hourly_wage'(時薪制)。 */
+  compensationType?: StaffCompensationType;
 }
 
 /**

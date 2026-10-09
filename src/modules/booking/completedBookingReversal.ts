@@ -12,6 +12,10 @@
 
 import { isoToTaipeiDateTimeWithSeconds } from "./dateUtils";
 import { formatAmount } from "./orderAmount";
+import {
+  STAFF_COMPENSATION_TYPE_LABELS,
+  isWageCompensationType,
+} from "@/modules/staff-agent/types";
 import type {
   CompletedBookingReversalAction,
   CompletedBookingReversalPreview,
@@ -217,7 +221,10 @@ export function buildCompletedBookingReversalView(
     value:
       preview.commission.exists && commission > 0
         ? `${preview.staff?.name ?? "(未知人員)"} −${formatAmount(commission)}`
-        : "無(月薪制/未產生抽成)",
+        : isWageCompensationType(preview.staff?.compensation_type_now)
+          ? // #1035 B 批 PB-U05:日薪／時薪制不計抽成,直接講是哪一種。
+            `無(這位服務人員是${STAFF_COMPENSATION_TYPE_LABELS[preview.staff!.compensation_type_now as "daily_wage" | "hourly_wage"]}，不計抽成)`
+          : "無(月薪制/未產生抽成)",
   });
 
   // 會員紅利:每位一列(邊界 19 可能 2 位);沒有入帳整列不顯示。

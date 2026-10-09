@@ -52,6 +52,14 @@ begin
 ', E'    tier_id = p_tier_id
 ');
   end if;
+  -- #1035 B 批 PB-U03:create_staff_leave 第 2 步多放行日薪制、時薪制(多一行註解 + 條件 + 訊息),先換回再比對改前指紋。
+  if p_sig like 'public.create_staff_leave(%' then
+    v_src := replace(v_src, E'  -- #1035 B 批(PB-U03):日薪制、時薪制也可以登記(請假那天上工時間 = 0,不套假別扣款規則);抽成制照舊擋。
+', '');
+    v_src := replace(v_src, E'if v_compensation_type not in (''monthly_salary'', ''daily_wage'', ''hourly_wage'') then',
+                            E'if v_compensation_type <> ''monthly_salary'' then');
+    v_src := replace(v_src, '只有月薪制、日薪制、時薪制的服務人員可以登記請假紀錄', '只有月薪制的服務人員可以登記請假紀錄');
+  end if;
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;
