@@ -113,7 +113,11 @@ import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { isValidTaiwanPhone, TW_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
-import { MemberLineBindingSection } from "@/modules/line-notifications/MemberLineBindingSection";
+import {
+  MemberLineBindingSection,
+  MemberLineLoginOnlySection,
+} from "@/modules/line-notifications/MemberLineBindingSection";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 
 import {
   setMemberBlacklistStatus,
@@ -462,6 +466,11 @@ function MemberDetailInner() {
   // 載入中 / 讀取失敗時**不顯示**點數卡片(fail-closed:不知道開沒開時,寧可先不顯示)。
   const { data: pointsFeatureEnabledData } = useMerchantPointsFeatureEnabled(merchant?.id ?? null);
   const pointsFeatureEnabled = pointsFeatureEnabledData === true;
+  // SPECS-INDEX #1025 FG-2(QA M1):平台沒開「LINE 通知」⇒「LINE 綁定」卡只留客人 LINE 登入相關的部分(卡片標題改
+  // 「LINE 登入」),通知用的綁定碼 / 解除綁定、以及「請用下面的 LINE 綁定產生綁定碼」的提醒都不顯示(F3=A)。
+  // 讀取中 / 讀取失敗一律當「不顯示通知相關內容」。
+  const { hasFeature } = useMerchantFeatures();
+  const lineNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === true;
 
   const { data: member, isLoading } = useMember(id);
   const { data: relatedBookings } = useMemberRelatedBookings(id);
@@ -658,7 +667,7 @@ function MemberDetailInner() {
                 🔴 文案要分「從來沒驗過」跟「驗過但目前已被解除」兩種,**不可以合成一句**:
                    上面那一列已經寫著「第一次完成驗證 2026-09-21」,這裡若還寫「還沒有完成身分驗證」,
                    同一個畫面就會自己打自己。兩種文案都是使用者 2026-09-30 逐字核准的。 */}
-            {identityStatus === "unverified" ? (
+            {identityStatus === "unverified" && lineNotificationsFeatureOn ? (
               member.identity_first_verified_at ? (
                 <AlertNote>
                   這位客戶之前完成過身分驗證，但目前<strong>已經解除</strong>，所以現在
@@ -718,12 +727,16 @@ function MemberDetailInner() {
 
       {/* 模組 11(LINE 通知)§4.7:會員詳情頁疊加「LINE 綁定」區塊,歸在既有 members 權限底下
           (第〇節判斷 3/5),不是本模組新增的權限項目。 */}
-      <Card>
+      <Card data-testid="member-line-card">
         <CardHeader>
-          <CardTitle>LINE 綁定</CardTitle>
+          <CardTitle>{lineNotificationsFeatureOn ? "LINE 綁定" : "LINE 登入"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <MemberLineBindingSection memberId={member.id} />
+          {lineNotificationsFeatureOn ? (
+            <MemberLineBindingSection memberId={member.id} />
+          ) : (
+            <MemberLineLoginOnlySection memberId={member.id} />
+          )}
         </CardContent>
       </Card>
 

@@ -154,12 +154,51 @@ export default function App() {
           <Route path="/app/members/:id" element={<MemberDetailPage />} />
           <Route path="/app/member-points" element={<MemberPointsPage />} />
           <Route path="/app/member-settings" element={<MemberSettingsPage />} />
+          {/* SPECS-INDEX #1025 FG2-U01:平台沒開通 LINE 通知 / 再行銷通知 / 手機推播通知 ⇒ 設定頁與發送記錄頁
+              整個看不到,直接打網址導回功能頁(紀錄資料保留,重新打開看得到)。
+              例外:LINE 串接設定頁仍可進入(只剩 LINE 登入設定卡),見下一列。 */}
+          {/* LINE 串接設定頁不整頁擋:LINE 通知沒開時頁面只剩「LINE 登入」設定卡(主腦裁決,頁面自己處理)。 */}
           <Route path="/app/line-settings" element={<LineSettingsPage />} />
-          <Route path="/app/line-events" element={<LineEventSettingsPage />} />
-          <Route path="/app/line-logs" element={<LineLogsPage />} />
-          <Route path="/app/line-marketing" element={<LineMarketingPage />} />
-          <Route path="/app/push-events" element={<PushEventSettingsPage />} />
-          <Route path="/app/push-logs" element={<PushLogsPage />} />
+          <Route
+            path="/app/line-events"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.lineNotifications}>
+                <LineEventSettingsPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/line-logs"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.lineNotifications}>
+                <LineLogsPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/line-marketing"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.lineMarketing}>
+                <LineMarketingPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/push-events"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.pushNotifications}>
+                <PushEventSettingsPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/push-logs"
+            element={
+              <RequireMerchantFeature featureKey={MERCHANT_FEATURE_KEYS.pushNotifications}>
+                <PushLogsPage />
+              </RequireMerchantFeature>
+            }
+          />
           {/* SPECS-INDEX #1025 FG1-U06:平台沒開通這個功能 ⇒ 整個看不到,直接打網址導回功能頁。 */}
           <Route
             path="/app/data-import"

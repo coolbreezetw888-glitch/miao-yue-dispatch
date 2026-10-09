@@ -49,11 +49,15 @@ vi.mock("./lineLoginApi", async () => {
 
 const { LineLoginSettingsCard } = await import("./LineLoginSettingsCard");
 
-function renderCard() {
+function renderCard(showNotificationHints?: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LineLoginSettingsCard merchantId="m1" />
+      {showNotificationHints === undefined ? (
+        <LineLoginSettingsCard merchantId="m1" />
+      ) : (
+        <LineLoginSettingsCard merchantId="m1" showNotificationHints={showNotificationHints} />
+      )}
     </QueryClientProvider>,
   );
 }
@@ -153,6 +157,24 @@ describe("C2-A05 LINE 登入設定卡", () => {
     await user.click(screen.getByTestId("line-login-delete"));
     await user.click(await screen.findByRole("button", { name: "確定刪除" }));
     await waitFor(() => expect(state.deleteCalls).toBe(1));
+  });
+
+  it("SPECS-INDEX #1025 FG-2:平台沒開 LINE 通知(showNotificationHints=false)⇒ 說明不提收得到 LINE 通知、沒有「收不到 LINE 通知」提醒", async () => {
+    state.status = {
+      ...EMPTY,
+      configured: true,
+      channelId: "1234567890",
+      channelSecretMasked: "••••ab12",
+      enabled: true,
+      linkedOaStatus: "not_linked",
+    };
+    renderCard(false);
+    expect(await screen.findByTestId("line-login-status")).toHaveTextContent("已啟用");
+    expect(
+      screen.getByText("讓客人在線上預約頁用 LINE 登入，第一次登入會自動成為會員。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("line-login-oa-not-linked")).not.toBeInTheDocument();
+    expect(screen.queryByText(/之後也能收到 LINE 通知/)).not.toBeInTheDocument();
   });
 
   it("設定步驟說明:點了才展開", async () => {

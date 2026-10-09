@@ -145,6 +145,9 @@ interface World {
   lineCalls: { url: string; auth: string | null; retryKey: string | null; body: { to: string; messages: { text: string }[] } }[];
   lineResponder: (to: string, n: number) => Response;
   consoleLines: string[];
+  /** SPECS-INDEX #1025 FG2-F01:平台功能「LINE 通知」(預設全部開著)。 */
+  lineFeature: (merchantId: string) => boolean | "error";
+  featureChecks: string[];
 }
 
 function world(jobs: Record<string, PreparedJob>, responder?: World["lineResponder"]): World {
@@ -156,6 +159,8 @@ function world(jobs: Record<string, PreparedJob>, responder?: World["lineRespond
     lineCalls: [],
     lineResponder: responder ?? (() => new Response("{}", { status: 200 })),
     consoleLines: [],
+    lineFeature: () => true,
+    featureChecks: [],
   };
 }
 
@@ -166,6 +171,10 @@ function deps(w: World, envOverrides: Record<string, string> = {}) {
     ...envOverrides,
   };
   const db: CustomerLineDb = {
+    lineFeatureEnabled: (merchantId) => {
+      w.featureChecks.push(merchantId);
+      return Promise.resolve(w.lineFeature(merchantId));
+    },
     claim: () => Promise.resolve(w.queue.shift() ?? []),
     prepare: (id) => Promise.resolve(w.jobs[id] ?? { state: "not_claimed" }),
     insertLog: (row) => {
@@ -520,4 +529,32 @@ Deno.test("N07/N08/N09~N11 提醒、完成、聯絡人通知:照一般流程發(
   assert(texts.includes("王太太 申請成為您在「涼風工匠」會員的聯絡人，請到會員中心同意或拒絕：https://miaoyue.example/booking/coolbreeze/me/bookings"));
   assertEquals([...new Set(w.logs.map((l) => l.event_type))].sort(), ["customer_completed", "customer_contact_request", "customer_reminder"]);
   assert(w.logs.filter((l) => l.event_type === "customer_contact_request").every((l) => l.booking_id === null));
+});
+
+// =========================================================================
+// SPECS-INDEX #1025 FG2-F01:送出前再檢查一次平台功能「LINE 通知」(這支自己檢查,X7)。
+// =========================================================================
+Deno.test("FG2:關掉前已排進去的待發列 ⇒ 不打 LINE、不寫發送紀錄,標 skipped + feature_disabled;別間店照常", async () => {
+  const w = world({ "ob-1": sendJob({ outbox_id: "ob-1", merchant_id: "m-off" }), "ob-2": sendJob({ outbox_id: "ob-2", merchant_id: "m-on" }) });
+  w.lineFeature = (m) => m !== "m-off";
+  const d = deps(w);
+  const res = await handleRequest(req(), d);
+  assertEquals(res.status, 200);
+  assertEquals(w.featureChecks, ["m-off", "m-on"]);
+  assertEquals(w.finishes[0], ["ob-1", "skipped", "feature_disabled"]);
+  assertEquals(w.finishes[1][0], "ob-2");
+  assertEquals(w.finishes[1][1], "sent");
+  // 只有 m-on 那則發給兩位收件人。
+  assertEquals(w.lineCalls.length, 2);
+  assertEquals(w.logs.every((l) => l.merchant_id === "m-on"), true);
+});
+
+Deno.test("FG2:查詢功能開關失敗 ⇒ 不發、不 finish(留在 processing,之後照既有機制重試)", async () => {
+  const w = world({ "ob-1": sendJob() });
+  w.lineFeature = () => "error";
+  const res = await handleRequest(req(), deps(w));
+  assertEquals(res.status, 200);
+  assertEquals(w.lineCalls.length, 0);
+  assertEquals(w.finishes.length, 0);
+  assertEquals(w.logs.length, 0);
 });

@@ -33,6 +33,7 @@ export const PUSH_LOG_ACTION_HINTS: Record<string, string> = {
   personal_disabled: "請這位服務人員到自己首頁的「手機推播通知」卡片，把這個事件打開。",
   no_subscription: "請這個人用手機登入秒約，在首頁的「手機推播通知」卡片按「開啟通知」。",
   no_target: "建立或修改這筆訂單時指派服務人員，系統才知道要通知誰。",
+  feature_disabled: "那段期間手機推播通知沒有開放，所以沒有發送；這則通知不會補發。",
 };
 
 /** 資料庫寫進來一個 label 表沒有的原因時,畫面上顯示的後綴(讓人一眼看出是系統缺文案,不是他的錯)。 */

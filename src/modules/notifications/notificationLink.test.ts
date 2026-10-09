@@ -16,9 +16,11 @@ import {
   COMPLETED_CANCELLATION_MERGE_WINDOW_MS,
   formatRelativeNotificationTime,
   formatUnreadBadgeText,
+  LINE_NOTIFICATION_FEATURE_EVENTS,
   mergeNotificationRows,
   NOTIFICATION_TARGET_URLS,
   resolveNotificationLink,
+  resolveNotificationLinkForFeatures,
   shouldWrapNotificationBody,
 } from "./notificationLink";
 import { NOTIFICATION_TARGET_TYPES, type UserNotification } from "./types";
@@ -472,5 +474,52 @@ describe("客戶端第 5 批:LINE 訊息額度鈴鐺(c5-contract 2-7)", () => {
         "/app/line-events",
       );
     }
+  });
+});
+
+// SPECS-INDEX #1025 功能開關 第 2 批(QA L1):LINE 額度鈴鐺 × 平台功能「LINE 通知」。
+describe("resolveNotificationLinkForFeatures(#1025 FG2)", () => {
+  it("LINE 額度鈴鐺 + 這間店 LINE 通知沒開 ⇒ null(不導向)", () => {
+    for (const event_type of LINE_NOTIFICATION_FEATURE_EVENTS) {
+      expect(
+        resolveNotificationLinkForFeatures(
+          { target_type: "admin", event_type },
+          { lineNotifications: false },
+        ),
+      ).toBeNull();
+    }
+  });
+
+  it("LINE 額度鈴鐺 + 開著 / 還不知道(別間店、讀取中)⇒ 照原本目的地", () => {
+    for (const lineNotifications of [true, undefined]) {
+      expect(
+        resolveNotificationLinkForFeatures(
+          { target_type: "admin", event_type: "line_quota_exhausted" },
+          { lineNotifications },
+        ),
+      ).toBe("/app/line-events");
+    }
+  });
+
+  it("其他事件不受 LINE 通知開關影響", () => {
+    expect(
+      resolveNotificationLinkForFeatures(
+        { target_type: "admin", event_type: "booking_created" },
+        { lineNotifications: false },
+      ),
+    ).toBe("/app/orders");
+    expect(
+      resolveNotificationLinkForFeatures(
+        { target_type: "agent", event_type: "member_contact_request" },
+        { lineNotifications: false },
+      ),
+    ).toBe("/app/members");
+  });
+
+  it("清單只含 LINE 額度兩種事件", () => {
+    expect([...LINE_NOTIFICATION_FEATURE_EVENTS].sort()).toEqual([
+      "line_quota_exhausted",
+      "line_quota_warning",
+    ]);
   });
 });

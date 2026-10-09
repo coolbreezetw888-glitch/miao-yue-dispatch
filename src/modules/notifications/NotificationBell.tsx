@@ -86,7 +86,7 @@ import {
   formatStaffPendingReminder,
   formatUnreadBadgeText,
   mergeNotificationRows,
-  resolveNotificationLink,
+  resolveNotificationLinkForFeatures,
   shouldWrapNotificationBody,
 } from "./notificationLink";
 import type { MergedNotification } from "./types";
@@ -107,9 +107,15 @@ function multiIdentityLabel(item: MergedNotification): string | null {
 
 export function NotificationBell({
   staffPendingCount = 0,
+  currentLineNotificationsEnabled,
 }: {
   /** #977 第 4 批:服務人員視角的待確認訂單數(只算自己是主要服務人員、今天以後)。其他視角傳 0 / 不傳。 */
   staffPendingCount?: number;
+  /**
+   * SPECS-INDEX #1025 FG-2(QA L1):目前這間店的平台功能「LINE 通知」(由 AppLayout 傳入;通知中心本身不讀功能開關,
+   * 維持 §13.11 的模組獨立)。false ⇒ 這間店的 LINE 額度鈴鐺點了不導向;undefined(不傳 / 讀取中)⇒ 照原本目的地。
+   */
+  currentLineNotificationsEnabled?: boolean | undefined;
 } = {}) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -147,9 +153,16 @@ export function NotificationBell({
     }
 
     // ③ 用純函式算出目的地並導航(跟 §5.5 的推播 payload url 完全同一套規則)。
-    navigate(
-      resolveNotificationLink({ target_type: item.primaryTargetType, event_type: item.event_type }),
+    //    SPECS-INDEX #1025 FG-2(QA L1):LINE 額度的鈴鐺,在已知這間店沒開「LINE 通知」時不導向(null)。
+    //    只有「目前這間店」的開關是已知的;別間店的列照原本目的地,真的沒開時由路由守門導回功能頁。
+    const to = resolveNotificationLinkForFeatures(
+      { target_type: item.primaryTargetType, event_type: item.event_type },
+      {
+        lineNotifications:
+          item.merchant_id === currentMerchantId ? currentLineNotificationsEnabled : undefined,
+      },
     );
+    if (to) navigate(to);
 
     // ④ 關閉面板。
     setOpen(false);

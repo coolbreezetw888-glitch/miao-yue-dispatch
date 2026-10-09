@@ -26,6 +26,7 @@ import type {
   UserNotificationInsert,
 } from "./pushDispatchCore.ts";
 import { sendWebPush, type VapidDetails } from "./webpushAdapter.ts";
+import { checkMerchantFeature, FEATURE_PUSH_NOTIFICATIONS } from "./featureGate.ts";
 
 // ⚠️ 這裡的 `any` 是刻意的:supabase-js 的 SupabaseClient 泛型要吃這個專案自動產生的
 // Database 型別,而 Edge Function(Deno)這一側沒有那份檔案。ESLint 看不懂 Deno 的
@@ -39,6 +40,13 @@ export function buildPushDispatchDeps(
   vapidDetails: VapidDetails,
 ): PushDispatchDeps {
   return {
+    // SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」(service role 呼叫 internal_merchant_has_feature)。
+    async isPushFeatureEnabled(merchantId: string) {
+      const result = await checkMerchantFeature(adminClient, merchantId, FEATURE_PUSH_NOTIFICATIONS);
+      if (result === "error") console.error("[push-dispatch] internal_merchant_has_feature 失敗");
+      return result;
+    },
+
     async getEventSetting(merchantId: string, eventType: PushDispatchEventType) {
       const { data, error } = await adminClient
         .from("merchant_push_event_settings")

@@ -68,6 +68,14 @@ const SECTION_LABELS = new Map(AGENT_PERMISSION_SECTIONS.map((s) => [s.key, s.la
 const HIDDEN_KEYS = new Set(AGENT_PERMISSION_SECTIONS.filter((s) => s.hidden).map((s) => s.key));
 const isHidden = (key: string) => HIDDEN_KEYS.has(key);
 
+/** SPECS-INDEX #1025:客服權限 section_key ⇒ 對應的平台功能(功能沒開通時那一列整列不顯示)。 */
+const AGENT_SECTION_FEATURE_KEYS: Readonly<Record<string, string>> = {
+  report_export: MERCHANT_FEATURE_KEYS.reportExport,
+  line_notification: MERCHANT_FEATURE_KEYS.lineNotifications,
+  line_marketing: MERCHANT_FEATURE_KEYS.lineMarketing,
+  push_notification: MERCHANT_FEATURE_KEYS.pushNotifications,
+};
+
 interface DependencyConfirm {
   mode: "enable" | "disable";
   key: string;
@@ -162,9 +170,13 @@ function AgentPermissionsInner() {
 
   // SPECS-INDEX #1025 FG1-U06 第 4 點:平台沒開通「報表匯出中心」⇒ 那一個權限開關整列不顯示
   // (值保留不改 —— T9,重新開通後原值直接生效)。讀取中 / 讀取失敗先不顯示這一列。
+  // SPECS-INDEX #1025 FG2-U01:LINE 通知設定(line_notification)看「LINE 通知」、再行銷通知(line_marketing)看
+  // 「再行銷通知」(主功能關時自動為關)、推播通知設定(push_notification)看「手機推播通知」,同樣整列不顯示、值保留。
   const { hasFeature } = useMerchantFeatures();
-  const isSectionFeatureVisible = (sectionKey: string): boolean =>
-    sectionKey !== "report_export" || hasFeature(MERCHANT_FEATURE_KEYS.reportExport) === true;
+  const isSectionFeatureVisible = (sectionKey: string): boolean => {
+    const featureKey = AGENT_SECTION_FEATURE_KEYS[sectionKey];
+    return featureKey === undefined || hasFeature(featureKey) === true;
+  };
 
   const copy = confirm ? DEPENDENCY_CONFIRM_COPY[confirm.mode] : null;
   const effects =

@@ -38,6 +38,11 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 import { isLocalSupabaseUrl, siteOrigin } from "../_shared/customerOrigin.ts";
+import {
+  createMerchantFeatureCache,
+  FEATURE_DISABLED_REASON,
+  FEATURE_LINE_NOTIFICATIONS,
+} from "../_shared/featureGate.ts";
 
 // =========================================================================
 // 純函式
@@ -265,6 +270,11 @@ export interface LogInsert {
 export type FinishOutcome = "sent" | "skipped" | "failed" | "retry" | "quota_exhausted";
 
 export interface CustomerLineDb {
+  /**
+   * SPECS-INDEX #1025 FG2-F01:這間店的平台功能「LINE 通知」有沒有開(service role 呼叫
+   * internal_merchant_has_feature)。true = 開;false = 沒開;"error" = 查詢失敗。規格 X7:這支自己檢查。
+   */
+  lineFeatureEnabled(merchantId: string): Promise<boolean | "error">;
   claim(limit: number): Promise<string[]>;
   prepare(outboxId: string): Promise<PreparedJob>;
   insertLog(row: LogInsert): Promise<void>;
@@ -315,6 +325,22 @@ export async function processJob(
 ): Promise<void> {
   const job = await db.prepare(outboxId);
   if (job.state === "not_claimed") return;
+
+  // SPECS-INDEX #1025 FG2-F01:送出前再檢查一次平台功能「LINE 通知」(關掉前已經排進去的待發列)。
+  //   沒開 ⇒ 不打 LINE、不寫發送紀錄;待發列標 skipped、last_error = 'feature_disabled'(= 已取消 + 原因)。
+  //   查詢失敗 ⇒ 丟例外:這一列留在 processing,之後照既有機制放回 pending 重試,絕不先發。
+  //   (資料庫 prepare 的每種結果都帶 merchant_id;萬一沒帶,只有「要發送」的才當錯誤 —— 其他狀態本來就不發。)
+  if (job.merchant_id) {
+    const lineFeature = await db.lineFeatureEnabled(job.merchant_id);
+    if (lineFeature === "error") throw new Error("feature check failed");
+    if (lineFeature !== true) {
+      await db.finish(outboxId, "skipped", FEATURE_DISABLED_REASON);
+      summary.skipped += 1;
+      return;
+    }
+  } else if (job.state === "send") {
+    throw new Error("prepared job has no merchant_id");
+  }
 
   if (job.state === "skip") {
     await db.finish(outboxId, "skipped", job.reason ?? null);
@@ -543,7 +569,12 @@ export async function checkQuotaWarnings(
 type AnySupabaseClient = any;
 
 export function buildDbDeps(client: AnySupabaseClient): CustomerLineDb {
+  // 同一次執行裡,同一間店只問一次(查詢失敗不快取)。
+  const featureCheck = createMerchantFeatureCache(client);
   return {
+    async lineFeatureEnabled(merchantId) {
+      return await featureCheck(merchantId, FEATURE_LINE_NOTIFICATIONS);
+    },
     async claim(limit) {
       const { data, error } = await client.rpc("internal_claim_customer_line_outbox", { p_limit: limit });
       if (error) throw new Error("claim failed");

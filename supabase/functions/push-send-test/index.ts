@@ -25,6 +25,11 @@ import {
   type PushSubscriptionRow,
 } from "../_shared/pushDispatchCore.ts";
 import { sendWebPush } from "../_shared/webpushAdapter.ts";
+import {
+  checkMerchantFeature,
+  FEATURE_PUSH_NOTIFICATIONS,
+  MERCHANT_FEATURE_DISABLED_MESSAGE,
+} from "../_shared/featureGate.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(理由同 push-notify-dispatch 的檔頭註解:
 // module 層級的常數會在 Deno 測試 import 之前就定案,測試無法控制)。
@@ -161,6 +166,19 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return jsonResponse({ error: "你不是這間商家的成員，無法發送測試通知" }, 403);
   }
 
+  // SPECS-INDEX #1025 FG2-F01:平台沒開「手機推播通知」⇒ 測試推播也擋(同一句訊息)。
+  // 放在身分檢查之後:不是這間店的人照舊先拿到 403「不是成員」,不會因此知道這間店有沒有開。
+  // service role 呼叫 internal_merchant_has_feature 自己檢查(X7);查詢失敗 ⇒ 500,不發送。
+  const adminClient = resolvedDeps.createAdminClient();
+  const pushFeature = await checkMerchantFeature(adminClient, merchantId, FEATURE_PUSH_NOTIFICATIONS);
+  if (pushFeature === "error") {
+    console.error("[push-send-test] internal_merchant_has_feature 失敗");
+    return jsonResponse({ error: "檢查功能開關時發生錯誤" }, 500);
+  }
+  if (!pushFeature) {
+    return jsonResponse({ error: MERCHANT_FEATURE_DISABLED_MESSAGE }, 403);
+  }
+
   // §6.6:頻率限制。放在裝置查詢之後、實際發送之前都可以,這裡先擋掉比較省。
   const { data: recentCount, error: rateError } = await callerClient.rpc(
     "count_my_recent_test_pushes",
@@ -189,8 +207,6 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     // 不是錯誤,就是他還沒開通。
     return jsonResponse({ sent: 0, failed: 0, reason: "no_subscription", ack_tokens: [] }, 200);
   }
-
-  const adminClient = resolvedDeps.createAdminClient();
 
   // §6.3:ack_url 必須是完整絕對網址 —— public/push-sw.js 是不經過 Vite 編譯的靜態檔案,
   // 裡面拿不到 import.meta.env,網址與 token 只能從 payload 帶進去。

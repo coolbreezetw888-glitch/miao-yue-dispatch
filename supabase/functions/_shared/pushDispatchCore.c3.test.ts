@@ -15,6 +15,7 @@ function makeDeps() {
   const logs: PushNotificationLogInsert[] = [];
   const sent: PushPayload[] = [];
   const deps: PushDispatchDeps = {
+    isPushFeatureEnabled: () => Promise.resolve(true),
     getEventSetting: () => Promise.resolve({ enabled: true, message_title: "新訂單 {{customer_name}}", message_body: "範本內文 {{booking_date}}" }),
     getBookingStaffId: () => Promise.resolve("staff-1"),
     resolveRecipients: () =>

@@ -80,11 +80,15 @@ const TWO = {
   relink_blocked: false,
 };
 
-function renderCard() {
+function renderCard(showNotificationInfo?: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemberContactsCard memberId="m1" />
+      {showNotificationInfo === undefined ? (
+        <MemberContactsCard memberId="m1" />
+      ) : (
+        <MemberContactsCard memberId="m1" showNotificationInfo={showNotificationInfo} />
+      )}
     </QueryClientProvider>,
   );
 }
@@ -252,6 +256,25 @@ describe("C5-F03 聯絡人卡多「LINE 好友 / 預約通知 / 優惠通知」(
     );
     expect(screen.getByTestId("member-contacts-card-requests")).toHaveTextContent("阿華");
     expect(screen.queryByTestId("member-contacts-card-empty")).toBeNull();
+  });
+
+  it("SPECS-INDEX #1025 FG-2:平台沒開 LINE 通知(showNotificationInfo=false)⇒ 聯絡人照常列出,但沒有好友 / 預約通知 / 優惠通知那一行", async () => {
+    renderCard(false);
+    const rows = await screen.findAllByTestId("member-contacts-card-row");
+    expect(rows.length).toBe(2);
+    expect(screen.queryByTestId("member-contacts-card-notify")).toBeNull();
+  });
+
+  it("SPECS-INDEX #1025 FG-2:平台沒開 LINE 通知 ⇒ 舊綁定碼會員的好友狀態也不顯示,待處理申請照常", async () => {
+    state.data = {
+      contacts: [],
+      requests: TWO.requests,
+      relink_blocked: false,
+      legacy_line: { friend_status: "friend" },
+    };
+    renderCard(false);
+    expect(await screen.findByTestId("member-contacts-card-requests")).toHaveTextContent("阿華");
+    expect(screen.queryByTestId("member-contacts-card-legacy-friend")).toBeNull();
   });
 
   it("沒有聯絡人也沒綁過 ⇒ 不顯示好友狀態", async () => {

@@ -98,6 +98,8 @@ export const PUSH_LOG_SKIP_REASONS = [
   "no_target",
   "personal_disabled",
   "no_recipient",
+  // SPECS-INDEX #1025 FG2-F01:平台沒開「手機推播通知」。
+  "feature_disabled",
 ] as const;
 
 export const PUSH_LOG_SKIP_REASON_LABELS: Record<string, string> = {
@@ -106,6 +108,7 @@ export const PUSH_LOG_SKIP_REASON_LABELS: Record<string, string> = {
   personal_disabled: "這位服務人員自己關掉了這種通知",
   no_subscription: "這個人還沒在任何裝置上開通推播",
   no_target: "這筆訂單沒有指定服務人員",
+  feature_disabled: "這段期間這間店的手機推播通知沒有開放",
 };
 
 /** 7.2:已開通裝置清單顯示用,把 user_agent 原始字串簡化成白話裝置名稱。 */

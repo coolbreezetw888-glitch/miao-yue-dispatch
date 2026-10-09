@@ -66,6 +66,35 @@ export function resolveNotificationLink(input: {
 }
 
 /**
+ * SPECS-INDEX #1025 FG-2(QA L1):只屬於平台功能「LINE 通知」的鈴鐺事件(點了會去 LINE 通知相關頁面)。
+ */
+export const LINE_NOTIFICATION_FEATURE_EVENTS: readonly string[] = [
+  "line_quota_exhausted",
+  "line_quota_warning",
+];
+
+/**
+ * SPECS-INDEX #1025 FG-2(QA L1):考慮平台功能開關的目的地。
+ *   ・LINE 通知的鈴鐺事件,而且已知這間店「LINE 通知」沒開(lineNotifications === false)⇒ null = 不導向
+ *     (只標已讀、關面板;F3=A 不把人帶去看不到的頁面)。
+ *   ・還不知道(undefined,例如那一列是別間店、或還在讀取)⇒ 照原本的目的地;真的沒開時路由守門會導回功能頁。
+ *   ・其他事件 ⇒ 跟 resolveNotificationLink 完全一樣。
+ */
+export function resolveNotificationLinkForFeatures(
+  input: { target_type: string | null | undefined; event_type?: string | null | undefined },
+  features: { lineNotifications: boolean | undefined },
+): string | null {
+  if (
+    input.event_type &&
+    LINE_NOTIFICATION_FEATURE_EVENTS.includes(input.event_type) &&
+    features.lineNotifications === false
+  ) {
+    return null;
+  }
+  return resolveNotificationLink(input);
+}
+
+/**
  * §5.5 / §13.7:同一列合併了兩個身份時,用哪一個身份算目的地。
  * 優先權 admin > agent > staff,跟 useMerchantRole 與 Edge Function 的 PUSH_TARGET_PRIORITY
  * 完全一致,不另發明一套。

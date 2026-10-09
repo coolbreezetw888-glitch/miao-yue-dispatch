@@ -488,7 +488,12 @@ export default function AppLayout() {
             <div className="flex shrink-0 items-center justify-end">
               {/* #1025 FG3-U01:服務人員登入端沒開時,服務人員端只剩一張小卡,鈴鐺也不顯示(留一格空位維持標題置中)。 */}
               {staffPortalGate === "open" ? (
-                <NotificationBell staffPendingCount={staffPendingCount} />
+                <NotificationBell
+                  staffPendingCount={staffPendingCount}
+                  currentLineNotificationsEnabled={hasFeature(
+                    MERCHANT_FEATURE_KEYS.lineNotifications,
+                  )}
+                />
               ) : (
                 <span aria-hidden="true" className="block h-8 w-8" />
               )}

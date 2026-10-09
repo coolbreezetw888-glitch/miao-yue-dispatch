@@ -25,6 +25,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+import {
+  checkMerchantFeature,
+  FEATURE_LINE_MARKETING,
+  MERCHANT_FEATURE_DISABLED_MESSAGE,
+} from "../_shared/featureGate.ts";
+
 // pushLineMessage/renderMessageTemplate 這兩支小函式跟 line-notify-dispatch/index.ts 裡的
 // 完全一樣——刻意不用跨 function 的相對路徑 import 共用,因為 Supabase Edge Function 是每個
 // function 目錄各自獨立部署的單位,跨目錄 import 會讓部署變得脆弱(部署其中一個 function 時
@@ -251,6 +257,18 @@ async function handleRequest(req: Request): Promise<Response> {
   const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
   });
+
+  // SPECS-INDEX #1025 FG2-F01:平台沒開「再行銷通知」(或它的主功能「LINE 通知」;細部功能在主功能關時
+  // 自動為關)⇒ 403「這個功能目前沒有開放。」。放在權限檢查之後:沒權限的人照舊拿到原本的 403。
+  // service role 呼叫 internal_merchant_has_feature 自己檢查(X7);查詢失敗 ⇒ 500,一則都不發。
+  const marketingFeature = await checkMerchantFeature(adminClient, merchantId, FEATURE_LINE_MARKETING);
+  if (marketingFeature === "error") {
+    console.error("[line-send-marketing] internal_merchant_has_feature 呼叫失敗");
+    return jsonResponse({ error: "檢查功能開關時發生錯誤" }, 500);
+  }
+  if (!marketingFeature) {
+    return jsonResponse({ error: MERCHANT_FEATURE_DISABLED_MESSAGE }, 403);
+  }
 
   // §10.2(SPECS-INDEX #612 問題 2):一併查 is_blacklisted,不能只信任前端已經把黑名單會員
   // 濾掉——見 buildMarketingDispatchPlan 的強制擋下邏輯。

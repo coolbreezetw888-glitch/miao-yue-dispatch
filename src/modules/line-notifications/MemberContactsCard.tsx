@@ -57,7 +57,18 @@ type Confirm =
   | { kind: "primary"; contact: AdminMemberContact }
   | { kind: "remove"; contact: AdminMemberContact };
 
-export function MemberContactsCard({ memberId }: { memberId: string }) {
+/**
+ * showNotificationInfo(預設 true,行為不變):SPECS-INDEX #1025 FG-2 —— 平台沒開「LINE 通知」時傳 false ⇒
+ * 不顯示每位聯絡人的「LINE 好友 / 預約通知 / 優惠通知」與舊綁定碼會員的好友狀態(通知相關,F3=A 整個看不到);
+ * 聯絡人本身(LINE 登入的身分、主要 / 第二聯絡人、待處理申請)跟 LINE 登入有關,照常顯示。
+ */
+export function MemberContactsCard({
+  memberId,
+  showNotificationInfo = true,
+}: {
+  memberId: string;
+  showNotificationInfo?: boolean;
+}) {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({
     queryKey: memberContactsAdminQueryKey(memberId),
@@ -178,19 +189,21 @@ export function MemberContactsCard({ memberId }: { memberId: string }) {
                   .filter(Boolean)
                   .join("・")}
               </p>
-              <p
-                className="text-xs leading-relaxed text-foreground"
-                data-testid="member-contacts-card-notify"
-              >
-                {[
-                  `LINE 好友：${lineFriendStatusLabel(c.lineFriendStatus)}`,
-                  `預約通知：${onOffLabel(c.notifyBooking)}`,
-                  // 5-B 起跟客人端一起出現(PROMO_SWITCH_VISIBLE)。
-                  PROMO_SWITCH_VISIBLE ? `優惠通知：${onOffLabel(c.notifyPromo)}` : null,
-                ]
-                  .filter(Boolean)
-                  .join("・")}
-              </p>
+              {showNotificationInfo ? (
+                <p
+                  className="text-xs leading-relaxed text-foreground"
+                  data-testid="member-contacts-card-notify"
+                >
+                  {[
+                    `LINE 好友：${lineFriendStatusLabel(c.lineFriendStatus)}`,
+                    `預約通知：${onOffLabel(c.notifyBooking)}`,
+                    // 5-B 起跟客人端一起出現(PROMO_SWITCH_VISIBLE)。
+                    PROMO_SWITCH_VISIBLE ? `優惠通知：${onOffLabel(c.notifyPromo)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join("・")}
+                </p>
+              ) : null}
               {mayManage ? (
                 <div className="flex flex-wrap gap-2">
                   {!c.isPrimary ? (
@@ -223,7 +236,7 @@ export function MemberContactsCard({ memberId }: { memberId: string }) {
       )}
 
       {/* C5-F03:舊綁定碼會員(沒有聯絡人)的好友狀態。只看 legacy_line 有沒有值,跟「待處理申請」各自獨立顯示。 */}
-      {!isLoading && !isError && data?.legacyLine ? (
+      {showNotificationInfo && !isLoading && !isError && data?.legacyLine ? (
         <p className="text-xs text-foreground" data-testid="member-contacts-card-legacy-friend">
           {`LINE 好友：${lineFriendStatusLabel(data.legacyLine.friendStatus)}`}
         </p>

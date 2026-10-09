@@ -70,7 +70,13 @@ export interface SendPushResult {
 }
 
 export type PushLogSkipReason =
-  "event_disabled" | "no_subscription" | "no_target" | "personal_disabled" | "no_recipient";
+  | "event_disabled"
+  | "no_subscription"
+  | "no_target"
+  | "personal_disabled"
+  | "no_recipient"
+  // SPECS-INDEX #1025 FG2-F01:平台沒開「手機推播通知」。
+  | "feature_disabled";
 
 export interface PushNotificationLogInsert {
   merchant_id: string;
@@ -125,6 +131,12 @@ export interface PushPayload {
 
 /** 兩支 Edge Function 各自用真正的 service role client 實作這組介面。 */
 export interface PushDispatchDeps {
+  /**
+   * SPECS-INDEX #1025 FG2-F01:這間店的平台功能「手機推播通知」有沒有開(service role 呼叫
+   * internal_merchant_has_feature,見 _shared/featureGate.ts)。true = 開;false = 沒開;"error" = 查詢失敗。
+   * 規格 X7:每支 Edge Function 都要自己檢查,所以這是**必填**的 dep —— 新的呼叫端忘了接會直接編譯失敗。
+   */
+  isPushFeatureEnabled(merchantId: string): Promise<boolean | "error">;
   getEventSetting(
     merchantId: string,
     eventType: PushDispatchEventType,
@@ -215,7 +227,13 @@ export function filterInternalRecipients<T extends { target_type: string }>(reci
 
 export interface DispatchPushForBookingResult {
   dispatched: boolean;
-  reason?: "event_disabled" | "no_target" | "no_subscription" | "no_recipient";
+  reason?:
+    | "event_disabled"
+    | "no_target"
+    | "no_subscription"
+    | "no_recipient"
+    | "feature_disabled"
+    | "feature_check_failed";
   deviceCount?: number;
   successCount?: number;
   recipientCount?: number;
@@ -362,6 +380,15 @@ export async function dispatchPushForBooking(
     skipInAppNotification,
     messageOverride,
   } = params;
+
+  // ---------------------------------------------------------------------
+  // SPECS-INDEX #1025 FG2-F01(主腦裁決 2):平台功能「手機推播通知」只管**手機 / 瀏覽器推播**這一件事。
+  //   ・站內鈴鐺不是推播 ⇒ 開關關著時照常解析收件人、照常寫鈴鐺(off_impact 只說不再發手機推播)。
+  //   ・沒開 ⇒ 不查裝置、不呼叫 sendPush,推播紀錄寫一列 skipped / feature_disabled。
+  //   ・查詢失敗 ⇒ 一樣不送推播(fail closed),鈴鐺照寫;不寫推播紀錄(不確定是不是沒開,不留錯的原因)。
+  // 先在這裡問一次,真正擋的位置在「寫完鈴鐺之後、查裝置之前」(見下方)。
+  // ---------------------------------------------------------------------
+  const pushFeature = await deps.isPushFeatureEnabled(merchantId);
 
   // ---------------------------------------------------------------------
   // §4.2 第 1 層:商家總開關。關 → 整件事跳過(行為跟改寫前完全一樣)。
@@ -552,6 +579,29 @@ export async function dispatchPushForBooking(
     } catch (err) {
       console.error("[push-dispatch] writeInAppNotification 失敗(推播照樣繼續)", err);
     }
+  }
+
+  // SPECS-INDEX #1025 FG2-F01(主腦裁決 2):鈴鐺寫完了,平台沒開「手機推播通知」就到此為止 —— 不查裝置、不送推播。
+  if (pushFeature === "error") {
+    console.error("[push-dispatch] 檢查平台功能開關失敗，這次不送手機推播（站內通知照常）");
+    return { dispatched: false, reason: "feature_check_failed", recipientCount: recipients.length };
+  }
+  if (pushFeature !== true) {
+    await deps.writeLog({
+      merchant_id: merchantId,
+      event_type: eventType,
+      booking_id: bookingId,
+      target_type: null,
+      target_id: null,
+      status: "skipped",
+      skip_reason: "feature_disabled",
+      device_count: 0,
+      success_count: 0,
+      error_detail: null,
+      rendered_title: renderedTitle,
+      rendered_body: renderedBody,
+    });
+    return { dispatched: false, reason: "feature_disabled", recipientCount: recipients.length };
   }
 
   // ---------------------------------------------------------------------

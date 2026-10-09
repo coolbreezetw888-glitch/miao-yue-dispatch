@@ -24,6 +24,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+import { createMerchantFeatureCache, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
+
 // pushLineMessage / renderMessageTemplate 跟 line-send-marketing / line-notify-dispatch 裡的寫法
 // 一致——刻意不跨 function 目錄 import(每個 function 是獨立部署單位,見 line-send-marketing 檔頭)。
 
@@ -125,6 +127,11 @@ export interface BirthdayLogInsert {
 
 /** 資料庫端的三個動作,注入進來方便測試(正式環境由 buildDbDeps 用 service_role client 實作)。 */
 export interface BirthdayDispatchDb {
+  /**
+   * SPECS-INDEX #1025 FG2-F01:這間店的平台功能「LINE 通知」有沒有開(service role 呼叫
+   * internal_merchant_has_feature)。true = 開;false = 沒開;"error" = 查詢失敗。規格 X7:這支自己檢查。
+   */
+  lineFeatureEnabled(merchantId: string): Promise<boolean | "error">;
   claimPending(limit: number): Promise<ClaimedBirthdayRow[]>;
   insertLog(row: BirthdayLogInsert): Promise<string | null>;
   markResult(grantId: string, status: "sent" | "failed", error: string | null, logId: string | null): Promise<void>;
@@ -135,6 +142,13 @@ export interface DispatchSummary {
   sent: number;
   failed: number;
 }
+
+/** SPECS-INDEX #1025 FG2-F01:平台沒開「LINE 通知」時寫進 line_error 的白話原因(商家在會員點數紀錄看得到)。 */
+export const BIRTHDAY_FEATURE_DISABLED_ERROR =
+  "這間店目前沒有開放 LINE 通知，所以沒有發送生日 LINE 訊息（生日點數已照常發放）。";
+/** 查詢功能開關失敗:不確定能不能發 ⇒ 不發(fail closed),也不自動重試(避免重複發)。 */
+export const BIRTHDAY_FEATURE_CHECK_FAILED_ERROR =
+  "系統暫時無法確認 LINE 通知是否開放，這次沒有發送；為避免重複發送，不會自動重試（生日點數已照常發放）。";
 
 export const CLAIM_BATCH_SIZE = 100;
 /** 單次執行最多處理幾批(防呆:正常一天的生日人數遠低於此)。 */
@@ -152,6 +166,25 @@ export async function runBirthdayDispatch(
     summary.claimed += rows.length;
 
     for (const row of rows) {
+      // SPECS-INDEX #1025 FG2-F01:每間店發送前檢查平台功能「LINE 通知」。沒開 / 查詢失敗 ⇒ 不打 LINE、
+      // 不寫 line_notification_log,直接把這列回寫成 failed + 白話原因(mark_birthday_line_result 只收 sent / failed)。
+      const lineFeature = await db.lineFeatureEnabled(row.merchant_id);
+      if (lineFeature !== true) {
+        try {
+          await db.markResult(
+            row.grant_id,
+            "failed",
+            lineFeature === "error" ? BIRTHDAY_FEATURE_CHECK_FAILED_ERROR : BIRTHDAY_FEATURE_DISABLED_ERROR,
+            null,
+          );
+        } catch (err) {
+          console.error("[birthday-line-dispatch] 回寫結果失敗", row.grant_id, err);
+        }
+        // 回應格式不變(只回統計數字):沒發出去的算在 failed。
+        summary.failed += 1;
+        continue;
+      }
+
       const text = renderBirthdayMessage(row);
       let result: LinePushResult;
       if (text.trim() === "") {
@@ -206,7 +239,14 @@ function jsonResponse(body: Record<string, unknown>, status: number): Response {
 type AnySupabaseClient = any;
 
 export function buildDbDeps(adminClient: AnySupabaseClient): BirthdayDispatchDb {
+  // 同一次執行裡,同一間店只問一次(查詢失敗不快取)。
+  const featureCheck = createMerchantFeatureCache(adminClient);
   return {
+    async lineFeatureEnabled(merchantId) {
+      const result = await featureCheck(merchantId, FEATURE_LINE_NOTIFICATIONS);
+      if (result === "error") console.error("[birthday-line-dispatch] internal_merchant_has_feature 失敗");
+      return result;
+    },
     async claimPending(limit) {
       const { data, error } = await adminClient.rpc("claim_birthday_line_pending", { p_limit: limit });
       if (error) throw error;

@@ -31,6 +31,8 @@ vi.mock("./RequireMembersAccess", () => ({
 vi.mock("./MemberPointsPanel", () => ({ MemberPointsPanel: () => null }));
 vi.mock("@/modules/line-notifications/MemberLineBindingSection", () => ({
   MemberLineBindingSection: () => null,
+  // SPECS-INDEX #1025 FG-2:平台沒開 LINE 通知時改掛的「只剩 LINE 登入」版本。
+  MemberLineLoginOnlySection: () => null,
 }));
 vi.mock("./api", () => ({
   setMemberBlacklistStatus: vi.fn(),

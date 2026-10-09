@@ -257,6 +257,8 @@ select is(
   array(select feature_key from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
   array['online_booking', 'data_import', 'report_export',
         'staff_portal', 'staff_order_editing', 'staff_self_availability', 'staff_self_payroll',
+        -- #1025 FG-2:LINE 通知(底下再行銷通知)、手機推播通知
+        'line_notifications', 'line_marketing', 'push_notifications',
         'zz_parent', 'zz_child'],
   '⑥-8 get_merchant_features:細部功能緊跟在自己的主功能後面');
 select pg_temp.test_clear_auth();
@@ -288,7 +290,7 @@ select set_config('test.new_id', (select id::text from merchants where name = '�
 select set_config('test.new_gid', (select group_id::text from merchants where name = '功能開關測試新店'), true);
 select is(
   pg_temp.grants_of(current_setting('test.new_id')::uuid),
-  'data_import:false,online_booking:true,report_export:true,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
+  'data_import:false,line_marketing:true,line_notifications:true,online_booking:true,push_notifications:true,report_export:true,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
   '⑦-2 新店:每個功能都有一列,值 = 到府派工的產業預設(資料匯入關)');
 
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000006');
@@ -298,7 +300,7 @@ select lives_ok(
 select pg_temp.test_clear_auth();
 select is(
   pg_temp.grants_of((select id from merchants where name = '功能開關測試分店')),
-  'data_import:true,online_booking:true,report_export:false,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
+  'data_import:true,line_marketing:true,line_notifications:true,online_booking:true,push_notifications:true,report_export:false,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
   '⑦-4 分店:照自己產業(到店服務)的預設,不複製本店(T4);報表匯出沒有產業預設 ⇒ 用功能清單預設(關)');
 select is(
   (select count(*)::int from merchant_feature_grant_logs
@@ -338,7 +340,7 @@ select is(
   0, '⑩-2 兩個產業 × 所有功能都有產業預設');
 select is(
   (select count(*)::int from platform_features),
-  7, '⑩-3 功能清單共 7 項(第 1 批 3 項 + #1025 FG-3 服務人員細部功能 4 項)');
+  10, '⑩-3 功能清單共 10 項(第 1 批 3 項 + #1025 FG-3 服務人員細部功能 4 項 + FG-2 LINE / 再行銷 / 推播 3 項)');
 
 -- ─── ⑪ ACL ────────────────────────────────────────────────────────────────
 select is(

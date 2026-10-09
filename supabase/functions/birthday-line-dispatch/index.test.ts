@@ -13,6 +13,8 @@ import {
   type BirthdayDispatchDb,
   type BirthdayLogInsert,
   type ClaimedBirthdayRow,
+  BIRTHDAY_FEATURE_CHECK_FAILED_ERROR,
+  BIRTHDAY_FEATURE_DISABLED_ERROR,
   CLAIM_BATCH_SIZE,
   handleRequest,
   isValidCronSecret,
@@ -42,12 +44,21 @@ interface Recorded {
   logs: BirthdayLogInsert[];
   marks: [string, string, string | null, string | null][];
   lineCalls: { url: string; auth: string | null; body: unknown }[];
+  /** SPECS-INDEX #1025 FG2-F01:問過哪幾間店的「LINE 通知」開關。 */
+  featureChecks: string[];
 }
 
-function makeDb(batches: ClaimedBirthdayRow[][], opts: { insertLogThrows?: boolean } = {}) {
-  const recorded: Recorded = { claims: [], logs: [], marks: [], lineCalls: [] };
+function makeDb(
+  batches: ClaimedBirthdayRow[][],
+  opts: { insertLogThrows?: boolean; lineFeature?: (merchantId: string) => boolean | "error" } = {},
+) {
+  const recorded: Recorded = { claims: [], logs: [], marks: [], lineCalls: [], featureChecks: [] };
   let i = 0;
   const db: BirthdayDispatchDb = {
+    lineFeatureEnabled(merchantId) {
+      recorded.featureChecks.push(merchantId);
+      return Promise.resolve(opts.lineFeature ? opts.lineFeature(merchantId) : true);
+    },
     claimPending(limit) {
       recorded.claims.push(limit);
       return Promise.resolve(batches[i++] ?? []);
@@ -241,4 +252,38 @@ Deno.test("renderBirthdayMessage:超過 LINE 上限 5000 字會截斷", () => {
   const text = renderBirthdayMessage(row({ message_template: "{{member_name}}", member_name: "字".repeat(6000) }));
   assertEquals(Array.from(text).length, 5000);
   assert(text.startsWith("字字"));
+});
+
+// =========================================================================
+// SPECS-INDEX #1025 FG2-F01:每間店發送前檢查平台功能「LINE 通知」(這支自己檢查,X7)。
+// =========================================================================
+Deno.test("FG2:A 店沒開 LINE 通知 ⇒ A 店不打 LINE、不寫發送紀錄、回寫 failed + 白話原因;B 店照常發", async () => {
+  Deno.env.set("BIRTHDAY_LINE_CRON_SECRET", SECRET);
+  const { db, recorded } = makeDb(
+    [[row({ grant_id: "g-a", merchant_id: "m-a" }), row({ grant_id: "g-b", merchant_id: "m-b", line_user_id: "U-b" })]],
+    { lineFeature: (m) => m !== "m-a" },
+  );
+  const fetchImpl = makeFetch(recorded, () => new Response("{}", { status: 200 }));
+  const res = await handleRequest(cronRequest(SECRET), { db, fetchImpl });
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { claimed: 2, sent: 1, failed: 1 });
+  assertEquals(recorded.featureChecks, ["m-a", "m-b"]);
+  assertEquals(recorded.lineCalls.length, 1);
+  assertEquals((recorded.lineCalls[0].body as { to: string }).to, "U-b");
+  assertEquals(recorded.logs.length, 1);
+  assertEquals(recorded.logs[0].merchant_id, "m-b");
+  assertEquals(recorded.marks[0], ["g-a", "failed", BIRTHDAY_FEATURE_DISABLED_ERROR, null]);
+  assertEquals(recorded.marks[1][0], "g-b");
+  assertEquals(recorded.marks[1][1], "sent");
+});
+
+Deno.test("FG2:查詢功能開關失敗 ⇒ 不發(fail closed)、回寫 failed + 原因", async () => {
+  Deno.env.set("BIRTHDAY_LINE_CRON_SECRET", SECRET);
+  const { db, recorded } = makeDb([[row()]], { lineFeature: () => "error" });
+  const fetchImpl = makeFetch(recorded, () => new Response("{}", { status: 200 }));
+  const res = await handleRequest(cronRequest(SECRET), { db, fetchImpl });
+  assertEquals(await res.json(), { claimed: 1, sent: 0, failed: 1 });
+  assertEquals(recorded.lineCalls.length, 0);
+  assertEquals(recorded.logs.length, 0);
+  assertEquals(recorded.marks[0], ["g-1", "failed", BIRTHDAY_FEATURE_CHECK_FAILED_ERROR, null]);
 });

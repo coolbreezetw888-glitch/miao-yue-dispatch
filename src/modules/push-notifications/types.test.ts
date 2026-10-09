@@ -2,7 +2,7 @@
 // 對應規格書 §4.4 第 3 點(小字要誠實寫出量有多大)、§4.5(前一天提醒只給服務人員)、
 // §5.3(跳過原因的白話說明「CHECK 清單與 label 清單一致」)。
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -59,15 +59,20 @@ describe("§4.4 第 3 點:管理員/客服的小字要誠實寫出「量有多�
 describe("§5.3:跳過原因的 CHECK 清單與 label 清單必須一致", () => {
   // 直接讀 migration 檔案取出資料庫真正允許的 skip_reason 值,不是抄一份常數在測試裡 ——
   // 抄一份的話,之後有人只改資料庫、沒改文案,這條測試照樣綠燈,等於沒守住。
+  // SPECS-INDEX #1025 FG2:這個 CHECK 之後的 migration 會重新定義(加 feature_disabled)⇒ 讀「最後一個」
+  // 定義它的 migration 檔(檔名依時間排序),才是資料庫現在真正的允許值。
   function readSkipReasonsFromMigration(): string[] {
-    const file = path.resolve(
-      __dirname,
-      "../../../supabase/migrations/20260925010000_push_multi_role_schema.sql",
-    );
-    const sql = readFileSync(file, "utf8");
-    const match = sql.match(
-      /add constraint push_notification_log_skip_reason_check[\s\S]*?in \(([\s\S]*?)\)/,
-    );
+    const dir = path.resolve(__dirname, "../../../supabase/migrations");
+    const pattern =
+      /add constraint push_notification_log_skip_reason_check[\s\S]*?in \(([\s\S]*?)\)/;
+    const files = readdirSync(dir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .filter((f) => pattern.test(readFileSync(path.join(dir, f), "utf8")));
+    const latest = files[files.length - 1];
+    if (!latest) throw new Error("找不到定義 push_notification_log_skip_reason_check 的 migration");
+    const sql = readFileSync(path.join(dir, latest), "utf8");
+    const match = sql.match(pattern);
     const inner = match?.[1];
     if (!inner) throw new Error("找不到 push_notification_log_skip_reason_check 的 CHECK 定義");
     return [...inner.matchAll(/'([a-z_]+)'/g)].map((m) => m[1] as string);

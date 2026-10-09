@@ -12,12 +12,18 @@
 //   ④ (FG-3)關掉「服務人員登入端」⇒ 服務人員登入只看到一句話 + 登出、其他網址導回 /app;
 //      管理員的服務人員管理看不到邀請登入 / 服務人員權限;打開 ⇒ 恢復
 //   ⑤ (FG-3)只關「服務人員查看自己的抽成薪資」⇒ 薪資報表分頁籤不見、網址導回 /app;其他照常
+//   ⑥ (FG-2)關掉「手機推播通知」⇒ 推播設定卡、推播發送記錄卡、我的推播通知卡都看不到;直接打網址回到功能頁;
+//      重新打開 ⇒ 發送記錄還在
+//   ⑦ (FG-2)關掉「LINE 通知」⇒ LINE 通知設定 / 發送記錄 / 再行銷卡與我的 LINE 綁定都看不到、網址導回功能頁;
+//      「LINE 串接設定」照常進得去,但只剩「LINE 登入」設定卡(主腦裁決 1);
+//      商家詳情卡的「再行銷通知」變灰(主功能關閉中)、值保留;打開 ⇒ 恢復
 //   (第三輪 ③:商家詳情卡改成先切開關、按「儲存」⇒ 確認小卡窗 + 備註 ⇒ 才生效)
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { injectSession } from "./support/c1-public-booking-fixture";
 import {
   readGrant,
+  serviceClient,
   setupReq1025Fixture,
   teardownReq1025Fixture,
   type Req1025Fixture,
@@ -265,6 +271,10 @@ test("③ 功能開關頁:新開商家預設 + 已開好的商家統計 + 全部
     "staff_order_editing",
     "staff_self_availability",
     "staff_self_payroll",
+    // FG-2
+    "line_notifications",
+    "line_marketing",
+    "push_notifications",
   ]) {
     await expect(platform.getByTestId(`feature-preset-row-${key}`)).toBeVisible({
       timeout: LOAD_TIMEOUT,
@@ -286,6 +296,10 @@ test("③ 功能開關頁:新開商家預設 + 已開好的商家統計 + 全部
     .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
   expect(rowIds.indexOf("feature-preset-row-staff_order_editing")).toBe(
     rowIds.indexOf("feature-preset-row-staff_portal") + 1,
+  );
+  // FG-2:再行銷通知縮排在 LINE 通知底下(緊接在後)。
+  expect(rowIds.indexOf("feature-preset-row-line_marketing")).toBe(
+    rowIds.indexOf("feature-preset-row-line_notifications") + 1,
   );
   await expect(platform.getByRole("button", { name: /^(新增|刪除)/ })).toHaveCount(0);
   await expect(platform.locator("body")).not.toContainText(/產業預設功能組合|方案|價格|加購/);
@@ -383,4 +397,107 @@ test("⑤ 只關「服務人員查看自己的抽成薪資」⇒ 薪資報表分
   await expect(staff.getByRole("link", { name: "薪資報表" })).toBeVisible({
     timeout: LOAD_TIMEOUT,
   });
+});
+
+test("⑥ 關掉「手機推播通知」⇒ 推播卡片與我的推播通知都看不到、網址導回功能頁;打開 ⇒ 發送記錄還在", async ({
+  browser,
+}) => {
+  // 先放一筆這間店的推播發送記錄(關掉功能時資料要保留,重新打開看得到)。
+  const svc = serviceClient();
+  const title = "E2E推播紀錄1025";
+  const ins = await svc.from("push_notification_log").insert({
+    merchant_id: fixture.merchantId,
+    event_type: "booking_created",
+    status: "skipped",
+    skip_reason: "no_recipient",
+    device_count: 0,
+    success_count: 0,
+    rendered_title: title,
+  });
+  expect(ins.error).toBeNull();
+
+  const admin = await openAs(browser, "admin");
+  await openManageAndWait(admin, "推播發送記錄");
+  await expect(admin.getByText("推播通知設定", { exact: true })).toBeVisible();
+  await expect(admin.getByText(/手機推播通知\(以/)).toBeVisible();
+
+  const platform = await openAs(browser, "platform");
+  await platformTurnOff(platform, "push_notifications", "先藏推播", "22_push_save_dialog");
+
+  await openManageAndWait(admin, "報表匯出中心");
+  await expect(admin.getByText("推播通知設定", { exact: true })).toHaveCount(0);
+  await expect(admin.getByText("推播發送記錄", { exact: true })).toHaveCount(0);
+  await expect(admin.getByText(/手機推播通知\(以/)).toHaveCount(0);
+  // LINE 不受影響
+  await expect(admin.getByText("LINE 通知設定", { exact: true })).toBeVisible();
+  for (const path of ["/app/push-events", "/app/push-logs"]) {
+    await admin.goto(path);
+    await expect(admin).toHaveURL(/\/app\/manage$/, { timeout: LOAD_TIMEOUT });
+  }
+  await expect(admin.locator("body")).not.toContainText(/尚未開通|方案|價格|加購/);
+
+  await platformTurnOn(platform, "push_notifications");
+  await openManageAndWait(admin, "推播發送記錄");
+  await admin.goto("/app/push-logs");
+  await expect(admin).toHaveURL(/\/app\/push-logs$/);
+  await expect(admin.getByTestId("push-log-group").filter({ hasText: title })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+});
+
+test("⑦ 關掉「LINE 通知」⇒ 通知相關卡片與我的 LINE 綁定都看不到、網址導回功能頁;LINE 串接設定只剩 LINE 登入;再行銷變灰值保留;打開 ⇒ 恢復", async ({
+  browser,
+}) => {
+  const admin = await openAs(browser, "admin");
+  await openManageAndWait(admin, "LINE 發送記錄");
+  await expect(admin.getByText("再行銷通知", { exact: true })).toBeVisible();
+  await expect(admin.getByText("我的 LINE 綁定", { exact: true })).toBeVisible();
+
+  const platform = await openAs(browser, "platform");
+  await platformTurnOff(platform, "line_notifications", "先藏 LINE");
+  // 細部功能「再行銷通知」:開關變灰不能切,值保留(還是開)。
+  const marketing = platform.getByTestId("merchant-feature-switch-line_marketing");
+  await expect(marketing).toBeDisabled();
+  expect(await readGrant(fixture, "line_marketing")).toBe(true);
+  await platform.getByTestId("merchant-feature-grants-card").scrollIntoViewIfNeeded();
+  await shotBoth(platform, "11_merchant_detail_card_line_off");
+
+  await openManageAndWait(admin, "報表匯出中心");
+  for (const label of ["LINE 通知設定", "LINE 發送記錄", "再行銷通知", "我的 LINE 綁定"]) {
+    await expect(admin.getByText(label, { exact: true })).toHaveCount(0);
+  }
+  // 「LINE 串接設定」卡照常,說明改成講 LINE 登入(店家找得到 LINE 登入設定)。
+  await expect(admin.getByText("LINE 串接設定", { exact: true })).toBeVisible();
+  await expect(admin.getByText("設定客人用 LINE 登入會員中心", { exact: true })).toBeVisible();
+  await expect(admin.locator("body")).not.toContainText(/尚未開通|方案|價格|加購/);
+  // 推播不受影響
+  await expect(admin.getByText("推播通知設定", { exact: true })).toBeVisible();
+  // 頁面進得去,只剩 LINE 登入設定卡;Messaging API 憑證、連線狀態都看不到。
+  await admin.goto("/app/line-settings");
+  await expect(admin.getByTestId("line-settings-login-only")).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await expect(admin.getByTestId("line-login-settings-card")).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await expect(admin.getByText("目前連線狀態", { exact: true })).toHaveCount(0);
+  await expect(admin.locator("#line-channel-token")).toHaveCount(0);
+  await expect(admin).toHaveURL(/\/app\/line-settings$/);
+  await shotBoth(admin, "12_line_settings_login_only");
+  for (const path of ["/app/line-events", "/app/line-logs", "/app/line-marketing"]) {
+    await admin.goto(path);
+    await expect(admin).toHaveURL(/\/app\/manage$/, { timeout: LOAD_TIMEOUT });
+  }
+
+  await platformTurnOn(platform, "line_notifications");
+  await expect(platform.getByTestId("merchant-feature-switch-line_marketing")).toBeEnabled();
+  await openManageAndWait(admin, "LINE 發送記錄");
+  await expect(admin.getByText("再行銷通知", { exact: true })).toBeVisible();
+  await admin.goto("/app/line-marketing");
+  await expect(admin).toHaveURL(/\/app\/line-marketing$/, { timeout: LOAD_TIMEOUT });
+  await admin.goto("/app/line-settings");
+  await expect(admin.getByText("目前連線狀態", { exact: true })).toBeVisible({
+    timeout: LOAD_TIMEOUT,
+  });
+  await expect(admin.getByTestId("line-settings-login-only")).toHaveCount(0);
 });

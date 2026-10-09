@@ -53,6 +53,8 @@ interface Recorded {
   logRows: Record<string, unknown>[];
   deletedSubscriptionIds: string[];
   sentPayloads: { endpoint: string; payload: Record<string, unknown> }[];
+  /** service role client 上發生的每一次 rpc。 */
+  adminRpcCalls: [string, Record<string, unknown>][];
 }
 
 interface FakeOptions {
@@ -61,6 +63,8 @@ interface FakeOptions {
   recentTestCount?: number;
   subscriptions?: SubscriptionRow[];
   sendResults?: { ok: boolean; status: number; errorDetail: string | null }[];
+  /** SPECS-INDEX #1025 FG2-F01:internal_merchant_has_feature 回什麼(預設 true);"error" = 查詢失敗。 */
+  pushFeature?: boolean | "error";
 }
 
 function makeDeps(options: FakeOptions = {}): { deps: HandleRequestDeps; recorded: Recorded } {
@@ -72,6 +76,7 @@ function makeDeps(options: FakeOptions = {}): { deps: HandleRequestDeps; recorde
     logRows: [],
     deletedSubscriptionIds: [],
     sentPayloads: [],
+    adminRpcCalls: [],
   };
 
   const identity =
@@ -117,7 +122,17 @@ function makeDeps(options: FakeOptions = {}): { deps: HandleRequestDeps; recorde
   };
 
   // service role client:§6.2 第 2 點,只用來寫 log / 刪除失效裝置,**絕不用來查要發給誰**。
+  // SPECS-INDEX #1025 FG2-F01:另外用來檢查平台功能開關(internal_merchant_has_feature)。
   const adminClient = {
+    rpc(fn: string, args: Record<string, unknown>) {
+      recorded.adminRpcCalls.push([fn, args]);
+      if (fn === "internal_merchant_has_feature") {
+        const v = options.pushFeature ?? true;
+        if (v === "error") return Promise.resolve({ data: null, error: { message: "boom" } });
+        return Promise.resolve({ data: v, error: null });
+      }
+      return Promise.resolve({ data: null, error: { message: `未預期的 rpc: ${fn}` } });
+    },
     from(table: string) {
       recorded.adminTables.push(table);
       return {
@@ -375,4 +390,36 @@ Deno.test("push-send-test:多台裝置各自一個 ack_token、各自一列 log"
   assertEquals(recorded.logRows.length, 2);
   assertEquals(recorded.logRows[0]["ack_subscription_id"], "sub-1");
   assertEquals(recorded.logRows[1]["ack_subscription_id"], "sub-2");
+});
+
+// =========================================================================
+// SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」沒開 ⇒ 測試推播也擋(這支自己檢查,X7)。
+// =========================================================================
+Deno.test("push-send-test(FG2):平台沒開手機推播 → 403「這個功能目前沒有開放。」、不發送、不寫 log", async () => {
+  setEnv();
+  const { deps, recorded } = makeDeps({ pushFeature: false });
+  const res = await handleRequest(postRequest({ merchant_id: "m1" }), deps);
+  assertEquals(res.status, 403);
+  assertEquals(((await res.json()) as { error: string }).error, "這個功能目前沒有開放。");
+  assertEquals(recorded.sentPayloads.length, 0);
+  assertEquals(recorded.logRows.length, 0);
+  assertEquals(recorded.adminRpcCalls, [
+    ["internal_merchant_has_feature", { p_merchant_id: "m1", p_feature_key: "push_notifications" }],
+  ]);
+});
+
+Deno.test("push-send-test(FG2):查詢功能開關失敗 → 500、不發送(fail closed)", async () => {
+  setEnv();
+  const { deps, recorded } = makeDeps({ pushFeature: "error" });
+  const res = await handleRequest(postRequest({ merchant_id: "m1" }), deps);
+  assertEquals(res.status, 500);
+  assertEquals(recorded.sentPayloads.length, 0);
+});
+
+Deno.test("push-send-test(FG2):不是這間店的成員 → 照舊 403「不是成員」,不先問功能開關", async () => {
+  setEnv();
+  const { deps, recorded } = makeDeps({ identity: null, pushFeature: false });
+  const res = await handleRequest(postRequest({ merchant_id: "m1" }), deps);
+  assertEquals(res.status, 403);
+  assertEquals(recorded.adminRpcCalls.length, 0);
 });

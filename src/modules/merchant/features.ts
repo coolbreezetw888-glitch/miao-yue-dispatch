@@ -26,6 +26,10 @@ export const MERCHANT_FEATURE_KEYS = {
   staffOrderEditing: "staff_order_editing",
   staffSelfAvailability: "staff_self_availability",
   staffSelfPayroll: "staff_self_payroll",
+  // SPECS-INDEX #1025 FG-2:LINE 通知(主功能)、再行銷通知(LINE 通知底下的細部功能)、手機推播通知。
+  lineNotifications: "line_notifications",
+  lineMarketing: "line_marketing",
+  pushNotifications: "push_notifications",
 } as const;
 
 export type MerchantFeatureKey = (typeof MERCHANT_FEATURE_KEYS)[keyof typeof MERCHANT_FEATURE_KEYS];

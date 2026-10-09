@@ -98,6 +98,7 @@ function makeFakeDeps(overrides: Partial<PushDispatchDeps> = {}): {
   };
 
   const defaultDeps: PushDispatchDeps = {
+    isPushFeatureEnabled: async () => true,
     getEventSetting: async () => defaultSetting,
     getBookingStaffId: async () => "staff-1",
     resolveRecipients: async (_m, _e, bookingStaffId) =>
@@ -1153,4 +1154,74 @@ Deno.test("#823:管理員同時也在收件人裡時,管理員不會被重複算
   const adminPayload = sentPayloads.find((x) => x.endpoint === "e-admin")!.payload;
   assertEquals(adminPayload.body, NORMAL_BODY);
   assertEquals(adminPayload.title, "涼風工匠·訂單內容異動");
+});
+
+// =========================================================================
+// SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」。
+// =========================================================================
+Deno.test("dispatchPushForBooking(FG2,主腦裁決 2):平台沒開手機推播 → 照常解析收件人、照常寫鈴鐺;不查裝置、不送推播,寫一列 feature_disabled", async () => {
+  let subsQueried = 0;
+  const { deps, logs, sentPayloads, inAppNotifications } = makeFakeDeps({
+    isPushFeatureEnabled: async () => false,
+    getSubscriptionsForUsers: async () => {
+      subsQueried += 1;
+      return new Map();
+    },
+  });
+  const result = await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+  assertEquals(result, { dispatched: false, reason: "feature_disabled", recipientCount: 1 });
+  assertEquals(sentPayloads.length, 0);
+  assertEquals(subsQueried, 0);
+  // 站內鈴鐺照寫(鈴鐺不是推播)。
+  assertEquals(inAppNotifications.length, 1);
+  assertEquals(inAppNotifications[0].target_id, "staff-1");
+  assertEquals(logs.length, 1);
+  assertEquals(logs[0].status, "skipped");
+  assertEquals(logs[0].skip_reason, "feature_disabled");
+  assertEquals(logs[0].target_type, null);
+});
+
+Deno.test("dispatchPushForBooking(FG2):查詢功能開關失敗 → 不送推播(fail closed)、鈴鐺照寫、不寫推播紀錄", async () => {
+  const { deps, logs, sentPayloads, inAppNotifications } = makeFakeDeps({
+    isPushFeatureEnabled: async () => "error",
+  });
+  const result = await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+  assertEquals(result, { dispatched: false, reason: "feature_check_failed", recipientCount: 1 });
+  assertEquals(sentPayloads.length, 0);
+  assertEquals(inAppNotifications.length, 1);
+  assertEquals(logs.length, 0);
+});
+
+Deno.test("dispatchPushForBooking(FG2):平台沒開手機推播 + 商家事件開關也關 → 照舊只寫 event_disabled(沒有收件人,也沒有鈴鐺)", async () => {
+  const { deps, logs, inAppNotifications } = makeFakeDeps({
+    isPushFeatureEnabled: async () => false,
+    getEventSetting: async () => ({ enabled: false, message_title: "x", message_body: "y" }),
+  });
+  const result = await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+  assertEquals(result, { dispatched: false, reason: "event_disabled" });
+  assertEquals(inAppNotifications.length, 0);
+  assertEquals(logs.map((l) => l.skip_reason), ["event_disabled"]);
+});
+
+Deno.test("dispatchPushForBooking(FG2):平台開著 → 行為跟改前一樣(照常發送)", async () => {
+  const { deps, sentPayloads } = makeFakeDeps({ isPushFeatureEnabled: async () => true });
+  const result = await dispatchPushForBooking(deps, {
+    merchantId: "m1",
+    bookingId: "b1",
+    eventType: "booking_created",
+  });
+  assertEquals(result.dispatched, true);
+  assertEquals(sentPayloads.length, 1);
 });

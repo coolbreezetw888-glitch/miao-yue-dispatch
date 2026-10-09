@@ -47,6 +47,7 @@ import {
   isStaffPathLineEventAllowed,
   STAFF_PATH_LINE_EVENT_BLOCKED_MESSAGE,
 } from "../_shared/staffBookingDispatch.ts";
+import { checkMerchantFeature, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
 
 // #972:環境變數改在 handleRequest 執行當下才讀(理由同 push-notify-dispatch:模組頂層讀成常數,
 // Deno 測試在 import 之前 set 的值會讀不到)。
@@ -321,6 +322,18 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return ownership.reason === "not_found"
       ? jsonResponse({ error: NOTIFY_SUBJECT_NOT_FOUND_MESSAGE }, 404)
       : jsonResponse({ error: NOTIFY_SUBJECT_LOOKUP_FAILED_MESSAGE }, 500);
+  }
+
+  // SPECS-INDEX #1025 FG2-F01:平台沒開「LINE 通知」⇒ 不發、不寫任何記錄(跟 not_configured 一樣安靜結束)。
+  // 資料庫 resolve_line_notification_targets 也會回空清單(兩層都擋);這裡用 service role 自己再檢查一次(X7)。
+  // 查詢失敗 ⇒ 500,不發送(fail closed)。
+  const lineFeature = await checkMerchantFeature(adminClient, merchantId, FEATURE_LINE_NOTIFICATIONS);
+  if (lineFeature === "error") {
+    console.error("[line-notify-dispatch] internal_merchant_has_feature 呼叫失敗");
+    return jsonResponse({ error: "檢查功能開關時發生錯誤" }, 500);
+  }
+  if (!lineFeature) {
+    return jsonResponse({ dispatched: false, reason: "feature_disabled" }, 200);
   }
 
   // 步驟 2:共用邏輯,跟 3.10 preview_line_notification_targets 判斷「要不要發」完全一致。

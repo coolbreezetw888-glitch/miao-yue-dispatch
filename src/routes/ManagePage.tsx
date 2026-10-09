@@ -599,6 +599,11 @@ export default function ManagePage() {
   const reportExportFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.reportExport) === true;
   // 「客戶線上預約」沒開通 ⇒ 下面的「預約網址」卡也不顯示(off_impact:商家後台看不到預約網址)。
   const onlineBookingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.onlineBooking) === true;
+  // SPECS-INDEX #1025 FG2-U01:LINE 通知、再行銷通知(LINE 通知的細部功能;effective 已含「主功能關 ⇒ 關」)、
+  // 手機推播通知。沒開通 ⇒ 相關卡片(含發送記錄)與個人「我的 LINE 綁定」「我的推播通知」卡整個不顯示。
+  const lineNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === true;
+  const lineMarketingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.lineMarketing) === true;
+  const pushNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.pushNotifications) === true;
   // 模組 10(會員與紅利)§10.5(#617):member-points 卡片沿用跟「會員管理」相同的 members
   // section_key——點數餘額檢視/兌換/手動調整這些操作性質上跟既有會員管理權限邊界一致,不新增
   // 權限項目(規格書「涉及元件」一節明講由 engineer 決定歸在 members 還是 member_settings,
@@ -753,7 +758,12 @@ export default function ManagePage() {
       key: "line-settings",
       to: "/app/line-settings",
       label: "LINE 串接設定",
-      description: "串接商家自己的 LINE 官方帳號憑證、測試連線",
+      // SPECS-INDEX #1025 FG-2(主腦裁決 1):LINE 通知沒開時這張卡照常顯示(頁面只剩 LINE 登入設定),
+      // 說明改成講 LINE 登入,讓店家找得到。讀取中先用原本的說明。
+      description:
+        hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === false
+          ? "設定客人用 LINE 登入會員中心"
+          : "串接商家自己的 LINE 官方帳號憑證、測試連線",
       icon: MessageCircle,
       visible: isAdmin,
     },
@@ -763,7 +773,7 @@ export default function ManagePage() {
       label: "LINE 通知設定",
       description: "設定每類事件要不要通知、通知誰、文案內容",
       icon: Bell,
-      visible: showLineNotificationCards,
+      visible: showLineNotificationCards && lineNotificationsFeatureOn,
     },
     {
       key: "line-logs",
@@ -771,7 +781,7 @@ export default function ManagePage() {
       label: "LINE 發送記錄",
       description: "查看每一次 LINE 通知的成功/失敗/跳過記錄",
       icon: History,
-      visible: showLineNotificationCards,
+      visible: showLineNotificationCards && lineNotificationsFeatureOn,
     },
     {
       key: "line-marketing",
@@ -779,7 +789,7 @@ export default function ManagePage() {
       label: "再行銷通知",
       description: "手動挑選已綁定會員名單，發送一次性自訂訊息",
       icon: Megaphone,
-      visible: showLineMarketingCard,
+      visible: showLineMarketingCard && lineMarketingFeatureOn,
     },
     {
       key: "push-events",
@@ -787,7 +797,7 @@ export default function ManagePage() {
       label: "推播通知設定",
       description: "設定服務人員手機/瀏覽器推播要不要開、文案內容",
       icon: Smartphone,
-      visible: showPushNotificationCard,
+      visible: showPushNotificationCard && pushNotificationsFeatureOn,
     },
     {
       // SPECS-INDEX #778:推播發送記錄頁。權限鑰匙跟「推播通知設定」同一把(push_notification),
@@ -797,7 +807,7 @@ export default function ManagePage() {
       label: "推播發送記錄",
       description: "查看每一次手機推播有沒有發成功；沒發成功的會用白話說明原因和該怎麼處理",
       icon: History,
-      visible: showPushNotificationCard,
+      visible: showPushNotificationCard && pushNotificationsFeatureOn,
     },
     {
       key: "data-import",
@@ -940,12 +950,12 @@ export default function ManagePage() {
       {/* 模組 11(LINE 通知)§4.5:「我的 LINE 綁定」個人設定區塊,商家管理員/客服都會經過這個
           頁面,不需要另外找個人設定選單掛載點。元件本身依角色判斷是否顯示,非管理員/客服(理論上
           不會發生)或還沒有選定商家時回傳 null。2026-09-23:使用者要求移到頁面最下方。 */}
-      <MyLineBindingCard />
+      {lineNotificationsFeatureOn ? <MyLineBindingCard /> : null}
 
       {/* 模組 15 擴充 §7.2:管理員/客服的「手機推播通知」卡片,刻意緊接在 LINE 綁定卡片
           後面 —— 服務人員端 HomePage 的順序也是「LINE 綁定 → 手機推播」,兩個頁面一致。
           元件本身依角色判斷是否顯示(不是 admin/agent 時回傳 null)。 */}
-      <MyPushSubscriptionCard />
+      {pushNotificationsFeatureOn ? <MyPushSubscriptionCard /> : null}
     </div>
   );
 }

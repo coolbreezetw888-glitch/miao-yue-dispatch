@@ -420,6 +420,10 @@ export function StaffFormDialog({
   // SPECS-INDEX #1025 FG3-U02:服務人員登入端 / 新增編輯訂單(細部功能)。讀取中當作沒開(先不顯示)。
   const staffPortalFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.staffPortal) === true;
   const staffOrderEditingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.staffOrderEditing) === true;
+  // SPECS-INDEX #1025 FG2-U01(QA M1):平台沒開 LINE 通知 / 手機推播通知 ⇒ 編輯畫面的「LINE 綁定」「推播裝置」
+  // 區塊整個不顯示(F3=A;綁定與裝置資料保留)。讀取中 / 讀取失敗也先不顯示。
+  const lineNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === true;
+  const pushNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.pushNotifications) === true;
   const fieldFeatures = {
     onlineBooking: onlineBookingFeatureOn,
     staffPortal: staffPortalFeatureOn,
@@ -966,9 +970,13 @@ export function StaffFormDialog({
 
           {/* 模組 11(LINE 通知)§4.6:服務人員詳情/編輯頁疊加「LINE 綁定」區塊,只有編輯既有
               服務人員(已經有 staff.id)時才顯示,新增流程還沒有 id 可以綁定。 */}
-          {isEdit && staff ? <StaffLineBindingSection staffId={staff.id} /> : null}
+          {isEdit && staff && lineNotificationsFeatureOn ? (
+            <StaffLineBindingSection staffId={staff.id} />
+          ) : null}
           {/* 模組 15(服務人員推播通知)§7.5(選配):同樣只在編輯既有服務人員時顯示。 */}
-          {isEdit && staff ? <StaffPushSubscriptionSummary staffId={staff.id} /> : null}
+          {isEdit && staff && pushNotificationsFeatureOn ? (
+            <StaffPushSubscriptionSummary staffId={staff.id} />
+          ) : null}
         </form>
       </FullPageLayerContent>
     </FullPageLayer>

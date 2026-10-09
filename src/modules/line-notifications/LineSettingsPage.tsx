@@ -25,6 +25,8 @@ import { Eye, EyeOff } from "lucide-react";
 
 import {
   AlertNote,
+  ErrorState,
+  GuardLoading,
   CardAlertDialog,
   CardAlertDialogAction,
   CardAlertDialogCancel,
@@ -46,6 +48,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import { RequireMerchantAdmin } from "@/modules/staff-agent/RequireMerchantAdmin";
 
 import {
@@ -85,7 +88,52 @@ function RevealToggle({
   );
 }
 
+/**
+ * SPECS-INDEX #1025 FG-2(主腦裁決 1):平台沒開「LINE 通知」時,這頁仍然進得來,但**只顯示「LINE 登入」設定卡**
+ * (客人用 LINE 登入會員中心不受影響,店家也可能只想用 LINE 登入)。
+ * 查證:LINE 登入用的是自己的 LINE Login channel(Channel ID / Secret 存在 LINE 登入設定,由 LineLoginSettingsCard
+ * 管理;customer-line-login 只讀那一組),**不需要** Messaging API 的憑證 ⇒ 官方帳號連線狀態、憑證表單、
+ * 加好友連結、解除串接這些通知用的內容全部藏起來(資料保留,重新打開功能後原樣出現)。
+ *   true      ⇒ 完整頁面(行為不變)
+ *   false     ⇒ 只有 LINE 登入設定卡
+ *   undefined ⇒ 讀取中只顯示骨架;讀取失敗顯示可重試的錯誤(不擅自顯示通知相關內容)
+ */
 function LineSettingsPageInner() {
+  const { merchant } = useCurrentMerchant();
+  const { hasFeature, isError, refetch } = useMerchantFeatures();
+  const lineNotifications = hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications);
+
+  if (lineNotifications === true) return <LineSettingsFullView />;
+  if (lineNotifications === false) {
+    return (
+      <main
+        className="mx-auto max-w-2xl space-y-6 px-5 py-12"
+        data-testid="line-settings-login-only"
+      >
+        <PageHeader
+          backTo="/app/manage"
+          title="LINE 串接設定"
+          description="設定客人用 LINE 登入會員中心。"
+        />
+        <LineLoginSettingsCard merchantId={merchant!.id} showNotificationHints={false} />
+      </main>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="mx-auto w-full max-w-2xl px-5 pt-10">
+        <ErrorState
+          title="讀不到這個頁面的設定"
+          reason="可能是網路不穩定，請稍後再試一次"
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
+  return <GuardLoading />;
+}
+
+function LineSettingsFullView() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
   const queryClient = useQueryClient();

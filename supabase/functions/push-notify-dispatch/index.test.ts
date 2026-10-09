@@ -190,6 +190,8 @@ function makeRecordingAdminClient() {
     }),
     rpc: (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
+      // SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」開著。
+      if (fn === "internal_merchant_has_feature") return Promise.resolve({ data: true, error: null });
       if (fn === "resolve_push_recipients") return Promise.resolve({ data: [], error: null });
       if (fn === "is_staff_push_event_disabled")
         return Promise.resolve({ data: false, error: null });
@@ -342,6 +344,8 @@ function makeOwnershipAwareAdminClient() {
     }),
     rpc: (fn: string) => {
       rpcCalls.push(fn);
+      // SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」開著。
+      if (fn === "internal_merchant_has_feature") return Promise.resolve({ data: true, error: null });
       if (fn === "resolve_push_recipients") return Promise.resolve({ data: [], error: null });
       return Promise.resolve({ data: {}, error: null });
     },
@@ -427,6 +431,8 @@ Deno.test(
         ...adminClient,
         rpc: (fn: string, args: Record<string, unknown>) => {
           rpcArgs.push({ fn, args });
+          // SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」開著。
+          if (fn === "internal_merchant_has_feature") return Promise.resolve({ data: true, error: null });
           if (fn === "resolve_push_recipients") {
             return Promise.resolve({
               data: [
@@ -612,6 +618,8 @@ function makeBodyRecordingAdminClient(extraRecipients: Record<string, unknown>[]
     }),
     rpc: (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
+      // SPECS-INDEX #1025 FG2-F01:平台功能「手機推播通知」開著。
+      if (fn === "internal_merchant_has_feature") return Promise.resolve({ data: true, error: null });
       if (fn === "resolve_push_recipients") {
         return Promise.resolve({
           data: [

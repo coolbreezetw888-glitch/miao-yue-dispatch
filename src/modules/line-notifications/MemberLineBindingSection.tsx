@@ -58,6 +58,20 @@ function formatCountdown(msRemaining: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+/**
+ * SPECS-INDEX #1025 FG-2(QA M1):平台沒開「LINE 通知」時,會員詳情頁改掛 MemberLineLoginOnlySection ——
+ * 只留跟「客人 LINE 登入」有關的部分(客戶端登入那一行、LINE 聯絡人),通知用的綁定狀態、綁定碼、解除綁定都不顯示
+ * (資料保留;重新打開功能後原樣出現)。
+ */
+export function MemberLineLoginOnlySection({ memberId }: { memberId: string }) {
+  return (
+    <div className="flex flex-col gap-3" data-testid="member-line-login-only">
+      <MemberCustomerLoginRow memberId={memberId} />
+      <MemberContactsCard memberId={memberId} showNotificationInfo={false} />
+    </div>
+  );
+}
+
 export function MemberLineBindingSection({ memberId }: { memberId: string }) {
   const queryClient = useQueryClient();
   const { data: bindingStatus, isLoading } = useMemberLineBindingStatus(memberId);

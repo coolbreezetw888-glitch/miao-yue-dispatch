@@ -277,7 +277,9 @@ const FAKE_BOOKINGS: Record<string, string> = {
 const FAKE_LEAVES: Record<string, string> = { "leave-A": "staff-A", "leave-B": "staff-B" };
 const FAKE_STAFF: Record<string, string> = { "staff-A": "merchant-A", "staff-B": "merchant-B" };
 
-function makeFakeLineAdminClient(options: { failLookup?: boolean; resolveResult?: unknown } = {}) {
+function makeFakeLineAdminClient(
+  options: { failLookup?: boolean; resolveResult?: unknown; lineFeature?: boolean | "error" } = {},
+) {
   const rpcCalls: string[] = [];
   const inserts: { table: string; row: Record<string, unknown> }[] = [];
   const selects: { table: string; filters: Record<string, unknown> }[] = [];
@@ -340,6 +342,12 @@ function makeFakeLineAdminClient(options: { failLookup?: boolean; resolveResult?
     },
     rpc(fn: string, _args: Record<string, unknown>) {
       rpcCalls.push(fn);
+      // SPECS-INDEX #1025 FG2-F01:平台功能「LINE 通知」(預設開著)。
+      if (fn === "internal_merchant_has_feature") {
+        const v = options.lineFeature ?? true;
+        if (v === "error") return Promise.resolve({ data: null, error: { message: "boom" } });
+        return Promise.resolve({ data: v, error: null });
+      }
       if (fn === "resolve_line_notification_targets" && options.resolveResult !== undefined) {
         return Promise.resolve({ data: options.resolveResult, error: null });
       }
@@ -460,7 +468,7 @@ Deno.test(
       makeLineDeps(adminClient),
     );
     assertEquals(res.status, 200);
-    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+    assertEquals(rpcCalls, ["internal_merchant_has_feature", "resolve_line_notification_targets"]);
     assertEquals(inserts.length, 1);
     assertEquals(inserts[0].table, "line_notification_log");
     assertEquals(inserts[0].row.booking_id, "booking-A");
@@ -485,7 +493,7 @@ Deno.test(
       makeLineDeps(adminClient),
     );
     assertEquals(res.status, 200);
-    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+    assertEquals(rpcCalls, ["internal_merchant_has_feature", "resolve_line_notification_targets"]);
     assertEquals(inserts.length, 1);
     assertEquals(inserts[0].row.staff_leave_record_id, "leave-A");
     assertEquals(selects[1], {
@@ -595,7 +603,7 @@ Deno.test(
         },
       },
     ]);
-    assertEquals(rpcCalls, ["resolve_line_notification_targets"]);
+    assertEquals(rpcCalls, ["internal_merchant_has_feature", "resolve_line_notification_targets"]);
   },
 );
 
@@ -799,5 +807,31 @@ Deno.test("C5-K01:resolve 只有會員對象 ⇒ 完全不寫記錄、不發送"
     makeLineDeps(adminClient),
   );
   assertEquals(res.status, 200);
+  assertEquals(inserts, []);
+});
+
+// =========================================================================
+// SPECS-INDEX #1025 FG2-F01:平台功能「LINE 通知」沒開 ⇒ 這支自己檢查(X7),不解析收件人、不發、不寫記錄。
+// =========================================================================
+Deno.test("FG2:平台沒開 LINE 通知 → 200 feature_disabled,不解析收件人、不寫任何發送記錄", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient({ lineFeature: false });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { dispatched: false, reason: "feature_disabled" });
+  assertEquals(rpcCalls, ["internal_merchant_has_feature"]);
+  assertEquals(inserts, []);
+});
+
+Deno.test("FG2:查詢功能開關失敗 → 500,不解析收件人、不寫記錄(fail closed)", async () => {
+  const { adminClient, rpcCalls, inserts } = makeFakeLineAdminClient({ lineFeature: "error" });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_created" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 500);
+  assertEquals(rpcCalls, ["internal_merchant_has_feature"]);
   assertEquals(inserts, []);
 });

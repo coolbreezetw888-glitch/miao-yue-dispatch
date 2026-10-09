@@ -63,7 +63,17 @@ function StatusLine({ status }: { status: MerchantLineLoginStatus }) {
   return <StatusTag tone="success">已啟用</StatusTag>;
 }
 
-export function LineLoginSettingsCard({ merchantId }: { merchantId: string }) {
+/**
+ * showNotificationHints(預設 true,行為不變):SPECS-INDEX #1025 FG-2 —— 平台沒開「LINE 通知」時,商家端 LINE 串接設定頁
+ * 傳 false ⇒ 說明不提「之後也能收到 LINE 通知」、不顯示「沒連結官方帳號 ⇒ 收不到 LINE 通知」的提醒(不承諾目前做不到的事)。
+ */
+export function LineLoginSettingsCard({
+  merchantId,
+  showNotificationHints = true,
+}: {
+  merchantId: string;
+  showNotificationHints?: boolean;
+}) {
   const queryClient = useQueryClient();
   const { data: status, isLoading, isError, refetch } = useMerchantLineLoginStatus(merchantId);
 
@@ -165,7 +175,9 @@ export function LineLoginSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>LINE 登入</CardTitle>
         <CardDescription>
-          讓客人在線上預約頁用 LINE 登入，第一次登入會自動成為會員，之後也能收到 LINE 通知。
+          {showNotificationHints
+            ? "讓客人在線上預約頁用 LINE 登入，第一次登入會自動成為會員，之後也能收到 LINE 通知。"
+            : "讓客人在線上預約頁用 LINE 登入，第一次登入會自動成為會員。"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
@@ -197,7 +209,9 @@ export function LineLoginSettingsCard({ merchantId }: { merchantId: string }) {
                 還沒有人成功用 LINE 登入過，建議先用你自己的 LINE 測一次。
               </AlertNote>
             ) : null}
-            {status.configured && status.linkedOaStatus === "not_linked" ? (
+            {showNotificationHints &&
+            status.configured &&
+            status.linkedOaStatus === "not_linked" ? (
               <AlertNote data-testid="line-login-oa-not-linked">
                 {
                   "這個 LINE 登入沒有連結官方帳號，客人登入後收不到 LINE 通知。請到 LINE Developers 的 Basic settings → Linked LINE Official Account 連結。"
