@@ -46,3 +46,26 @@ description: 秒約「平台功能開關」(#1025)的規則與已知坑。要新
 - FG-2:LINE 通知、再行銷、手機推播(會碰 public-booking,等 #1048 收尾)。
 - FG-3:服務人員細部功能(等 F7~F9)。疊加規則:實際能用 = 平台主功能開 AND 平台細部開 AND 店家給這個人開。
 - F01 清單裡還有 10 支客人端函式有自己的停用檢查、沒接線上預約開關(customer_me_context、get_customer_session_state 等),之後評估。
+
+---
+
+## 批次開關 + 服務人員細部功能 + 按儲存才生效(2026-10-09,commit d3ffb25,migration 20261010200000/200100/200200,Edge invite-merchant-staff v10)
+
+### 使用者第三輪裁決(鐵律)
+1. **細項縮排列在大項下面**;大項打開時細項預設全開;大項關掉時細項變灰不能操作(值保留)。
+2. **所有平台開關都是「先調整、按儲存才生效」**(功能開關頁、商家詳情卡、全部開啟/關閉)。一次儲存在同一個交易內(`platform_save_feature_settings`、`platform_set_merchant_features`),任何一項不合法整筆不寫;未存離開用 `useLeaveGuard` 提醒(攔不到瀏覽器上一頁)。舊的單項 `platform_set_merchant_feature` 保留但畫面不用。
+3. 批次只寫有變動的店,紀錄 `is_bulk=true`,備註空白寫「批次調整」。統計用 `platform_feature_usage_summary`(細項跟著大項算關)。
+
+### 服務人員細部功能(FG-3)
+- 大項「服務人員登入端」;細項:新增編輯訂單、自己排休、看自己的抽成薪資(行事曆檢視與確認接單併入大項)。
+- **實際能用 = 平台大項 AND 細項 AND 店家給這個人**,集中在 `private.has_own_staff_permission`、`private.staff_order_self_ok`、`generate_own_staff_line_binding_code`;Edge `invite-merchant-staff` 用 service role 呼叫 `internal_merchant_has_feature` 自己檢查(關 → 403,查詢失敗 → 500)。
+- 登入端關:服務人員只看到「這間店目前沒有開放服務人員登入，請聯絡店家管理員。」+ 登出(頁首保留可切商家,不提秒約);底部分頁籤與鈴鐺不顯示;雙重身分停在後台。`resolve_push_recipients` 停發推播與站內鈴鐺給該店服務人員(管理員/客服不受影響)。即時同步發送端沒改(空訊號,收聽端已擋)。
+- 後台服務人員管理:登入端關時「邀請登入」「服務人員權限」、登入狀態/信箱、新增編輯訂單、顯示會員資料都藏起來,存檔原值送回;「商家後台確認後直接接單」照常顯示(F9)。
+- 未擋(只回本人顏色/營業時間設定,無客人資料):get_my_booking_status_colors、get_my_calendar_state_styles、get_my_day_business_hours、get_my_day_schedule_state、clear_staff_pending_login_email、頭像 storage 政策。
+
+### 指紋(上線後)
+has_own_staff_permission b30806e9、staff_order_self_ok 9aebab86、generate_own_staff_line_binding_code 27b39cde、resolve_push_recipients 5da04839。正式庫 merchant_feature_grants = 商家數 × 7。
+
+### 待做
+- FG-2:LINE 通知、再行銷、手機推播開關(等週額度重置)。
+- 小尾巴(體檢時處理):批次確認窗大項關閉缺「底下的細部功能也會一起停用。」;關閉畫面頁首標題仍是「個人資料」;req1025 e2e 沒監聽 console same key。
