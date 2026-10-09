@@ -111,3 +111,9 @@ description: 秒約客戶端(公開預約頁 /booking/<代碼>、未來的 LINE 
 ## 測試
 - pgTAP:`c1_public_booking_page.sql`(白名單、哨兵)、`c1_public_available_slots.sql`(B 區、等價、效能)、`c1_function_acl_hardening.sql`(權限)。
 - e2e-local:`c1-public-booking-page.spec.ts`(含攔截 `/rest/v1/rpc/` 原文搜哨兵)、`c1-merchant-online-booking-settings.spec.ts`;fixture `e2e-local/support/c1-public-booking-fixture.ts`。
+
+## 客戶端稱呼統一用「您」(2026-10-09,commit ed891d8,#1048,migration 20261010190000_req1048_customer_honorific)
+- **客人看得到的字一律用「您」**(預約頁、不登入預約、LINE 登入流程、完成頁、會員中心、聯絡人邀請、客人端錯誤訊息、LINE 通知客人預設範本、完成頁預設文字)。商家後台、服務人員端、超級管理員維持「你」。
+- 共用元件 `ErrorState` 在客戶端要帶 `honorific`(「您的資料沒有遺失。」);後台不帶。
+- 守門:`src/modules/public-booking/customerHonorific.test.ts`(public-booking 非測試檔去註解後不得有你/妳、LINE 預設與完成頁預設不得有你、{{merchant_phone}} 句子自己一行)。新增客戶端文字要過這支。
+- 改預設範本時:前端 `CUSTOMER_LINE_DEFAULT_TEMPLATES` 與 DB `private.customer_line_default_templates` 必須逐字一致(pgTAP req1048 鎖住);既有店家設定只更新「內容等於舊預設」的列。
