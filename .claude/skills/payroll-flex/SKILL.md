@@ -72,3 +72,25 @@ sync 5b85b194、as_of 4e155840、get_merchant_billing_summary_by_range 0cd65c0a�
 - 訂單詳情「沒有抽成紀錄」改成通用說法(`get_booking_commission_summary` 不能動,不回計酬類型)。
 - 服務人員報表版面看「目前」的計酬方式;改制後回看過去月份看不到工資明細(合計有算)。
 - staff_payroll_status_history 沒有 merchant_id 索引(體檢時加)。
+
+---
+
+## C 批「自由公式」(2026-10-09,commit c52236d,migration `20261010180000_req1035c_bonus_formula`)
+
+### 🔴 公式安全鐵律(改公式引擎前必讀)
+1. **永遠不准用 EXECUTE / format() / 任何動態 SQL** 處理公式。流程固定:`bonus_formula_compile` 逐字白名單切記號 → 遞迴解析成 jsonb 語法樹 → `bonus_formula_eval` 遞迴求值。服務名稱只當查詢參數、限本店,存檔時換成服務 id。
+2. 存檔一律以 text 在伺服器重新編譯,**忽略前端送來的 ast**。前端不做任何求值(沒有 eval / new Function / 自己的解析器),檢查與試算都打 `preview_bonus_formula`。
+3. 上限:300 字、150 記號、函式巢狀 8、數量/業績 合計 10 次、每方案 5 條;計算器再整棵檢查(節點深度 200、節點數 300、欄位與運算子白名單),不符丟 BFE02「獎金公式的資料不正確，請重新儲存這個獎金方案。」。
+4. 編譯錯誤用 BFC01 回 `{ok:false, message:"第 N 個字附近：…", position}`,不吞錯、不露 PostgreSQL 內部訊息。看不見的字元(零寬、方向控制、特殊空白)訊息只寫 `U+XXXX`,不放原字元。
+5. 除以 0 → 那次除法 = 0 + division_by_zero 旗標;中間值 > 1e12 → 整條 0 + overflow;< 0 → 0 + negative_clamped;> 100 萬封頂 + capped。IF 只算選到的那邊。
+6. 服務人員看報表不含公式原文/ast;名稱空白時預設「自訂公式」。
+7. 白名單:欄位「完成單數、完成數量、業績、月薪、請假天數」;函式 IF(3 參數)、MIN/MAX(2~10)、數量("服務")、業績("服務");接受全形數字/字母/運算子/彎引號;不接受 AND/OR/NOT、`%`、`^`、`.5`、千分位(`MAX(1,000)` 判千分位報錯,提示逗號後加空白)。
+
+### 指紋
+bonus_validate_rules 044a3807、bonus_compute_rules bcbc87c0、bonus_formula_compile 7c32ea83、bonus_formula_eval 5f44d9a7、preview_bonus_formula 0d51db59。
+
+### C 批已知限制
+- 公式用到的服務改名後計算照常(存 id),但下次開編輯器原文舊名會被判「找不到」,要改新名才能再存。
+- 極端報表(一年 × 50 位 × 5 條滿額公式)約 6 秒,接近一般查詢逾時;體檢可考慮限制每方案節點總數。
+- 組合字元(U+0300~U+036F)錯誤訊息仍會放原字元(只是顯示,體檢時一起處理)。
+- 服務名稱含引號的服務無法用公式指定(前端提示先改名)。
