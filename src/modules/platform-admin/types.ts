@@ -85,6 +85,21 @@ export interface PlatformFeatureRow {
   default_enabled: boolean;
 }
 
+/** SPECS-INDEX #1025 FG1-F06(⚠️5):每個功能目前幾間商家開、幾間關(platform_feature_usage_summary)。 */
+export interface FeatureUsageRow {
+  feature_key: string;
+  enabled_count: number;
+  disabled_count: number;
+}
+
+/** SPECS-INDEX #1025 第三輪 ③:platform_save_feature_settings 的回傳。 */
+export interface FeatureSettingsSaveResult {
+  /** 新開商家預設實際改了幾格。 */
+  presets_changed: number;
+  /** 每個做了「全部商家開／關」的功能,實際改變了幾間商家。 */
+  merchants_changed: Record<string, number>;
+}
+
 /** SPECS-INDEX #1025 FG1-U05(⚠️1):功能開關變更紀錄的一列(platform_list_merchant_feature_logs)。 */
 export interface MerchantFeatureLogRow {
   created_at: string;

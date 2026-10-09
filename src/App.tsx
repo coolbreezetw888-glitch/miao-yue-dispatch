@@ -102,11 +102,44 @@ export default function App() {
           <Route path="/app/calendar" element={<CalendarPage />} />
           <Route path="/app/orders" element={<OrdersPage />} />
           <Route path="/app/staff" element={<StaffListPage />} />
-          <Route path="/app/staff/:staffId/permissions" element={<StaffPermissionsPage />} />
+          {/* SPECS-INDEX #1025 FG3-U02:平台沒開「服務人員登入端」⇒ 服務人員權限頁整個看不到,導回服務人員名單。 */}
+          <Route
+            path="/app/staff/:staffId/permissions"
+            element={
+              <RequireMerchantFeature
+                featureKey={MERCHANT_FEATURE_KEYS.staffPortal}
+                redirectTo="/app/staff"
+              >
+                <StaffPermissionsPage />
+              </RequireMerchantFeature>
+            }
+          />
           <Route path="/app/agents" element={<AgentListPage />} />
           <Route path="/app/agents/:agentId/permissions" element={<AgentPermissionsPage />} />
-          <Route path="/app/my-availability" element={<MyAvailabilityPage />} />
-          <Route path="/app/my-payroll" element={<MyPayrollPage />} />
+          {/* SPECS-INDEX #1025 FG3-U01:平台沒開「服務人員自己排休」/「服務人員查看自己的抽成薪資」⇒ 導回 /app。
+              (登入端整個關掉時由 AppLayout 處理:只顯示一句話 + 登出。) */}
+          <Route
+            path="/app/my-availability"
+            element={
+              <RequireMerchantFeature
+                featureKey={MERCHANT_FEATURE_KEYS.staffSelfAvailability}
+                redirectTo="/app"
+              >
+                <MyAvailabilityPage />
+              </RequireMerchantFeature>
+            }
+          />
+          <Route
+            path="/app/my-payroll"
+            element={
+              <RequireMerchantFeature
+                featureKey={MERCHANT_FEATURE_KEYS.staffSelfPayroll}
+                redirectTo="/app"
+              >
+                <MyPayrollPage />
+              </RequireMerchantFeature>
+            }
+          />
           <Route path="/app/service-items" element={<ServiceItemsPage />} />
           <Route path="/app/business-hours" element={<BusinessHoursPage />} />
           <Route path="/app/material-costs" element={<MaterialCostsPage />} />

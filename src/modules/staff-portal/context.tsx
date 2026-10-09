@@ -10,6 +10,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { getVerifiedUser } from "@/lib/auth-guard";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { staffSectionFeatureStatus, useMerchantFeatures } from "@/modules/merchant/features";
 import {
   addStaffAvailabilityWindow,
   removeStaffAvailabilityWindow,
@@ -114,7 +115,12 @@ export function useMyStaffPermission(
   const { data: staffRow } = useActiveMyStaffRecord(merchantId);
   const staffId = staffRow?.id ?? null;
 
-  return useQuery({
+  // SPECS-INDEX #1025 FG3-F01:平台功能開關疊加(跟資料庫 has_own_staff_permission 同一套規則)。
+  //   平台開 ⇒ 照個人權限;平台關 ⇒ false(個人權限值本身不動,T9);還不知道 ⇒ undefined(呼叫端 `=== true` 才放行)。
+  const { hasFeature, isLoading: featuresLoading } = useMerchantFeatures();
+  const featureOk = staffSectionFeatureStatus(hasFeature, sectionKey);
+
+  const query = useQuery({
     queryKey: ["staff-portal-module", "my-staff-permission", staffId, sectionKey],
     queryFn: async (): Promise<boolean | null> => {
       if (!staffId) return null;
@@ -131,6 +137,13 @@ export function useMyStaffPermission(
     },
     enabled: Boolean(merchantId) && Boolean(staffId),
   });
+
+  const data = featureOk === true ? query.data : featureOk === false ? false : undefined;
+  return {
+    ...query,
+    data,
+    isLoading: query.isLoading || (featureOk === undefined && featuresLoading),
+  } as UseQueryResult<boolean | null>;
 }
 
 // =========================================================================

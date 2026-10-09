@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { staffSectionFeatureStatus, useMerchantFeatures } from "@/modules/merchant/features";
 import { fetchStaffPermissions, setStaffPermission } from "@/modules/staff-portal/api";
 import { STAFF_PERMISSION_SECTIONS } from "@/modules/staff-portal/types";
 
@@ -41,6 +42,13 @@ function StaffPermissionsInner() {
   });
 
   const grantedMap = new Map((permissions ?? []).map((p) => [p.section_key, p.granted]));
+
+  // SPECS-INDEX #1025 FG3-U02:平台沒開的細部功能(自己排休、查看自己的抽成薪資)⇒ 那一列整個不顯示。
+  // 值保留不動(T9):這頁是逐項即存,藏起來的那一列不會被送出;平台重新打開後原設定直接恢復。
+  const { hasFeature } = useMerchantFeatures();
+  const visibleSections = STAFF_PERMISSION_SECTIONS.filter(
+    (section) => staffSectionFeatureStatus(hasFeature, section.key) === true,
+  );
 
   async function handleToggle(sectionKey: string, granted: boolean) {
     if (!staffId) return;
@@ -96,7 +104,7 @@ function StaffPermissionsInner() {
             <LoadingSkeleton variant="lines" rows={4} />
           ) : (
             <ul className="space-y-2">
-              {STAFF_PERMISSION_SECTIONS.map((section) => (
+              {visibleSections.map((section) => (
                 <li
                   key={section.key}
                   className="flex items-center justify-between rounded-md border border-border px-3 py-2"

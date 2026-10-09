@@ -5180,6 +5180,10 @@ export type Database = {
         Args: { p_limit: number; p_merchant_id: string; p_used: number }
         Returns: boolean
       }
+      internal_merchant_has_feature: {
+        Args: { p_feature_key: string; p_merchant_id: string }
+        Returns: boolean
+      }
       internal_prepare_customer_line_job: {
         Args: { p_outbox_id: string }
         Returns: Json
@@ -5287,6 +5291,14 @@ export type Database = {
         Args: { p_merchant_id: string }
         Returns: Json
       }
+      platform_feature_usage_summary: {
+        Args: never
+        Returns: {
+          disabled_count: number
+          enabled_count: number
+          feature_key: string
+        }[]
+      }
       platform_get_merchant_admin_counts: {
         Args: never
         Returns: {
@@ -5375,9 +5387,26 @@ export type Database = {
         Args: { p_merchant_id: string; p_user_id: string }
         Returns: undefined
       }
+      platform_save_feature_settings: {
+        Args: { p_bulk?: Json; p_note?: string | null; p_presets?: Json }
+        Returns: Json
+      }
+      platform_set_feature_for_all_merchants: {
+        Args: {
+          p_also_presets?: boolean
+          p_enabled: boolean
+          p_feature_key: string
+          p_note?: string | null
+        }
+        Returns: number
+      }
       platform_set_group_admin: {
         Args: { p_group_id: string; p_user_email: string }
         Returns: undefined
+      }
+      platform_set_merchant_features: {
+        Args: { p_changes: Json; p_merchant_id: string; p_note?: string | null }
+        Returns: number
       }
       platform_set_merchant_feature: {
         Args: {

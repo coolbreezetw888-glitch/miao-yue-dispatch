@@ -10,6 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { IndustryType } from "@/modules/merchant/types";
 import type { MerchantFeatureRow } from "@/modules/merchant/features";
 import type {
+  FeatureSettingsSaveResult,
+  FeatureUsageRow,
   IndustryFeaturePresetRow,
   MerchantFeatureLogRow,
   PlatformFeatureRow,
@@ -304,4 +306,50 @@ export async function platformListMerchantFeatureLogs(
   });
   if (error) throwSupabaseError(error);
   return (data ?? []) as MerchantFeatureLogRow[];
+}
+
+// ---------------------------------------------------------------------------
+// SPECS-INDEX #1025 第三輪 ③:所有開關改成「先調整、按儲存才生效」。
+// 一次儲存 = 一次 RPC = 一個資料庫交易(大項 + 細項同時生效)。兩支函式第一行都檢查超級管理員。
+// ---------------------------------------------------------------------------
+
+/** FG1-F06(⚠️5):每個功能目前幾間商家開、幾間關(依實際結果,含停用的商家)。 */
+export async function platformFetchFeatureUsageSummary(): Promise<FeatureUsageRow[]> {
+  const { data, error } = await supabase.rpc("platform_feature_usage_summary");
+  if (error) throwSupabaseError(error);
+  return (data ?? []) as FeatureUsageRow[];
+}
+
+/** 商家詳情「功能開關」卡按「儲存」:一次存多個功能(platform_set_merchant_features)。回傳實際改變的項數。 */
+export async function platformSetMerchantFeatures(input: {
+  merchantId: string;
+  changes: { feature_key: string; enabled: boolean }[];
+  note?: string | null;
+}): Promise<number> {
+  const { data, error } = await supabase.rpc("platform_set_merchant_features", {
+    p_merchant_id: input.merchantId,
+    p_changes: input.changes,
+    p_note: input.note ?? null,
+  });
+  if (error) throwSupabaseError(error);
+  return Number(data ?? 0);
+}
+
+/** 「功能開關」頁按「儲存」:新開商家預設 + 全部商家開／關,一個交易內套用(platform_save_feature_settings)。 */
+export async function platformSaveFeatureSettings(input: {
+  presets: { industry_type: IndustryType; feature_key: string; default_enabled: boolean }[];
+  bulk: { feature_key: string; enabled: boolean }[];
+  note?: string | null;
+}): Promise<FeatureSettingsSaveResult> {
+  const { data, error } = await supabase.rpc("platform_save_feature_settings", {
+    p_presets: input.presets,
+    p_bulk: input.bulk,
+    p_note: input.note ?? null,
+  });
+  if (error) throwSupabaseError(error);
+  const result = (data ?? {}) as Partial<FeatureSettingsSaveResult>;
+  return {
+    presets_changed: Number(result.presets_changed ?? 0),
+    merchants_changed: (result.merchants_changed ?? {}) as Record<string, number>,
+  };
 }

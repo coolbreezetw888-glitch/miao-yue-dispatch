@@ -90,6 +90,8 @@ import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { isValidTaiwanMobilePhone, TW_MOBILE_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
+
+import { isStaffBooleanFieldVisible } from "./staffFeatureFieldVisibility";
 import {
   getServiceItem,
   useMerchantServiceCategories,
@@ -200,12 +202,6 @@ const EMPTY_FORM: StaffFormState = {
   //    不夠直覺)。資料庫存的值仍然是英文 'piece_rate',只有前端顯示文字改,不動資料庫。
   compensationType: "piece_rate",
 };
-
-/** SPECS-INDEX #1025 ⚠️6:只對「客戶線上預約」有作用的兩個開關(另外兩個數字欄位是 STAFF_NUMBER_PERMISSION_FIELDS 整組)。 */
-const ONLINE_BOOKING_ONLY_STAFF_FIELDS: ReadonlySet<string> = new Set([
-  "no_time_slot_limit",
-  "auto_accept_booking",
-]);
 
 function staffToFormState(staff: MerchantStaff): StaffFormState {
   return {
@@ -421,6 +417,14 @@ export function StaffFormDialog({
   // 存檔時 updateMerchantStaff(staff.id, form) 照樣把原值送回去。新增服務人員時則是送出跟資料庫預設一樣的空值 / false。
   const { hasFeature } = useMerchantFeatures();
   const onlineBookingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.onlineBooking) === true;
+  // SPECS-INDEX #1025 FG3-U02:服務人員登入端 / 新增編輯訂單(細部功能)。讀取中當作沒開(先不顯示)。
+  const staffPortalFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.staffPortal) === true;
+  const staffOrderEditingFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.staffOrderEditing) === true;
+  const fieldFeatures = {
+    onlineBooking: onlineBookingFeatureOn,
+    staffPortal: staffPortalFeatureOn,
+    staffOrderEditing: staffOrderEditingFeatureOn,
+  };
 
   const staffServiceItemsQueryKey = ["staff-agent-module", "staff-service-items", staff?.id];
 
@@ -619,11 +623,14 @@ export function StaffFormDialog({
               建立/編輯基本資料,登入帳號要等這裡儲存完成後,回到人員清單按「邀請登入」才會真的
               開通(見 4.7 第 2 點的 InviteStaffLoginDialog)。
               skill 二:這是「現在的狀態跟使用者以為的不一樣」(存了不等於能登入)→ `!` 常駐。 */}
-          <AlertNote>
-            {isEdit
-              ? "這裡只會更新基本資料，不會影響登入帳號——登入帳號的開通/權限，請到人員清單使用「邀請登入」或「服務人員權限」。"
-              : "這裡先建立基本資料，登入帳號要在儲存完成後，回到人員清單裡按「邀請登入」才會真的開通。"}
-          </AlertNote>
+          {/* #1025 FG3-U02:平台沒開「服務人員登入端」⇒ 跟登入有關的說明不顯示。 */}
+          {staffPortalFeatureOn ? (
+            <AlertNote>
+              {isEdit
+                ? "這裡只會更新基本資料，不會影響登入帳號——登入帳號的開通/權限，請到人員清單使用「邀請登入」或「服務人員權限」。"
+                : "這裡先建立基本資料，登入帳號要在儲存完成後，回到人員清單裡按「邀請登入」才會真的開通。"}
+            </AlertNote>
+          ) : null}
 
           <div className="flex flex-col gap-4">
             <StaffAvatarUploader currentAvatarUrl={form.avatarUrl} onUpload={handleAvatarUpload} />
@@ -865,9 +872,8 @@ export function StaffFormDialog({
               </div>
             ) : null}
             <div className="flex flex-col gap-2">
-              {STAFF_BOOLEAN_PERMISSION_FIELDS.filter(
-                (field) =>
-                  onlineBookingFeatureOn || !ONLINE_BOOKING_ONLY_STAFF_FIELDS.has(field.key),
+              {STAFF_BOOLEAN_PERMISSION_FIELDS.filter((field) =>
+                isStaffBooleanFieldVisible(field.key, fieldFeatures),
               ).map((field) => (
                 <SwitchRow
                   key={field.key}
@@ -887,6 +893,12 @@ export function StaffFormDialog({
                   titleTestId="permission-switch-title"
                   checked={Boolean(form[toCamel(field.key)])}
                   onCheckedChange={(v) => {
+                    // #1025 FG3-U02:「新增編輯訂單」被平台藏起來時,「顯示會員資料」單獨改、不連動
+                    // (否則會動到畫面上看不到的「新增編輯訂單」原值,T9)。
+                    if (!isStaffBooleanFieldVisible("can_create_edit_orders", fieldFeatures)) {
+                      setField(toCamel(field.key), v);
+                      return;
+                    }
                     // #977 第 7 批(裁決 6):「新增編輯訂單」與「顯示會員資料」連動,先問再一起改。
                     const decision = decideOrderSwitchChange(field.key, v, {
                       canCreateEditOrders: Boolean(form.canCreateEditOrders),
@@ -1188,6 +1200,10 @@ function StaffListInner() {
   const { data: merchantRole } = useCurrentMerchantRole();
   const isAdmin = merchantRole === "admin";
   const [listFilter, setListFilter] = useState<StaffListFilter>("all");
+  // SPECS-INDEX #1025 FG3-U02:平台沒開「服務人員登入端」⇒「邀請登入」「服務人員權限」、登入狀態標籤、
+  // 登入信箱都不顯示,卡片也不因「尚未開通登入」變黃。讀取中先不顯示(`=== true`)。名單、編輯、派工照舊。
+  const { hasFeature: hasMerchantFeature } = useMerchantFeatures();
+  const staffPortalOn = hasMerchantFeature(MERCHANT_FEATURE_KEYS.staffPortal) === true;
 
   // 🔴 2026-09-30(品管第二次打回,必修-3):原本只解構 isLoading,查詢失敗時 staffList 是
   // undefined ⇒ 畫成「還沒有任何服務人員」+ 一顆「新增第一位服務人員」,商家以為人員名單
@@ -1371,9 +1387,11 @@ function StaffListInner() {
                 const isRemoved = staff.status !== "active";
                 // 🔴 #846:「尚未開通登入」要不要當成待辦(整張卡變黃 + 待辦標籤)。
                 // false 時標籤照樣顯示,只是降級成中性的屬性標籤、卡片不變黃。
-                const pendingLoginIsTodo = shouldMarkPendingLoginAsTodo(staff, usesStaffLogin);
+                const pendingLoginIsTodo =
+                  staffPortalOn && shouldMarkPendingLoginAsTodo(staff, usesStaffLogin);
                 // 模組 14(服務人員端)規格書 4.7 第 2 點:尚未開通登入時顯示邀請入口(只給管理員)。
-                const canInvite = isAdmin && !isRemoved && loginStatus === "not_invited";
+                const canInvite =
+                  staffPortalOn && isAdmin && !isRemoved && loginStatus === "not_invited";
                 // 2026-09-29 主腦裁決(skill 二之三「位置固定」的精神是不要讓人每次都得重新找):
                 //   - 「編輯」是天天用的動作 ⇒ 永遠是主要動作;唯一例外是已移除的人(主要動作換成「恢復」,
                 //     那時編輯沒有意義)。
@@ -1384,7 +1402,7 @@ function StaffListInner() {
                 // 🔴 第 20 批 #1015:「邀請登入」「服務人員權限」改成卡片上的按鈕(見下方 primaryAction),
                 //   顯示條件與原本 ⋯ 選單項目一字不差:邀請登入 = canInvite;服務人員權限 = isAdmin &&
                 //   login_status === "active" && 未移除。⋯ 只留「移除」與不可逆的「真正刪除」。
-                const canOpenPermissions = isAdmin && loginStatus === "active";
+                const canOpenPermissions = staffPortalOn && isAdmin && loginStatus === "active";
                 const menuItems: ListCardMenuItem[] | undefined = isRemoved
                   ? isAdmin
                     ? [
@@ -1466,14 +1484,14 @@ function StaffListInner() {
                                   (方角灰底、安靜、沒有警示感),卡片也不變黃。
                               skill 二之五末段的通則:「標成待辦之前先問一句,這個狀態對某些使用者
                               是不是永久狀態?」是的話它就是屬性,屬性不給警示色。 */}
-                          {!isRemoved && loginStatus === "not_invited" ? (
+                          {staffPortalOn && !isRemoved && loginStatus === "not_invited" ? (
                             pendingLoginIsTodo ? (
                               <TodoTag>尚未開通登入</TodoTag>
                             ) : (
                               <AttributeTag>尚未開通登入</AttributeTag>
                             )
                           ) : null}
-                          {!isRemoved && loginStatus === "invited" ? (
+                          {staffPortalOn && !isRemoved && loginStatus === "invited" ? (
                             <StatusTag tone="warning">
                               {STAFF_LOGIN_STATUS_LABELS.invited}
                             </StatusTag>
@@ -1483,7 +1501,7 @@ function StaffListInner() {
                       meta={
                         // 對應規格書(帳號登入安全性優化)2.5.3 第 1 點:已開通登入才顯示登入信箱
                         // 狀態與修改入口。
-                        loginStatus === "active" ? (
+                        staffPortalOn && loginStatus === "active" ? (
                           <StaffLoginEmailManagement staff={staff} />
                         ) : null
                       }

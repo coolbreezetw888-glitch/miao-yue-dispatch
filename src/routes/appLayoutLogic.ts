@@ -440,3 +440,46 @@ export function writeStoredStaffViewPreference(
     // 寫不進去(無痕模式/配額滿)只影響「下次進來要重新按一次切換」,不該讓畫面爆掉。
   }
 }
+
+// =========================================================================
+// SPECS-INDEX #1025 FG3-U01:平台功能開關(服務人員細部功能)
+// =========================================================================
+//
+// 規則(規格書 .project/specs/功能開關.md FG3-U01,使用者 F8 裁決):
+//   ・「服務人員登入端」(staff_portal)關 ⇒ 整個服務人員端只剩一張小卡(一句話 + 登出),
+//     底部分頁籤不顯示,任何服務人員端網址都導回 /app。
+//   ・雙重身分者:登入端關 ⇒ 不能切到服務人員端(切換選項不出現),記住的選擇也不生效 ⇒ 停在後台。
+//   ・「服務人員自己排休」關 ⇒ 「休假設定」分頁籤不顯示;「服務人員查看自己的抽成薪資」關 ⇒ 「薪資報表」分頁籤不顯示。
+//   ・讀取中(undefined)一律先不顯示 / 不放行(`=== true` 才算開),不導走(T10)。
+
+/** 服務人員端畫面這一刻的狀態。 */
+export type StaffPortalGate = "loading" | "closed" | "open";
+
+export function resolveStaffPortalGate(staffPortal: boolean | undefined): StaffPortalGate {
+  if (staffPortal === undefined) return "loading";
+  return staffPortal === true ? "open" : "closed";
+}
+
+/** 雙重身分判斷要用的「我有一筆可以切過去的服務人員紀錄」:紀錄存在 **而且** 這間店的服務人員登入端開著。
+ * 讀取中(undefined)當作還不能切(切換選項先不出現)。 */
+export function hasUsableStaffRecord(
+  hasActiveStaffRecord: boolean,
+  staffPortal: boolean | undefined,
+): boolean {
+  return hasActiveStaffRecord && staffPortal === true;
+}
+
+/** 服務人員端底部分頁籤:依平台細部功能拿掉「休假設定」「薪資報表」。商家端那組原封不動。 */
+export function filterStaffTabsByFeatures(
+  tabs: TabDef[],
+  features: { selfAvailability: boolean | undefined; selfPayroll: boolean | undefined },
+): TabDef[] {
+  return tabs.filter((tab) => {
+    if (tab.to === "/app/my-availability") return features.selfAvailability === true;
+    if (tab.to === "/app/my-payroll") return features.selfPayroll === true;
+    return true;
+  });
+}
+
+/** 服務人員登入端關掉時顯示的唯一一句話(F8:不提秒約、不提開通,叫他找店家)。 */
+export const STAFF_PORTAL_CLOSED_MESSAGE = "這間店目前沒有開放服務人員登入，請聯絡店家管理員。";

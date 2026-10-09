@@ -15,6 +15,17 @@ const useMyBookingScheduleMock = vi.fn();
 const useMyBookingStatusColorsMock = vi.fn();
 const dialogPropsMock = vi.fn();
 
+// SPECS-INDEX #1025 FG-3:平台功能開關全開(這支測試不測開關;開關的行為見 staffFeatureGates.test.tsx)。
+vi.mock("@/modules/merchant/features", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/merchant/features")>()),
+  useMerchantFeatures: () => ({
+    features: [],
+    hasFeature: () => true,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("@/modules/merchant/context", () => ({
   useCurrentMerchant: () => useCurrentMerchantMock(),
 }));

@@ -4,6 +4,7 @@
 // 建立:
 //   ・商家管理員帳號 + 一間到府派工商家(走 create_group_and_merchant ⇒ 開店時自動套產業預設,三個功能全開)
 //   ・本機暫時超級管理員(platform_admins 沒有自助寫入 ⇒ service_role 建列,note 標記)
+//   ・(FG-3)一位已開通登入的服務人員帳號(service_role 建 merchant_staff + 四項權限全開)
 // teardown:service_role 硬刪除。刪前 SELECT 核對(商家名稱前綴、帳號 email 格式、超管列 note 都對得上才刪),
 // 刪後再 SELECT 一次全部必須為 0。商家刪掉時,merchant_feature_grants / merchant_feature_grant_logs 會 cascade。
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
@@ -12,7 +13,7 @@ import { buildFetch } from "../../e2e/support/fixture-supabase-client";
 import { readLocalSupabaseTarget } from "./local-target";
 
 export const MERCHANT_NAME_PREFIX = "E2E功能開關1025本機";
-const EMAIL_RE = /^e2e-1025(admin|platform)-\d+@example-local-test\.test$/;
+const EMAIL_RE = /^e2e-1025(admin|platform|staff)-\d+@example-local-test\.test$/;
 const PLATFORM_ADMIN_NOTE = "E2E功能開關1025本機暫時超級管理員(teardown 硬刪除)";
 
 export interface Req1025Fixture {
@@ -23,6 +24,8 @@ export interface Req1025Fixture {
   slug: string;
   admin: { userId: string; session: Session };
   platform: { userId: string; session: Session };
+  /** FG-3:這間店已開通登入的服務人員(純服務人員,不是管理員)。 */
+  staff: { userId: string; session: Session; staffId: string; name: string };
 }
 
 function makeClient(key: string): SupabaseClient {
@@ -44,7 +47,7 @@ function must<T>(label: string, data: T | null | undefined, error: { message: st
   return data;
 }
 
-async function signUp(runId: string, role: "admin" | "platform") {
+async function signUp(runId: string, role: "admin" | "platform" | "staff") {
   const client = makeClient(readLocalSupabaseTarget().publishableKey);
   const email = `e2e-1025${role}-${runId}@example-local-test.test`;
   const r = await client.auth.signUp({ email, password: `E2e1025!${runId}Aa` });
@@ -58,6 +61,7 @@ export async function setupReq1025Fixture(): Promise<Req1025Fixture> {
   const admin = await signUp(runId, "admin");
   let groupId: string | null = null;
   let platformUserId: string | null = null;
+  let staffUserId: string | null = null;
   try {
     const merchantName = `${MERCHANT_NAME_PREFIX}${runId}`;
     const m = await admin.client.rpc("create_group_and_merchant", {
@@ -83,6 +87,37 @@ export async function setupReq1025Fixture(): Promise<Req1025Fixture> {
       .insert({ user_id: platform.userId, note: PLATFORM_ADMIN_NOTE });
     if (pa.error) throw new Error(`建立本機超級管理員失敗:${pa.error.message}`);
 
+    // FG-3:已開通登入的服務人員(service_role 直接建,跟邀請流程完成後的狀態一樣)。
+    const staffAccount = await signUp(runId, "staff");
+    staffUserId = staffAccount.userId;
+    const staffName = `功能開關服務人員${runId.slice(-4)}`;
+    const st = await svc
+      .from("merchant_staff")
+      .insert({
+        merchant_id: merchantId,
+        user_id: staffAccount.userId,
+        name: staffName,
+        phone: `09${runId.slice(-8).padStart(8, "0")}`,
+        compensation_type: "piece_rate",
+        status: "active",
+        login_status: "active",
+        login_activated_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    const staffId = must("建立服務人員", st.data, st.error) as { id: string };
+    const perms = await svc
+      .from("merchant_staff_permissions")
+      .insert(
+        [
+          "staff_calendar_view",
+          "staff_availability_self_manage",
+          "staff_payroll_view",
+          "staff_profile_edit",
+        ].map((section_key) => ({ staff_id: staffId.id, section_key, granted: true })),
+      );
+    if (perms.error) throw new Error(`建立服務人員權限失敗:${perms.error.message}`);
+
     return {
       runId,
       merchantId,
@@ -91,6 +126,12 @@ export async function setupReq1025Fixture(): Promise<Req1025Fixture> {
       slug: merchantRow.booking_slug,
       admin: { userId: admin.userId, session: admin.session },
       platform: { userId: platform.userId, session: platform.session },
+      staff: {
+        userId: staffAccount.userId,
+        session: staffAccount.session,
+        staffId: staffId.id,
+        name: staffName,
+      },
     };
   } catch (err) {
     // 建到一半失敗:只清這次建的東西。
@@ -102,6 +143,7 @@ export async function setupReq1025Fixture(): Promise<Req1025Fixture> {
       await svc.from("platform_admins").delete().eq("user_id", platformUserId);
       await svc.auth.admin.deleteUser(platformUserId);
     }
+    if (staffUserId) await svc.auth.admin.deleteUser(staffUserId);
     await svc.auth.admin.deleteUser(admin.userId);
     throw err;
   }
@@ -137,7 +179,7 @@ export async function teardownReq1025Fixture(fixture: Req1025Fixture): Promise<s
   ) {
     throw new Error(`teardown 中止:集團底下的商家不是本 fixture 建立的(${JSON.stringify(rows)})`);
   }
-  for (const uid of [fixture.admin.userId, fixture.platform.userId]) {
+  for (const uid of [fixture.admin.userId, fixture.platform.userId, fixture.staff.userId]) {
     const u = await svc.auth.admin.getUserById(uid);
     if (!EMAIL_RE.test(u.data.user?.email ?? "")) {
       throw new Error(`teardown 中止:${uid} 不是本 fixture 的帳號`);
@@ -156,7 +198,7 @@ export async function teardownReq1025Fixture(fixture: Req1025Fixture): Promise<s
     .select("id", { count: "exact", head: true })
     .eq("merchant_id", fixture.merchantId);
   actions.push(
-    `核對通過:商家 1 間、帳號 2 個、超管列 ${pa.data?.length ?? 0} 列、功能開關紀錄 ${logs.count ?? "?"} 筆,都是本次 fixture 建立的`,
+    `核對通過:商家 1 間、帳號 3 個、超管列 ${pa.data?.length ?? 0} 列、功能開關紀錄 ${logs.count ?? "?"} 筆,都是本次 fixture 建立的`,
   );
 
   // ② 硬刪除(商家 cascade 帶走 merchant_feature_grants / merchant_feature_grant_logs)
@@ -170,12 +212,12 @@ export async function teardownReq1025Fixture(fixture: Req1025Fixture): Promise<s
   if (mDel.error) throw new Error(`teardown 刪商家失敗:${mDel.error.message}`);
   const gDel = await svc.from("groups").delete().eq("id", fixture.groupId).select("id");
   if (gDel.error) throw new Error(`teardown 刪集團失敗:${gDel.error.message}`);
-  for (const uid of [fixture.admin.userId, fixture.platform.userId]) {
+  for (const uid of [fixture.admin.userId, fixture.platform.userId, fixture.staff.userId]) {
     const d = await svc.auth.admin.deleteUser(uid);
     if (d.error) throw new Error(`teardown 刪帳號失敗:${d.error.message}`);
   }
   actions.push(
-    `已硬刪除超管列 ${paDel.data?.length ?? 0}、商家 ${mDel.data?.length ?? 0}、集團 ${gDel.data?.length ?? 0}、帳號 2`,
+    `已硬刪除超管列 ${paDel.data?.length ?? 0}、商家 ${mDel.data?.length ?? 0}、集團 ${gDel.data?.length ?? 0}、帳號 3(服務人員列隨商家 cascade)`,
   );
 
   // ③ 刪後核對
@@ -192,10 +234,12 @@ export async function teardownReq1025Fixture(fixture: Req1025Fixture): Promise<s
     (await count("groups", "id", fixture.groupId)) +
     (await count("merchant_feature_grants", "merchant_id", fixture.merchantId)) +
     (await count("merchant_feature_grant_logs", "merchant_id", fixture.merchantId)) +
-    (await count("platform_admins", "user_id", fixture.platform.userId));
+    (await count("platform_admins", "user_id", fixture.platform.userId)) +
+    (await count("merchant_staff", "merchant_id", fixture.merchantId));
   const usersLeft =
     ((await svc.auth.admin.getUserById(fixture.admin.userId)).data.user ? 1 : 0) +
-    ((await svc.auth.admin.getUserById(fixture.platform.userId)).data.user ? 1 : 0);
+    ((await svc.auth.admin.getUserById(fixture.platform.userId)).data.user ? 1 : 0) +
+    ((await svc.auth.admin.getUserById(fixture.staff.userId)).data.user ? 1 : 0);
   if (left + usersLeft !== 0) throw new Error(`teardown 後仍有殘留 ${left + usersLeft} 筆`);
   actions.push("刪後核對:商家 / 集團 / 功能開關 / 紀錄 / 超管列 / 帳號 全部 0");
   return actions;

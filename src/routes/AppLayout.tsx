@@ -94,13 +94,20 @@
 // =========================================================================
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, Outlet, useLocation, useNavigate, useOutletContext } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  useLocation,
+  useNavigate,
+  useOutletContext,
+} from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CustomerAccountBlocked } from "@/components/CustomerAccountBlocked";
 import { isCustomerAccountUser, signOutBackendClientOnly } from "@/lib/customerAccountGuard";
 
-import { GuardLoading } from "@/components/patterns";
+import { ErrorState, GuardLoading } from "@/components/patterns";
 import InstallPwaHint from "@/components/InstallPwaHint";
 // SPECS-INDEX #982:手機下拉刷新。掛在共用外殼,商家端與服務人員端所有頁面一次就有。
 import { PullToRefresh } from "@/components/PullToRefresh";
@@ -116,6 +123,7 @@ import {
   useCurrentMerchant,
   useGroupMerchants,
 } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import { MerchantSwitcher } from "@/modules/merchant/MerchantSwitcher";
 import { applyThemeColorToDocument, resolveMerchantThemeColor } from "@/modules/merchant/theme";
 // §13.6:站內通知中心(鈴鐺)。這是 <NotificationBell /> 全系統**唯一**的掛載處(§13.11)。
@@ -132,12 +140,16 @@ import {
   // SPECS-INDEX #977 第 4 批:服務人員視角的鈴鐺頂端「你有 N 筆訂單待確認」(即時由行事曆資料計算)。
   useMyPendingConfirmationCount,
 } from "@/modules/staff-portal/context";
+import { StaffPortalClosedNotice } from "@/modules/staff-portal/StaffPortalClosedNotice";
 
 import {
+  filterStaffTabsByFeatures,
+  hasUsableStaffRecord,
   isStaffViewResolved,
   readStoredStaffViewPreference,
   resolveAppHeaderTitle,
   resolveIsStaffView,
+  resolveStaffPortalGate,
   resolveTabs,
   shouldShowStaffViewSwitch,
   writeStoredStaffViewPreference,
@@ -215,7 +227,17 @@ export default function AppLayout() {
   const { data: myStaffRow, isLoading: staffRecordLoading } = useActiveMyStaffRecord(
     currentMerchant?.id ?? null,
   );
-  const isDualRoleEligible = shouldShowStaffViewSwitch(merchantRole, myStaffRow != null);
+  // SPECS-INDEX #1025 FG3-U01:這間店的平台功能「服務人員登入端」關掉時,自己的服務人員紀錄當作「不能切過去」:
+  // 雙重身分的切換選項不出現、記住的選擇也不生效(停在後台)。讀取中也先當不能切(`=== true` 才算開)。
+  const {
+    hasFeature,
+    isLoading: featuresLoading,
+    isError: featuresError,
+    refetch: refetchFeatures,
+  } = useMerchantFeatures();
+  const staffPortalFeature = hasFeature(MERCHANT_FEATURE_KEYS.staffPortal);
+  const hasStaffRecordForView = hasUsableStaffRecord(myStaffRow != null, staffPortalFeature);
+  const isDualRoleEligible = shouldShowStaffViewSwitch(merchantRole, hasStaffRecordForView);
 
   const [forcedStaffView, setForcedStaffView] = useState(false);
   // 2026-09-24 修正:切換商家時不再單純重置成 false,而是讀回「這個使用者在這間商家」上次的選擇。
@@ -239,10 +261,18 @@ export default function AppLayout() {
 
   const isStaffView = resolveIsStaffView({
     merchantRole,
-    hasActiveStaffRecord: myStaffRow != null,
+    hasActiveStaffRecord: hasStaffRecordForView,
     forcedStaffView,
   });
-  const tabs = resolveTabs(isStaffView);
+  // #1025 FG3-U01:服務人員端的狀態(登入端讀取中 / 關 / 開);商家端一律 open。
+  const staffPortalGate = isStaffView ? resolveStaffPortalGate(staffPortalFeature) : "open";
+  // #1025 FG3-U01:服務人員端依平台細部功能拿掉「休假設定」「薪資報表」分頁籤。
+  const tabs = isStaffView
+    ? filterStaffTabsByFeatures(resolveTabs(true), {
+        selfAvailability: hasFeature(MERCHANT_FEATURE_KEYS.staffSelfAvailability),
+        selfPayroll: hasFeature(MERCHANT_FEATURE_KEYS.staffSelfPayroll),
+      })
+    : resolveTabs(false);
   // 2026-09-24 使用者回報「頁首應該要顯示目前在哪個功能頁」。判斷邏輯本身是純函式(涵蓋 App.tsx
   // 底下全部 34 條子路由,認不出來的路徑回空字串、永遠不會是 undefined),測試見
   // appLayoutLogic.test.ts。
@@ -252,10 +282,14 @@ export default function AppLayout() {
   const isViewResolved = isStaffViewResolved({
     hasCurrentMerchant: currentMerchant != null,
     roleLoading,
-    staffRecordLoading,
+    // #1025:有自己的服務人員紀錄時,要等功能開關讀完才知道能不能看服務人員端(避免雙重身分者先被導走再切回來)。
+    staffRecordLoading: staffRecordLoading || (myStaffRow != null && featuresLoading),
   });
   // SPECS-INDEX #977 第 4 批:只有服務人員視角才算(其他視角回 0、不查)。一定要在下面的 early return 之前呼叫。
-  const staffPendingCount = useMyPendingConfirmationCount(isStaffView);
+  // #1025:登入端沒開(或還不知道)時不查(資料庫也會擋)。
+  const staffPendingCount = useMyPendingConfirmationCount(
+    isStaffView && staffPortalGate === "open",
+  );
 
   // 以下這段登入驗證/導向邏輯,原封不動搬自舊版 src/routes/app.tsx(AppShell),行為完全不變,
   // 只多存一份 userId(user.id)供 1.2 首頁個人資料卡片查詢自己的管理員/客服紀錄使用。
@@ -452,7 +486,12 @@ export default function AppLayout() {
                 外面這層 div 保留,跟左邊那格對稱(都是 shrink-0 的 32px 格子),讓標題自然置中;
                 之後如果真的要再往右側加東西,先回去讀上面關於 320px 寬度預算的說明。 */}
             <div className="flex shrink-0 items-center justify-end">
-              <NotificationBell staffPendingCount={staffPendingCount} />
+              {/* #1025 FG3-U01:服務人員登入端沒開時,服務人員端只剩一張小卡,鈴鐺也不顯示(留一格空位維持標題置中)。 */}
+              {staffPortalGate === "open" ? (
+                <NotificationBell staffPendingCount={staffPendingCount} />
+              ) : (
+                <span aria-hidden="true" className="block h-8 w-8" />
+              )}
             </div>
           </div>
         </header>
@@ -472,7 +511,31 @@ export default function AppLayout() {
       {/* data-app-content-root(第 15 批 #1009):電腦版小卡窗從這裡往下找頁面的主要內容欄,左右邊界對齊它
           (見 src/components/patterns/cardDialogColumnAlign.ts)。不要拿掉,也不要在這層加左右內距。 */}
       <main className="pb-24" data-app-content-root="">
-        <Outlet context={outletContext} />
+        {/* SPECS-INDEX #1025 FG3-U01(F8):服務人員登入端關掉 ⇒ 只顯示一句話 + 登出;其他服務人員端網址導回 /app。
+            讀取中只顯示骨架,不導走(T10)。 */}
+        {staffPortalGate === "open" ? (
+          <Outlet context={outletContext} />
+        ) : staffPortalGate === "loading" ? (
+          featuresError ? (
+            // FG1-U04:讀取失敗 ⇒ 骨架 + 錯誤提示(可重試),不擅自顯示也不擅自導走。
+            <div data-testid="staff-portal-feature-error">
+              <div className="mx-auto w-full max-w-3xl px-5 pt-10">
+                <ErrorState
+                  title="讀不到這個頁面的設定"
+                  reason="可能是網路不穩定，請稍後再試一次"
+                  onRetry={() => void refetchFeatures()}
+                />
+              </div>
+              <GuardLoading />
+            </div>
+          ) : (
+            <GuardLoading />
+          )
+        ) : location.pathname !== "/app" ? (
+          <Navigate to="/app" replace />
+        ) : (
+          <StaffPortalClosedNotice onSignOut={handleSignOut} />
+        )}
       </main>
 
       {/* SPECS-INDEX #982:手機(寬 < 1024px)頁面在最頂端時往下拉 ⇒ 重新抓目前畫面的資料(不整頁重載)。
@@ -505,36 +568,38 @@ export default function AppLayout() {
           ⚠️ 高度刻意是 64px:src/lib/fixedLayers.ts 的動作列 / 提示條都用 bottom-16(64px)讓開分頁籤列,
           高度改了那邊要一起改。底部安全區用 padding 外加(env(...) 目前因為沒有 viewport-fit=cover
           恆為 0,見 UpdateAvailableHint.tsx 說明)。 */}
-      <nav
-        className={cn(
-          BOTTOM_LAYER_TAB_BAR,
-          "border-t border-border bg-background pb-[env(safe-area-inset-bottom)]",
-        )}
-      >
-        <div className="mx-auto flex h-[63px] max-w-5xl items-stretch justify-around">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = tab.isActive(location.pathname);
-            return (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={cn(
-                  "flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
-                  active ? "text-brand" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Icon
-                  aria-hidden="true"
-                  className={cn("size-5", active && "fill-brand/20")}
-                  strokeWidth={active ? 2 : 1.8}
-                />
-                <span className="text-[10px] leading-none font-medium">{tab.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      {staffPortalGate === "open" ? (
+        <nav
+          className={cn(
+            BOTTOM_LAYER_TAB_BAR,
+            "border-t border-border bg-background pb-[env(safe-area-inset-bottom)]",
+          )}
+        >
+          <div className="mx-auto flex h-[63px] max-w-5xl items-stretch justify-around">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = tab.isActive(location.pathname);
+              return (
+                <Link
+                  key={tab.to}
+                  to={tab.to}
+                  className={cn(
+                    "flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors",
+                    active ? "text-brand" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon
+                    aria-hidden="true"
+                    className={cn("size-5", active && "fill-brand/20")}
+                    strokeWidth={active ? 2 : 1.8}
+                  />
+                  <span className="text-[10px] leading-none font-medium">{tab.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      ) : null}
     </div>
   );
 }

@@ -182,15 +182,15 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000002');
 select is(
   (select count(*)::int from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
-  3, '⑤-1 自己店的管理員讀得到 3 個功能');
+  (select count(*)::int from platform_features), '⑤-1 自己店的管理員讀得到全部功能(#1025 FG-3 起功能清單不只 3 項)');
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000004');
 select is(
   (select count(*)::int from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
-  3, '⑤-2 自己店的客服讀得到');
+  (select count(*)::int from platform_features), '⑤-2 自己店的客服讀得到');
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000005');
 select is(
   (select count(*)::int from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
-  3, '⑤-3 自己店的服務人員讀得到');
+  (select count(*)::int from platform_features), '⑤-3 自己店的服務人員讀得到');
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000003');
 select throws_ok(
   $$select * from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')$$,
@@ -206,7 +206,8 @@ select throws_ok(
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000001');
 select is(
   array(select feature_key || ':' || coalesce(granted::text, 'null') || ':' || effective::text || ':' || coalesce(preset_enabled::text, 'null')
-          from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
+          from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')
+         where feature_key in ('online_booking', 'data_import', 'report_export')),
   array['online_booking:true:true:true', 'data_import:false:false:true', 'report_export:true:true:true'],
   '⑤-7 超級管理員讀得到;依 sort_order 排序;granted / effective / preset_enabled 正確');
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000002');
@@ -254,7 +255,9 @@ select is(
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000001');
 select is(
   array(select feature_key from public.get_merchant_features('f1025000-0000-4000-8000-000000000021')),
-  array['online_booking', 'data_import', 'report_export', 'zz_parent', 'zz_child'],
+  array['online_booking', 'data_import', 'report_export',
+        'staff_portal', 'staff_order_editing', 'staff_self_availability', 'staff_self_payroll',
+        'zz_parent', 'zz_child'],
   '⑥-8 get_merchant_features:細部功能緊跟在自己的主功能後面');
 select pg_temp.test_clear_auth();
 select throws_ok(
@@ -285,7 +288,7 @@ select set_config('test.new_id', (select id::text from merchants where name = '�
 select set_config('test.new_gid', (select group_id::text from merchants where name = '功能開關測試新店'), true);
 select is(
   pg_temp.grants_of(current_setting('test.new_id')::uuid),
-  'data_import:false,online_booking:true,report_export:true',
+  'data_import:false,online_booking:true,report_export:true,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
   '⑦-2 新店:每個功能都有一列,值 = 到府派工的產業預設(資料匯入關)');
 
 select pg_temp.test_set_auth('f1025000-0000-4000-8000-000000000006');
@@ -295,7 +298,7 @@ select lives_ok(
 select pg_temp.test_clear_auth();
 select is(
   pg_temp.grants_of((select id from merchants where name = '功能開關測試分店')),
-  'data_import:true,online_booking:true,report_export:false',
+  'data_import:true,online_booking:true,report_export:false,staff_order_editing:true,staff_portal:true,staff_self_availability:true,staff_self_payroll:true',
   '⑦-4 分店:照自己產業(到店服務)的預設,不複製本店(T4);報表匯出沒有產業預設 ⇒ 用功能清單預設(關)');
 select is(
   (select count(*)::int from merchant_feature_grant_logs
@@ -335,7 +338,7 @@ select is(
   0, '⑩-2 兩個產業 × 所有功能都有產業預設');
 select is(
   (select count(*)::int from platform_features),
-  3, '⑩-3 這批功能清單只有 3 項(客戶線上預約、資料匯入、報表匯出中心)');
+  7, '⑩-3 功能清單共 7 項(第 1 批 3 項 + #1025 FG-3 服務人員細部功能 4 項)');
 
 -- ─── ⑪ ACL ────────────────────────────────────────────────────────────────
 select is(

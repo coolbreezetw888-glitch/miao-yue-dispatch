@@ -16,11 +16,16 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { useCurrentMerchant } from "./context";
 
-/** 第 1 批的三個功能 key(跟資料庫 platform_features.key 一致)。 */
+/** 平台功能 key(跟資料庫 platform_features.key 一致)。第 1 批三個 + 第 3 批服務人員細部功能四個。 */
 export const MERCHANT_FEATURE_KEYS = {
   onlineBooking: "online_booking",
   dataImport: "data_import",
   reportExport: "report_export",
+  // SPECS-INDEX #1025 FG-3:服務人員登入端(主功能)與底下三個細部功能。
+  staffPortal: "staff_portal",
+  staffOrderEditing: "staff_order_editing",
+  staffSelfAvailability: "staff_self_availability",
+  staffSelfPayroll: "staff_self_payroll",
 } as const;
 
 export type MerchantFeatureKey = (typeof MERCHANT_FEATURE_KEYS)[keyof typeof MERCHANT_FEATURE_KEYS];
@@ -93,4 +98,28 @@ export function useMerchantFeatures() {
     isError: query.isError,
     refetch: query.refetch,
   };
+}
+
+/**
+ * SPECS-INDEX #1025 FG3-F01(前端對照):服務人員某個權限 section 在「平台這一層」開不開。
+ * 跟資料庫 private.has_own_staff_permission 同一套規則:
+ *   ・一律要「服務人員登入端」開
+ *   ・排休(staff_availability_self_manage)再要「服務人員自己排休」
+ *   ・薪資(staff_payroll_view)再要「服務人員查看自己的抽成薪資」
+ * 回傳 true / false / undefined(還不知道);呼叫端一律 `=== true` 才放行。
+ * 細部功能的 effective 已經含「主功能關 ⇒ 關」(T5),這裡仍把登入端寫出來,讀起來跟資料庫一致。
+ */
+export function staffSectionFeatureStatus(
+  hasFeature: (key: string) => boolean | undefined,
+  sectionKey: string,
+): boolean | undefined {
+  const portal = hasFeature(MERCHANT_FEATURE_KEYS.staffPortal);
+  if (portal !== true) return portal;
+  if (sectionKey === "staff_availability_self_manage") {
+    return hasFeature(MERCHANT_FEATURE_KEYS.staffSelfAvailability);
+  }
+  if (sectionKey === "staff_payroll_view") {
+    return hasFeature(MERCHANT_FEATURE_KEYS.staffSelfPayroll);
+  }
+  return true;
 }

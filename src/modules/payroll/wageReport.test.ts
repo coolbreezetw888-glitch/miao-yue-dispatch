@@ -285,6 +285,7 @@ describe("Q4 = A:日薪／時薪不能自己開關時段(PB-U04)", () => {
           staffRow: { can_create_edit_orders: true, show_member_info: true, compensation_type },
           hasCalendarView: true,
           hasSelfManageAvailability: true,
+          hasOrderEditingFeature: true,
         }),
       ).toEqual({ canEditOrders: true, canToggleSlots: false });
     }

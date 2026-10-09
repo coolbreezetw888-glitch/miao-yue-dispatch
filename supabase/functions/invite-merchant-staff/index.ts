@@ -132,6 +132,22 @@ async function handleInviteMerchantStaff(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
+  // SPECS-INDEX #1025 FG3-F01(X7):service role 沒有 RLS 保護,這裡自己明確檢查平台功能開關,
+  // 不假設上游(畫面)擋過。這間店的「服務人員登入端」沒開 ⇒ 403,固定一句、不帶任何資料。
+  const { data: staffPortalOn, error: featureCheckError } = await adminClient.rpc(
+    "internal_merchant_has_feature",
+    { p_merchant_id: merchantId, p_feature_key: "staff_portal" },
+  );
+
+  if (featureCheckError) {
+    console.error("[invite-merchant-staff] internal_merchant_has_feature 呼叫失敗", featureCheckError);
+    return jsonResponse({ error: "驗證權限時發生錯誤，請稍後再試" }, 500);
+  }
+
+  if (staffPortalOn !== true) {
+    return jsonResponse({ error: "這個功能目前沒有開放。" }, 403);
+  }
+
   const { data: staffRow, error: staffLookupError } = await adminClient
     .from("merchant_staff")
     .select("id, merchant_id, status, user_id")

@@ -16,6 +16,7 @@ describe("resolveStaffOrderAbility", () => {
         staffRow: ON,
         hasCalendarView: true,
         hasSelfManageAvailability: true,
+        hasOrderEditingFeature: true,
       }),
     ).toEqual({ canEditOrders: true, canToggleSlots: true });
   });
@@ -27,7 +28,13 @@ describe("resolveStaffOrderAbility", () => {
       { staffRow: ON, hasCalendarView: undefined },
       { staffRow: null, hasCalendarView: true },
     ]) {
-      expect(resolveStaffOrderAbility({ ...input, hasSelfManageAvailability: true })).toEqual({
+      expect(
+        resolveStaffOrderAbility({
+          ...input,
+          hasSelfManageAvailability: true,
+          hasOrderEditingFeature: true,
+        }),
+      ).toEqual({
         canEditOrders: false,
         canToggleSlots: false,
       });
@@ -39,6 +46,7 @@ describe("resolveStaffOrderAbility", () => {
         staffRow: { ...ON, compensation_type: "monthly_salary" },
         hasCalendarView: true,
         hasSelfManageAvailability: true,
+        hasOrderEditingFeature: true,
       }),
     ).toEqual({ canEditOrders: true, canToggleSlots: false });
     expect(
@@ -46,8 +54,24 @@ describe("resolveStaffOrderAbility", () => {
         staffRow: ON,
         hasCalendarView: true,
         hasSelfManageAvailability: false,
+        hasOrderEditingFeature: true,
       }),
     ).toEqual({ canEditOrders: true, canToggleSlots: false });
+  });
+});
+
+describe("SPECS-INDEX #1025 FG3:平台功能「服務人員新增編輯訂單」", () => {
+  it("平台關或還不知道 ⇒ 不能新增編輯、也不能開關時段(個人開關全開也一樣)", () => {
+    for (const hasOrderEditingFeature of [false, undefined, null]) {
+      expect(
+        resolveStaffOrderAbility({
+          staffRow: ON,
+          hasCalendarView: true,
+          hasSelfManageAvailability: true,
+          hasOrderEditingFeature,
+        }),
+      ).toEqual({ canEditOrders: false, canToggleSlots: false });
+    }
   });
 });
 

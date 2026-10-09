@@ -62,6 +62,7 @@ import {
 import { MyBookingDetailDialog } from "./MyBookingDetailDialog";
 import { MyCalendarTimelineView } from "./MyCalendarTimelineView";
 import { countDayStatusBadges } from "./staffConfirmLogic";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import { resolveStaffOrderAbility } from "./staffOrderLogic";
 import { invalidateStaffSchedule } from "./staffScheduleChannel";
 
@@ -213,6 +214,8 @@ export default function MyCalendarPage() {
   const { data: hasSelfManageAvailability } = useMyStaffPermission(
     "staff_availability_self_manage",
   );
+  // SPECS-INDEX #1025 FG3-U01:平台功能「服務人員新增編輯訂單」。
+  const { hasFeature } = useMerchantFeatures();
   const [formState, setFormState] = useState<
     | { open: false }
     | { open: true; editingBookingId: string | null; dateKey?: string; time?: string }
@@ -291,6 +294,8 @@ export default function MyCalendarPage() {
     staffRow,
     hasCalendarView: hasCalendarAccess,
     hasSelfManageAvailability,
+    // SPECS-INDEX #1025 FG3-U01:平台關掉「服務人員新增編輯訂單」⇒ 跟這個人沒被開權限時同一個畫面。
+    hasOrderEditingFeature: hasFeature(MERCHANT_FEATURE_KEYS.staffOrderEditing),
   });
   const detailBooking = (schedule ?? []).find((b) => b.id === detailBookingId) ?? null;
 

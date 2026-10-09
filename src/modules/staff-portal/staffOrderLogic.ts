@@ -17,10 +17,15 @@ export interface StaffOrderAbilityInput {
   hasCalendarView: boolean | null | undefined;
   /** 「可預約時段/休假自助調整」權限(useMyStaffPermission('staff_availability_self_manage').data)。 */
   hasSelfManageAvailability: boolean | null | undefined;
+  /**
+   * SPECS-INDEX #1025 FG3-F01:平台功能「服務人員新增編輯訂單」(useMerchantFeatures().hasFeature('staff_order_editing'))。
+   * 後端 staff_order_self_ok 同一個條件;讀取中(undefined)當作不能用。
+   */
+  hasOrderEditingFeature: boolean | null | undefined;
 }
 
 export interface StaffOrderAbility {
-  /** 規格 4-1:新增編輯訂單有效 = 開關開 + 顯示會員資料開 + 行事曆檢視(後端 staff_order_self_ok 同一組條件)。 */
+  /** 規格 4-1:新增編輯訂單有效 = 開關開 + 顯示會員資料開 + 行事曆檢視 + 平台功能開(#1025;後端 staff_order_self_ok 同一組條件)。 */
   canEditOrders: boolean;
   /**
    * 方案 B2(使用者 2026-10-07 裁決):選單的「開啟 / 關閉時段」只給 canEditOrders + 按件計酬 + 排班自助權限的人
@@ -35,7 +40,8 @@ export function resolveStaffOrderAbility(input: StaffOrderAbilityInput): StaffOr
     Boolean(row) &&
     row!.can_create_edit_orders === true &&
     row!.show_member_info === true &&
-    input.hasCalendarView === true;
+    input.hasCalendarView === true &&
+    input.hasOrderEditingFeature === true;
   const canToggleSlots =
     canEditOrders &&
     row!.compensation_type === "piece_rate" &&
