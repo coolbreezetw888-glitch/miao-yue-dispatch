@@ -14,7 +14,7 @@
 // 比起既有管理員/客服版本的行事曆(可以跨服務人員切換、建單、編輯),這裡刻意做成簡化版
 // 唯讀檢視——服務人員這次的範圍只到「看得到自己的排程」,不包含建單/編輯(見規格書判斷 2)。
 
-import { lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/components/patterns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { lazyWithReload } from "@/lib/lazyWithReload";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
@@ -68,8 +69,10 @@ import { invalidateStaffSchedule } from "./staffScheduleChannel";
 
 // #977 第 7 批:建單 / 編輯表單在 booking/CalendarPage.tsx(那支檔案也 import 這一頁)⇒ 用 lazy 載入,
 // 不形成靜態的互相 import;只有開關生效、真的打開表單時才會載入。
-const BookingFormDialog = lazy(() =>
-  import("@/modules/booking/CalendarPage").then((m) => ({ default: m.BookingFormDialog })),
+// #1054:改用 lazyWithReload(部署新版後舊分檔不存在 ⇒ 自動重新整理一次),載入行為不變。
+const BookingFormDialog = lazyWithReload(
+  () => import("@/modules/booking/CalendarPage"),
+  (m) => m.BookingFormDialog,
 );
 import type { MyBookingScheduleItem } from "./api";
 

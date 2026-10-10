@@ -43,7 +43,15 @@
 // 「實心填入商家自訂的那個顏色、文字一律白字」(StatusTag 的 fillColor)。
 // 四種狀態一律實心,左側 4px 色條維持現狀不拿掉。詳見 OrderCard 裡 tags 那段的說明。
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -67,6 +75,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 
 import { getVerifiedUser } from "@/lib/auth-guard";
+import { lazyWithReload } from "@/lib/lazyWithReload";
 import { useCurrentMerchant } from "@/modules/merchant/context";
 import { INDUSTRY_REQUIRES_CUSTOMER_ADDRESS, type IndustryType } from "@/modules/merchant/types";
 import {
@@ -76,7 +85,6 @@ import {
 } from "@/modules/staff-agent/context";
 
 import { BookingDetailDialog } from "./BookingDetailDialog";
-import { BookingFormDialog } from "./CalendarPage";
 import {
   useBookingCardExtras,
   useMerchantBookings,
@@ -114,6 +122,15 @@ import {
   type BookingStatus,
   type BookingStatusColorMap,
 } from "./types";
+
+// SPECS-INDEX #1054(網站拆檔,體檢 D-03):編輯表單在 CalendarPage.tsx。原本這裡直接 import,
+// 讓行事曆整支被綁進訂單管理頁、也讓服務人員行事曆的動態 import 失效。改成動態 import:
+// 表單元件一直掛著(open 由 formOpen 控制),所以訂單管理頁一打開就會在背景下載行事曆分檔,
+// 使用者按「編輯」時通常早已下載好;萬一還沒好,表單等下載完才出現(fallback 不顯示任何東西)。
+const BookingFormDialog = lazyWithReload(
+  () => import("./CalendarPage"),
+  (m) => m.BookingFormDialog,
+);
 
 interface OrderFilters {
   keyword: string;
@@ -513,15 +530,17 @@ function OrdersPageInner() {
         onEdit={openEditForm}
       />
 
-      <BookingFormDialog
-        merchantId={merchantId}
-        industryType={merchant!.industry_type as IndustryType}
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        prefill={{}}
-        editingBookingId={editingBookingId}
-        onSaved={refetchAll}
-      />
+      <Suspense fallback={null}>
+        <BookingFormDialog
+          merchantId={merchantId}
+          industryType={merchant!.industry_type as IndustryType}
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          prefill={{}}
+          editingBookingId={editingBookingId}
+          onSaved={refetchAll}
+        />
+      </Suspense>
     </main>
   );
 }

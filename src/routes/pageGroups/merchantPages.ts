@@ -1,0 +1,39 @@
+// SPECS-INDEX #1054(網站拆檔):「商家後台」分組 —— 後台外殼(AppLayout)與 /app 底下的各頁。
+// 例外:行事曆(CalendarPage)不在這包,App.tsx 直接對它做動態 import,讓行事曆成為自己的分檔
+// (服務人員行事曆、訂單管理頁的編輯表單也都用動態 import 拿它,見 D-03)。
+export { default as AppLayout } from "@/routes/AppLayout";
+export { default as HomePage } from "@/routes/HomePage";
+export { default as ManagePage } from "@/routes/ManagePage";
+export { default as OnboardingPage } from "@/modules/merchant/OnboardingPage";
+export { default as NewMerchantPage } from "@/modules/merchant/NewMerchantPage";
+export { default as MerchantSettingsPage } from "@/modules/merchant/MerchantSettingsPage";
+export { default as StaffListPage } from "@/modules/staff-agent/StaffListPage";
+export { default as AgentListPage } from "@/modules/staff-agent/AgentListPage";
+export { default as AgentPermissionsPage } from "@/modules/staff-agent/AgentPermissionsPage";
+export { default as AgentInviteCompletePage } from "@/modules/staff-agent/AgentInviteCompletePage";
+export { default as StaffPermissionsPage } from "@/modules/staff-agent/StaffPermissionsPage";
+export { default as ServiceItemsPage } from "@/modules/service-items/ServiceItemsPage";
+export { default as BusinessHoursPage } from "@/modules/booking/BusinessHoursPage";
+export { default as MaterialCostsPage } from "@/modules/booking/MaterialCostsPage";
+export { default as PaymentMethodsPage } from "@/modules/booking/PaymentMethodsPage";
+export { default as OrdersPage } from "@/modules/booking/OrdersPage";
+export { default as LeaveTypesPage } from "@/modules/scheduling/LeaveTypesPage";
+export { default as LeaveRecordsPage } from "@/modules/scheduling/LeaveRecordsPage";
+export { default as SchedulingOverviewPage } from "@/modules/scheduling/SchedulingOverviewPage";
+export { default as PayrollSettingsPage } from "@/modules/payroll/PayrollSettingsPage";
+export { default as BillingReportPage } from "@/modules/payroll/BillingReportPage";
+export { default as StaffReportPage } from "@/modules/payroll/StaffReportPage";
+export { default as MembersListPage } from "@/modules/members/MembersListPage";
+export { default as MemberDetailPage } from "@/modules/members/MemberDetailPage";
+export { default as MemberPointsPage } from "@/modules/members/MemberPointsPage";
+export { default as MemberSettingsPage } from "@/modules/members/MemberSettingsPage";
+export { default as LineSettingsPage } from "@/modules/line-notifications/LineSettingsPage";
+export { default as LineEventSettingsPage } from "@/modules/line-notifications/LineEventSettingsPage";
+export { default as LineLogsPage } from "@/modules/line-notifications/LineLogsPage";
+export { default as LineMarketingPage } from "@/modules/line-notifications/LineMarketingPage";
+export { default as ImportWizardPage } from "@/modules/data-tools/ImportWizardPage";
+export { default as ImportHistoryPage } from "@/modules/data-tools/ImportHistoryPage";
+export { default as ReportExportCenterPage } from "@/modules/data-tools/ReportExportCenterPage";
+export { default as IndustryTransferWizardPage } from "@/modules/data-tools/IndustryTransferWizardPage";
+export { default as PushEventSettingsPage } from "@/modules/push-notifications/PushEventSettingsPage";
+export { default as PushLogsPage } from "@/modules/push-notifications/PushLogsPage";

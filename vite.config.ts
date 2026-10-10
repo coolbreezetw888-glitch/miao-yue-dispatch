@@ -5,6 +5,40 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // SPECS-INDEX #1054(網站拆檔,體檢 D-03):頁面已經在 src/App.tsx 改成「用到才下載」(依角色分組)。
+  // 這裡再把每個頁面都一定會用到的大型共用套件各自分一個檔(等同 Rollup 的 manualChunks;
+  // 這個版本的打包工具 rolldown 把 manualChunks 標成過時,官方建議改用 codeSplitting.groups,效果相同):
+  //   ・vendor-react:react / react-dom / react-router(畫面與網址切換的基礎)
+  //   ・vendor-supabase:supabase 用戶端(登入與資料讀寫)
+  //   ・vendor-query:@tanstack/react-query(資料快取)
+  // 好處:這幾包很少變動,部署新版時檔名(雜湊)通常不變,回訪的手機不必重新下載。
+  // 其他套件(radix 元件、日期、圖示、圖表⋯)刻意不手動分組,交給打包工具依「哪幾頁會用到」自動分,
+  // 才不會讓客人預約頁被迫下載只有後台才用的套件;也避免切得太碎。
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "vendor-react",
+              test: /node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom)[\\/]/,
+              priority: 30,
+            },
+            {
+              name: "vendor-supabase",
+              test: /node_modules[\\/](@supabase[\\/]|iceberg-js[\\/])/,
+              priority: 20,
+            },
+            {
+              name: "vendor-query",
+              test: /node_modules[\\/]@tanstack[\\/](query-core|react-query)[\\/]/,
+              priority: 10,
+            },
+          ],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
