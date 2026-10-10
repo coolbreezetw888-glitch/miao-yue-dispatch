@@ -31,6 +31,7 @@ import {
   MERCHANT_FEATURE_DISABLED_MESSAGE,
 } from "../_shared/featureGate.ts";
 import { errorCode } from "../_shared/safeLog.ts";
+import { getLineMessagingCredentials } from "../_shared/lineCredentials.ts";
 
 // pushLineMessage/renderMessageTemplate 這兩支小函式跟 line-notify-dispatch/index.ts 裡的
 // 完全一樣——刻意不用跨 function 的相對路徑 import 共用,因為 Supabase Edge Function 是每個
@@ -306,12 +307,12 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
 
   const plan = buildMarketingDispatchPlan(memberIds, (members ?? []) as MarketingMemberRow[]);
 
-  const { data: configRow } = await adminClient
-    .from("merchant_line_configs")
-    .select("channel_access_token")
-    .eq("merchant_id", merchantId)
-    .maybeSingle();
-  const channelAccessToken = (configRow?.channel_access_token as string) ?? "";
+  // #1053:金鑰改存 Vault,透過 service_role 專用 RPC 取。讀不到 ⇒ 當作 LINE 未設定,一則都不發、不寫記錄。
+  const credentials = await getLineMessagingCredentials(adminClient, merchantId, "[line-send-marketing]");
+  if (!credentials) {
+    return jsonResponse({ error: "尚未設定 LINE 串接憑證，無法發送" }, 400);
+  }
+  const channelAccessToken = credentials.channelAccessToken;
 
   let sentCount = 0;
   let failedCount = 0;

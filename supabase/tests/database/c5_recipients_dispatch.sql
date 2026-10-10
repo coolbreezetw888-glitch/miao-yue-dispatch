@@ -53,9 +53,9 @@ insert into merchants (id, group_id, name, industry_type, booking_slug, status, 
 insert into merchant_admins (id, merchant_id, user_id) values
   ('c5b00000-0000-4000-8000-000000000081', 'c5b00000-0000-4000-8000-000000000031', 'c5b00000-0000-4000-8000-000000000001');
 update merchant_admins set line_bound = true, line_user_id = 'Uadmin00000000000000000000000c5b' where id = 'c5b00000-0000-4000-8000-000000000081';
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected, line_bot_basic_id) values
-  ('c5b00000-0000-4000-8000-000000000031', '1234567892', 'C5B-A-SECRET', 'C5B-A-TOKEN-SENTINEL', true, '@c5btest'),
-  ('c5b00000-0000-4000-8000-000000000032', '1234567893', 'C5B-B-SECRET', 'C5B-B-TOKEN-SENTINEL', true, null);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected, line_bot_basic_id) values
+  ('c5b00000-0000-4000-8000-000000000031', '1234567892', vault.create_secret('C5B-A-SECRET'), vault.create_secret('C5B-A-TOKEN-SENTINEL'), right('C5B-A-SECRET', 4), right('C5B-A-TOKEN-SENTINEL', 4), true, '@c5btest'),
+  ('c5b00000-0000-4000-8000-000000000032', '1234567893', vault.create_secret('C5B-B-SECRET'), vault.create_secret('C5B-B-TOKEN-SENTINEL'), right('C5B-B-SECRET', 4), right('C5B-B-TOKEN-SENTINEL', 4), true, null);
 insert into merchant_line_event_settings (merchant_id, event_type, enabled, notify_admin, notify_agent, notify_staff, notify_member, message_template) values
   ('c5b00000-0000-4000-8000-000000000031', 'booking_created', true, true, false, false, true, '{{customer_name}} 新預約');
 insert into merchant_line_login_configs (merchant_id, channel_id, channel_secret_vault_id, channel_secret_last4, enabled) values

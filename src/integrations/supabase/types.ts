@@ -2343,9 +2343,11 @@ export type Database = {
       }
       merchant_line_configs: {
         Row: {
-          channel_access_token: string
+          channel_access_token_last4: string
+          channel_access_token_vault_id: string
           channel_id: string
-          channel_secret: string
+          channel_secret_last4: string
+          channel_secret_vault_id: string
           created_at: string
           display_name: string | null
           is_connected: boolean
@@ -2357,9 +2359,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          channel_access_token: string
+          channel_access_token_last4: string
+          channel_access_token_vault_id: string
           channel_id: string
-          channel_secret: string
+          channel_secret_last4: string
+          channel_secret_vault_id: string
           created_at?: string
           display_name?: string | null
           is_connected?: boolean
@@ -2371,9 +2375,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          channel_access_token?: string
+          channel_access_token_last4?: string
+          channel_access_token_vault_id?: string
           channel_id?: string
-          channel_secret?: string
+          channel_secret_last4?: string
+          channel_secret_vault_id?: string
           created_at?: string
           display_name?: string | null
           is_connected?: boolean
@@ -5172,6 +5178,10 @@ export type Database = {
         Returns: Json
       }
       internal_get_line_login_credentials: {
+        Args: { p_merchant_id: string }
+        Returns: Json
+      }
+      internal_get_line_messaging_credentials: {
         Args: { p_merchant_id: string }
         Returns: Json
       }

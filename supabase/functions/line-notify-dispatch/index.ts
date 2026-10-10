@@ -49,6 +49,7 @@ import {
 } from "../_shared/staffBookingDispatch.ts";
 import { checkMerchantFeature, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
 import { errorCode } from "../_shared/safeLog.ts";
+import { getLineMessagingCredentials } from "../_shared/lineCredentials.ts";
 
 // #972:環境變數改在 handleRequest 執行當下才讀(理由同 push-notify-dispatch:模組頂層讀成常數,
 // Deno 測試在 import 之前 set 的值會讀不到)。
@@ -370,6 +371,12 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     );
   }
 
+  // #1053:金鑰改存 Vault,透過 service_role 專用 RPC 取。讀不到 ⇒ 跟 not_configured 一樣安靜結束、不寫任何記錄。
+  const credentials = await getLineMessagingCredentials(adminClient, merchantId, "[line-notify-dispatch]");
+  if (!credentials) {
+    return jsonResponse({ dispatched: false, reason: "not_configured" }, 200);
+  }
+
   // 寫入 skipped 對象的記錄。
   for (const skipped of result.skipped) {
     await adminClient.from("line_notification_log").insert({
@@ -389,12 +396,6 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   }
 
   // 步驟 4:有實際目標,取變數 + 範本渲染 + 逐一呼叫 LINE push API。
-  const { data: configRow } = await adminClient
-    .from("merchant_line_configs")
-    .select("channel_access_token")
-    .eq("merchant_id", merchantId)
-    .maybeSingle();
-
   const { data: settingsRow } = await adminClient
     .from("merchant_line_event_settings")
     .select("message_template")
@@ -411,7 +412,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
 
   const messageTemplate = (settingsRow?.message_template as string) ?? "";
   const renderedMessage = renderMessageTemplate(messageTemplate, variables);
-  const channelAccessToken = (configRow?.channel_access_token as string) ?? "";
+  const channelAccessToken = credentials.channelAccessToken;
 
   let sentCount = 0;
   let failedCount = 0;

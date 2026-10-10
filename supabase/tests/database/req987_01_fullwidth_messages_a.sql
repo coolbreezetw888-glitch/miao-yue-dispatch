@@ -29,6 +29,14 @@ begin
   v_src := regexp_replace(v_src, E'    -- \\[c5b\\] C5-P02.*?continue;\\n    end if;\\n\\n', '', 'g');
   -- SPECS-INDEX #1025 FG-2:resolve_line_notification_targets 多一段「平台沒開 LINE 通知 ⇒ 回空清單」([req1025 FG2] 標記),先拿掉再比對改前指紋。
   v_src := regexp_replace(v_src, E'  -- \\[req1025 FG2 begin\\].*?-- \\[req1025 FG2 end\\]\\n\\n', '', 'g');
+  -- SPECS-INDEX #1053:claim_birthday_line_pending 的 token 改從 Vault 取([req1053] 標記),先換回原寫法再比對改前指紋。
+  if p_sig = 'public.claim_birthday_line_pending(p_limit integer)' then
+    v_src := replace(v_src, E'  v_r record;\n  v_token text;\n', E'  v_r record;\n');
+    v_src := replace(v_src, E'      c.is_connected,\n', E'      c.is_connected,\n      c.channel_access_token,\n');
+    v_src := regexp_replace(v_src, E'    -- \\[req1053\\][^\\n]*\\n    v_token := case when coalesce\\(v_r\\.is_connected, false\\)\\n                    then private\\.line_messaging_access_token\\(v_r\\.merchant_id\\) end;\\n', '', 'g');
+    v_src := replace(v_src, 'coalesce(btrim(v_token), '''')', 'coalesce(btrim(v_r.channel_access_token), '''')');
+    v_src := replace(v_src, '''channel_access_token'', v_token,', '''channel_access_token'', v_r.channel_access_token,');
+  end if;
   for i in 1 .. coalesce(array_length(p_pairs, 1), 0) / 2 loop
     v_src := replace(v_src, p_pairs[2 * i - 1], p_pairs[2 * i]);
   end loop;

@@ -155,8 +155,19 @@ Deno.test("C5-P01-4 混合:則數 = 實際要發的聯絡人數(跟 preview_line
 // =========================================================================
 import { handleRequest } from "./index.ts";
 
-function fgFakeClients(marketingFeature: boolean | "error", allowed = true) {
-  const rec = { adminRpcs: [] as string[], pushes: 0 };
+function fgFakeClients(
+  marketingFeature: boolean | "error",
+  allowed = true,
+  opts: { credentials?: "ok" | "missing"; members?: unknown[] } = {},
+) {
+  const rec = {
+    adminRpcs: [] as string[],
+    pushes: 0,
+    credentialCalls: [] as Record<string, unknown>[],
+    fromTables: [] as string[],
+    auths: [] as string[],
+    inserts: 0,
+  };
   const callerClient = {
     rpc(fn: string) {
       return Promise.resolve(fn === "am_i_allowed_line_marketing" ? { data: allowed, error: null } : { data: null, error: null });
@@ -164,19 +175,31 @@ function fgFakeClients(marketingFeature: boolean | "error", allowed = true) {
     auth: { getUser: () => Promise.resolve({ data: { user: { id: "u-1" } } }) },
   };
   const adminClient = {
-    rpc(fn: string) {
+    rpc(fn: string, args?: Record<string, unknown>) {
+      // #1053:金鑰 RPC 另外記錄,不混進 adminRpcs(既有斷言維持原樣)。
+      if (fn === "internal_get_line_messaging_credentials") {
+        rec.credentialCalls.push(args ?? {});
+        return Promise.resolve({
+          data: (opts.credentials ?? "ok") === "ok" ? { channel_secret: "S", channel_access_token: "T" } : null,
+          error: null,
+        });
+      }
       rec.adminRpcs.push(fn);
       if (fn === "internal_merchant_has_feature") {
         return Promise.resolve(marketingFeature === "error" ? { data: null, error: { code: "XX000" } } : { data: marketingFeature, error: null });
       }
-      return Promise.resolve({ data: [], error: null });
+      return Promise.resolve({ data: opts.members ?? [], error: null });
     },
-    from() {
+    from(table: string) {
+      rec.fromTables.push(table);
       const b = {
         select: () => b,
         eq: () => b,
-        maybeSingle: () => Promise.resolve({ data: { channel_access_token: "T" }, error: null }),
-        insert: () => Promise.resolve({ error: null }),
+        maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        insert: () => {
+          rec.inserts++;
+          return Promise.resolve({ error: null });
+        },
       };
       return b;
     },
@@ -185,7 +208,8 @@ function fgFakeClients(marketingFeature: boolean | "error", allowed = true) {
     env: () => undefined,
     createCallerClient: () => callerClient,
     createAdminClient: () => adminClient,
-    fetchImpl: (() => {
+    fetchImpl: ((_url: string, init?: RequestInit) => {
+      rec.auths.push(String((init?.headers as Record<string, string>)?.Authorization ?? ""));
       rec.pushes++;
       return Promise.resolve(new Response("{}"));
     }) as unknown as typeof fetch,
@@ -229,4 +253,27 @@ Deno.test("#1051 再行銷通知開著 ⇒ 繼續往下查會員(200)", async ()
   const res = await handleRequest(marketingRequest(), deps);
   assertEquals(res.status, 200);
   assertEquals(rec.adminRpcs, ["internal_merchant_has_feature", "internal_line_marketing_candidates"]);
+});
+
+// =========================================================================
+// SPECS-INDEX #1053:金鑰改存 Vault ⇒ 透過 internal_get_line_messaging_credentials 取;不再讀 merchant_line_configs。
+// =========================================================================
+const BOUND_MEMBER = { id: "mem-1", name: "會員甲", line_bound: true, line_user_id: "Uabc001", is_blacklisted: false };
+
+Deno.test("#1053 用 RPC 取 token 發送,不查 merchant_line_configs", async () => {
+  const { deps, rec } = fgFakeClients(true, true, { members: [BOUND_MEMBER] });
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 200);
+  assertEquals(rec.credentialCalls, [{ p_merchant_id: "m-1" }]);
+  assertEquals(rec.auths, ["Bearer T"]);
+  assertEquals(rec.fromTables.includes("merchant_line_configs"), false);
+});
+
+Deno.test("#1053 金鑰讀不到 ⇒ 當作 LINE 未設定:400,一則都不發、不寫記錄", async () => {
+  const { deps, rec } = fgFakeClients(true, true, { credentials: "missing", members: [BOUND_MEMBER] });
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 400);
+  assertEquals(await res.json(), { error: "尚未設定 LINE 串接憑證，無法發送" });
+  assertEquals(rec.pushes, 0);
+  assertEquals(rec.inserts, 0);
 });

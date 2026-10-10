@@ -93,8 +93,8 @@ select throws_ok(
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
 
 select throws_ok(
-  $$insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token)
-    values ('ec000000-0000-4000-8000-000000000021', 'x', 'y', 'z')$$,
+  $$insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4)
+    values ('ec000000-0000-4000-8000-000000000021', 'x', gen_random_uuid(), gen_random_uuid(), 'yyyy', 'zzzz')$$,
   '42501', null,
   '3.21:merchant_line_configs 沒有任何 RLS 政策,一般角色直接 insert 被擋下'
 );

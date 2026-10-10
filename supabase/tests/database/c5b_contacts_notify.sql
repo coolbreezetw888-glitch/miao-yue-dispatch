@@ -85,9 +85,9 @@ insert into merchants (id, group_id, name, industry_type, booking_slug, status, 
 insert into merchant_admins (merchant_id, user_id) values
   ('c5d00000-0000-4000-8000-000000000031', 'c5d00000-0000-4000-8000-000000000001'),
   ('c5d00000-0000-4000-8000-000000000032', 'c5d00000-0000-4000-8000-000000000001');
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('c5d00000-0000-4000-8000-000000000031', '1234567811', 'C5D-A-SECRET', 'C5D-A-TOKEN-SENTINEL', true),
-  ('c5d00000-0000-4000-8000-000000000032', '1234567812', 'C5D-B-SECRET', 'C5D-B-TOKEN-SENTINEL', false);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('c5d00000-0000-4000-8000-000000000031', '1234567811', vault.create_secret('C5D-A-SECRET'), vault.create_secret('C5D-A-TOKEN-SENTINEL'), right('C5D-A-SECRET', 4), right('C5D-A-TOKEN-SENTINEL', 4), true),
+  ('c5d00000-0000-4000-8000-000000000032', '1234567812', vault.create_secret('C5D-B-SECRET'), vault.create_secret('C5D-B-TOKEN-SENTINEL'), right('C5D-B-SECRET', 4), right('C5D-B-TOKEN-SENTINEL', 4), false);
 insert into merchant_line_login_configs (merchant_id, channel_id, channel_secret_vault_id, channel_secret_last4, enabled) values
   ('c5d00000-0000-4000-8000-000000000031', '5656565656', vault.create_secret('C5DFAKESECRET00000000000000000AA'), '00AA', true),
   ('c5d00000-0000-4000-8000-000000000032', '5757575757', vault.create_secret('C5DFAKESECRET00000000000000000BB'), '00BB', true);

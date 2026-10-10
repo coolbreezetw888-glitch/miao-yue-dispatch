@@ -74,9 +74,9 @@ insert into merchant_staff (id, merchant_id, name, status, login_status, phone, 
   ('c5a00000-0000-4000-8000-000000000052', 'c5a00000-0000-4000-8000-000000000031', 'C5A店長兼服務人員', 'active', 'not_invited', '0900510052', 'c5a00000-0000-4000-8000-000000000005'),
   ('c5a00000-0000-4000-8000-000000000053', 'c5a00000-0000-4000-8000-000000000032', 'C5B服務人員', 'active', 'not_invited', '0900510053', null);
 
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('c5a00000-0000-4000-8000-000000000031', '1234567890', 'C5A-SECRET-SENTINEL', 'C5A-TOKEN-SENTINEL', true),
-  ('c5a00000-0000-4000-8000-000000000032', '1234567891', 'C5B-SECRET-SENTINEL', 'C5B-TOKEN-SENTINEL', false);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('c5a00000-0000-4000-8000-000000000031', '1234567890', vault.create_secret('C5A-SECRET-SENTINEL'), vault.create_secret('C5A-TOKEN-SENTINEL'), right('C5A-SECRET-SENTINEL', 4), right('C5A-TOKEN-SENTINEL', 4), true),
+  ('c5a00000-0000-4000-8000-000000000032', '1234567891', vault.create_secret('C5B-SECRET-SENTINEL'), vault.create_secret('C5B-TOKEN-SENTINEL'), right('C5B-SECRET-SENTINEL', 4), right('C5B-TOKEN-SENTINEL', 4), false);
 insert into merchant_line_event_settings (merchant_id, event_type, enabled, notify_admin, notify_agent, notify_staff, notify_member, message_template) values
   ('c5a00000-0000-4000-8000-000000000031', 'booking_created', true, true, false, false, true, '新預約'),
   ('c5a00000-0000-4000-8000-000000000031', 'booking_cancelled', true, true, false, false, true, '取消');

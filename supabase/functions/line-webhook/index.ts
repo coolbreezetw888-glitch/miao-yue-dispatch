@@ -7,6 +7,7 @@
 //   2. 解析 JSON 取出 destination(此時內容尚未驗證,不可信任,只拿來查表)。
 //   3. 查 merchant_line_configs where line_bot_user_id = destination,查無資料 → 回 200 不處理
 //      (安靜跳過,不洩漏「這個 destination 存不存在」的資訊)。
+//      #1053:查表只取 merchant_id;secret / token 改從 Vault 取(_shared/lineCredentials.ts),讀不到同樣回 200。
 //   4. 用查到的 channel_secret 對原始位元組計算 HMAC-SHA256,base64 編碼後跟 x-line-signature
 //      比對(常數時間比較)。
 //   5. 比對失敗 → 401,完全不處理任何事件。
@@ -24,6 +25,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { errorCode } from "../_shared/safeLog.ts";
 import { checkMerchantFeature, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
+import { getLineMessagingCredentials } from "../_shared/lineCredentials.ts";
 
 
 // =========================================================================
@@ -188,7 +190,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   // 規則 8:靠 destination 反查商家。
   const { data: config, error: configError } = await adminClient
     .from("merchant_line_configs")
-    .select("merchant_id, channel_secret, channel_access_token")
+    .select("merchant_id")
     .eq("line_bot_user_id", payload.destination)
     .maybeSingle();
 
@@ -201,11 +203,18 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return new Response("OK", { status: 200 });
   }
 
+  // #1053:金鑰改存 Vault,透過 service_role 專用 RPC 取。讀不到 ⇒ 視同這間店沒設定 LINE,安靜回 200。
+  const merchantId = config.merchant_id as string;
+  const credentials = await getLineMessagingCredentials(adminClient, merchantId, "[line-webhook]");
+  if (!credentials) {
+    return new Response("OK", { status: 200 });
+  }
+
   const signatureHeader = req.headers.get("x-line-signature");
   const validSignature = await verifyLineSignature(
     rawBody,
     signatureHeader,
-    config.channel_secret as string,
+    credentials.channelSecret,
   );
 
   if (!validSignature) {
@@ -213,8 +222,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     return new Response("Invalid signature", { status: 401 });
   }
 
-  const merchantId = config.merchant_id as string;
-  const channelAccessToken = config.channel_access_token as string;
+  const channelAccessToken = credentials.channelAccessToken;
 
   for (const event of payload.events ?? []) {
     // 規則 2.3:冪等處理——已存在的 webhookEventId 直接跳過(不看 isRedelivery)。

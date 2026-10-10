@@ -56,10 +56,10 @@ insert into merchant_staff (id, merchant_id, name, status, login_status, phone, 
   ('c5c00000-0000-4000-8000-000000000051', 'c5c00000-0000-4000-8000-000000000031', 'C5C服務人員', 'active', 'not_invited', '0900530051', 'c5c00000-0000-4000-8000-000000000003'),
   ('c5c00000-0000-4000-8000-000000000052', 'c5c00000-0000-4000-8000-000000000032', 'C5C-B服務人員', 'active', 'not_invited', '0900530052', null),
   ('c5c00000-0000-4000-8000-000000000053', 'c5c00000-0000-4000-8000-000000000033', 'C5C-C服務人員', 'active', 'not_invited', '0900530053', null);
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('c5c00000-0000-4000-8000-000000000031', '1234567801', 'C5C-A-SECRET', 'C5C-A-TOKEN-SENTINEL', true),
-  ('c5c00000-0000-4000-8000-000000000032', '1234567802', 'C5C-B-SECRET', 'C5C-B-TOKEN-SENTINEL', true),
-  ('c5c00000-0000-4000-8000-000000000033', '1234567803', 'C5C-C-SECRET', 'C5C-C-TOKEN-SENTINEL', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('c5c00000-0000-4000-8000-000000000031', '1234567801', vault.create_secret('C5C-A-SECRET'), vault.create_secret('C5C-A-TOKEN-SENTINEL'), right('C5C-A-SECRET', 4), right('C5C-A-TOKEN-SENTINEL', 4), true),
+  ('c5c00000-0000-4000-8000-000000000032', '1234567802', vault.create_secret('C5C-B-SECRET'), vault.create_secret('C5C-B-TOKEN-SENTINEL'), right('C5C-B-SECRET', 4), right('C5C-B-TOKEN-SENTINEL', 4), true),
+  ('c5c00000-0000-4000-8000-000000000033', '1234567803', vault.create_secret('C5C-C-SECRET'), vault.create_secret('C5C-C-TOKEN-SENTINEL'), right('C5C-C-SECRET', 4), right('C5C-C-TOKEN-SENTINEL', 4), true);
 insert into merchant_customer_line_settings (merchant_id, on_reminder, on_completed, reminder_hours_before) values
   ('c5c00000-0000-4000-8000-000000000031', true, true, 24),
   ('c5c00000-0000-4000-8000-000000000033', true, false, 12);

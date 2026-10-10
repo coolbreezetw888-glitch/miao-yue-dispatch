@@ -115,10 +115,10 @@ insert into merchant_member_settings (merchant_id, birthday_bonus_enabled, birth
   ('db150000-0000-4000-8000-0000000000a8', true, 30, '生日快樂', true, 'none'),
   ('db150000-0000-4000-8000-0000000000ab', true, 30, '生日快樂', true, 'none');
 
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('db150000-0000-4000-8000-0000000000a1', 'ch-a', 'secret-a', 'token-a', true),
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('db150000-0000-4000-8000-0000000000a1', 'ch-a', vault.create_secret('secret-a'), vault.create_secret('token-a'), right('secret-a', 4), right('token-a', 4), true),
   -- F 店有設定列但未連線(is_connected = false)
-  ('db150000-0000-4000-8000-0000000000a6', 'ch-f', 'secret-f', 'token-f', false);
+  ('db150000-0000-4000-8000-0000000000a6', 'ch-f', vault.create_secret('secret-f'), vault.create_secret('token-f'), right('secret-f', 4), right('token-f', 4), false);
 
 -- 會員。生日年份不影響(只比月 / 日);2/29 生日用 2000 年。
 insert into members (id, merchant_id, name, phone, referral_code, birthday, status, is_blacklisted, line_bound, line_user_id, points_balance) values
@@ -480,8 +480,7 @@ insert into merchants (id, group_id, name, industry_type, status) values
   ('db150000-0000-4000-8000-0000000000ac', 'db150000-0000-4000-8000-000000000011', '生日測試L店(停用)', 'in_store_beauty', 'disabled');
 insert into merchant_member_settings (merchant_id, birthday_bonus_enabled, birthday_bonus_points, birthday_line_message)
 values ('db150000-0000-4000-8000-0000000000ac', true, 30, '生日快樂');
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected)
-values ('db150000-0000-4000-8000-0000000000ac', 'ch-l', 'secret-l', 'token-l', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values ('db150000-0000-4000-8000-0000000000ac', 'ch-l', vault.create_secret('secret-l'), vault.create_secret('token-l'), right('secret-l', 4), right('token-l', 4), true);
 
 insert into members (id, merchant_id, name, phone, referral_code, birthday, status, line_bound, line_user_id, points_balance) values
   ('db150000-0000-4000-8000-000000000901', 'db150000-0000-4000-8000-0000000000a1', '餘額快溢位', '0915000901', 'M1015I01', '1990-08-10', 'active', false, null, 2147483640),

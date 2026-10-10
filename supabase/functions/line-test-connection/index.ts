@@ -3,7 +3,7 @@
 // 流程:
 //   1. 用呼叫者的 JWT(anon client)呼叫 am_i_merchant_admin(merchant_id)——回傳 false 就 403。
 //      比照 invite-merchant-agent 既有寫法(第一步先驗證權限,不是收到請求就無條件執行特權操作)。
-//   2. 通過後用 service_role client 讀取 merchant_line_configs,呼叫
+//   2. 通過後用 service_role client 取金鑰(#1053:改走 _shared/lineCredentials → Vault),呼叫
 //      GET https://api.line.me/v2/bot/info(header Authorization: Bearer <channel_access_token>)。
 //   3. 成功:更新 is_connected=true/line_bot_user_id/line_bot_basic_id/display_name/
 //      last_tested_at/last_test_result,回傳成功結果。
@@ -16,6 +16,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { errorCode } from "../_shared/safeLog.ts";
+import { getLineMessagingCredentials } from "../_shared/lineCredentials.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -195,21 +196,13 @@ async function handleRequest(req: Request): Promise<Response> {
     auth: { persistSession: false },
   });
 
-  const { data: config, error: configError } = await adminClient
-    .from("merchant_line_configs")
-    .select("channel_access_token")
-    .eq("merchant_id", merchantId)
-    .maybeSingle();
-
-  if (configError) {
-    console.error("[line-test-connection] 讀取 merchant_line_configs 失敗", errorCode(configError));
-    return jsonResponse({ error: "查詢串接設定時發生錯誤，請稍後再試" }, 500);
-  }
-  if (!config) {
+  // #1053:金鑰改存 Vault,透過 service_role 專用 RPC 取;讀不到 ⇒ 走「尚未設定」既有分支。
+  const credentials = await getLineMessagingCredentials(adminClient, merchantId, "[line-test-connection]");
+  if (!credentials) {
     return jsonResponse({ error: "尚未設定 LINE 串接憑證，請先儲存憑證再測試連線" }, 400);
   }
 
-  const result = await callLineBotInfo(fetch, config.channel_access_token as string);
+  const result = await callLineBotInfo(fetch, credentials.channelAccessToken);
   const { update, response } = buildTestResultUpdate(result, new Date().toISOString());
 
   const { error: updateError } = await adminClient

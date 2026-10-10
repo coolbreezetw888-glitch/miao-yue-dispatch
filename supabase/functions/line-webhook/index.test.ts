@@ -140,9 +140,14 @@ import { computeLineSignature as sign, friendshipChangeFromEvent, handleRequest 
 const C5_SECRET = "c5-channel-secret";
 const C5_USER = "U0123456789abcdef0123456789abcdef";
 
-function c5FakeClient(lineNotificationsFeature: boolean | "error" = true) {
+function c5FakeClient(
+  lineNotificationsFeature: boolean | "error" = true,
+  credentials: "ok" | "missing" | "error" = "ok",
+) {
   const rec = {
     rpcs: [] as { fn: string; args: Record<string, unknown> }[],
+    credentialCalls: [] as Record<string, unknown>[],
+    configSelects: [] as string[],
     events: new Set<string>(),
     replies: 0,
   };
@@ -150,7 +155,8 @@ function c5FakeClient(lineNotificationsFeature: boolean | "error" = true) {
     from(table: string) {
       const filters: Record<string, unknown> = {};
       const builder = {
-        select() {
+        select(cols?: string) {
+          if (table === "merchant_line_configs") rec.configSelects.push(String(cols));
           return builder;
         },
         eq(col: string, val: unknown) {
@@ -159,10 +165,9 @@ function c5FakeClient(lineNotificationsFeature: boolean | "error" = true) {
         },
         maybeSingle() {
           if (table === "merchant_line_configs") {
+            // #1053:表裡已經沒有金鑰欄位,只回 merchant_id。
             return Promise.resolve({
-              data: filters.line_bot_user_id === "Ubot"
-                ? { merchant_id: "m-1", channel_secret: C5_SECRET, channel_access_token: "TOKEN" }
-                : null,
+              data: filters.line_bot_user_id === "Ubot" ? { merchant_id: "m-1" } : null,
               error: null,
             });
           }
@@ -179,6 +184,15 @@ function c5FakeClient(lineNotificationsFeature: boolean | "error" = true) {
       return builder;
     },
     rpc(fn: string, args: Record<string, unknown>) {
+      // #1053:金鑰從 Vault 取(另外記錄,不混進 rpcs 讓既有斷言維持原樣)。
+      if (fn === "internal_get_line_messaging_credentials") {
+        rec.credentialCalls.push(args);
+        if (credentials === "error") return Promise.resolve({ data: null, error: { code: "XX000", message: "boom" } });
+        return Promise.resolve({
+          data: credentials === "ok" ? { channel_secret: C5_SECRET, channel_access_token: "TOKEN" } : null,
+          error: null,
+        });
+      }
       rec.rpcs.push({ fn, args });
       if (fn === "internal_merchant_has_feature") {
         return Promise.resolve(lineNotificationsFeature === "error"
@@ -269,6 +283,47 @@ for (const gate of [false, "error"] as const) {
     assertEquals(res.status, 200);
     assertEquals(rec.rpcs.map((r) => r.fn), ["internal_merchant_has_feature"]);
     assertEquals(replies, 0);
+  });
+}
+
+Deno.test("#1053 金鑰從 Vault 取:查表只選 merchant_id,用 RPC 取到的 secret 驗簽、token 回覆", async () => {
+  const { client, rec } = c5FakeClient();
+  const auths: string[] = [];
+  const deps = {
+    ...c5Deps(client),
+    fetchImpl: ((_url: string, init?: RequestInit) => {
+      auths.push(String((init?.headers as Record<string, string>)?.Authorization ?? ""));
+      return Promise.resolve(new Response("{}"));
+    }) as unknown as typeof fetch,
+  };
+  const res = await handleRequest(await c5Request([
+    { type: "message", webhookEventId: "v1", replyToken: "r", message: { type: "text", text: "123456" }, source: { userId: C5_USER } },
+  ]), deps);
+  assertEquals(res.status, 200);
+  assertEquals(rec.configSelects, ["merchant_id"]);
+  assertEquals(rec.credentialCalls, [{ p_merchant_id: "m-1" }]);
+  assertEquals(auths, ["Bearer TOKEN"]);
+});
+
+for (const mode of ["missing", "error"] as const) {
+  Deno.test(`#1053 金鑰讀不到(${mode === "missing" ? "沒設定 / Vault 沒有" : "RPC 失敗"})⇒ 當作沒設定:安靜 200、不處理任何事件、log 不帶原文`, async () => {
+    const { client, rec } = c5FakeClient(true, mode);
+    const logs: unknown[][] = [];
+    const orig = console.error;
+    console.error = (...a: unknown[]) => {
+      logs.push(a);
+    };
+    try {
+      const res = await handleRequest(await c5Request([
+        { type: "follow", webhookEventId: `k-${mode}`, source: { userId: C5_USER } },
+      ]), c5Deps(client));
+      assertEquals(res.status, 200);
+      assertEquals(rec.rpcs.length, 0);
+      assertEquals(rec.events.size, 0);
+      assertEquals(logs, mode === "error" ? [["[line-webhook] 讀取 LINE 金鑰失敗", "XX000"]] : []);
+    } finally {
+      console.error = orig;
+    }
   });
 }
 

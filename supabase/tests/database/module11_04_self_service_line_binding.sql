@@ -157,11 +157,10 @@ insert into merchant_staff (id, merchant_id, user_id, name, phone, compensation_
 -- A 店已完成串接(直接寫入 merchant_line_configs 模擬跑過 line-test-connection 的結果,
 -- 比照 module11_02 既有 fixture 的做法)。B 店刻意完全沒有這一列。
 insert into merchant_line_configs (
-  merchant_id, channel_id, channel_secret, channel_access_token,
+  merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4,
   line_bot_user_id, line_bot_basic_id, display_name, is_connected
 ) values (
-  'ef000000-0000-4000-8000-000000000021', '2000000201', 'secret-must-never-leak-201',
-  'token-must-never-leak-201', 'Um11dbotuser000201', 'm11dshop', '自助綁定測試官方帳號', true
+  'ef000000-0000-4000-8000-000000000021', '2000000201', vault.create_secret('secret-must-never-leak-201'), vault.create_secret('token-must-never-leak-201'), right('secret-must-never-leak-201', 4), right('token-must-never-leak-201', 4), 'Um11dbotuser000201', 'm11dshop', '自助綁定測試官方帳號', true
 );
 
 -- =========================================================================

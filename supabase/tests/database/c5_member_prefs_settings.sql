@@ -105,8 +105,8 @@ select is((select body from o where label = 'p0'),
           '{"state":"ok","available":false,"notify_booking":true,"notify_promo":true,"friend_status":"unknown","add_friend_url":"https://lin.ee/c5cfallback"}'::jsonb,
           'M03-1 沒接上官方帳號 ⇒ available false;預設兩個開關開;沒有 @ID ⇒ 用 line_friend_url');
 
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected, line_bot_basic_id) values
-  ('c5c00000-0000-4000-8000-000000000031', '1234567894', 'C5C-SECRET-SENTINEL', 'C5C-TOKEN-SENTINEL', true, '@c5c.shop');
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected, line_bot_basic_id) values
+  ('c5c00000-0000-4000-8000-000000000031', '1234567894', vault.create_secret('C5C-SECRET-SENTINEL'), vault.create_secret('C5C-TOKEN-SENTINEL'), right('C5C-SECRET-SENTINEL', 4), right('C5C-TOKEN-SENTINEL', 4), true, '@c5c.shop');
 insert into customer_line_friendships (merchant_id, line_user_id, is_friend, source, changed_at) values
   ('c5c00000-0000-4000-8000-000000000031', 'U00000000000000000000000000c5c012', false, 'webhook', now()),
   ('c5c00000-0000-4000-8000-000000000031', 'U00000000000000000000000000c5c011', true, 'login', now());

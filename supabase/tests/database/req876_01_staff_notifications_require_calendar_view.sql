@@ -99,8 +99,7 @@ values ('e8760000-0000-4000-8000-000000000071', 'e8760000-0000-4000-8000-0000000
 select seed_default_line_event_settings('e8760000-0000-4000-8000-000000000021');
 select seed_default_member_settings('e8760000-0000-4000-8000-000000000021');
 
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected)
-values ('e8760000-0000-4000-8000-000000000021', 'chid', 'secret', 'token-req876', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values ('e8760000-0000-4000-8000-000000000021', 'chid', vault.create_secret('secret'), vault.create_secret('token-req876'), right('secret', 4), right('token-req876', 4), true);
 update merchant_line_event_settings
 set enabled = true, notify_admin = true, notify_agent = true, notify_staff = true, notify_member = true
 where merchant_id = 'e8760000-0000-4000-8000-000000000021' and event_type = 'booking_confirmed';

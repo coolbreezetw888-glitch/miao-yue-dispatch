@@ -21,6 +21,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 import { isLocalSupabaseUrl } from "../_shared/customerOrigin.ts";
+import { getLineMessagingCredentials } from "../_shared/lineCredentials.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,11 +126,13 @@ export async function handleRequest(req: Request, deps?: Deps): Promise<Response
       const admin = createClient(url, service, { auth: { persistSession: false } });
       const { data } = await admin
         .from("merchant_line_configs")
-        .select("channel_access_token, is_connected")
+        .select("is_connected")
         .eq("merchant_id", mid)
         .maybeSingle();
       if (!data?.is_connected) return null;
-      return (data.channel_access_token as string) || null;
+      // #1053:金鑰改存 Vault,透過 service_role 專用 RPC 取;讀不到 ⇒ null(回 line_status unavailable 的既有分支)。
+      const credentials = await getLineMessagingCredentials(admin, mid, "[line-quota-status]");
+      return credentials?.channelAccessToken ?? null;
     };
   }
 

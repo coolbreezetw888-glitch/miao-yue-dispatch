@@ -89,9 +89,9 @@ insert into merchant_agent_permissions (agent_id, section_key, granted) values
   ('c5e00000-0000-4000-8000-000000000084', 'line_marketing', true);
 insert into merchant_staff (id, merchant_id, name, status, login_status, phone) values
   ('c5e00000-0000-4000-8000-000000000051', 'c5e00000-0000-4000-8000-000000000031', 'C5E服務人員', 'active', 'not_invited', '0900550051');
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('c5e00000-0000-4000-8000-000000000031', '1234567821', 'C5E-A-SECRET', 'C5E-A-TOKEN-SENTINEL', true),
-  ('c5e00000-0000-4000-8000-000000000032', '1234567822', 'C5E-B-SECRET', 'C5E-B-TOKEN-SENTINEL', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('c5e00000-0000-4000-8000-000000000031', '1234567821', vault.create_secret('C5E-A-SECRET'), vault.create_secret('C5E-A-TOKEN-SENTINEL'), right('C5E-A-SECRET', 4), right('C5E-A-TOKEN-SENTINEL', 4), true),
+  ('c5e00000-0000-4000-8000-000000000032', '1234567822', vault.create_secret('C5E-B-SECRET'), vault.create_secret('C5E-B-TOKEN-SENTINEL'), right('C5E-B-SECRET', 4), right('C5E-B-TOKEN-SENTINEL', 4), true);
 insert into merchant_line_event_settings (merchant_id, event_type, enabled, notify_admin, notify_agent, notify_staff, notify_member, message_template) values
   ('c5e00000-0000-4000-8000-000000000031', 'booking_created', true, true, false, false, false, '新預約');
 update merchant_admins set line_bound = true, line_user_id = 'Uadmin000000000000000000000000c5e' where id = 'c5e00000-0000-4000-8000-000000000081';

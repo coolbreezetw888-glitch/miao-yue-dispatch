@@ -174,12 +174,13 @@ async function newPage(browser: Browser): Promise<Page> {
 function connectLine(): void {
   const m = uuid(fixture.c2.c1.merchantAId);
   psqlLocal(`
-    insert into public.merchant_line_configs
-      (merchant_id, channel_id, channel_secret, channel_access_token, line_bot_basic_id, display_name, is_connected)
-    values ('${m}', 'C5E2ECHANNEL', 'C5E2E-FAKE-SECRET', 'C5E2E-FAKE-TOKEN', '${BASIC_ID}', 'C5 測試官方帳號', true)
+    insert into public.merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, line_bot_basic_id, display_name, is_connected) values ('${m}', 'C5E2ECHANNEL', vault.create_secret('C5E2E-FAKE-SECRET'), vault.create_secret('C5E2E-FAKE-TOKEN'), right('C5E2E-FAKE-SECRET', 4), right('C5E2E-FAKE-TOKEN', 4), '${BASIC_ID}', 'C5 測試官方帳號', true)
     on conflict (merchant_id) do update
       set is_connected = true, line_bot_basic_id = excluded.line_bot_basic_id,
-          channel_access_token = excluded.channel_access_token;
+          channel_secret_vault_id = excluded.channel_secret_vault_id,
+          channel_access_token_vault_id = excluded.channel_access_token_vault_id,
+          channel_secret_last4 = excluded.channel_secret_last4,
+          channel_access_token_last4 = excluded.channel_access_token_last4;
   `);
 }
 

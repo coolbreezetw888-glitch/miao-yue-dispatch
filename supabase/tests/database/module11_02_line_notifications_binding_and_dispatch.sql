@@ -290,8 +290,7 @@ select pg_temp.test_clear_auth();
 select is(:'previewnotconfigured_r'::boolean, false, '2.4/2.5:尚未串接 LINE 時,preview_line_notification_targets 回傳 has_any_target=false');
 
 -- 串接 LINE(直接寫入 merchant_line_configs 模擬已完成 line-test-connection),但事件關閉 → event_disabled。
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected)
-values ('ed000000-0000-4000-8000-000000000021', 'chid', 'secret', 'token-abcdefgh', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values ('ed000000-0000-4000-8000-000000000021', 'chid', vault.create_secret('secret'), vault.create_secret('token-abcdefgh'), right('secret', 4), right('token-abcdefgh', 4), true);
 
 select pg_temp.test_set_auth('ed000000-0000-4000-8000-000000000001', 'service_role');
 select (resolve_line_notification_targets('ed000000-0000-4000-8000-000000000021', 'booking_confirmed', :'booking_id'::uuid, null)->>'event_enabled')::boolean as r \gset eventdisabled_

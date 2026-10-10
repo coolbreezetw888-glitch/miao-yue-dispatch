@@ -87,9 +87,9 @@ insert into merchant_admins (id, merchant_id, user_id, line_bound, line_user_id)
   ('f1025300-0000-4000-8000-000000000025', 'f1025300-0000-4000-8000-000000000021', 'f1025300-0000-4000-8000-000000000002',
    true, 'U00000000000000000000000000f20025');
 
-insert into merchant_line_configs (merchant_id, channel_id, channel_secret, channel_access_token, is_connected) values
-  ('f1025300-0000-4000-8000-000000000021', '1234567825', 'FG2-SECRET-SENTINEL', 'FG2-TOKEN-SENTINEL', true),
-  ('f1025300-0000-4000-8000-000000000022', '1234567826', 'FG2B-SECRET-SENTINEL', 'FG2B-TOKEN-SENTINEL', true);
+insert into merchant_line_configs (merchant_id, channel_id, channel_secret_vault_id, channel_access_token_vault_id, channel_secret_last4, channel_access_token_last4, is_connected) values
+  ('f1025300-0000-4000-8000-000000000021', '1234567825', vault.create_secret('FG2-SECRET-SENTINEL'), vault.create_secret('FG2-TOKEN-SENTINEL'), right('FG2-SECRET-SENTINEL', 4), right('FG2-TOKEN-SENTINEL', 4), true),
+  ('f1025300-0000-4000-8000-000000000022', '1234567826', vault.create_secret('FG2B-SECRET-SENTINEL'), vault.create_secret('FG2B-TOKEN-SENTINEL'), right('FG2B-SECRET-SENTINEL', 4), right('FG2B-TOKEN-SENTINEL', 4), true);
 insert into merchant_line_event_settings (merchant_id, event_type, enabled, notify_admin, notify_agent, notify_staff, notify_member, message_template) values
   ('f1025300-0000-4000-8000-000000000021', 'booking_created', true, true, false, false, false, '新預約');
 insert into merchant_customer_line_settings (merchant_id, on_confirmed) values

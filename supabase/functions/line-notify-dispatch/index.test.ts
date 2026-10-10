@@ -278,9 +278,16 @@ const FAKE_LEAVES: Record<string, string> = { "leave-A": "staff-A", "leave-B": "
 const FAKE_STAFF: Record<string, string> = { "staff-A": "merchant-A", "staff-B": "merchant-B" };
 
 function makeFakeLineAdminClient(
-  options: { failLookup?: boolean; resolveResult?: unknown; lineFeature?: boolean | "error" } = {},
+  options: {
+    failLookup?: boolean;
+    resolveResult?: unknown;
+    lineFeature?: boolean | "error";
+    credentials?: "ok" | "missing";
+  } = {},
 ) {
   const rpcCalls: string[] = [];
+  // #1053:金鑰 RPC 另外記錄,不混進 rpcCalls(既有斷言維持原樣)。
+  const credentialCalls: Record<string, unknown>[] = [];
   const inserts: { table: string; row: Record<string, unknown> }[] = [];
   const selects: { table: string; filters: Record<string, unknown> }[] = [];
 
@@ -320,9 +327,6 @@ function makeFakeLineAdminClient(
                   (filters.merchant_id === undefined || filters.merchant_id === owner);
                 return Promise.resolve({ data: ok ? { id: filters.id } : null, error: null });
               }
-              if (table === "merchant_line_configs") {
-                return Promise.resolve({ data: { channel_access_token: "token" }, error: null });
-              }
               if (table === "merchant_line_event_settings") {
                 return Promise.resolve({
                   data: { message_template: "{{customer_name}}" },
@@ -340,7 +344,16 @@ function makeFakeLineAdminClient(
         },
       };
     },
-    rpc(fn: string, _args: Record<string, unknown>) {
+    rpc(fn: string, args: Record<string, unknown>) {
+      if (fn === "internal_get_line_messaging_credentials") {
+        credentialCalls.push(args);
+        return Promise.resolve({
+          data: (options.credentials ?? "ok") === "ok"
+            ? { channel_secret: "secret", channel_access_token: "token" }
+            : null,
+          error: null,
+        });
+      }
       rpcCalls.push(fn);
       // SPECS-INDEX #1025 FG2-F01:平台功能「LINE 通知」(預設開著)。
       if (fn === "internal_merchant_has_feature") {
@@ -366,7 +379,7 @@ function makeFakeLineAdminClient(
       return Promise.resolve({ data: {}, error: null });
     },
   };
-  return { adminClient, rpcCalls, inserts, selects };
+  return { adminClient, rpcCalls, inserts, selects, credentialCalls };
 }
 
 function makeLineDeps(
@@ -833,5 +846,30 @@ Deno.test("FG2:查詢功能開關失敗 → 500,不解析收件人、不寫記�
   );
   assertEquals(res.status, 500);
   assertEquals(rpcCalls, ["internal_merchant_has_feature"]);
+  assertEquals(inserts, []);
+});
+
+// =========================================================================
+// SPECS-INDEX #1053:金鑰改存 Vault ⇒ 透過 internal_get_line_messaging_credentials 取;不再讀 merchant_line_configs。
+// =========================================================================
+Deno.test("#1053:有對象時用 RPC 取 token,不查 merchant_line_configs", async () => {
+  const { adminClient, selects, credentialCalls } = makeFakeLineAdminClient();
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(credentialCalls, [{ p_merchant_id: "merchant-A" }]);
+  assertEquals(selects.some((x) => x.table === "merchant_line_configs"), false);
+});
+
+Deno.test("#1053:金鑰讀不到 ⇒ 當作 not_configured,不寫任何記錄", async () => {
+  const { adminClient, inserts } = makeFakeLineAdminClient({ credentials: "missing" });
+  const res = await handleRequest(
+    makeLineRequest({ merchant_id: "merchant-A", booking_id: "booking-A", event_type: "booking_confirmed" }),
+    makeLineDeps(adminClient),
+  );
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { dispatched: false, reason: "not_configured" });
   assertEquals(inserts, []);
 });
