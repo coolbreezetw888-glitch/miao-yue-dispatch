@@ -349,26 +349,8 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
     await expect(monthlyCard).not.toContainText(PIECE_RATE_STAFF_NAME_PREFIX);
   });
 
-  test("T2 商家層級設定的抽成基準真的反映後端的值", async ({ page }) => {
-    await gotoPayrollSettings(page);
-
-    // 前提斷言:這張卡片載完了(scope 到這張卡再等,不能用整頁的 getByText("載入中⋯")——
-    // 這四個字在三個區塊逐字重複出現,沒 scope 必撞 strict mode)。
-    const card = cardByTitle(page, "商家層級設定");
-    // #849(ui-v1-full skill 二之七):抽成基準從 RadioGroup(#basis-gross / #basis-net)改成
-    // ChoiceChipGroup(role="radiogroup" + role="radio" + aria-checked),用選項名稱定位。
-    const grossOption = card.getByRole("radio", { name: /^服務金額全額/ });
-    const netOption = card.getByRole("radio", { name: /^扣除料錢成本後淨額/ });
-    await expect(grossOption).toBeVisible({ timeout: LOAD_TIMEOUT });
-    await expect(card.getByText("載入中⋯")).toHaveCount(0);
-
-    // 行為斷言:fixture 寫的是 commission_basis_type: "gross"(payroll-fixture.ts L220-226)
-    // ⇒「服務金額全額」被選中、「扣除料錢成本後淨額」沒被選中。
-    // ⚠️ 這條的價值在於它是**由後端資料決定的**,不是畫面寫死的字:如果查詢壞掉、或
-    //    useEffect 沒把值灌進 RadioGroup,兩顆都會是未選中,這條就會紅。
-    await expect(grossOption).toBeChecked();
-    await expect(netOption).not.toBeChecked();
-  });
+  // #1052 H2-14:原本的「T2 商家層級設定的抽成基準真的反映後端的值」已刪除 —— 畫面上的
+  // 「服務金額全額 / 扣除料錢成本後淨額」選項已經拿掉,這條一跑必紅(e2e 條數基準 123 → 122)。
 
   test("T3 月薪制那一列顯示的金額 = fixture 寫進資料庫的金額", async ({ page }) => {
     await gotoPayrollSettings(page);
@@ -461,7 +443,9 @@ test.describe("#763 /app/payroll-settings 抽成與薪資設定", () => {
 
     const basisCard = cardByTitle(page, "商家層級設定");
     // #849:欄位標題改用 FormField,必填欄位的 <label> 文字後面多一個 aria-hidden 的「*」⇒ 用「逐字 + 可有可無的 *」比對。
-    await expect(basisCard.getByText(/^【抽成制】抽成基準\*?$/)).toBeVisible({
+    // #1052 H2-14:#985 第 8 批已把「【抽成制】抽成基準」二選一拿掉,改成唯讀的「【抽成制】料錢影響抽成」
+    // (修改入口在料錢成本管理頁),這裡跟著改成釘現在的文字。
+    await expect(basisCard.getByText(/^【抽成制】料錢影響抽成\*?$/)).toBeVisible({
       timeout: LOAD_TIMEOUT,
     });
     await expect(basisCard.getByText(/^【月薪制】月折算天數\*?$/)).toBeVisible();

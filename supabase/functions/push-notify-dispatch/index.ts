@@ -32,6 +32,7 @@ import {
   checkStaffBookingDispatch,
   resolveStaffSafeDispatchFields,
 } from "../_shared/staffBookingDispatch.ts";
+import { errorCode } from "../_shared/safeLog.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(不在模組頂層算成常數)——ES module 的 import
 // 陳述式會被提升到檔案最前面執行,如果這裡在模組頂層就讀一次 Deno.env.get 存成常數,Deno 測試
@@ -154,7 +155,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   });
 
   if (authCheckError) {
-    console.error("[push-notify-dispatch] can_manage_bookings 呼叫失敗", authCheckError);
+    console.error("[push-notify-dispatch] can_manage_bookings 呼叫失敗", errorCode(authCheckError));
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
   // #977 第 7 批:這次是不是走「服務人員本人」那條放行路(決定下面要不要採信呼叫端自由填的欄位)。

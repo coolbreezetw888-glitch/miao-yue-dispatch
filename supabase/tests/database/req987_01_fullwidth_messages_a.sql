@@ -10,7 +10,7 @@
 --   對照表的每一組都是「含單引號的完整 SQL 字串字面值」,避免換到函式裡其他地方的同樣文字。
 begin;
 
-select plan(87);
+select plan(84);
 
 create function pg_temp.req987_oid(p_sig text) returns oid language sql stable as $$
   select p.oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -48,6 +48,7 @@ create function pg_temp.req987_triggers(p_sig text) returns text[] language sql 
 $$;
 
 -- ----- private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid)$m$, array[
     $m$'暫時無法產生新的綁定碼，請稍後再試'$m$, $m$'暫時無法產生新的綁定碼,請稍後再試'$m$
@@ -56,7 +57,7 @@ select is(
   $m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$規則 2.7 共用邏輯:先讓同目標舊碼失效,再產生一組目前有效範圍內不重複的 6 碼數字。只給 3.4~3.7 呼叫。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$規則 2.7 共用邏輯:先讓同目標舊碼失效,再產生一組目前有效範圍內不重複的 6 碼數字。只給 3.4~3.7 呼叫。$m$],
   $m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid)$m$),
@@ -64,6 +65,7 @@ select is(
   $m$private.issue_line_binding_code(p_merchant_id uuid, p_target_type text, p_target_id uuid, p_created_by_user_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- private.protect_merchant_staff_line_binding_columns() -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.protect_merchant_staff_line_binding_columns()$m$, array[
     $m$'不能透過一般編輯直接變更 LINE 綁定狀態，請透過 LINE 綁定/解除綁定流程操作'$m$, $m$'不能透過一般編輯直接變更 LINE 綁定狀態,請透過 LINE 綁定/解除綁定流程操作'$m$
@@ -72,7 +74,7 @@ select is(
   $m$private.protect_merchant_staff_line_binding_columns() ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.protect_merchant_staff_line_binding_columns()$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$規則 2.9:擋下「不是透過 service role」對 merchant_staff.line_user_id/line_bound 的異動,不影響這兩個欄位以外的一般編輯(姓名/電話/上架狀態等維持商家管理員可直接修改)。唯一例外是 3.19 unbind_line_account 已完成權限檢查後,用 transaction-local 的 line_notifications.bypass_staff_binding_guard 旗標放行。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$規則 2.9:擋下「不是透過 service role」對 merchant_staff.line_user_id/line_bound 的異動,不影響這兩個欄位以外的一般編輯(姓名/電話/上架狀態等維持商家管理員可直接修改)。唯一例外是 3.19 unbind_line_account 已完成權限檢查後,用 transaction-local 的 line_notifications.bypass_staff_binding_guard 旗標放行。$m$],
   $m$private.protect_merchant_staff_line_binding_columns() ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.protect_merchant_staff_line_binding_columns()$m$),
@@ -80,6 +82,7 @@ select is(
   $m$private.protect_merchant_staff_line_binding_columns() ③ 觸發器綁定不變$m$);
 
 -- ----- private.protect_merchants_group_id_column() -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.protect_merchants_group_id_column()$m$, array[
     $m$'商家的集團歸屬只能由平台管理員調整，商家管理員不能自行把店搬到其他集團'$m$, $m$'商家的集團歸屬只能由平台管理員調整,商家管理員不能自行把店搬到其他集團'$m$
@@ -88,7 +91,7 @@ select is(
   $m$private.protect_merchants_group_id_column() ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.protect_merchants_group_id_column()$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$2026-09-24 安全修補(A4):擋下非平台管理員對 merchants.group_id 的異動。merchants_update 政策只判斷 id、不限制欄位,商家管理員原本可以自己把店搬到別的集團,導致原集團管理者的 private.is_merchant_admin() 立刻失效、永久失去存取且無法自行修復。放行路徑:service_role,或 transaction-local 旗標 platform_admin.bypass_merchant_group_guard(預留給未來的「商家轉移集團」功能)。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$2026-09-24 安全修補(A4):擋下非平台管理員對 merchants.group_id 的異動。merchants_update 政策只判斷 id、不限制欄位,商家管理員原本可以自己把店搬到別的集團,導致原集團管理者的 private.is_merchant_admin() 立刻失效、永久失去存取且無法自行修復。放行路徑:service_role,或 transaction-local 旗標 platform_admin.bypass_merchant_group_guard(預留給未來的「商家轉移集團」功能)。$m$],
   $m$private.protect_merchants_group_id_column() ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.protect_merchants_group_id_column()$m$),
@@ -269,21 +272,7 @@ select is(
   array[]::text[],
   $m$public.platform_add_merchant_admin(p_merchant_id uuid, p_user_email text) ③ 觸發器綁定不變$m$);
 
--- ----- public.platform_purge_merchant_members_and_points(p_merchant_id uuid) -----
-select is(
-  md5(pg_temp.req987_swap_back($m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid)$m$, array[
-    $m$'沒有權限執行此操作，僅限平台管理員使用'$m$, $m$'沒有權限執行此操作,僅限平台管理員使用'$m$
-  ])),
-  $m$bbcb63917cce8cae564c95046f150cd6$m$,
-  $m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
-select is(
-  pg_temp.req987_attrs($m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}$m$, $m$模組 10 §3.18(規則 2.9,模組 2 掛鉤點,危險操作):硬刪除該商家的 members/member_point_transactions。bookings.member_id/member_name_snapshot 因為 on delete set null 會自動變成 null,不會刪除訂單本身。只有 private.is_platform_admin() 通過才能呼叫,商家管理員/客服皆被擋下。這次沒有任何 UI 使用,純粹是給模組 2 之後串接用的建構塊。$m$],
-  $m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid) ② security definer / volatility / search_path / ACL / comment 不變$m$);
-select is(
-  pg_temp.req987_triggers($m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid)$m$),
-  array[]::text[],
-  $m$public.platform_purge_merchant_members_and_points(p_merchant_id uuid) ③ 觸發器綁定不變$m$);
+-- (#1051:public.platform_purge_merchant_members_and_points 已移除,原本這裡的 3 條比對一併拿掉。)
 
 -- ----- public.platform_remove_merchant_admin(p_merchant_id uuid, p_user_id uuid) -----
 select is(
@@ -322,6 +311,7 @@ select is(
   $m$public.platform_set_group_admin(p_group_id uuid, p_user_email text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.prevent_disable_last_active_merchant() -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.prevent_disable_last_active_merchant()$m$, array[
     $m$'集團底下至少要保留一間啟用中商家，無法停用最後一間'$m$, $m$'集團底下至少要保留一間啟用中商家,無法停用最後一間'$m$
@@ -330,7 +320,7 @@ select is(
   $m$public.prevent_disable_last_active_merchant() ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.prevent_disable_last_active_merchant()$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${=X/postgres,postgres=X/postgres,service_role=X/postgres}$m$, $m$NULL$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,service_role=X/postgres}$m$, $m$NULL$m$],
   $m$public.prevent_disable_last_active_merchant() ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$public.prevent_disable_last_active_merchant()$m$),
@@ -511,6 +501,7 @@ select is(
   $m$public.hard_delete_merchant_agent(p_agent_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.hard_delete_merchant_staff(p_staff_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.hard_delete_merchant_staff(p_staff_id uuid)$m$, array[
     $m$'沒有權限執行此操作，僅限該商家管理員使用'$m$, $m$'沒有權限執行此操作,僅限該商家管理員使用'$m$,
@@ -518,7 +509,7 @@ select is(
     $m$'這位服務人員「%」有歷史紀錄牽連(訂單 %筆、助手身份訂單 %筆、請假紀錄 %筆、抽成紀錄 %筆)，為了保留歷史帳務與訂單資料，無法真正刪除，只能維持「已移除」狀態。'$m$, $m$'這位服務人員「%」有歷史紀錄牽連(訂單 %筆、助手身份訂單 %筆、請假紀錄 %筆、抽成紀錄 %筆),為了保留歷史帳務與訂單資料,無法真正刪除,只能維持「已移除」狀態。'$m$,
     $m$'這位服務人員過去有實際發生過的月薪紀錄(曾經是有薪資的月薪制員工)，為了保留歷史帳務報表的正確性，無法真正刪除，只能維持「已移除」狀態。'$m$, $m$'這位服務人員過去有實際發生過的月薪紀錄(曾經是有薪資的月薪制員工),為了保留歷史帳務報表的正確性,無法真正刪除,只能維持「已移除」狀態。'$m$
   ])),
-  $m$b2739c768de7032844a18698b5f30f7a$m$,
+  $m$6b42dc972e3fb77a50d504447b8cdd1c$m$,
   $m$public.hard_delete_merchant_staff(p_staff_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.hard_delete_merchant_staff(p_staff_id uuid)$m$),
@@ -547,13 +538,14 @@ select is(
   $m$public.remove_merchant_agent(p_agent_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.restore_merchant_agent(p_agent_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.restore_merchant_agent(p_agent_id uuid)$m$, array[
     $m$'沒有權限執行此操作，僅限該商家管理員使用'$m$, $m$'沒有權限執行此操作,僅限該商家管理員使用'$m$,
     $m$'只有已移除的客服才需要恢復，這位客服目前的狀態不是已移除'$m$, $m$'只有已移除的客服才需要恢復,這位客服目前的狀態不是已移除'$m$,
     $m$'這個邀請 Email(%)目前已經有另一筆使用中的客服紀錄，無法恢復這一筆；如果要改用這一筆，請先移除另一筆'$m$, $m$'這個邀請 Email(%)目前已經有另一筆使用中的客服紀錄,無法恢復這一筆;如果要改用這一筆,請先移除另一筆'$m$
   ])),
-  $m$bd2e31052e121c84439d8e2c5fc1bf7f$m$,
+  $m$bc10ec6fb429b9ad2379b1faaf157875$m$,
   $m$public.restore_merchant_agent(p_agent_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.restore_merchant_agent(p_agent_id uuid)$m$),

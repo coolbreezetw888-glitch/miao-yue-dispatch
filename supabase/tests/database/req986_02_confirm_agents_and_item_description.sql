@@ -9,6 +9,8 @@
 --   ⑪~⑱    服務項目描述:201 字擋、200 字可、null 可;管理員、service_items 客服可寫;
 --            沒權限客服、服務人員寫不進去
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(18);
 

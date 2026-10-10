@@ -170,8 +170,7 @@ export function LeaveDeductionRuleDialog({
           {/* 假別名稱是商家自填的,長度不固定 ⇒ 標題要能折行。 */}
           <CardDialogTitle className="break-words">「{leaveTypeName}」的扣款規則</CardDialogTitle>
           <CardDialogDescription>
-            設定請這個假的扣款計算模式與數值，系統不會自動幫你套用任何非零數字，請自己填入實際
-            要扣多少。
+            設定請這個假的扣款計算模式與數值，系統不會自動幫你套用任何非零數字，請自己填入實際要扣多少。
           </CardDialogDescription>
         </CardDialogHeader>
 
@@ -244,9 +243,8 @@ export function LeaveDeductionRuleDialog({
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
               試算：假設月薪 {exampleMonthlySalary} 元，以本月 {exampleDaysInMonth}{" "}
               天換算，一天薪水約 {exampleDayRate.toFixed(2)} 元，請這個假一天扣{" "}
-              <strong>{previewPerDay}</strong> 元。
-              天數由系統依請假當月自動換算，不用另外設定；這裡的月薪只是範例，僅供參考，實際扣款以每位
-              服務人員自己的月薪計算為準。
+              <strong>{previewPerDay}</strong>{" "}
+              元。天數由系統依請假當月自動換算，不用另外設定；這裡的月薪只是範例，僅供參考，實際扣款以每位服務人員自己的月薪計算為準。
             </p>
           </form>
         )}

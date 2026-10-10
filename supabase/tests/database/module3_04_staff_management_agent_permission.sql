@@ -3,6 +3,8 @@
 -- private.can_manage_staff(merchant_id) + merchant_staff/merchant_staff_service_items 的
 -- SELECT/INSERT/UPDATE(/DELETE)政策新增 staff_management 分支。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(6);
 

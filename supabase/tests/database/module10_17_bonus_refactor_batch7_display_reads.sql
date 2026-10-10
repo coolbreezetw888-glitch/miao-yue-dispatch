@@ -15,6 +15,8 @@
 --      讀照常;寫入走 upsert_member_point_formulas 照常
 --   F. 權限衛生:三支函式 PUBLIC / anon 沒有 EXECUTE、authenticated 有
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(46);
 
@@ -190,7 +192,7 @@ select pg_temp.test_set_auth('db170000-0000-4000-8000-000000000004');  -- 只有
 select throws_ok(
   $$select public.get_merchant_points_feature_enabled('db170000-0000-4000-8000-000000000020')$$,
   '42501', null,
-  'C5:只有 billing 鑰匙 ⇒ 42501(帳務報表有自己的來源 get_merchant_billing_summary)'
+  'C5:只有 billing 鑰匙 ⇒ 42501(帳務報表有自己的來源 get_merchant_billing_summary_by_range)'
 );
 
 select pg_temp.test_set_auth('db170000-0000-4000-8000-000000000006');  -- B 店管理員

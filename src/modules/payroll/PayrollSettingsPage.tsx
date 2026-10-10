@@ -478,8 +478,8 @@ function StaffServiceCommissionDialog({
             </div>
             <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
               範例：一筆原價 1000 元、1 件的服務，套用這個設定可以拿到{" "}
-              <strong>{batchPreviewAmount}</strong> 元抽成(僅供參考；只會套用到目前開關=開的
-              項目，關掉的項目不受影響)。
+              <strong>{batchPreviewAmount}</strong>{" "}
+              元抽成(僅供參考；只會套用到目前開關=開的項目，關掉的項目不受影響)。
             </p>
           </section>
 
@@ -840,8 +840,8 @@ function StaffSalarySettingsDialog({
             {!Number.isNaN(numericBaseSalary) ? (
               <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground tabular-nums">
                 試算：以本月 {payDaysPerMonth} 天換算，一天薪水約{" "}
-                <strong>{dayRate.toFixed(2)}</strong> 元。這就是假別扣款會用到的「一天薪水」；
-                天數由系統依請假當月自動換算，不用另外設定(詳見上方「【月薪制】月折算天數」)。
+                <strong>{dayRate.toFixed(2)}</strong>{" "}
+                元。這就是假別扣款會用到的「一天薪水」；天數由系統依請假當月自動換算，不用另外設定(詳見上方「【月薪制】月折算天數」)。
               </p>
             ) : null}
           </form>

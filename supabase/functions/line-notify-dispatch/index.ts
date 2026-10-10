@@ -48,6 +48,7 @@ import {
   STAFF_PATH_LINE_EVENT_BLOCKED_MESSAGE,
 } from "../_shared/staffBookingDispatch.ts";
 import { checkMerchantFeature, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
+import { errorCode } from "../_shared/safeLog.ts";
 
 // #972:環境變數改在 handleRequest 執行當下才讀(理由同 push-notify-dispatch:模組頂層讀成常數,
 // Deno 測試在 import 之前 set 的值會讀不到)。
@@ -179,7 +180,7 @@ export async function resolveNotificationVariables(
       p_merchant_id: merchantId,
     });
     if (error) {
-      console.error("[line-notify-dispatch] render_booking_notification_variables 失敗", error);
+      console.error("[line-notify-dispatch] render_booking_notification_variables 失敗", errorCode(error));
       return {};
     }
     return (data as Record<string, string>) ?? {};
@@ -191,7 +192,7 @@ export async function resolveNotificationVariables(
       p_merchant_id: merchantId,
     });
     if (error) {
-      console.error("[line-notify-dispatch] render_staff_leave_notification_variables 失敗", error);
+      console.error("[line-notify-dispatch] render_staff_leave_notification_variables 失敗", errorCode(error));
       return {};
     }
     return (data as Record<string, string>) ?? {};
@@ -280,7 +281,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   );
 
   if (authCheckError) {
-    console.error("[line-notify-dispatch] can_dispatch_line_notification 呼叫失敗", authCheckError);
+    console.error("[line-notify-dispatch] can_dispatch_line_notification 呼叫失敗", errorCode(authCheckError));
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
   if (!allowed) {
@@ -348,10 +349,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   );
 
   if (resolveError) {
-    console.error(
-      "[line-notify-dispatch] resolve_line_notification_targets 呼叫失敗",
-      resolveError,
-    );
+    console.error("[line-notify-dispatch] resolve_line_notification_targets 呼叫失敗", errorCode(resolveError));
     return jsonResponse({ error: "判斷通知對象時發生錯誤" }, 500);
   }
 

@@ -5,6 +5,8 @@
 -- 核心)、復原機制與安全檢查(2.7/2.8 核心)、報表匯出權限不繞過來源模組(2.9)、產業轉移安全邊界
 -- (2.10 核心)、轉移後訂單連結斷開(2.11 核心)、3.7/3.8 唯讀查詢。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -205,7 +207,7 @@ select pg_temp.test_clear_auth();
 -- =========================================================================
 select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000005');
 select throws_ok(
-  $$select get_merchant_billing_summary('ec000000-0000-4000-8000-000000000021', 2026, 1)$$,
+  $$select public.get_merchant_billing_summary_by_range('ec000000-0000-4000-8000-000000000021', make_date(2026, 1, 1), (make_date(2026, 1, 1) + interval '1 month - 1 day')::date)$$,
   '42501', null,
   '2.9:被授權 report_export、但沒有 billing/staff_report 權限的客服，呼叫帳務報表仍被擋下'
 );

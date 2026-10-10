@@ -446,8 +446,8 @@ function ImportWizardPageInner() {
                     htmlFor="import-write-mode"
                     help={
                       <>
-                        <strong>只新增</strong>：CSV 裡的電話如果系統已經有了，就整列跳過不動，
-                        既有資料一定不會被改到(不確定時選這個)。
+                        <strong>只新增</strong>：CSV
+                        裡的電話如果系統已經有了，就整列跳過不動，既有資料一定不會被改到(不確定時選這個)。
                         <br />
                         <strong>電話重複時更新</strong>：CSV 會蓋掉系統既有那一筆會員的資料。
                       </>

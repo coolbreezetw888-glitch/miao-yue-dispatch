@@ -11,6 +11,8 @@
 --
 -- 故障注入(engineer 已做,見回報):can_send_line_marketing 拿掉 section_key 判斷(任何在職客服都放行)⇒ ③④⑨⑬ 轉紅
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(16);
 

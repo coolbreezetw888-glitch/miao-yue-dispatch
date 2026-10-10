@@ -9,6 +9,8 @@
 --         authenticated 呼叫被擋下 42501)
 -- 另外補上 §13.2 的 CHECK(拒絕 'test')、auth.users 級聯、booking 硬刪除後 booking_id 變 null。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(51);
 
@@ -102,9 +104,11 @@ select is(
 select pg_temp.test_clear_auth();
 
 select pg_temp.test_set_auth('00000000-0000-4000-8000-0000000000ff', 'anon');
-select is(
-  (select count(*) from user_notifications)::int, 0,
-  '§13.2:未登入(anon)一則都看不到'
+-- #1051:anon 的表層權限已全部收回 ⇒ 直接讀是「沒有權限」(比原本的 0 則更嚴)。
+select throws_ok(
+  $$select count(*) from user_notifications$$,
+  '42501', null,
+  '§13.2:未登入(anon)一則都讀不到'
 );
 select pg_temp.test_clear_auth();
 

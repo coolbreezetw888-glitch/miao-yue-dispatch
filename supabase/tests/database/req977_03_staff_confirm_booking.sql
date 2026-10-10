@@ -12,6 +12,8 @@
 --   ㉒~㉔  user_notifications CHECK 放寬只多 booking_confirmed;權限 ACL / SECURITY DEFINER / search_path
 --   ㉕     沒有呼叫任何 LINE / 推播(push_notification_log、line 記錄都沒有新列)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(26);
 

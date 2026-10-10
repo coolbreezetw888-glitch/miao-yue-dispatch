@@ -5,6 +5,8 @@
 -- ——傳入別人的 staff_id 一律被擋下。
 
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -40,7 +42,7 @@ create trigger req977_full_day_windows
 
 -- 47 → 48:2026-09-25(#784)新增一條反向斷言(用訂單虛構的預約月份查詢必須是 0 筆),
 -- 把「抽成報表改用完成時間認列」這個口徑釘死,避免只驗正向時「兩個月都算」的錯誤實作也會過。
-select plan(48);
+select plan(50);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -532,6 +534,13 @@ select pg_temp.test_clear_auth();
 --      set_config('storage.allow_delete_query','true',true) 繞過這個全域保護,才測得到
 --      本模組 RLS 政策本身真正的隔離效果。
 -- =========================================================================
+-- #1051:公開讀取 policy 已改成「只看得到自己有權寫入的檔案」;要確認「別人的檔案原封不動」時,
+-- 改用下面這支以 owner 身分計數的輔助函式(不受查詢者的 RLS 影響)。
+create function pg_temp.h1_obj_count(p_name text) returns int
+language sql security definer set search_path = '' as $$
+  select count(*)::int from storage.objects where name = p_name
+$$;
+
 select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002'); -- X
 
 select lives_ok(
@@ -576,7 +585,7 @@ select lives_ok(
 );
 
 select is(
-  (select count(*)::int from storage.objects where name = 'e1420000-0000-4000-8000-000000000020/self/e1420000-0000-4000-8000-000000000042/z-avatar.png'),
+  pg_temp.h1_obj_count('e1420000-0000-4000-8000-000000000020/self/e1420000-0000-4000-8000-000000000042/z-avatar.png'),
   1,
   '3.20(核心必測):實際檢查——Z 的頭像檔名完全沒被 X 改動,證明剛才的 UPDATE 實際影響 0 筆'
 );
@@ -591,7 +600,7 @@ select lives_ok(
 );
 
 select is(
-  (select count(*)::int from storage.objects where name = 'e1420000-0000-4000-8000-000000000020/self/e1420000-0000-4000-8000-000000000042/z-avatar.png'),
+  pg_temp.h1_obj_count('e1420000-0000-4000-8000-000000000020/self/e1420000-0000-4000-8000-000000000042/z-avatar.png'),
   1,
   '3.20(核心必測):實際檢查——Z 的頭像檔案完全沒被刪除,證明剛才的 DELETE 實際影響 0 筆'
 );
@@ -603,19 +612,31 @@ select lives_ok(
 );
 
 select is(
-  (select count(*)::int from storage.objects where name = 'e1420000-0000-4000-8000-000000000020/admin-uploaded.png'),
+  pg_temp.h1_obj_count('e1420000-0000-4000-8000-000000000020/admin-uploaded.png'),
   1,
   '3.20:實際檢查——既有管理員上傳的檔案完全沒被 X 刪除,X 的自助政策不會誤放行沒有 /self/ 這一層的路徑'
 );
 
 select pg_temp.test_clear_auth();
 
--- 公開讀取政策完全不受影響。
-select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002');
+-- #1051:公開讀取 policy 已移除,改成只看得到自己有權寫入的檔案(列不出別人的檔名;公開網址照樣能讀圖)。
 select is(
   (select count(*)::int from storage.objects where bucket_id = 'staff-avatars'),
   3,
-  '3.20:既有公開讀取政策(staff_avatars_public_read)不受影響,任何登入者都能讀到 bucket 內所有物件(X 的頭像 1 筆 + Z 的頭像 1 筆 + 既有管理員上傳路徑 1 筆,三筆全部原封不動)'
+  '3.20:bucket 內三筆全部原封不動(X 的頭像 1 筆 + Z 的頭像 1 筆 + 既有管理員上傳路徑 1 筆)'
+);
+select pg_temp.test_set_auth('e1420000-0000-4000-8000-000000000002');
+select is(
+  (select count(*)::int from storage.objects where bucket_id = 'staff-avatars'),
+  1,
+  '3.20(#1051):服務人員 X 只看得到自己的頭像 1 筆,列不出 Z 與管理員上傳的檔案'
+);
+select pg_temp.test_clear_auth();
+select pg_temp.test_set_auth(null, 'anon');
+select is(
+  (select count(*)::int from storage.objects where bucket_id = 'staff-avatars'),
+  0,
+  '3.20(#1051):未登入訪客列不出任何頭像檔案'
 );
 select pg_temp.test_clear_auth();
 

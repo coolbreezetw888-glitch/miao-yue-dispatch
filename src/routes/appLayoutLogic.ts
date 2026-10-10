@@ -369,10 +369,22 @@ export interface AppHeaderTitleInput {
   /** 目前實際顯示的是服務人員端還是商家端內容(見 resolveIsStaffView)。
    * 只有 `/app` 這一條路徑的標題會因為它而不同。 */
   isStaffView: boolean;
+  /** #1052 H2-06:服務人員端「登入端被關」(畫面只剩一張請找店家的小卡)。商家端不用傳。 */
+  staffPortalClosed?: boolean | undefined;
+  /** 目前商家的店名;登入端被關時頁首改顯示它,拿不到就空白。 */
+  merchantName?: string | null | undefined;
 }
 
 /** 頁首中間那格要顯示的功能頁名稱。永遠回傳字串,認不出來的路徑回空字串(不會是 undefined)。 */
-export function resolveAppHeaderTitle({ pathname, isStaffView }: AppHeaderTitleInput): string {
+export function resolveAppHeaderTitle({
+  pathname,
+  isStaffView,
+  staffPortalClosed = false,
+  merchantName = null,
+}: AppHeaderTitleInput): string {
+  // #1052 H2-06:服務人員登入端被關時,不論路徑都只剩一張小卡 ⇒ 頁首不顯示「個人資料」等頁名,改顯示店名。
+  if (isStaffView && staffPortalClosed) return merchantName?.trim() ?? "";
+
   const segments = pathSegments(pathname);
 
   // /app 是唯一一條「同一個路徑、兩種角色看到不同頁面」的路由(HomePage.tsx:服務人員端顯示

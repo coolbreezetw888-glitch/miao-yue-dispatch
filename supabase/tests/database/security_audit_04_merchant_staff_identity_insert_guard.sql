@@ -22,6 +22,8 @@
 --   ④ 既有繞道與既有 UPDATE 面保護全部沒有被這次改動弄壞
 --      (service_role、邀請流程 record_invited_staff_login、客服的一般編輯)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(16);
 

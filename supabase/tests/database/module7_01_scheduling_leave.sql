@@ -1,6 +1,8 @@
 -- 模組 7(排班與休假管理)— 對應規格書 .project/specs/排班與休假管理.md 全文,
 -- 含主腦裁示(取代規格書規則 2.7/2.8 原文):unlimited_backend_edit 不覆寫請假限制。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它

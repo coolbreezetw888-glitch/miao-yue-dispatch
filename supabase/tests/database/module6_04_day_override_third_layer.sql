@@ -19,6 +19,8 @@
 -- 服務項目「服務」90 分鐘,用來製造橫跨 3 個半小時格子的預約(10:00-11:30),
 -- 驗證「多格子只要有一格不合格,整筆擋下」在無例外情況下依然成立(等價性延伸到多格情境)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(15);
 

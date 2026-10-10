@@ -1,6 +1,8 @@
 -- 第 11 批 E(#992,2026-10-07):public.set_agent_permissions 一次寫入多把客服權限、失敗全退。
 -- 規格書 .project/specs/改掛會員與預設文案全形-第11批.md §11.7、§11.10 pgTAP 1~6。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(27);
 

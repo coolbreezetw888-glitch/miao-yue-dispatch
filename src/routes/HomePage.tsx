@@ -50,7 +50,7 @@ import { PushSubscriptionCard } from "@/modules/push-notifications/PushSubscript
 // 服務人員端模組自己做一張唯讀版的狀態卡片,見該元件開頭的完整說明。
 import { MyStaffLineBindingCard } from "@/modules/staff-portal/MyStaffLineBindingCard";
 
-import { useAppLayoutContext } from "./AppLayout";
+import { useAppLayoutContext } from "./appLayoutContext";
 import { resolveHomePageOutcome } from "./appLayoutLogic";
 import { LoginEmailSection, PendingAdminLoginEmailSuggestionCard } from "./ProfileCardShared";
 

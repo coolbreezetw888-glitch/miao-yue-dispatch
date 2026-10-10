@@ -9,6 +9,8 @@
 --   ⑯~⑰    11 支新的 public 函式:SECURITY DEFINER + search_path=public;anon / PUBLIC 沒有 EXECUTE、
 --            authenticated 有(⑯ 是「清單真的有 11 支」的前提斷言,避免空清單假通過)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(17);
 

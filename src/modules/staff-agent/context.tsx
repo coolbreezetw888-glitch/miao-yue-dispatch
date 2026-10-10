@@ -131,26 +131,6 @@ export function useMerchantStaffList(
   });
 }
 
-/** 5.4 對外介面:回傳某商家目前有效(status='active')的客服名單,唯讀。 */
-export function useMerchantAgentList(
-  merchantId: string | null | undefined,
-): UseQueryResult<MerchantAgent[]> {
-  return useQuery({
-    queryKey: ["staff-agent-module", "agent-list", merchantId],
-    queryFn: async (): Promise<MerchantAgent[]> => {
-      const { data, error } = await supabase
-        .from("merchant_agents")
-        .select("*")
-        .eq("merchant_id", merchantId as string)
-        .eq("status", "active")
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as MerchantAgent[];
-    },
-    enabled: Boolean(merchantId),
-  });
-}
-
 // =========================================================================
 // 對應規格書(帳號登入安全性優化)2.4.3/2.5.3:管理員視角查詢某位服務人員/客服目前實際的
 // 登入信箱狀態,給人員管理頁的登入信箱欄位/徽章用。只在已開通登入時才需要查(呼叫端自行控制

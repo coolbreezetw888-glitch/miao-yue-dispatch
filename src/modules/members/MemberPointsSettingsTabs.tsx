@@ -759,8 +759,7 @@ function FormulaCard({
       {/* §4.2 第 5 點 (b)(逐字)+ 主腦補的那一行(放在 (b) 後面)。 */}
       {hasAllItemsFormula && shouldShowOwnFormulaNote(draft, drafts) ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          這個項目有自己的公式，不吃『全部服務項目』那條。
-          把這條公式關掉後，這個項目會改吃『全部服務項目』那條。
+          這個項目有自己的公式，不吃『全部服務項目』那條。把這條公式關掉後，這個項目會改吃『全部服務項目』那條。
         </p>
       ) : null}
     </div>

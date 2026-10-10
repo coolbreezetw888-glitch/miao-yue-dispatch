@@ -51,7 +51,7 @@ export interface LeaveReportRow {
   notes: string | null;
 }
 
-/** 抽成 / 請假分頁的服務人員下拉選項(在職、依姓名排序;跟改前 useMerchantStaffList 同一個範圍)。 */
+/** 抽成 / 請假分頁的服務人員下拉選項(在職、依順位排序 = display_order → 建立時間;跟改前 useMerchantStaffList 同一個範圍)。 */
 export async function fetchReportExportStaff(
   merchantId: string,
 ): Promise<ReportExportStaffOption[]> {

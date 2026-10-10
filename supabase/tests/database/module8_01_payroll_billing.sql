@@ -18,6 +18,8 @@
 -- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
 --   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -1031,11 +1033,7 @@ select is(
 --    完成時間篩選條件」手動加總的結果是否一致——驗證的是彙整邏輯本身正確,不受這個檔案
 --    前面到底建立了幾筆訂單影響。
 select is(
-  (get_merchant_billing_summary(
-    'e8000000-0000-4000-8000-000000000021',
-    extract(year from now() at time zone 'Asia/Taipei')::int,
-    extract(month from now() at time zone 'Asia/Taipei')::int
-  ) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   (select coalesce(sum(b.subtotal_amount_snapshot - b.discount_amount_snapshot), 0)
    from bookings b
    where b.merchant_id = 'e8000000-0000-4000-8000-000000000021'
@@ -1048,11 +1046,7 @@ select is(
 -- 同時釘住「這三筆(R1/R2/R3 共 3500)真的有被認列在完成當月」,否則上面那條自我對照的斷言
 -- 在「兩邊都是 0」的情況下也會通過,等於什麼都沒驗到。
 select cmp_ok(
-  (get_merchant_billing_summary(
-    'e8000000-0000-4000-8000-000000000021',
-    extract(year from now() at time zone 'Asia/Taipei')::int,
-    extract(month from now() at time zone 'Asia/Taipei')::int
-  ) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   '>=',
   3500.00,
   '§3.11 + 2026-09-24 完成時間基準:完成當月的未稅營收至少包含 R1(1000)+R2(已折扣後1500)+R3(1000)= 3500.00,證明這三筆確實被認列在「完成當下」那個月'
@@ -1061,17 +1055,13 @@ select cmp_ok(
 -- 對照組(釘住這次的口徑改變,避免之後有人又把基準改回 start_at):同樣三筆訂單,用它們虛構的
 -- 訂單月份 2026-12 去查,現在應該是 0.00——因為它們的完成時間不在 2026-12。
 select is(
-  (get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(2026, 12, 1), (make_date(2026, 12, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   0.00,
   '2026-09-24 完成時間基準(對照組):用訂單的虛構 start_at 月份(2026-12)查詢,營收是 0.00——證明報表真的改用「完成時間」認列,不是用預約時間'
 );
 
 select is(
-  (get_merchant_billing_summary(
-    'e8000000-0000-4000-8000-000000000021',
-    extract(year from now() at time zone 'Asia/Taipei')::int,
-    extract(month from now() at time zone 'Asia/Taipei')::int
-  ) ->> 'total_tax_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_tax_amount')::numeric,
   0.00,
   '§3.1:total_tax_amount = 0.00(這三筆訂單都沒有開稅金)'
 );
@@ -1081,11 +1071,7 @@ select is(
 -- 改成直接對照「用同一套 computed_at 篩選條件」手動加總的結果是否一致(驗證彙整邏輯本身正確,
 -- 不受測試執行時的實際時間影響)。
 select is(
-  (get_merchant_billing_summary(
-    'e8000000-0000-4000-8000-000000000021',
-    extract(year from now() at time zone 'Asia/Taipei')::int,
-    extract(month from now() at time zone 'Asia/Taipei')::int
-  ) ->> 'total_commission_payout')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_commission_payout')::numeric,
   (select coalesce(sum(commission_amount), 0) from booking_commission_records
    where merchant_id = 'e8000000-0000-4000-8000-000000000021'
      and computed_at >= (date_trunc('month', now() at time zone 'Asia/Taipei') at time zone 'Asia/Taipei')
@@ -1105,7 +1091,7 @@ select throws_ok(
 );
 
 select throws_ok(
-  $$select get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12)$$,
+  $$select public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(2026, 12, 1), (make_date(2026, 12, 1) + interval '1 month - 1 day')::date)$$,
   '42501', null,
   '§3.11 跨商家隔離:B 店管理員不能查詢 A 店的帳務報表'
 );
@@ -1119,7 +1105,7 @@ select pg_temp.test_clear_auth();
 select pg_temp.test_set_auth('e8000000-0000-4000-8000-000000000005');
 
 select lives_ok(
-  $$select get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12)$$,
+  $$select public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(2026, 12, 1), (make_date(2026, 12, 1) + interval '1 month - 1 day')::date)$$,
   '規則 2.9:被授權 billing 的客服可以查詢店家帳務報表'
 );
 
@@ -1139,7 +1125,7 @@ select lives_ok(
 );
 
 select throws_ok(
-  $$select get_merchant_billing_summary('e8000000-0000-4000-8000-000000000021', 2026, 12)$$,
+  $$select public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(2026, 12, 1), (make_date(2026, 12, 1) + interval '1 month - 1 day')::date)$$,
   '42501', null,
   '規則 2.9:被授權 staff_report(沒有 billing)的客服不能查詢店家帳務報表'
 );
@@ -1285,11 +1271,7 @@ select is(
     date_trunc('month', now() at time zone 'Asia/Taipei')::date,
     (date_trunc('month', now() at time zone 'Asia/Taipei') + interval '1 month - 1 day')::date
   ) ->> 'total_revenue_excl_tax')::numeric,
-  (get_merchant_billing_summary(
-    'e8000000-0000-4000-8000-000000000021',
-    extract(year from now() at time zone 'Asia/Taipei')::int,
-    extract(month from now() at time zone 'Asia/Taipei')::int
-  ) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   '§3.6 + 2026-09-24 完成時間基準:get_merchant_billing_summary_by_range(完成當月整月)的 total_revenue_excl_tax 跟月份版本 get_merchant_billing_summary(完成當月)算出完全相同的數字'
 );
 

@@ -51,7 +51,7 @@ vi.mock("@/modules/staff-agent/context", () => ({
   useAgentPermission: () => ({ data: true }),
   useMyAgentProfile: () => ({ data: null, refetch: vi.fn() }),
 }));
-vi.mock("./AppLayout", () => ({
+vi.mock("./appLayoutContext", () => ({
   useAppLayoutContext: () => ({
     email: "owner@test.local",
     newEmail: null,

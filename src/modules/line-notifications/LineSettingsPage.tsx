@@ -344,8 +344,8 @@ function LineSettingsFullView() {
             >
               LINE Developers Console
             </a>{" "}
-            建立一個 Messaging API 頻道，在「Basic settings」找到 Channel ID/Channel Secret，在
-            「Messaging API」分頁點擊「Issue」核發一組 Channel Access Token。
+            建立一個 Messaging API 頻道，在「Basic settings」找到 Channel ID/Channel
+            Secret，在「Messaging API」分頁點擊「Issue」核發一組 Channel Access Token。
           </CardDescription>
         </CardHeader>
         <CardContent>

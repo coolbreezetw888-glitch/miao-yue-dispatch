@@ -111,19 +111,6 @@ export function useMerchantBulkOperations(
   });
 }
 
-// =========================================================================
-// §3.8/§5.2:模組 2(超級管理員後台)專用掛鉤點。這次沒有任何 UI 使用。
-// =========================================================================
-export async function platformListMerchantBulkOperations(
-  merchantId: string,
-): Promise<MerchantBulkOperation[]> {
-  const { data, error } = await supabase.rpc("platform_list_merchant_bulk_operations", {
-    p_merchant_id: merchantId,
-  });
-  if (error) throw error;
-  return (data ?? []) as MerchantBulkOperation[];
-}
-
 /** error_report 欄位是 jsonb，前端讀取時做型別收斂。 */
 export function parseErrorReport(errorReport: unknown): BulkOperationErrorItem[] {
   if (!Array.isArray(errorReport)) return [];

@@ -9,6 +9,8 @@
 -- status='active' + record_invited_staff_login 補防呆)在正式環境重新跑過同一套流程確認成功。
 -- 這裡把同一套情境搬進 pgTAP,確保之後任何人改動這兩個地方都會被這份測試擋下回歸。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(13);
 

@@ -30,6 +30,7 @@ import {
   FEATURE_LINE_MARKETING,
   MERCHANT_FEATURE_DISABLED_MESSAGE,
 } from "../_shared/featureGate.ts";
+import { errorCode } from "../_shared/safeLog.ts";
 
 // pushLineMessage/renderMessageTemplate 這兩支小函式跟 line-notify-dispatch/index.ts 裡的
 // 完全一樣——刻意不用跨 function 的相對路徑 import 共用,因為 Supabase Edge Function 是每個
@@ -80,9 +81,19 @@ export function renderMessageTemplate(template: string, variables: Record<string
   });
 }
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// #1051(H1-25):handleRequest 改成可注入相依(比照 line-webhook),環境變數改在執行當下讀。
+// deno-lint-ignore no-explicit-any
+type AnyClient = any;
+
+/** 可注入的相依(Deno 測試傳假的 client / fetch)。 */
+export interface HandleRequestDeps {
+  env?: (k: string) => string | undefined;
+  /** 以呼叫者自己的 JWT 建立的 client(權限檢查用)。 */
+  createCallerClient?: (authHeader: string) => AnyClient;
+  /** service role client。 */
+  createAdminClient?: () => AnyClient;
+  fetchImpl?: typeof fetch;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -193,14 +204,20 @@ export function buildMarketingDispatchPlan(
   return plan;
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+export async function handleRequest(req: Request, deps?: HandleRequestDeps): Promise<Response> {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
   if (req.method !== "POST") {
     return jsonResponse({ error: "只接受 POST 請求" }, 405);
   }
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+  const env = deps?.env ?? ((k: string) => Deno.env.get(k));
+  const SUPABASE_URL = env("SUPABASE_URL") ?? "";
+  const SUPABASE_ANON_KEY = env("SUPABASE_ANON_KEY") ?? "";
+  const SUPABASE_SERVICE_ROLE_KEY = env("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const injected = Boolean(deps?.createCallerClient && deps?.createAdminClient);
+  const fetchImpl = deps?.fetchImpl ?? fetch;
+  if (!injected && (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY)) {
     console.error("[line-send-marketing] 缺少必要的環境變數");
     return jsonResponse({ error: "伺服器設定不完整" }, 500);
   }
@@ -230,10 +247,12 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // 規則 2.6(核心必測)+ #976 第 3 批:商家管理員或 line_marketing 客服才放行;
   // 只有 line_notification 權限的客服照樣擋下。
-  const callerClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false },
-  });
+  const callerClient = deps?.createCallerClient
+    ? deps.createCallerClient(authHeader)
+    : createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
 
   const { data: isAllowed, error: permissionCheckError } = await callerClient.rpc(
     "am_i_allowed_line_marketing",
@@ -241,7 +260,7 @@ async function handleRequest(req: Request): Promise<Response> {
   );
 
   if (permissionCheckError) {
-    console.error("[line-send-marketing] am_i_allowed_line_marketing 呼叫失敗", permissionCheckError);
+    console.error("[line-send-marketing] am_i_allowed_line_marketing 呼叫失敗", errorCode(permissionCheckError));
     return jsonResponse({ error: "驗證權限時發生錯誤" }, 500);
   }
   if (isAllowed !== true) {
@@ -254,9 +273,11 @@ async function handleRequest(req: Request): Promise<Response> {
   const { data: userData } = await callerClient.auth.getUser();
   const createdByUserId = userData?.user?.id ?? null;
 
-  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
+  const adminClient = deps?.createAdminClient
+    ? deps.createAdminClient()
+    : createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
 
   // SPECS-INDEX #1025 FG2-F01:平台沒開「再行銷通知」(或它的主功能「LINE 通知」;細部功能在主功能關時
   // 自動為關)⇒ 403「這個功能目前沒有開放。」。放在權限檢查之後:沒權限的人照舊拿到原本的 403。
@@ -338,7 +359,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
     const renderedMessage = renderMessageTemplate(message, { member_name: item.name });
     const pushResult = await pushLineMessage(
-      fetch,
+      fetchImpl,
       channelAccessToken,
       item.lineUserId as string,
       renderedMessage,
@@ -365,5 +386,5 @@ async function handleRequest(req: Request): Promise<Response> {
 }
 
 if (import.meta.main) {
-  Deno.serve(handleRequest);
+  Deno.serve((req) => handleRequest(req));
 }

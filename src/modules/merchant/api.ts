@@ -4,6 +4,7 @@
 // 一律透過 context.tsx 匯出的 hooks，或視需要直接 import 這個檔案裡的函式。
 
 import { supabase } from "@/integrations/supabase/client";
+import { imageExtensionForMime } from "@/lib/imageUploadExtension";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { IndustryType, MerchantAdminUser, MerchantWithGroup } from "./types";
 
@@ -173,7 +174,8 @@ export async function uploadMerchantLogo(merchantId: string, file: File): Promis
     throw new Error(validationError);
   }
 
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "png";
+  // #1052 H2-12:副檔名由實際檔案類型決定,不沿用原檔名。
+  const ext = imageExtensionForMime(file.type);
   const path = `${merchantId}/logo-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage

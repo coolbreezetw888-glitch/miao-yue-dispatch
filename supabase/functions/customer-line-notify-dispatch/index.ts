@@ -48,16 +48,9 @@ import {
 // 純函式
 // =========================================================================
 
-/** 比對 X-Cron-Secret;環境變數沒設時一律擋下。固定時間比對。 */
-export function isValidCronSecret(headerValue: string | null, expected: string): boolean {
-  if (!expected) return false;
-  if (headerValue === null || headerValue.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= headerValue.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
-}
+/** 比對 X-Cron-Secret:#1051 起改用共用的固定時間比對(_shared/cronSecret.ts);環境變數沒設時一律擋下。 */
+import { isValidCronSecret } from "../_shared/cronSecret.ts";
+export { isValidCronSecret };
 
 /** {{變數}} 單次替換(不遞迴;不認得的原樣保留)。店家這邊(模組 11 範本)用這支,行為跟 line-notify-dispatch 一致。 */
 export function renderMessageTemplate(template: string, variables: Record<string, string>): string {

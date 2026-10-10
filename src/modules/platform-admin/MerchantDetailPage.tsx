@@ -458,8 +458,8 @@ export default function MerchantDetailPage() {
                               break-words:email 與商家名稱都是使用者自填的長文字,320px 要能折行。 */}
                           <CardAlertDialogDescription className="break-words">
                             {adminDisplayName(admin)}({admin.email})將無法再登入管理「
-                            {merchant.name}」。如果這是最後一位管理員(且集團也沒有設定集團
-                            管理者)，系統會擋下這個操作並提示。
+                            {merchant.name}
+                            」。如果這是最後一位管理員(且集團也沒有設定集團管理者)，系統會擋下這個操作並提示。
                           </CardAlertDialogDescription>
                         </CardAlertDialogHeader>
                         <CardAlertDialogFooter>

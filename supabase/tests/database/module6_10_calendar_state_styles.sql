@@ -7,6 +7,8 @@
 -- 並行 agent 測試狀態的風險,這次刻意沒有執行,已在回報中向主腦說明,請 QA 或主腦找一個獨立的
 -- 本機環境實際跑一次 `npm run test:db` 驗證)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(23);
 

@@ -10,6 +10,8 @@
 --   D04  鈴鐺收件人(管理員、orders 客服、通過行事曆門檻的服務人員;同帳號一則;沒權限的客服 / 沒開通的服務人員不收)與文字
 --   並發:pgTAP 只有一條連線,無法真的開兩個交易;另以兩條 psql 連線手動驗證(見回報)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(58);
 

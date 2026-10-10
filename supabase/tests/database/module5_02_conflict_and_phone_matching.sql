@@ -16,6 +16,8 @@
 -- 不再測試 NULL 分支——NULL 分支在應用層 create_booking() 函式裡的防呆程式碼還在,只是資料庫
 -- 現在保證這個分支不會再被觸發到,不需要、也無法再用 pgTAP fixture 重現)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它

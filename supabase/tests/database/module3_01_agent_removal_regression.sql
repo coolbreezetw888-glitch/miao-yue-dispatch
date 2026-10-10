@@ -13,6 +13,8 @@
 -- 改壞的函式後重跑這份測試,確認下面「移除後」那兩條斷言真的會 fail;改回正確版本後再重跑一次,
 -- 確認全數轉為 pass。完整過程與指令記錄在 .claude/skills/automated-testing/SKILL.md。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(5);
 

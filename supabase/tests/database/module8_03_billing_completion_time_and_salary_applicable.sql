@@ -14,6 +14,8 @@
 -- 在同一個測試交易裡不可能自然產生「9 月預約、10 月完成」或「10/5 離職」這種跨月時間軸。
 -- 手動改寫之後測試結果完全不依賴測試執行當下的實際時鐘時間,穩定可重現。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -222,25 +224,25 @@ select pg_temp.test_set_auth('e8030000-0000-4000-8000-000000000001');
 --    不是 9 月。營收 / 料錢 / 訂單數三項都要跟著搬過去。
 -- =========================================================================
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   0.00,
   '任務 1(核心):訂單預約在 9/20、完成在 10/5 → 9 月報表的未稅營收是 0.00(使用者裁決:「若訂單在 9 月但未完成代表他在 9 月還沒收到錢」)'
 );
 
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   1000.00,
   '任務 1(核心):同一筆訂單的 1000 元未稅營收出現在 10 月報表(使用者裁決:「直到哪個月份按完成才歸在那個月」)'
 );
 
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_material_cost')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_material_cost')::numeric,
   0.00,
   '任務 1:料錢成本也跟著用完成時間分月 → 9 月是 0.00(原本料錢也是用 start_at,跟營收同一個 bug)'
 );
 
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) ->> 'total_material_cost')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) ->> 'total_material_cost')::numeric,
   200.00,
   '任務 1:料錢成本 200 元出現在 10 月報表'
 );
@@ -249,7 +251,7 @@ select is(
 select is(
   (select (elem ->> 'order_count')::int
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000041'),
   0,
@@ -259,7 +261,7 @@ select is(
 select is(
   (select (elem ->> 'order_count')::int
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000041'),
   1,
@@ -288,13 +290,13 @@ select is(
 --    T2 在 2026-09 還在職(10/5 才離職),9 月請假 3 天扣 3000。
 -- =========================================================================
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_monthly_salary_base')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_base')::numeric,
   50000.00,
   '任務 2:9 月的月薪基本額 = T2(30000,當時還在職)+ T3(20000)= 50000(這一半原本就是對的,靠 11.6 的歷史母體)'
 );
 
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_monthly_salary_deduction')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_deduction')::numeric,
   3000.00,
   '任務 2(核心):9 月的月薪扣款 = T2 請假 3 天 × (30000/30) = 3000 —— 原本這裡用 ms.status=active 當母體,T2 已離職所以這 3000 會整個漏掉,月薪實發因此多算'
 );
@@ -303,7 +305,7 @@ select ok(
   exists (
     select 1
     from jsonb_array_elements(
-      get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+      public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
     ) as elem
     where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000042'
   ),
@@ -313,7 +315,7 @@ select ok(
 select is(
   (select (elem ->> 'net_pay')::numeric
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000042'),
   27000.00,
@@ -324,17 +326,17 @@ select is(
 select is(
   (select sum((elem ->> 'net_pay')::numeric)
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'net_pay' is not null),
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_monthly_salary_base')::numeric
-  - (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_monthly_salary_deduction')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_base')::numeric
+  - (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_deduction')::numeric,
   '任務 2(核心,這是使用者原本的抱怨本身):per_staff_breakdown 的 net_pay 加總 == 卡片的(月薪基本額 − 月薪扣款),兩邊母體一致所以永遠對得起來'
 );
 
 -- 反面:查 2026-10(T2 在 10/5 已離職,當月月底 as_of 是 removed)→ T2 不該再出現。
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) ->> 'total_monthly_salary_base')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_base')::numeric,
   20000.00,
   '任務 2(反面):查 2026-10 時 T2 已離職(月底 as_of 是 removed)→ 月薪基本額只剩 T3 的 20000'
 );
@@ -343,7 +345,7 @@ select ok(
   not exists (
     select 1
     from jsonb_array_elements(
-      get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) -> 'per_staff_breakdown'
+      public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
     ) as elem
     where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000042'
   ),
@@ -358,7 +360,7 @@ select ok(
 select is(
   (select (elem ->> 'is_active_as_of')::boolean
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000042'),
   false,
@@ -368,7 +370,7 @@ select is(
 select is(
   (select (elem ->> 'is_active_as_of')::boolean
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) as elem
    where elem ->> 'staff_id' = 'e8030000-0000-4000-8000-000000000043'),
   true,
@@ -403,8 +405,8 @@ select is(
 
 -- 這一條釘住 §11.9 那條決策記錄真的被推翻了(原本的斷言是「人數不隨查詢月份改變」)。
 select isnt(
-  jsonb_array_length(get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'),
-  jsonb_array_length(get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 10) -> 'per_staff_breakdown'),
+  jsonb_array_length(public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'),
+  jsonb_array_length(public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'),
   '任務 2:per_staff_breakdown 的人數**會**隨查詢月份改變(9 月 3 人、10 月 2 人)——明確推翻模組 8 §11.9「維持目前在職名單、不逐月還原歷史人員名單」那條決策記錄,以使用者裁決為準'
 );
 
@@ -553,16 +555,16 @@ select is(
   '任務 3(對照組):[2/1,2/28] 是完整月份 → 只算 1 個月的 50000,證明「1 個月就是 1 個月」,不是 2 個月'
 );
 
--- 3-f. 按年月那一支永遠是完整月份,salary_applicable 固定 true(兩支介面一致)。
+-- 3-f. 查整個月份 ⇒ salary_applicable 為 true(#1051:舊版按年月那一支已移除,改用區間版查整個月)。
 select is(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) ->> 'salary_applicable')::boolean,
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'salary_applicable')::boolean,
   true,
-  '任務 3:按年月那一支 get_merchant_billing_summary 本質上就是完整月份,salary_applicable 固定 true(兩支函式回傳形狀一致,前端不用分兩套處理)'
+  '任務 3:區間版查整個月份 ⇒ salary_applicable 為 true'
 );
 
 select ok(
-  (get_merchant_billing_summary('e8030000-0000-4000-8000-000000000020', 2026, 9) -> 'salary_applicable') is not null,
-  '任務 3:salary_applicable 這個 key 在按年月那一支也確實存在(前端防禦寫法是 `?? true`,key 真的要在,否則舊行為會繼續生效)'
+  (public.get_merchant_billing_summary_by_range('e8030000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'salary_applicable') is not null,
+  '任務 3:salary_applicable 這個 key 確實存在(前端防禦寫法是 `?? true`,key 真的要在,否則舊行為會繼續生效)'
 );
 
 -- 3-g. 邊界:結束日剛好是 2 月最後一天(閏年/平年都要對)。2026 是平年,2/28 是最後一天。

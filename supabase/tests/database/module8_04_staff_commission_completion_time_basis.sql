@@ -27,6 +27,8 @@
 -- 本專案連續抓到兩次「空清單假通過」(scalar subquery 對空集合回傳 NULL,is(NULL, null) 為真),
 -- 所以每一組行為斷言前面都先證明「資料真的長成我以為的樣子」。前提斷言不是形式。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -298,7 +300,7 @@ select ok(
 select is(
   (select count(*)::int
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8040000-0000-4000-8000-000000000020', 2026, 10) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8040000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) elem
    where elem ->> 'staff_id' = 'e8040000-0000-4000-8000-000000000041'),
   1,
@@ -309,7 +311,7 @@ select is(
   (get_staff_commission_summary('e8040000-0000-4000-8000-000000000041', 2026, 10) ->> 'total_commission_amount')::numeric,
   (select (elem ->> 'commission_amount')::numeric
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8040000-0000-4000-8000-000000000020', 2026, 10) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8040000-0000-4000-8000-000000000020', make_date(2026, 10, 1), (make_date(2026, 10, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) elem
    where elem ->> 'staff_id' = 'e8040000-0000-4000-8000-000000000041'),
   '🔴 #767 核心守門員(跨視角對帳):同一位服務人員、同一個月份,服務人員報表的「抽成合計」必須等於商家帳務報表 per_staff_breakdown 裡他那一列的抽成金額。兩側只要有任何一邊改回別的歸月基準,這一條就會紅'
@@ -318,7 +320,7 @@ select is(
 select is(
   (select (elem ->> 'commission_amount')::numeric
    from jsonb_array_elements(
-     get_merchant_billing_summary('e8040000-0000-4000-8000-000000000020', 2026, 9) -> 'per_staff_breakdown'
+     public.get_merchant_billing_summary_by_range('e8040000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
    ) elem
    where elem ->> 'staff_id' = 'e8040000-0000-4000-8000-000000000041'),
   0.00,

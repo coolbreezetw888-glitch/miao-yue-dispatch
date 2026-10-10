@@ -18,6 +18,8 @@
 --
 -- 時間:本檔不依賴「現在幾月幾號」;唯一的業務時間是寫死的台北時間 2026-12-15 10:00(建單用)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -857,10 +859,11 @@ select is(
   'I2 v2.4 裁決 2:會員被硬刪後,訂單的 member_id 變成空,但折抵 20 點 / 2 元原樣保留(不回頭改數字)'
 );
 
-select pg_temp.test_set_auth('db110000-0000-4000-8000-000000000008');
+-- #1051:平台批次清除函式已移除;這裡直接用它原本的兩句刪除重現「清空 A 店會員與點數」,驗證的是外鍵行為。
+delete from member_point_transactions where merchant_id = 'db110000-0000-4000-8000-000000000020';
 select lives_ok(
-  $$select platform_purge_merchant_members_and_points('db110000-0000-4000-8000-000000000020')$$,
-  'I3 v2.4 裁決 1/2(核心):平台管理員清除 A 店全部會員與點數成功——A 店同時有生日發送紀錄(2 筆)與折抵訂單,兩者都不能讓清除失敗'
+  $$delete from members where merchant_id = 'db110000-0000-4000-8000-000000000020'$$,
+  'I3 v2.4 裁決 1/2(核心):清除 A 店全部會員與點數成功——A 店同時有生日發送紀錄(2 筆)與折抵訂單,兩者都不能讓清除失敗'
 );
 select pg_temp.test_clear_auth();
 select is(

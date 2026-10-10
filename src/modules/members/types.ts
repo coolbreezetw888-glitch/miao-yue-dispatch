@@ -140,7 +140,7 @@ export function memberPointTransactionTypeLabel(type: string): string {
  *    **member_settings / member_points** 鑰匙(**不放行 members**)。其他人呼叫 `useMerchantMemberSettings`
  *    時 RLS 查無列 ⇒ 會靜默回到這組預設值(`points_feature_enabled = true`)。
  *    ⇒ 只有紅利點數管理頁(MemberPointsPage)、會員系統設定頁(MemberSettingsPage)可以拿它判斷「紅利開沒開」。
- *    建單頁看 preview_booking_points 的 feature_enabled;帳務報表看 get_merchant_billing_summary 的
+ *    建單頁看 preview_booking_points 的 feature_enabled;帳務報表看 get_merchant_billing_summary_by_range 的
  *    points_feature_enabled;會員詳情頁看 get_merchant_points_feature_enabled(useMerchantPointsFeatureEnabled)。 */
 export const DEFAULT_MERCHANT_MEMBER_SETTINGS: Pick<
   MerchantMemberSettings,

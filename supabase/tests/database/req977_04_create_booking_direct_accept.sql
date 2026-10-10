@@ -15,6 +15,8 @@
 --          只有「協助人員」開了開關不算(看主要服務人員);開關開啟時跟舊版只差狀態與紀錄
 --   ⑪~⑫   編輯訂單換主要服務人員:狀態不變(待確認換給開了開關的人仍是待確認;已確認換給沒開的人仍是已確認)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(12);
 

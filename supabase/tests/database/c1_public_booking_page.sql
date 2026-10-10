@@ -8,6 +8,8 @@
 --   F02-1~4   以 anon 呼叫 C01、C02(指定 / 不指定)把回傳轉成文字,逐一搜尋哨兵字串與內部 id ⇒ 都搜不到
 --   A06       誰會出現在「選服務人員」(由 primary_service_item_ids + C02 驗證)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(23);
 

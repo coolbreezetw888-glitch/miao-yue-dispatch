@@ -761,7 +761,7 @@ select pg_temp.test_set_uid('f9851000-0000-4000-8000-000000000001');
 
 -- 新函式結果、改前複製品結果。
 create temp table r985n on commit drop as select
-  public.get_merchant_billing_summary('f9851000-0000-4000-8000-000000000020', :p_y, :p_m) as bm,
+  public.get_merchant_billing_summary_by_range('f9851000-0000-4000-8000-000000000020', make_date(:p_y, :p_m, 1), (make_date(:p_y, :p_m, 1) + interval '1 month - 1 day')::date) as bm,
   pg_temp.old_get_merchant_billing_summary('f9851000-0000-4000-8000-000000000020', :p_y, :p_m) as obm,
   public.get_merchant_billing_summary_by_range('f9851000-0000-4000-8000-000000000020', :'p_ms'::date, :'p_me'::date) as br,
   pg_temp.old_get_merchant_billing_summary_by_range('f9851000-0000-4000-8000-000000000020', :'p_ms'::date, :'p_me'::date) as obr,
@@ -830,16 +830,16 @@ select is((select count(*)::int from jsonb_array_elements(public.get_staff_commi
            where e ? 'material_cost_deducted'),
   5, '⑪ 服務人員本人查自己的明細也有 material_cost_deducted');
 
--- ⑫ ACL 重申:四支報表函式 anon 沒有 EXECUTE、authenticated 有。
+-- ⑫ ACL 重申:三支報表函式 anon 沒有 EXECUTE、authenticated 有。
+--    (#1051:舊版單月 get_merchant_billing_summary 已移除,「月份版」改用區間版查整個月。)
 reset role;
 select is((select count(*)::int from pg_proc p
-           where p.oid in ('public.get_merchant_billing_summary(uuid,integer,integer)'::regprocedure,
-                           'public.get_merchant_billing_summary_by_range(uuid,date,date)'::regprocedure,
+           where p.oid in ('public.get_merchant_billing_summary_by_range(uuid,date,date)'::regprocedure,
                            'public.get_staff_commission_summary(uuid,integer,integer)'::regprocedure,
                            'public.get_staff_commission_summary_by_range(uuid,date,date)'::regprocedure)
              and not has_function_privilege('anon', p.oid, 'execute')
              and has_function_privilege('authenticated', p.oid, 'execute')),
-  4, '⑫ 四支報表函式:anon 沒有 EXECUTE、authenticated 有');
+  3, '⑫ 三支報表函式:anon 沒有 EXECUTE、authenticated 有');
 
 select * from finish();
 rollback;

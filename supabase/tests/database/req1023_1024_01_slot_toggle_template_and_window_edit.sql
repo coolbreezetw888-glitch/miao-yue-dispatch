@@ -4,6 +4,8 @@
 --         沒有權限的人不會從錯誤訊息看到別人的時段(直接 42501)。
 -- migration:20261008140000_req1023_1024_slot_toggle_template_and_window_edit.sql
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(32);
 
@@ -248,8 +250,8 @@ select pg_temp.test_set_auth(null, 'anon');
 select throws_ok(
   $$insert into staff_availability_windows (staff_id, day_of_week, start_time, end_time)
     values ('d1023000-0000-4000-8000-000000000040', 2, '15:00', '15:30')$$,
-  '42501', '沒有權限設定這位服務人員的可預約時段',
-  '㉙ anon 寫入重疊時段 ⇒ 42501,訊息不含任何時段'
+  '42501', 'permission denied for table staff_availability_windows',
+  '㉙ anon 寫入重疊時段 ⇒ 42501,訊息不含任何時段(#1051:anon 已無表層權限,在進到 trigger 之前就被擋)'
 );
 select pg_temp.test_clear_auth();
 select is(

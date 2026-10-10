@@ -7,6 +7,8 @@
 -- 「A師傅(同一人跨店)」的電話字串改成完全相同(這是現在唯一能表示「同一人跨店」的方式,
 -- 見 module5_02_conflict_and_phone_matching.sql 開頭同一天補充的說明)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(10);
 

@@ -12,6 +12,8 @@
 --   1. 橫跨兩組相鄰時段交界的預約,必須被擋下(重現漏洞的具體案例)。
 --   2. 完整落在其中一組時段內的預約,必須維持可以成功建立(確認沒有過度修正、連帶擋掉正常情境)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(3);
 

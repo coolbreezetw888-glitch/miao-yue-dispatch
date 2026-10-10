@@ -19,6 +19,8 @@
 --   H. #844 批次 4 修正(2026-10-01):同一張單有 2 位入帳會員 / 2 位推薦人(#844 邊界 19)時,
 --      shortfall_hint 依會員 / 推薦人分句、冠姓名,各自找自己的折抵訂單,不把數字加總混在一起講
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -273,8 +275,9 @@ select is(
   (select md5(replace(pg_temp.req987_revert(replace(prosrc, E'\r\n', E'\n')), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
           || '/' || length(replace(pg_temp.req987_revert(replace(prosrc, E'\r\n', E'\n')), E'where id = p_booking_id\n  for update;', 'where id = p_booking_id;'))
    from pg_proc where oid = 'public.complete_booking(uuid)'::regprocedure),
-  '4cfb14875fbb5ffc365373b046907520/1088',
-  'A6 §3.5 + #844 §3.11:complete_booking 除了 #844 加的 for update 之外,本體與正式庫指紋一致'
+  -- #1051 加固(先驗權限再加鎖)又改了讀訂單那一段 ⇒ 期望值更新為 #1051 之後的版本(改前為 4cfb1487…/1088)。
+  'bce89d1c713abf627909f4cff05686c3/1299',
+  'A6 §3.5 + #844 §3.11:complete_booking 除了 #844 / #1051 調整的加鎖段落之外,本體不變'
 );
 select ok(
   not exists (select 1 from pg_indexes where schemaname = 'public'

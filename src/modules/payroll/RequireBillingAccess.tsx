@@ -7,7 +7,7 @@
 // navigate() 離開。
 //
 // 這個元件只是體驗層的顯示邏輯,不是安全邊界——真正擋住未授權讀取的是
-// private.can_view_billing 這支函式落實的 get_merchant_billing_summary 權限檢查(規格書 §3.1/§3.11),
+// private.can_view_billing 這支函式落實的 get_merchant_billing_summary_by_range 權限檢查(規格書 §3.1/§3.11),
 // 即使有人繞過前端路由直接呼叫 API,也會被資料庫擋下。
 
 import type { ReactNode } from "react";

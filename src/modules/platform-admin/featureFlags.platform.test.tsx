@@ -260,6 +260,23 @@ describe("功能開關頁(IndustryPresetsPage,FG1-U01 / U02 / U08 + 第三輪)",
     expect(toastMock.success).toHaveBeenCalledWith("已儲存，共更新 256 間商家的開關。");
   });
 
+  it("#1052 H2-06:有細部功能的大項全部關閉 ⇒ 確認窗加「底下的細部功能也會一起停用。」;沒有細部功能的不加", async () => {
+    const user = userEvent.setup();
+    render(wrap(<IndustryPresetsPage />));
+    await user.click(await screen.findByTestId("feature-bulk-off-staff_portal"));
+    await user.click(screen.getByTestId("feature-bulk-off-online_booking"));
+    await user.click(screen.getByTestId("feature-presets-save"));
+    const dialog = await screen.findByTestId("feature-presets-confirm");
+    const items = within(within(dialog).getByTestId("feature-presets-confirm-list"))
+      .getAllByRole("listitem")
+      .map((li) => li.textContent ?? "");
+    const portal = items.find((t) => t.includes("「服務人員登入端」都關閉"));
+    const booking = items.find((t) => t.includes("「客戶線上預約」都關閉"));
+    expect(portal).toContain("服務人員登入後只會看到一句話。底下的細部功能也會一起停用。");
+    expect(booking).toBeDefined();
+    expect(booking).not.toContain("底下的細部功能也會一起停用。");
+  });
+
   it("主功能全部開啟 ⇒ 細部功能也排「全部開啟」;主功能全部關閉 ⇒ 細部功能的批次按鈕不能按", async () => {
     const user = userEvent.setup();
     render(wrap(<IndustryPresetsPage />));

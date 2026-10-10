@@ -16,6 +16,8 @@
 --   並發:pgTAP 環境沒有 dblink(只有一條連線),無法真的開兩個交易同時送;改測「店層級鎖 + 唯一索引」中的唯一索引
 --         (A01-5),鎖本身由程式碼審查確認(兩個交易都要先拿同一把 pg_advisory_xact_lock 才會查時段)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(72);
 

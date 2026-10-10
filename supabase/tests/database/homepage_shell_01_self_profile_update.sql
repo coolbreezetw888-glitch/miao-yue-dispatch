@@ -12,6 +12,8 @@
 --    hasnt_function 絆線(防止有人把它加回來),plan 從 12 變成 7(拿掉 6 條、加 1 條)。
 --    客服那兩列 fixture 保留不動——刪掉沒有好處,留著也沒有副作用。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(7);
 

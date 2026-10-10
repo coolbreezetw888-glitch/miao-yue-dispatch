@@ -18,6 +18,8 @@
 -- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
 --   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -307,20 +309,20 @@ select confirm_booking(:'no_tax_booking_id'::uuid);
 select complete_booking(:'no_tax_booking_id'::uuid);
 
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('ed000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   1500.00,
   '§3.1:total_revenue_excl_tax = 1000(含稅單未稅金額) + 500(無稅單) = 1500.00,不含稅金'
 );
 
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'total_tax_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('ed000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_tax_amount')::numeric,
   100.00,
   '§3.1:total_tax_amount = 100.00(只有含稅那一筆的稅金)'
 );
 
 -- §3.2:estimated_net_margin = 1500(未稅營收) - 0(無料錢成本) - 300(抽成:1000×20%+500×20%) - 0(無月薪)
 select is(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'estimated_net_margin')::numeric,
+  (public.get_merchant_billing_summary_by_range('ed000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'estimated_net_margin')::numeric,
   1200.00,
   '§3.2:estimated_net_margin 用未稅營收計算,1500 - 300(抽成) = 1200.00'
 );
@@ -328,7 +330,7 @@ select is(
 -- 對照組:如果沿用舊版「用含稅營收計算」的錯誤口徑,會得到 1300.00(1600-300),
 -- 證明這次修正確實生效,不是恰好兩個數字一樣矇混過關。
 select isnt(
-  (get_merchant_billing_summary('ed000000-0000-4000-8000-000000000021', extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'estimated_net_margin')::numeric,
+  (public.get_merchant_billing_summary_by_range('ed000000-0000-4000-8000-000000000021', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'estimated_net_margin')::numeric,
   1300.00,
   '§3.2(修正生效驗證):如果沿用舊版含稅營收口徑會得到 1300.00,新公式不會得出這個錯誤數字'
 );

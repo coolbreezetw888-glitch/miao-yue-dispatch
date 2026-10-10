@@ -15,6 +15,8 @@
 --   ⑪  ACL
 --   ⑫  platform_list_merchant_feature_logs(⚠️1)只給超級管理員,回傳功能名稱與改的人 email
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(54);
 

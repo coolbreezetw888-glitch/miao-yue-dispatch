@@ -11,6 +11,8 @@
 --      rollback_bulk_operation、get_merchant_bulk_operations 照常;打開 ⇒ 恢復
 --   (打開時原本的 c1、c3、module12、req976 pgTAP 全部照過 ⇒ 行為不變,不在這裡重複)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 set local client_min_messages = warning;
 select plan(25);

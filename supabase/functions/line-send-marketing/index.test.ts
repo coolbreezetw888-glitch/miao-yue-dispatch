@@ -149,3 +149,84 @@ Deno.test("C5-P01-4 混合:則數 = 實際要發的聯絡人數(跟 preview_line
   const plan = buildMarketingDispatchPlan(["c1", "c2-blacklisted", "c3-legacy-blocked", "c4-legacy", "m1", "missing"], [...CONTACT_MEMBERS, ...MEMBERS]);
   assertEquals(plan.filter((p) => p.status === "will_send").length, 4);
 });
+
+// =========================================================================
+// #1051(H1-25):handleRequest 可注入相依後的整段流程 —— 平台「再行銷通知」關閉 ⇒ 403。
+// =========================================================================
+import { handleRequest } from "./index.ts";
+
+function fgFakeClients(marketingFeature: boolean | "error", allowed = true) {
+  const rec = { adminRpcs: [] as string[], pushes: 0 };
+  const callerClient = {
+    rpc(fn: string) {
+      return Promise.resolve(fn === "am_i_allowed_line_marketing" ? { data: allowed, error: null } : { data: null, error: null });
+    },
+    auth: { getUser: () => Promise.resolve({ data: { user: { id: "u-1" } } }) },
+  };
+  const adminClient = {
+    rpc(fn: string) {
+      rec.adminRpcs.push(fn);
+      if (fn === "internal_merchant_has_feature") {
+        return Promise.resolve(marketingFeature === "error" ? { data: null, error: { code: "XX000" } } : { data: marketingFeature, error: null });
+      }
+      return Promise.resolve({ data: [], error: null });
+    },
+    from() {
+      const b = {
+        select: () => b,
+        eq: () => b,
+        maybeSingle: () => Promise.resolve({ data: { channel_access_token: "T" }, error: null }),
+        insert: () => Promise.resolve({ error: null }),
+      };
+      return b;
+    },
+  };
+  const deps = {
+    env: () => undefined,
+    createCallerClient: () => callerClient,
+    createAdminClient: () => adminClient,
+    fetchImpl: (() => {
+      rec.pushes++;
+      return Promise.resolve(new Response("{}"));
+    }) as unknown as typeof fetch,
+  };
+  return { deps, rec };
+}
+
+function marketingRequest() {
+  return new Request("https://x.supabase.co/functions/v1/line-send-marketing", {
+    method: "POST",
+    headers: { Authorization: "Bearer test", "Content-Type": "application/json" },
+    body: JSON.stringify({ merchant_id: "m-1", member_ids: ["mem-1"], message: "您好" }),
+  });
+}
+
+Deno.test("#1051 再行銷通知關閉 ⇒ 403「這個功能目前沒有開放。」,不查會員、不發送", async () => {
+  const { deps, rec } = fgFakeClients(false);
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 403);
+  assertEquals(await res.json(), { error: "這個功能目前沒有開放。" });
+  assertEquals(rec.adminRpcs, ["internal_merchant_has_feature"]);
+  assertEquals(rec.pushes, 0);
+});
+
+Deno.test("#1051 功能開關查詢失敗 ⇒ 500,一則都不發", async () => {
+  const { deps, rec } = fgFakeClients("error");
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 500);
+  assertEquals(rec.pushes, 0);
+});
+
+Deno.test("#1051 沒權限的人照舊先拿到原本的 403(不透露功能開關狀態)", async () => {
+  const { deps, rec } = fgFakeClients(false, false);
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 403);
+  assertEquals(rec.adminRpcs, []);
+});
+
+Deno.test("#1051 再行銷通知開著 ⇒ 繼續往下查會員(200)", async () => {
+  const { deps, rec } = fgFakeClients(true);
+  const res = await handleRequest(marketingRequest(), deps);
+  assertEquals(res.status, 200);
+  assertEquals(rec.adminRpcs, ["internal_merchant_has_feature", "internal_line_marketing_candidates"]);
+});

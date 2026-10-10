@@ -14,6 +14,7 @@
 //
 // 回應慣例:不符 → 404「找不到…或它不屬於這個商家」(不區分「不存在」與「別家的」,避免被拿來探測編號);
 // 查詢本身出錯 → 500(fail closed,絕不當作通過)。兩種情況都**不寫任何發送記錄**。
+import { errorCode } from "./safeLog.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnyAdminClient = any;
@@ -54,7 +55,7 @@ export async function checkNotifySubjectsBelongToMerchant(
     }
     return { ok: true };
   } catch (err) {
-    console.error("[notify-subject-ownership] 檢查訂單/請假紀錄歸屬時發生錯誤", err);
+    console.error("[notify-subject-ownership] 檢查訂單/請假紀錄歸屬時發生錯誤", errorCode(err));
     return { ok: false, reason: "lookup_failed" };
   }
 }

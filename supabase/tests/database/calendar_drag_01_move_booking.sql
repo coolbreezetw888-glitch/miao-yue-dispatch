@@ -48,6 +48,8 @@
 -- 復原方式:`npx supabase db reset --local`(從 migration 重新套用),再跑一次全綠。
 -- =========================================================================
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -584,8 +586,8 @@ select throws_ok(
 select throws_ok(
   format($$select public.move_booking(%L, %L, %L, %L, %L, %L)$$,
     'e7000000-0000-4000-8000-0000000000ff', :'staff_a', :'staff_a', '2026-10-06 12:00:00+08', '2026-10-06 10:00:00+08', :'staff_a'),
-  'P0001', '找不到這筆預約',
-  '訂單不存在 → 擋下'
+  '42501', '沒有權限執行此操作',
+  '訂單不存在 → 擋下(#1051:與「沒有權限」回同一句)'
 );
 select is((select staff_id from bookings where id = :'t1_id'::uuid), :'staff_a'::uuid,
   '上面四條邊界擋下後:T1 主服務人員仍是 A');

@@ -154,8 +154,7 @@ export function AdminSuggestLoginEmailDialog({
             建議「{personLabel}」的新登入信箱
           </CardDialogTitle>
           <CardDialogDescription>
-            這只是建議，不會立刻生效，也不會馬上寄出任何驗證信——要等對方本人登入後自己按套用、
-            新信箱主人也點了驗證信，才會真的改成這個信箱。
+            這只是建議，不會立刻生效，也不會馬上寄出任何驗證信——要等對方本人登入後自己按套用、新信箱主人也點了驗證信，才會真的改成這個信箱。
           </CardDialogDescription>
         </CardDialogHeader>
 

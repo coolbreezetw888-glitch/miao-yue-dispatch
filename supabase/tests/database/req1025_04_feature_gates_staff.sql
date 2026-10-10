@@ -13,6 +13,11 @@
 --   ⑦  重新全開:個人權限與 merchant_staff 開關完全沒變、權限恢復
 --   ⑧  internal_merchant_has_feature 只給 service_role
 begin;
+-- #1051:private 函式已收回 authenticated 執行權;本檔斷言直接以登入者身分呼叫下列輔助函式,在交易內暫時授權(rollback 後失效)。
+grant execute on function private.can_view_staff_own_payroll(uuid) to authenticated;
+grant execute on function private.has_own_staff_permission(uuid, text) to authenticated;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(46);
 

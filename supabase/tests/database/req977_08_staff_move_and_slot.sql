@@ -9,6 +9,8 @@
 --            按件計酬 + 排班自助 + 可以自己下單 ⇒ 可以關 / 開自己的時段,有既有預約時回傳衝突筆數(只提示不擋);
 --            別人的 staff id、沒有排班自助、顯示會員資料關、未登入擋
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(22);
 

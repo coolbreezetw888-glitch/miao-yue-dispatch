@@ -8,6 +8,8 @@
 -- is_merchant_admin() 立刻失效,從此看不到也管不到這間店,而且沒有任何自救途徑。
 -- 這份測試釘住:商家管理員改不動 group_id、平台管理員改得動、其他既有流程沒被誤擋。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(9);
 

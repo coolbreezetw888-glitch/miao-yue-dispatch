@@ -14,6 +14,8 @@
 --   ㉓~㉗    鎖與屬性:本體有 for update 且順序 = 讀商家 → 權限 → 鎖列 → 狀態;ACL;anon 無 EXECUTE;
 --            security definer / search_path / volatility
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(31);
 

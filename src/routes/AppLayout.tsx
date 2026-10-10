@@ -94,14 +94,7 @@
 // =========================================================================
 
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Link,
-  Navigate,
-  Outlet,
-  useLocation,
-  useNavigate,
-  useOutletContext,
-} from "react-router-dom";
+import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CustomerAccountBlocked } from "@/components/CustomerAccountBlocked";
@@ -154,6 +147,7 @@ import {
   shouldShowStaffViewSwitch,
   writeStoredStaffViewPreference,
 } from "./appLayoutLogic";
+import type { AppLayoutContext } from "./appLayoutContext";
 import { DualRoleViewSwitchBar } from "./DualRoleViewSwitchBar";
 
 /** localStorage 在某些瀏覽器設定下光是「存取這個屬性」就會丟例外,所以包起來取用。
@@ -166,33 +160,8 @@ function safeLocalStorage(): Storage | null {
   }
 }
 
-export interface AppLayoutContext {
-  email: string | null;
-  userId: string | null;
-  /** 對應規格書(帳號登入安全性優化)2.5.1:目前登入者自己有沒有一筆 Supabase 原生的待驗證新
-   * 信箱(auth.users.new_email)。三種角色共用,不用各自重新呼叫一次 getVerifiedUser()。 */
-  newEmail: string | null;
-  onSignOut: () => void;
-  /** 使用者決策(2026-09-23):目前實際要不要顯示服務人員端內容——純服務人員角色永遠 true;
-   * 管理員/客服同時也是服務人員時,依雙重身分切換選擇決定。HomePage.tsx 用這個值決定要渲染
-   * 服務人員自己的個人資料頁,還是導去 /app/manage。 */
-  isStaffView: boolean;
-  /** 2026-09-24 修正:「該看商家端還是服務人員端」這件事現在已經有確定答案了嗎?
-   * 角色/服務人員紀錄還在查的時候是 false —— 子路由必須先等這個值變 true 才能做任何導向判斷,
-   * 否則會拿「還沒解出來的角色」當成「不是服務人員」用(見 appLayoutLogic.ts isStaffViewResolved)。 */
-  isViewResolved: boolean;
-  /** 這位使用者是不是雙重身分(管理員/客服 + 同一間商家的服務人員)。ManagePage 用來在
-   * 「一張卡片都沒有」的空狀態裡直接給出切換到服務人員端的按鈕。 */
-  isDualRoleEligible: boolean;
-  /** 切換商家端/服務人員端。isDualRoleEligible 為 false 時呼叫不會有任何效果。 */
-  onToggleStaffView: () => void;
-}
-
-/** 給子路由(HomePage/ManagePage 等)用,取得共用外殼已經驗證好的 email 跟登出函式,
- * 不用自己重新監聽一次 auth 狀態。 */
-export function useAppLayoutContext(): AppLayoutContext {
-  return useOutletContext<AppLayoutContext>();
-}
+// AppLayoutContext 型別與 useAppLayoutContext 搬到 ./appLayoutContext.ts(#1052 H2-09:這支檔案只 export 元件,
+// 開發時的 Fast Refresh 才會正常運作)。
 
 // 分頁籤定義(MERCHANT_TABS/STAFF_TABS)與所有角色判斷都搬到 ./appLayoutLogic.ts,並在
 // ./appLayoutLogic.test.ts 有對應的單元測試。2026-09-24 線上故障的教訓:這段判斷邏輯寫在元件
@@ -276,7 +245,12 @@ export default function AppLayout() {
   // 2026-09-24 使用者回報「頁首應該要顯示目前在哪個功能頁」。判斷邏輯本身是純函式(涵蓋 App.tsx
   // 底下全部 34 條子路由,認不出來的路徑回空字串、永遠不會是 undefined),測試見
   // appLayoutLogic.test.ts。
-  const headerTitle = resolveAppHeaderTitle({ pathname: location.pathname, isStaffView });
+  const headerTitle = resolveAppHeaderTitle({
+    pathname: location.pathname,
+    isStaffView,
+    staffPortalClosed: staffPortalGate === "closed",
+    merchantName: currentMerchant?.name ?? null,
+  });
   // 角色/服務人員紀錄都查完了才算「有答案」。子路由(HomePage/ManagePage)拿這個值決定要不要
   // 先顯示載入中,不能在還沒有答案的時候就把人導走。
   const isViewResolved = isStaffViewResolved({
@@ -354,6 +328,8 @@ export default function AppLayout() {
   // refetchAccessibleMerchants() 更新,這裡才會在「沒有切換商家」的情況下也重新套用一次剛存的顏色。
   useEffect(() => {
     applyThemeColorToDocument(resolveMerchantThemeColor(currentMerchant));
+    // 刻意只列這三個欄位:主題色只跟它們有關,商家物件本身每次重抓都會換參照,列整個物件會白白重套色。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMerchant?.id, currentMerchant?.theme_preset, currentMerchant?.theme_custom_color]);
 
   // 對應規格書(商家與集團管理)4.6:登入後檢查目前使用者是否至少是一間商家的管理員/客服,

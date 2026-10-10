@@ -17,6 +17,8 @@
 --   ・把 can_view_payroll_reports 改回含 can_view_billing ⇒ ⑱ ⑲ ⑳ ㉑ ㉓ 轉紅
 --   ・把 export_orders_report 的權限判斷拿掉 ⇒ ㉝ 轉紅
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(49);
 

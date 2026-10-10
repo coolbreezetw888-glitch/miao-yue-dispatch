@@ -129,6 +129,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 import { useAgentPermission, useCurrentMerchantRole } from "@/modules/staff-agent/context";
 
 import {
@@ -139,6 +140,7 @@ import {
 import { shouldRenderPointsTabs } from "./memberPointsSettingsLogic";
 import { MemberPointsSettingsTabs } from "./MemberPointsSettingsTabs";
 import { RequireMemberPointsAccess } from "./RequireMemberPointsAccess";
+import { rewardConditionModeOptions } from "./memberLineFeatureCopy";
 import { REWARD_CONDITION_MODE_LABELS, type RewardConditionMode } from "./types";
 
 function MemberPointsPageInner() {
@@ -152,6 +154,9 @@ function MemberPointsPageInner() {
   // 重新抓回 settings 才更新,否則使用者會看到選單彈回舊值。
   const [rewardConditionMode, setRewardConditionMode] = useState<RewardConditionMode>("none");
   const [savingRewardCondition, setSavingRewardCondition] = useState(false);
+  // #1052 H2-05:LINE 通知沒開 ⇒ 下拉不列「只看 LINE 已綁定」(目前存的就是它時照樣列,值保留)。
+  const { hasFeature } = useMerchantFeatures();
+  const lineNotificationsFeatureOn = hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === true;
 
   // =======================================================================
   // 2026-09-24 使用者裁決(紅利點數管理頁分成「交易」與「規則」兩段權限)。使用者原文:
@@ -242,9 +247,7 @@ function MemberPointsPageInner() {
         // 🟡 常駐 `!`:skill 二的表格裡「功能已關閉,資料不會被清空」就是這一類的原始例子。
         <AlertNote>
           <strong>目前紅利點數功能已關閉</strong>
-          ，系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發)，
-          建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空，
-          重新開啟後會完整還原顯示。
+          ，系統不會再自動給任何新點數(客人消費、推薦朋友、生日都不發)，建單表單與會員詳情頁也不再顯示任何點數相關的內容與入口。既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
           {canManagePointsRules
             ? "要重新開啟，請到下方「啟用紅利點數功能」切換開關。"
             : "要重新開啟這個功能需要「紅利點數」權限，請找商家管理員處理。"}
@@ -292,8 +295,9 @@ function MemberPointsPageInner() {
                         (v) => void handleSaveRewardCondition(v),
                         (v) => v in REWARD_CONDITION_MODE_LABELS,
                       )}
-                      options={(
-                        Object.keys(REWARD_CONDITION_MODE_LABELS) as RewardConditionMode[]
+                      options={rewardConditionModeOptions(
+                        lineNotificationsFeatureOn,
+                        rewardConditionMode,
                       ).map((mode) => ({
                         value: mode,
                         label: REWARD_CONDITION_MODE_LABELS[mode],
@@ -324,9 +328,7 @@ function MemberPointsPageInner() {
                 >
                   <AlertNote>
                     關閉後<strong>系統就不再自動給點數了</strong>
-                    ：客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再
-                    顯示任何點數相關的數字與入口(要結清某位會員剩下的點數，請先重新開啟功能、
-                    結清後再關閉)；既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
+                    ：客人消費不再累點、推薦朋友不發獎勵、生日也不送點。建單表單與會員詳情頁也不再顯示任何點數相關的數字與入口(要結清某位會員剩下的點數，請先重新開啟功能、結清後再關閉)；既有的點數餘額與異動歷史不會被清空，重新開啟後會完整還原顯示。
                   </AlertNote>
                 </SwitchRow>
               )}

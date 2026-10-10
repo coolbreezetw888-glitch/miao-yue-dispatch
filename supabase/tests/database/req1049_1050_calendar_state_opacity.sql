@@ -5,6 +5,8 @@
 --     get_my_calendar_state_styles 多回 opacity、新函式 get_my_staff_availability_windows 正 / 反、
 --     沒有放寬 RLS(沒排休權限的服務人員直接查表仍是 0 筆)、anon 政策 0 條。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(37);
 

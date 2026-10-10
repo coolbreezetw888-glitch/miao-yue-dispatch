@@ -407,7 +407,14 @@ export default function IndustryPresetsPage() {
                     </p>
                   ) : null}
                   {!b.enabled && feature ? (
-                    <p className="mt-0.5 text-muted-foreground">{feature.off_impact}</p>
+                    <p className="mt-0.5 text-muted-foreground">
+                      {feature.off_impact}
+                      {/* #1052 H2-06:比照商家詳情卡,大項而且有細部功能時補這一句 */}
+                      {feature.parent_key === null &&
+                      features.some((f) => f.parent_key === feature.key)
+                        ? "底下的細部功能也會一起停用。"
+                        : null}
+                    </p>
                   ) : null}
                 </li>
               );

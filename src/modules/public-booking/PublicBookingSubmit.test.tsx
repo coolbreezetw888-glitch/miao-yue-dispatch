@@ -225,11 +225,12 @@ function renderPage(path = "/booking/cool-shop") {
 }
 
 async function walkToForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByTestId("public-booking-start"));
+  // #1052 H2-14:負載下第一次渲染 / 時段載入可能超過預設 1 秒,等待拉長到 5 秒(不影響斷言)。
+  await user.click(await screen.findByTestId("public-booking-start", {}, { timeout: 5_000 }));
   await user.click(screen.getByRole("checkbox", { name: /室內機清洗/ }));
   await user.click(screen.getByTestId("public-booking-next"));
   await user.click(screen.getByTestId("public-booking-next")); // ③ 不指定
-  await user.click(await screen.findByTestId("public-booking-time-14:00"));
+  await user.click(await screen.findByTestId("public-booking-time-14:00", {}, { timeout: 5_000 }));
   await user.click(screen.getByTestId("public-booking-next"));
   await user.type(screen.getByLabelText(/姓名/), "王小明");
   await user.type(screen.getByLabelText(/服務地址/), "台北市信義區松仁路 58 號");
@@ -579,6 +580,9 @@ describe("C3-D04 ⑥-4 訪客送出 → ⑦-3", () => {
 });
 
 describe("C3-D06 完成頁上一頁 / C3-D07 加入會員", () => {
+  // #1052 H2-14:全套 vitest 一起跑(CPU 吃緊)時偶發逾時 —— 這條要走完整個預約流程,步驟多。
+  // 每個 findBy 等待拉長到 5 秒、整條測試上限拉長到 20 秒;斷言內容不變。
+  const SLOW_FIND = { timeout: 5_000 };
   it("完成頁按系統上一頁 ⇒ 回 ①(不能回確認畫面再送一次)", async () => {
     state.session = { state: "linked", memberName: "王小明", memberPhone: "0912345678" };
     state.submitResults = [createdResult()];
@@ -586,13 +590,13 @@ describe("C3-D06 完成頁上一頁 / C3-D07 加入會員", () => {
     renderPage();
     await walkToForm(user);
     await user.click(screen.getByTestId("public-booking-submit"));
-    await user.click(await screen.findByTestId("customer-linked-submit"));
-    await screen.findByTestId("booking-complete");
+    await user.click(await screen.findByTestId("customer-linked-submit", {}, SLOW_FIND));
+    await screen.findByTestId("booking-complete", {}, SLOW_FIND);
     expect(screen.queryByRole("button", { name: "回上一步" })).toBeNull();
     await act(async () => {
       await navigateRef?.(-1);
     });
-    expect(await screen.findByTestId("public-booking-start")).toBeInTheDocument();
+    expect(await screen.findByTestId("public-booking-start", {}, SLOW_FIND)).toBeInTheDocument();
     expect(screen.queryByTestId("customer-linked")).toBeNull();
     // 再按一次上一頁也不會回到確認畫面(選的內容已清空)
     await act(async () => {
@@ -600,7 +604,7 @@ describe("C3-D06 完成頁上一頁 / C3-D07 加入會員", () => {
     });
     expect(screen.queryByTestId("customer-linked")).toBeNull();
     expect(state.submitCalls).toHaveLength(1);
-  });
+  }, 20_000);
 
   it("C4-B03:加入會員回來(沒有草稿)的標記留在預約頁 ⇒ 轉到會員中心 /me(標記留給會員中心拿)", async () => {
     state.session = { state: "needs_profile", lineDisplayName: "小明", linePictureUrl: null };

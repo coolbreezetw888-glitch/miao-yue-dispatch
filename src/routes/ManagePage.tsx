@@ -109,7 +109,7 @@ import { MyPushSubscriptionCard } from "@/modules/push-notifications/MyPushSubsc
 import { SCHEDULING_FEATURE_HIDDEN } from "@/modules/scheduling/featureVisibility";
 import { REFERRAL_UI_HIDDEN } from "@/modules/members/referralVisibility";
 
-import { useAppLayoutContext } from "./AppLayout";
+import { useAppLayoutContext } from "./appLayoutContext";
 import {
   emailNamePrefix,
   LoginEmailSection,

@@ -4,6 +4,8 @@
 -- deactivate_member/reactivate_member/(set_member_phone_verified 第 11 批 D 已退場)、seed_default_member_settings、
 -- 一之二節「既有 RLS 政策定義完全沒有變動」的回歸驗證。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ⚠️ SPECS-INDEX #615/#618 疊加(2026-09-22):phone_required_to_create/
 -- require_verified_phone_for_rewards 兩個開關已被移除(#618),電話從此不再是 create_member/

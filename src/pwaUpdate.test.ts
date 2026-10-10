@@ -251,6 +251,24 @@ describe("切回前景時檢查新版本(#1014 主腦補上的決定)", () => {
     expect(registration.update).toHaveBeenCalledTimes(1);
   });
 
+  it("#1052 H2-10:register() 失敗(開發模式沒有 /sw.js)⇒ 安靜略過,不變成 unhandled rejection", async () => {
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      container.register.mockImplementationOnce(() => Promise.reject(new Error("no sw.js")));
+      registerServiceWorkerAutoUpdate();
+      window.dispatchEvent(new Event("load"));
+      await vi.waitFor(() => expect(container.register).toHaveBeenCalled());
+      await flush();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+      // 沒有註冊成功 ⇒ 檢查新版本照樣安靜回 false
+      await expect(checkForServiceWorkerUpdate(100_000)).resolves.toBe(false);
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("瀏覽器不支援 service worker ⇒ 什麼都不掛、不報錯", () => {
     delete (navigator as unknown as Record<string, unknown>)["serviceWorker"];
     const addSpy = vi.spyOn(document, "addEventListener");

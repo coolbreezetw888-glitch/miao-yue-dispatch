@@ -121,8 +121,7 @@ function TaxSettingsCard({ merchantId }: { merchantId: string }) {
       <CardHeader>
         <CardTitle>稅金設定</CardTitle>
         <CardDescription>
-          建單表單開啟稅金開關時，預設帶入這裡的模式跟數字(客服可以針對個別訂單再調整數字，但不能
-          改變模式)。模式要改成別種，只能在這裡改。
+          建單表單開啟稅金開關時，預設帶入這裡的模式跟數字(客服可以針對個別訂單再調整數字，但不能改變模式)。模式要改成別種，只能在這裡改。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">

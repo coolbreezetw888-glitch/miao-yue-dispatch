@@ -13,6 +13,8 @@
 --
 -- 寫法比照 module3_02_hard_delete_merchant_staff.sql(服務人員硬刪除的既有測試)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(24);
 

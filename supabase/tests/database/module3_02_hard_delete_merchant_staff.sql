@@ -8,6 +8,8 @@
 -- 不會擋下刪除,是 hard_delete_merchant_staff() 應用層邏輯的唯一防線,所以下面④⑤兩項
 -- 是「最需要驗證的一項」(規格書用語),不能省略。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(29);
 

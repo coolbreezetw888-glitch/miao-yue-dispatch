@@ -27,6 +27,7 @@ import type {
 } from "./pushDispatchCore.ts";
 import { sendWebPush, type VapidDetails } from "./webpushAdapter.ts";
 import { checkMerchantFeature, FEATURE_PUSH_NOTIFICATIONS } from "./featureGate.ts";
+import { errorCode } from "./safeLog.ts";
 
 // ⚠️ 這裡的 `any` 是刻意的:supabase-js 的 SupabaseClient 泛型要吃這個專案自動產生的
 // Database 型別,而 Edge Function(Deno)這一側沒有那份檔案。ESLint 看不懂 Deno 的
@@ -55,7 +56,7 @@ export function buildPushDispatchDeps(
         .eq("event_type", eventType)
         .maybeSingle();
       if (error) {
-        console.error("[push-dispatch] getEventSetting 失敗", error);
+        console.error("[push-dispatch] getEventSetting 失敗", errorCode(error));
         return null;
       }
       return (data as PushEventSettingRow | null) ?? null;
@@ -70,7 +71,7 @@ export function buildPushDispatchDeps(
         .eq("merchant_id", merchantId)
         .maybeSingle();
       if (error) {
-        console.error("[push-dispatch] getBookingStaffId 失敗", error);
+        console.error("[push-dispatch] getBookingStaffId 失敗", errorCode(error));
         return null;
       }
       const row = data as { staff_id: string | null } | null;
@@ -89,7 +90,7 @@ export function buildPushDispatchDeps(
         p_booking_staff_id: bookingStaffId,
       });
       if (error) {
-        console.error("[push-dispatch] resolve_push_recipients 失敗", error);
+        console.error("[push-dispatch] resolve_push_recipients 失敗", errorCode(error));
         return [];
       }
       return (data as PushRecipient[] | null) ?? [];
@@ -105,7 +106,7 @@ export function buildPushDispatchDeps(
         .select("id, endpoint, p256dh_key, auth_key, user_id")
         .in("user_id", userIds);
       if (error) {
-        console.error("[push-dispatch] getSubscriptionsForUsers 失敗", error);
+        console.error("[push-dispatch] getSubscriptionsForUsers 失敗", errorCode(error));
         return grouped;
       }
 
@@ -135,7 +136,7 @@ export function buildPushDispatchDeps(
         p_event_type: eventType,
       });
       if (error) {
-        console.error("[push-dispatch] is_staff_push_event_disabled 失敗", error);
+        console.error("[push-dispatch] is_staff_push_event_disabled 失敗", errorCode(error));
         return false;
       }
       return data === true;
@@ -143,7 +144,7 @@ export function buildPushDispatchDeps(
 
     async deleteSubscription(id: string) {
       const { error } = await adminClient.from("push_subscriptions").delete().eq("id", id);
-      if (error) console.error("[push-dispatch] deleteSubscription 失敗", error);
+      if (error) console.error("[push-dispatch] deleteSubscription 失敗", errorCode(error));
     },
 
     // #972:render_booking_notification_variables 簽章改為 (p_booking_id, p_merchant_id),必須帶商家。
@@ -153,7 +154,7 @@ export function buildPushDispatchDeps(
         p_merchant_id: merchantId,
       });
       if (error) {
-        console.error("[push-dispatch] render_booking_notification_variables 失敗", error);
+        console.error("[push-dispatch] render_booking_notification_variables 失敗", errorCode(error));
         return {};
       }
       return (data as Record<string, string>) ?? {};
@@ -161,7 +162,7 @@ export function buildPushDispatchDeps(
 
     async writeLog(row: PushNotificationLogInsert) {
       const { error } = await adminClient.from("push_notification_log").insert(row);
-      if (error) console.error("[push-dispatch] writeLog 失敗", error);
+      if (error) console.error("[push-dispatch] writeLog 失敗", errorCode(error));
     },
 
     // §13.4:站內通知中心(鈴鐺)。這張表沒有任何 INSERT 政策,而且表層 GRANT 也把
@@ -172,7 +173,7 @@ export function buildPushDispatchDeps(
     //    推播不發(§13.4 最後一段)。
     async writeInAppNotification(row: UserNotificationInsert) {
       const { error } = await adminClient.from("user_notifications").insert(row);
-      if (error) console.error("[push-dispatch] writeInAppNotification 失敗", error);
+      if (error) console.error("[push-dispatch] writeInAppNotification 失敗", errorCode(error));
     },
 
     async sendPush(subscription, payload) {

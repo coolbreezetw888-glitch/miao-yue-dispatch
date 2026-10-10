@@ -155,14 +155,35 @@ export function applyColumnMapping(
 //   * 匯入時由 parseCsvText 呼叫 unescapeCsvFormulaGuard 把這個單引號拿掉,讓「匯出 → 修正 →
 //     再匯入」(例如「匯入失敗清單」)不會讓資料多出一個單引號。
 // =========================================================================
-export const CSV_FORMULA_TRIGGER_CHARS: readonly string[] = ["=", "+", "-", "@", "\t", "\r"];
+// #1052 H2-11:再加全形「＝＋－＠」,並且判斷前先略過開頭空白(「  =x」這種前面有空白的也算)。
+// 只影響「要不要補單引號」的判斷,補的方式與匯入端還原方式不變。
+export const CSV_FORMULA_TRIGGER_CHARS: readonly string[] = [
+  "=",
+  "+",
+  "-",
+  "@",
+  "\t",
+  "\r",
+  "＝",
+  "＋",
+  "－",
+  "＠",
+];
 
-/** 去掉開頭連續的單引號之後,第一個字元是不是公式觸發字元。
- * 例:"=x"、"'=x"、"''=x" 都是 true;"'abc"、"王小明"、"'" 是 false。 */
+/** 去掉開頭連續的單引號、再略過開頭空白(等同 trimStart;Tab / 歸位字元本身就是觸發字元)之後,
+ * 第一個字元是不是公式觸發字元。
+ * 例:"=x"、"'=x"、"''=x"、"  =x"、"'  =x"、"＝x" 都是 true;
+ *     "'abc"、"王小明"、"'"、"  abc"、"   " 是 false。 */
 function startsWithQuotesThenTrigger(text: string): boolean {
   let i = 0;
   while (i < text.length && text.charAt(i) === "'") i++;
-  return i < text.length && CSV_FORMULA_TRIGGER_CHARS.includes(text.charAt(i));
+  while (i < text.length) {
+    const ch = text.charAt(i);
+    if (CSV_FORMULA_TRIGGER_CHARS.includes(ch)) return true;
+    if (!/\s/.test(ch)) return false;
+    i++;
+  }
+  return false;
 }
 
 /** 字串以公式觸發字元開頭時,前面補一個單引號。非字串一律原樣回傳(只有字串才判斷)。

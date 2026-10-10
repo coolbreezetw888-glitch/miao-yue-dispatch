@@ -30,10 +30,6 @@ export const LINE_NOTIFICATION_EVENT_LABELS: Record<LineNotificationEventType, s
 export function eventSupportsStaffTarget(eventType: LineNotificationEventType): boolean {
   return eventType !== "staff_leave_created";
 }
-export function eventSupportsMemberTarget(eventType: LineNotificationEventType): boolean {
-  return eventType !== "staff_leave_created";
-}
-
 /** 發送記錄(3.18/4.3)用的狀態/事件/對象白話標籤。 */
 export const LINE_LOG_STATUS_LABELS: Record<string, string> = {
   sent: "成功",

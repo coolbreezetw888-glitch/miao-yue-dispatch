@@ -1,6 +1,8 @@
 -- 模組 10(會員與紅利)— SPECS-INDEX #615/#616(規格書 §10.3/§10.4)。
 -- 會員分級(merchant_member_tiers)+ 會員黑名單(is_blacklisted/set_member_blacklist_status)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(19);
 

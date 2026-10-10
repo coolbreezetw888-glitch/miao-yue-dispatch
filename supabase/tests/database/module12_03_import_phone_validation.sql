@@ -31,6 +31,8 @@
 --     module12_01 那些吃計數的既有斷言也全綠 ⇒ 證明兩件事:①這三條真的在守「訊息有沒有出現」,
 --     ②這次改動確實沒有動到 success / failed / skipped 的計數語意。恢復後 31/31 全綠。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(31);
 

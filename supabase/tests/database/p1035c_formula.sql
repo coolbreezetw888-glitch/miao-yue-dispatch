@@ -11,6 +11,8 @@
 --   I  整合:欄位值跟 A 批規則的量一致、存檔重新編譯(忽略前端 ast)、5 條上限、錯誤訊息、
 --      報表含公式獎金、公式明細不含原文、沒有公式時輸出鍵不變、preview 三種模式與 IDOR
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(153);
 

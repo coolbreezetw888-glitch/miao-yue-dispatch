@@ -6,6 +6,8 @@
 -- 放在這一支檔案(而不是 module14_*)是因為姊妹表的同類函式 get_my_calendar_state_styles
 -- 也是釘在「表本身」那一支 module6_10_calendar_state_styles.sql 的 ⑥,組織方式跟著它走。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(21);
 

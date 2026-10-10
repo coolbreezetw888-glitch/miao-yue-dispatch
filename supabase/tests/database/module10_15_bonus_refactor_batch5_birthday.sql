@@ -18,6 +18,8 @@
 --      中斷超過 30 分鐘 ⇒ failed、超過 7 天未發 ⇒ failed;LINE 失敗不影響點數
 --   H. 紀錄清單:最近 50 筆、新到舊、跨商家隔離、members / member_points 任一放行、其他 42501
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(103);
 

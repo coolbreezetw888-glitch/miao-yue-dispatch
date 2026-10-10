@@ -22,6 +22,8 @@
 // 在別家商家是不是「已邀請未開通」(already_had_account 只在 active 時為 true,見兩支 index.ts)。
 //
 // 所有外部呼叫都透過 deps 注入,方便用 scripts/run-edge-function-tests.mjs 跑 Deno 測試。
+import { errorCode } from "./safeLog.ts";
+import { INVITE_SEND_FAILED_MESSAGE } from "./inviteErrors.ts";
 
 export interface AuthAccountLookup {
   user_id: string;
@@ -128,16 +130,17 @@ export function supabaseInviteAccountDeps(adminClient: AdminClientLike): InviteA
     async inviteUserByEmail(email, redirectTo) {
       const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, { redirectTo });
       if (error || !data?.user) {
-        console.error("[inviteAccountResolver] inviteUserByEmail 失敗", error);
-        return { userId: null, errorMessage: error?.message ?? "請稍後再試" };
+        console.error("[inviteAccountResolver] inviteUserByEmail 失敗", errorCode(error));
+        // #1051:寄信服務的錯誤原文只進 log(只印代碼),回給前端的是固定句。
+        return { userId: null, errorMessage: INVITE_SEND_FAILED_MESSAGE };
       }
       return { userId: data.user.id, errorMessage: null };
     },
     async sendPasswordSetupEmail(email, redirectTo) {
       const { error } = await adminClient.auth.resetPasswordForEmail(email, { redirectTo });
       if (error) {
-        console.error("[inviteAccountResolver] resetPasswordForEmail 失敗", error);
-        return { errorMessage: error.message };
+        console.error("[inviteAccountResolver] resetPasswordForEmail 失敗", errorCode(error));
+        return { errorMessage: INVITE_SEND_FAILED_MESSAGE };
       }
       return { errorMessage: null };
     },

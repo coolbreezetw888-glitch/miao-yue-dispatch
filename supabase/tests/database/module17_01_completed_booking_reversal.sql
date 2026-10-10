@@ -32,6 +32,8 @@
 --      module6_08 同樣整檔失敗 —— 證明 default 會讓既有四支狀態函式全部壞掉。
 --   ③ RLS 政策改成 private.can_manage_bookings → A9 轉紅(orders 客服看得到稽核表)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -246,10 +248,11 @@ select pg_temp.test_clear_auth();
 
 -- anon
 select pg_temp.test_set_auth(null, 'anon');
-select is(
-  (select count(*)::int from booking_completion_reversals),
-  0,
-  'A12:anon SELECT → 0 筆(沒有 anon 政策)'
+-- #1051:anon 的表層權限已全部收回 ⇒ 直接讀是「沒有權限」(比原本的 0 筆更嚴)。
+select throws_ok(
+  $$select count(*) from booking_completion_reversals$$,
+  '42501', null,
+  'A12:anon SELECT → 沒有權限(沒有 anon 政策,也沒有表層權限)'
 );
 select throws_ok(
   $$update booking_completion_reversals set reason = 'x'$$,
@@ -676,7 +679,7 @@ select throws_ok(format($$select revert_completed_booking('%s', null)$$, :'rv_id
 select throws_ok(format($$select revert_completed_booking('%s', repeat('字', 501))$$, :'rv_id'),
   '22023', '原因最多 500 個字，目前是 501 個字，請精簡後再送出', 'D19:原因 501 字 → 擋下');
 select throws_ok($$select revert_completed_booking('e8440000-0000-4000-8000-0000000009ff', '誤按')$$,
-  'P0002', '找不到這筆預約', 'D20:不存在的訂單 → 找不到');
+  '42501', '還原或取消已完成的訂單，只有商家管理員可以操作', 'D20:不存在的訂單 → 擋下(#1051:與「沒有權限」回同一句)');
 select pg_temp.test_clear_auth();
 
 select is(
@@ -782,16 +785,12 @@ select pg_temp.test_set_auth('e8440000-0000-4000-8000-000000000005');
 select (s ->> 'total_revenue_excl_tax')::numeric as rev, (s ->> 'total_commission_payout')::numeric as com,
        (select (e ->> 'order_count')::int from jsonb_array_elements(s -> 'per_staff_breakdown') e
         where e ->> 'staff_id' = 'e8440000-0000-4000-8000-000000000251') as cnt
-from (select get_merchant_billing_summary('e8440000-0000-4000-8000-000000000023',
-        extract(year from now() at time zone 'Asia/Taipei')::int,
-        extract(month from now() at time zone 'Asia/Taipei')::int) as s) x \gset bill_before_
+from (select public.get_merchant_billing_summary_by_range('e8440000-0000-4000-8000-000000000023', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) as s) x \gset bill_before_
 select cancel_completed_booking(:'cc_id'::uuid, '客人要求作廢', true) as result \gset cc_
 select (s ->> 'total_revenue_excl_tax')::numeric as rev, (s ->> 'total_commission_payout')::numeric as com,
        (select (e ->> 'order_count')::int from jsonb_array_elements(s -> 'per_staff_breakdown') e
         where e ->> 'staff_id' = 'e8440000-0000-4000-8000-000000000251') as cnt
-from (select get_merchant_billing_summary('e8440000-0000-4000-8000-000000000023',
-        extract(year from now() at time zone 'Asia/Taipei')::int,
-        extract(month from now() at time zone 'Asia/Taipei')::int) as s) x \gset bill_after_
+from (select public.get_merchant_billing_summary_by_range('e8440000-0000-4000-8000-000000000023', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) as s) x \gset bill_after_
 select pg_temp.test_clear_auth();
 
 select is(

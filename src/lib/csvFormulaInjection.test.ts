@@ -42,8 +42,32 @@ describe("escapeCsvCell — 公式注入防護(#925)", () => {
     expect(escapeCsvCell("\r=1+1")).toBe('"\'\r=1+1"');
   });
 
-  it("觸發字元清單就是規格書指定的六個", () => {
-    expect([...CSV_FORMULA_TRIGGER_CHARS].sort()).toEqual(["\t", "\r", "+", "-", "=", "@"].sort());
+  it("觸發字元清單 = 規格書指定的六個 + #1052 H2-11 補的全形四個", () => {
+    expect([...CSV_FORMULA_TRIGGER_CHARS].sort()).toEqual(
+      ["\t", "\r", "+", "-", "=", "@", "＝", "＋", "－", "＠"].sort(),
+    );
+  });
+
+  it("#1052 H2-11:開頭有空白再接觸發字元、全形觸發字元 → 也補單引號", () => {
+    expect(escapeCsvCell("  =1+1")).toBe("'  =1+1");
+    expect(escapeCsvCell("　=1+1")).toBe("'　=1+1");
+    expect(escapeCsvCell("＝SUM(A1)")).toBe("'＝SUM(A1)");
+    expect(escapeCsvCell("＋886")).toBe("'＋886");
+    expect(escapeCsvCell("－5")).toBe("'－5");
+    expect(escapeCsvCell("＠x")).toBe("'＠x");
+    // 開頭空白但後面不是觸發字元、或整格只有空白 → 不動
+    expect(escapeCsvCell("  王小明")).toBe("  王小明");
+    expect(escapeCsvCell("   ")).toBe("   ");
+  });
+
+  it("#1052 H2-11:匯入端對稱還原(空白 / 全形開頭)", () => {
+    for (const original of ["  =x", "'  =x", "＝x", "'＝x", " ＠x", "  abc", "'  abc"]) {
+      const exported = escapeCsvCell(original);
+      const csv = buildCsvContent(["欄"], [[original]]);
+      expect(parseCsvText(csv).rows[0]![0]).toBe(original);
+      expect(unescapeCsvFormulaGuard(String(neutralizeCsvFormula(original)))).toBe(original);
+      expect(exported.length).toBeGreaterThanOrEqual(original.length);
+    }
   });
 
   it("一般文字原樣不動(中間出現 = + - @ 不算,只看第一個字元)", () => {

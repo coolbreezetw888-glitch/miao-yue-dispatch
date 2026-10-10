@@ -27,6 +27,8 @@
 --   ・新函式不看呼叫者權限(排程以 postgres 執行),所以呼叫時先 test_clear_auth()
 --   ・新函式要求 birthday_bonus_enabled = true(§2.9 第 2 點),fixture 補上
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(20);
 

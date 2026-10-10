@@ -14,6 +14,8 @@
 --   ㉚~㉛    staff_get_booking_for_edit:material_costs(含 is_active = false);隱藏備註仍不回原文
 --   ㉜~㉝    抽成:第 8 批開關開 / 關,服務人員改過料錢的單跟客服改的同一張單抽成相同
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(33);
 
@@ -161,8 +163,9 @@ select is(
                    'public.compute_booking_commission(uuid)'::regprocedure,
                    'public.recalculate_booking_commission(uuid)'::regprocedure,
                    'public.complete_booking(uuid)'::regprocedure)),
-  'calculate_booking_staff_commission:0a46ab26a17bc373589b14d17173bbc2 complete_booking:a1b9c712eac0b47e99f57e13a9013705 '
+  'calculate_booking_staff_commission:0a46ab26a17bc373589b14d17173bbc2 complete_booking:b84d0035c971f0951316229d7a56747a '
   || 'compute_booking_commission:cc8e2a2b366c5a83b1fb65c8261e6062 recalculate_booking_commission:cdabc100207b2e27cc062f3303b5f501',
+  -- #1051 加固(先驗權限再加鎖)改過 complete_booking ⇒ 它的期望指紋更新為加固後的值(改前為 a1b9c712…)。
   '⑨ 抽成計算 4 支(calculate / compute / recalculate / complete)指紋未變(#987 第 10 批的錯誤訊息標點先換回舊訊息再比)'
 );
 

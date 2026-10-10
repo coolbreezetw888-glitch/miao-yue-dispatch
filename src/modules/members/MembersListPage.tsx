@@ -92,6 +92,7 @@ import { guardPhantomEmptyChange } from "@/lib/radixSelectGuard";
 import { isValidTaiwanPhone, TW_PHONE_ERROR_MESSAGE } from "@/lib/validation";
 import { getErrorMessage } from "@/modules/platform-admin/getErrorMessage";
 import { useCurrentMerchant } from "@/modules/merchant/context";
+import { MERCHANT_FEATURE_KEYS, useMerchantFeatures } from "@/modules/merchant/features";
 
 import {
   createMember,
@@ -108,6 +109,7 @@ import {
   MEMBER_IDENTITY_STATUS_LABELS,
   type MemberIdentityFilter,
 } from "./memberIdentityStatus";
+import { membersListFirstMemberHint } from "./memberLineFeatureCopy";
 import { RequireMembersAccess } from "./RequireMembersAccess";
 import { REFERRAL_UI_HIDDEN } from "./referralVisibility";
 import { MEMBER_STATUS_LABELS, type MemberStatus, type MemberSummary } from "./types";
@@ -381,6 +383,11 @@ function NewMemberDialog({ merchantId, onSaved }: { merchantId: string; onSaved:
 function MembersListInner() {
   const { merchant } = useCurrentMerchant();
   const merchantId = merchant!.id;
+  // #1052 H2-05:LINE 通知或再行銷沒開 ⇒ 空白狀態說明不提 LINE 再行銷(讀取中也先不提)。
+  const { hasFeature } = useMerchantFeatures();
+  const lineMarketingFeatureOn =
+    hasFeature(MERCHANT_FEATURE_KEYS.lineNotifications) === true &&
+    hasFeature(MERCHANT_FEATURE_KEYS.lineMarketing) === true;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -475,8 +482,8 @@ function MembersListInner() {
             <CardTitle>會員名單</CardTitle>
             <HelpToggle label="說明：「尚未驗證」和「已完成驗證」有什麼差別">
               <strong>尚未驗證</strong>
-              ：這位客戶的資料已經在你的會員管理裡(建單時自動登記，或你自己新增/匯入的)，
-              但本人還沒有完成身分驗證。這種客戶<strong>照樣會累積紅利點數</strong>，但
+              ：這位客戶的資料已經在你的會員管理裡(建單時自動登記，或你自己新增/匯入的)，但本人還沒有完成身分驗證。這種客戶
+              <strong>照樣會累積紅利點數</strong>，但
               <strong>不會收到通知</strong>。
               <br />
               <strong>已完成驗證</strong>：本人已經證明過自己就是這支手機的主人，通知才會寄得出去。
@@ -569,7 +576,7 @@ function MembersListInner() {
               // (違反 skill 二之三),而且是同一個動作的兩個實例。改在文案裡指路。
               description={
                 allMembers.length === 0
-                  ? "按右上角的「新增會員」建立第一位。建立之後，建單時輸入電話就能查到這位客戶、累積紅利點數、發生日獎勵與 LINE 再行銷通知。"
+                  ? membersListFirstMemberHint(lineMarketingFeatureOn)
                   : "換一個篩選條件或清空搜尋關鍵字再看看。"
               }
             />

@@ -1652,44 +1652,6 @@ export async function getCustomerRelatedBookings(
 }
 
 // =========================================================================
-// 模組 6 §6.1:訂單金額查詢對外介面——直接取得「這筆訂單最終金額」的查詢窗口(讀取
-// final_amount_snapshot 等 breakdown 欄位),供模組 8(薪資與帳務)、模組 12(報表匯出)之後
-// 直接複用,不用重新查三張關聯表自己加總。
-// =========================================================================
-export interface BookingAmountSummary {
-  id: string;
-  subtotalAmountSnapshot: number;
-  discountAmountSnapshot: number;
-  taxAmountSnapshot: number;
-  finalAmountSnapshot: number;
-  paymentMethodId: string | null;
-  paymentMethodNameSnapshot: string | null;
-}
-
-export async function fetchBookingAmountSummary(
-  bookingId: string,
-): Promise<BookingAmountSummary | null> {
-  const { data, error } = await supabase
-    .from("bookings")
-    .select(
-      "id, subtotal_amount_snapshot, discount_amount_snapshot, tax_amount_snapshot, final_amount_snapshot, payment_method_id, payment_method_name_snapshot",
-    )
-    .eq("id", bookingId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return {
-    id: data.id,
-    subtotalAmountSnapshot: data.subtotal_amount_snapshot,
-    discountAmountSnapshot: data.discount_amount_snapshot,
-    taxAmountSnapshot: data.tax_amount_snapshot,
-    finalAmountSnapshot: data.final_amount_snapshot,
-    paymentMethodId: data.payment_method_id,
-    paymentMethodNameSnapshot: data.payment_method_name_snapshot,
-  };
-}
-
-// =========================================================================
 // 模組 6 §9.1(SPECS-INDEX #597):操作記錄——查詢某筆訂單的狀態變更歷史,供預約詳情彈窗
 // 「操作記錄」按鈕使用。
 // =========================================================================

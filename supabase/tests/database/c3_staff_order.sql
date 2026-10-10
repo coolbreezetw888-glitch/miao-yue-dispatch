@@ -1,5 +1,7 @@
 -- 客戶端第 3 批 — C3-H01 服務人員順位 / C3-H02 move_merchant_staff_order / C3-H04 依順位排列 / C3-H05 完成頁文字
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(35);
 
@@ -155,8 +157,7 @@ select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public
   array['K3', 'K5', 'K1', 'K2'], 'H04-2 後台行事曆服務人員欄依順位(原本依姓名)');
 select is((select array_agg(e ->> 'name') from jsonb_array_elements(public.list_report_export_staff('c3d00000-0000-4000-8000-000000000021')) e),
   array['K3', 'K5', 'K1', 'K2'], 'H04-4 報表匯出中心服務人員下拉依順位(使用者 Q3-c;原本依姓名)');
-select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public.get_merchant_billing_summary('c3d00000-0000-4000-8000-000000000021',
-             extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int) -> 'per_staff_breakdown') e),
+select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public.get_merchant_billing_summary_by_range('c3d00000-0000-4000-8000-000000000021', make_date(extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int, 1), (make_date(extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown') e),
   array['K3', 'K5', 'K1', 'K2'], 'H04-5 帳單報表(單月)服務人員明細依順位(主腦裁決;原本依姓名)');
 select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public.get_merchant_billing_summary_by_range('c3d00000-0000-4000-8000-000000000021',
              (now() at time zone 'Asia/Taipei')::date, (now() at time zone 'Asia/Taipei')::date) -> 'per_staff_breakdown') e),
@@ -165,10 +166,9 @@ select is((select array_agg(k order by k) from jsonb_array_elements(public.get_m
              (now() at time zone 'Asia/Taipei')::date, (now() at time zone 'Asia/Taipei')::date) -> 'per_staff_breakdown') e, jsonb_object_keys(e) k
            -- #1035 A 批 PA-B01:自訂區間版每列多一個 bonus_amount(單月舊版 Q11 不改),比對時排除。
            where e ->> 'staff_name' = 'K3' and k <> 'bonus_amount'),
-          (select array_agg(k order by k) from jsonb_array_elements(public.get_merchant_billing_summary('c3d00000-0000-4000-8000-000000000021',
-             extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int) -> 'per_staff_breakdown') e, jsonb_object_keys(e) k
-           where e ->> 'staff_name' = 'K3'),
-  'H04-7 自訂區間版每列欄位跟單月版一樣(沒有多回 display_order)');
+          (select array_agg(k order by k) from jsonb_array_elements(public.get_merchant_billing_summary_by_range('c3d00000-0000-4000-8000-000000000021', make_date(extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int, 1), (make_date(extract(year from (now() at time zone 'Asia/Taipei'))::int, extract(month from (now() at time zone 'Asia/Taipei'))::int, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown') e, jsonb_object_keys(e) k
+           where e ->> 'staff_name' = 'K3' and k <> 'bonus_amount'),
+  'H04-7 自訂區間版每列欄位跟整個月份查詢一樣(沒有多回 display_order)');
 select is((select array_agg(e ->> 'staff_name') from jsonb_array_elements(public.get_staff_schedule_overview('c3d00000-0000-4000-8000-000000000021', current_date, current_date) -> 'staff') e),
   array['K3', 'K5', 'K1', 'K2'], 'H04-3 排班一覽服務人員依順位(原本依姓名)');
 select pg_temp.test_clear_auth();

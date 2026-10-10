@@ -30,6 +30,7 @@ import {
   FEATURE_PUSH_NOTIFICATIONS,
   MERCHANT_FEATURE_DISABLED_MESSAGE,
 } from "../_shared/featureGate.ts";
+import { errorCode } from "../_shared/safeLog.ts";
 
 // 環境變數一律在 handleRequest 執行當下才讀取(理由同 push-notify-dispatch 的檔頭註解:
 // module 層級的常數會在 Deno 測試 import 之前就定案,測試無法控制)。
@@ -158,7 +159,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     { p_merchant_id: merchantId },
   );
   if (identityError) {
-    console.error("[push-send-test] get_my_push_identity 失敗", identityError);
+    console.error("[push-send-test] get_my_push_identity 失敗", errorCode(identityError));
     return jsonResponse({ error: "你不是這間商家的成員，無法發送測試通知" }, 403);
   }
   const identity = identityData as PushIdentity | null;
@@ -185,7 +186,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     { p_merchant_id: merchantId },
   );
   if (rateError) {
-    console.error("[push-send-test] count_my_recent_test_pushes 失敗", rateError);
+    console.error("[push-send-test] count_my_recent_test_pushes 失敗", errorCode(rateError));
     return jsonResponse({ error: "檢查發送頻率時發生錯誤" }, 500);
   }
   if (typeof recentCount === "number" && recentCount >= TEST_PUSH_RATE_LIMIT) {
@@ -199,7 +200,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   if (endpointFilter) query = query.eq("endpoint", endpointFilter);
   const { data: subscriptionsData, error: subscriptionsError } = await query;
   if (subscriptionsError) {
-    console.error("[push-send-test] 查詢裝置失敗", subscriptionsError);
+    console.error("[push-send-test] 查詢裝置失敗", errorCode(subscriptionsError));
     return jsonResponse({ error: "查詢裝置時發生錯誤" }, 500);
   }
   const subscriptions = (subscriptionsData as PushSubscriptionRow[] | null) ?? [];
@@ -258,7 +259,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
       // §6.4 第 3 點:記下這一列是發給哪一台裝置,ack 進來時才能精準更新那一台的 last_seen_at。
       ack_subscription_id: subscription.id,
     });
-    if (logError) console.error("[push-send-test] 寫入 push_notification_log 失敗", logError);
+    if (logError) console.error("[push-send-test] 寫入 push_notification_log 失敗", errorCode(logError));
 
     // 規則 4.6:404/410 代表這個 endpoint 已經失效,刪掉它(沿用既有判斷函式,不重寫)。
     if (!result.ok && shouldDeleteSubscriptionOnFailure(result.status)) {
@@ -266,7 +267,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
         .from("push_subscriptions")
         .delete()
         .eq("id", subscription.id);
-      if (deleteError) console.error("[push-send-test] 刪除失效裝置失敗", deleteError);
+      if (deleteError) console.error("[push-send-test] 刪除失效裝置失敗", errorCode(deleteError));
     }
   }
 

@@ -17,6 +17,8 @@
 --   ㊶~㊻    主腦裁決(防溢位):單一品項小計剛好 1,000,000 可以、多一點擋(有送單價 / 沒送單價兩條路都擋);
 --            整張單合計剛好 9,999,999.99 可以、多一點擋;寫入後檢查的 helper 不開放給前端
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(46);
 
@@ -269,8 +271,7 @@ select is(
      (now() at time zone 'Asia/Taipei')::date - 1, (now() at time zone 'Asia/Taipei')::date + 1) ->> 'total_material_cost')::numeric,
   3124.99::numeric, '㉖ 區間報表 total_material_cost = Σ 單價 × 數量');
 select is(
-  (public.get_merchant_billing_summary('fb11f000-0000-4000-8000-000000000020',
-     extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int) ->> 'total_material_cost')::numeric,
+  (public.get_merchant_billing_summary_by_range('fb11f000-0000-4000-8000-000000000020', make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from now() at time zone 'Asia/Taipei')::int, extract(month from now() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) ->> 'total_material_cost')::numeric,
   3124.99::numeric, '㉗ 月報表 total_material_cost = Σ 單價 × 數量');
 select pg_temp.test_clear_auth();
 

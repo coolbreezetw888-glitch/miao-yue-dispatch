@@ -15,6 +15,8 @@
 -- 這份測試刻意「一路驗到報表」而不是只驗 bookings 欄位:因為使用者關心的是「未稅營收會不會被
 -- 汙染」,只驗欄位值沒有證明那件事真的被解決。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(17);
 
@@ -193,13 +195,13 @@ select is(
 --       而且沒有 coalesce fallback,這四筆就會整批從報表消失。
 -- =========================================================================
 select is(
-  (get_merchant_billing_summary('ec020000-0000-4000-8000-000000000020', 2024, 5) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('ec020000-0000-4000-8000-000000000020', make_date(2024, 5, 1), (make_date(2024, 5, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   3999.00,
   '任務 4(核心,一路驗到報表):2024-05 的未稅營收 = 1000(A)+1000(B)+999(C)+1000(D)= 3999.00,完全不含那 200 元稅金'
 );
 
 select is(
-  (get_merchant_billing_summary('ec020000-0000-4000-8000-000000000020', 2024, 5) ->> 'total_tax_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('ec020000-0000-4000-8000-000000000020', make_date(2024, 5, 1), (make_date(2024, 5, 1) + interval '1 month - 1 day')::date) ->> 'total_tax_amount')::numeric,
   200.00,
   '任務 4:稅金 200.00 獨立顯示在 total_tax_amount 裡(該進哪一欄就進哪一欄,不是被丟掉也不是混進營收)'
 );

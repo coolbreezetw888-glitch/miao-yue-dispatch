@@ -15,6 +15,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { errorCode } from "../_shared/safeLog.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -182,7 +183,7 @@ async function handleRequest(req: Request): Promise<Response> {
   });
 
   if (adminCheckError) {
-    console.error("[line-test-connection] am_i_merchant_admin 呼叫失敗", adminCheckError);
+    console.error("[line-test-connection] am_i_merchant_admin 呼叫失敗", errorCode(adminCheckError));
     return jsonResponse({ error: "驗證權限時發生錯誤，請稍後再試" }, 500);
   }
   if (!isAdmin) {
@@ -201,7 +202,7 @@ async function handleRequest(req: Request): Promise<Response> {
     .maybeSingle();
 
   if (configError) {
-    console.error("[line-test-connection] 讀取 merchant_line_configs 失敗", configError);
+    console.error("[line-test-connection] 讀取 merchant_line_configs 失敗", errorCode(configError));
     return jsonResponse({ error: "查詢串接設定時發生錯誤，請稍後再試" }, 500);
   }
   if (!config) {
@@ -217,7 +218,7 @@ async function handleRequest(req: Request): Promise<Response> {
     .eq("merchant_id", merchantId);
 
   if (updateError) {
-    console.error("[line-test-connection] 更新 merchant_line_configs 失敗", updateError);
+    console.error("[line-test-connection] 更新 merchant_line_configs 失敗", errorCode(updateError));
     return jsonResponse({ error: "寫入測試結果時發生錯誤，請稍後再試" }, 500);
   }
 

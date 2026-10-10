@@ -140,7 +140,7 @@ import { computeLineSignature as sign, friendshipChangeFromEvent, handleRequest 
 const C5_SECRET = "c5-channel-secret";
 const C5_USER = "U0123456789abcdef0123456789abcdef";
 
-function c5FakeClient() {
+function c5FakeClient(lineNotificationsFeature: boolean | "error" = true) {
   const rec = {
     rpcs: [] as { fn: string; args: Record<string, unknown> }[],
     events: new Set<string>(),
@@ -180,6 +180,11 @@ function c5FakeClient() {
     },
     rpc(fn: string, args: Record<string, unknown>) {
       rec.rpcs.push({ fn, args });
+      if (fn === "internal_merchant_has_feature") {
+        return Promise.resolve(lineNotificationsFeature === "error"
+          ? { data: null, error: { code: "XX000" } }
+          : { data: lineNotificationsFeature, error: null });
+      }
       return Promise.resolve({ data: { success: true }, error: null });
     },
   };
@@ -242,8 +247,30 @@ Deno.test("C5-F01-4 不明 destination ⇒ 安靜 200、不寫;綁定碼訊息�
   await handleRequest(await c5Request([
     { type: "message", webhookEventId: "e4", replyToken: "r", message: { type: "text", text: "123456" }, source: { userId: C5_USER } },
   ]), c5Deps(client));
-  assertEquals(rec.rpcs.map((r) => r.fn), ["consume_line_binding_code"]);
+  assertEquals(rec.rpcs.map((r) => r.fn), ["internal_merchant_has_feature", "consume_line_binding_code"]);
+  assertEquals(rec.rpcs[0].args, { p_merchant_id: "m-1", p_feature_key: "line_notifications" });
 });
+
+// #1051(H1-21):店家「LINE 通知」功能關閉(或查詢失敗)⇒ 綁定碼不綁定、也不回覆。
+for (const gate of [false, "error"] as const) {
+  Deno.test(`#1051 LINE 通知功能 ${gate === false ? "關閉" : "查詢失敗"} ⇒ 不呼叫 consume_line_binding_code、不回覆`, async () => {
+    const { client, rec } = c5FakeClient(gate);
+    let replies = 0;
+    const deps = {
+      ...c5Deps(client),
+      fetchImpl: (() => {
+        replies++;
+        return Promise.resolve(new Response("{}"));
+      }) as unknown as typeof fetch,
+    };
+    const res = await handleRequest(await c5Request([
+      { type: "message", webhookEventId: `g-${String(gate)}`, replyToken: "r", message: { type: "text", text: "123456" }, source: { userId: C5_USER } },
+    ]), deps);
+    assertEquals(res.status, 200);
+    assertEquals(rec.rpcs.map((r) => r.fn), ["internal_merchant_has_feature"]);
+    assertEquals(replies, 0);
+  });
+}
 
 Deno.test("C5-F01-5 friendshipChangeFromEvent:沒有 userId / 其他事件 ⇒ null", () => {
   assertEquals(friendshipChangeFromEvent({ type: "follow", webhookEventId: "a" }), null);

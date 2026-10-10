@@ -13,6 +13,8 @@
 --
 -- 故障注入(engineer 已做,見回報):把 'customer_phone' 那行改回 bb.customer_phone ⇒ ① ③ 轉紅。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(12);
 

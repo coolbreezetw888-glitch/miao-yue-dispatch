@@ -16,11 +16,8 @@ export const LINE_FRIEND_URL_FORMAT_MESSAGE =
 
 export const MIN_LEAD_HOURS_MIN = 0;
 export const MIN_LEAD_HOURS_MAX = 72;
-export const DEFAULT_MIN_LEAD_HOURS = 2;
 export const TRAVEL_BUFFER_MINUTES_MIN = 0;
 export const TRAVEL_BUFFER_MINUTES_MAX = 240;
-export const DEFAULT_TRAVEL_BUFFER_MINUTES = 0;
-export const DEFAULT_ALLOW_GUEST_BOOKING = true;
 /** 客戶端第 4 批(C4-A01 / K01):客人自己取消的期限(服務開始前幾小時),0 = 服務開始前都可以;最多 7 天。 */
 export const CUSTOMER_CANCEL_DEADLINE_HOURS_MIN = 0;
 export const CUSTOMER_CANCEL_DEADLINE_HOURS_MAX = 168;

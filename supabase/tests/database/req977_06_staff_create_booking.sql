@@ -12,6 +12,8 @@
 --   ㉘~㉛   staff_list_my_bookable_start_times:本人可以查、標記已清掉;排除別人的單 / 顯示會員資料關 ⇒ 擋
 --   ㉜~㉟   staff_preview_booking_points:新增模式、編輯自己的單可以;別人的單 / 顯示會員資料關 ⇒ 擋
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(35);
 

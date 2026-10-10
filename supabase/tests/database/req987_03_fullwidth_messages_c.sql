@@ -87,16 +87,17 @@ create function pg_temp.req987_triggers(p_sig text) returns text[] language sql 
 $$;
 
 -- ----- private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric)$m$, array[
     $m$'已開啟自訂總金額，請輸入金額'$m$, $m$'已開啟自訂總金額,請輸入金額'$m$,
     $m$'計算出來的最終金額不能是負數，請確認折扣/稅金設定'$m$, $m$'計算出來的最終金額不能是負數,請確認折扣/稅金設定'$m$
   ])),
-  $m$20dd0b438deedf3040c0fe1b45ab9495$m$,
+  $m$60be70770b883ab5d21c8e6cfbcaaefe$m$,
   $m$private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric)$m$),
-  array[$m$true$m$, $m$s$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres}$m$, $m$對應規格書 §2.3/七、建議實作順序第 2 點:create_booking/update_booking 共用的金額計算引擎,依「小計→折扣→稅金→最終金額」固定順序計算,折扣不可超過小計、最終金額不可為負數。只給本模組內部函式呼叫,不對外暴露。$m$],
+  array[$m$true$m$, $m$s$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$對應規格書 §2.3/七、建議實作順序第 2 點:create_booking/update_booking 共用的金額計算引擎,依「小計→折扣→稅金→最終金額」固定順序計算,折扣不可超過小計、最終金額不可為負數。只給本模組內部函式呼叫,不對外暴露。$m$],
   $m$private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.calculate_booking_amount(p_items_subtotal numeric, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, OUT subtotal_amount numeric, OUT discount_amount numeric, OUT tax_amount numeric, OUT final_amount numeric)$m$),
@@ -120,6 +121,7 @@ select is(
   $m$private.check_booking_points_redeemed_requires_member() ③ 觸發器綁定不變$m$);
 
 -- ----- private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text)$m$, array[
     $m$'%這天是休假日(假別：%)，無法預約'$m$, $m$'%這天是休假日(假別:%),無法預約'$m$,
@@ -130,7 +132,7 @@ select is(
   $m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres}$m$, $m$對應規格書 §5.3(模組 5/6/9)+ 模組 7(排班與休假管理)規則 2.7:以半小時為單位逐格檢查商家整體營業時間(第一層)∩服務人員每週時段(第二層)∩單日例外(第三層,staff_availability_overrides)的疊加結果,任何一格不合格就整筆擋下且指出具體時段。unlimited_backend_edit=true 時第一/二/三層(邊界檢查)一併跳過,優先權最高。**主腦裁示(取代排班與休假管理.md 規格書原文規則 2.8 的設計)**:請假整天判斷(模組 7)放在 v_bypass_bounds 判斷區塊之外,一律執行,不受 unlimited_backend_edit 影響——請假期間一律擋下建單,沒有覆寫例外,要安排工作請先呼叫 cancel_staff_leave 取消請假紀錄。無任何單日例外資料時,「無例外的連續格子」會先累積成一段再套用 private.check_staff_legacy_range 的整段判斷(修正 20260919100200_day_override_third_layer.sql 逐格獨立檢查導致橫跨相鄰時段交界預約被誤判放行的漏洞),因此逐格判斷結果與模組 5 原本的整段範圍判斷完全等價。規則 2.4/2.6 衝突檢查邏輯不變,是獨立的判斷維度,不受第三層或請假判斷影響。private.validate_booking_selection 對主要服務人員呼叫一次、對每一位助手各自呼叫一次。只給本模組內部函式呼叫,不對外暴露。【SPECS-INDEX #924,2026-10-01】「同一個人在別的分店」只在**同一集團內**比對(private.same_person_staff_ids_in_group,跟兩支行事曆函式共用同一支);不同集團的商家完全隔離、互不擋單。錯誤訊息改成「{角色}「{姓名}」在這個時段已經有同集團其他分店的預約,請改選其他時段或其他服務人員」({角色}/{姓名} 是本店自己的服務人員:p_role_label + p_staff.name;助手的 p_role_label 已含姓名就原樣用),不洩漏別家分店的店名/客戶/訂單。【SPECS-INDEX #980 QA,2026-10-06】① 逐格迴圈改用「從半小時格線起點經過多久」(interval)計時,不再用 time 型別逐格 +30 分鐘:原本結束時間落在 23:30~24:00(不含兩端)時 23:30+30 分會繞回 00:00 造成無限迴圈。② 起點不在整點 / 半點(例 09:05)時,單日例外改用半小時格線鍵值(09:00、09:30…)查詢,每一格只檢查預約實際用到的部分;原本會用 09:05、09:35 這種鍵值去查而永遠查不到,單日排休被忽略(誤放行)、單日開啟也被忽略(誤擋)。起點在整點 / 半點的情境判斷結果完全不變。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$對應規格書 §5.3(模組 5/6/9)+ 模組 7(排班與休假管理)規則 2.7:以半小時為單位逐格檢查商家整體營業時間(第一層)∩服務人員每週時段(第二層)∩單日例外(第三層,staff_availability_overrides)的疊加結果,任何一格不合格就整筆擋下且指出具體時段。unlimited_backend_edit=true 時第一/二/三層(邊界檢查)一併跳過,優先權最高。**主腦裁示(取代排班與休假管理.md 規格書原文規則 2.8 的設計)**:請假整天判斷(模組 7)放在 v_bypass_bounds 判斷區塊之外,一律執行,不受 unlimited_backend_edit 影響——請假期間一律擋下建單,沒有覆寫例外,要安排工作請先呼叫 cancel_staff_leave 取消請假紀錄。無任何單日例外資料時,「無例外的連續格子」會先累積成一段再套用 private.check_staff_legacy_range 的整段判斷(修正 20260919100200_day_override_third_layer.sql 逐格獨立檢查導致橫跨相鄰時段交界預約被誤判放行的漏洞),因此逐格判斷結果與模組 5 原本的整段範圍判斷完全等價。規則 2.4/2.6 衝突檢查邏輯不變,是獨立的判斷維度,不受第三層或請假判斷影響。private.validate_booking_selection 對主要服務人員呼叫一次、對每一位助手各自呼叫一次。只給本模組內部函式呼叫,不對外暴露。【SPECS-INDEX #924,2026-10-01】「同一個人在別的分店」只在**同一集團內**比對(private.same_person_staff_ids_in_group,跟兩支行事曆函式共用同一支);不同集團的商家完全隔離、互不擋單。錯誤訊息改成「{角色}「{姓名}」在這個時段已經有同集團其他分店的預約,請改選其他時段或其他服務人員」({角色}/{姓名} 是本店自己的服務人員:p_role_label + p_staff.name;助手的 p_role_label 已含姓名就原樣用),不洩漏別家分店的店名/客戶/訂單。【SPECS-INDEX #980 QA,2026-10-06】① 逐格迴圈改用「從半小時格線起點經過多久」(interval)計時,不再用 time 型別逐格 +30 分鐘:原本結束時間落在 23:30~24:00(不含兩端)時 23:30+30 分會繞回 00:00 造成無限迴圈。② 起點不在整點 / 半點(例 09:05)時,單日例外改用半小時格線鍵值(09:00、09:30…)查詢,每一格只檢查預約實際用到的部分;原本會用 09:05、09:35 這種鍵值去查而永遠查不到,單日排休被忽略(誤放行)、單日開啟也被忽略(誤擋)。起點在整點 / 半點的情境判斷結果完全不變。$m$],
   $m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text)$m$),
@@ -138,6 +140,7 @@ select is(
   $m$private.check_staff_booking_slot(p_merchant_id uuid, p_staff merchant_staff, p_start_at timestamp with time zone, p_end_at timestamp with time zone, p_exclude_booking_id uuid, p_role_label text) ③ 觸發器綁定不變$m$);
 
 -- ----- private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text)$m$, array[
     $m$'%的%到%這個時段不可預約(超出商家營業時間，或超出服務人員可預約時段設定)'$m$, $m$'%的%到%這個時段不可預約(超出商家營業時間,或超出服務人員可預約時段設定)'$m$
@@ -146,7 +149,7 @@ select is(
   $m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$規則 2.1∩2.2 的「整段範圍」判斷(不是逐格判斷):[p_range_start, p_range_end) 這一整段是否完整落在商家營業時間內,且存在同一組 staff_availability_windows 完整涵蓋整段。給 private.check_staff_booking_slot 內部呼叫,用來驗證「沒有被單日例外覆蓋的連續區段」,修正 20260919100200_day_override_third_layer.sql 逐格獨立檢查導致橫跨相鄰時段交界的預約被誤判放行的漏洞。只給本模組內部函式呼叫,不對外暴露。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$規則 2.1∩2.2 的「整段範圍」判斷(不是逐格判斷):[p_range_start, p_range_end) 這一整段是否完整落在商家營業時間內,且存在同一組 staff_availability_windows 完整涵蓋整段。給 private.check_staff_booking_slot 內部呼叫,用來驗證「沒有被單日例外覆蓋的連續區段」,修正 20260919100200_day_override_third_layer.sql 逐格獨立檢查導致橫跨相鄰時段交界的預約被誤判放行的漏洞。只給本模組內部函式呼叫,不對外暴露。$m$],
   $m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text)$m$),
@@ -154,6 +157,7 @@ select is(
   $m$private.check_staff_legacy_range(p_staff merchant_staff, p_day_of_week smallint, p_has_hours boolean, p_is_closed boolean, p_open_time time without time zone, p_close_time time without time zone, p_range_start time without time zone, p_range_end time without time zone, p_role_label text) ③ 觸發器綁定不變$m$);
 
 -- ----- private.reverse_booking_completion(p_booking_id uuid, p_target_status text, p_reason text, p_notify_requested boolean) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.reverse_booking_completion(p_booking_id uuid, p_target_status text, p_reason text, p_notify_requested boolean)$m$, array[
     $m$'原因最多 500 個字，目前是 % 個字，請精簡後再送出'$m$, $m$'原因最多 500 個字,目前是 % 個字,請精簡後再送出'$m$,
@@ -162,7 +166,7 @@ select is(
     $m$'匯入的歷史訂單不能還原，只能取消。如果匯錯了，請取消後重新匯入'$m$, $m$'匯入的歷史訂單不能還原,只能取消。如果匯錯了,請取消後重新匯入'$m$,
     $m$'這筆已完成訂單缺少完成時間，資料異常，請聯絡系統管理員'$m$, $m$'這筆已完成訂單缺少完成時間,資料異常,請聯絡系統管理員'$m$
   ])),
-  $m$86545d74041b3a71cf197eaa761134af$m$,
+  $m$1ddd974a96c54ae80ee79ce6d26d36c8$m$,
   $m$private.reverse_booking_completion(p_booking_id uuid, p_target_status text, p_reason text, p_notify_requested boolean) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.reverse_booking_completion(p_booking_id uuid, p_target_status text, p_reason text, p_notify_requested boolean)$m$),
@@ -216,6 +220,7 @@ select is(
   $m$private.validate_booking_redeem(p_merchant_id uuid, p_member_id uuid, p_points integer, p_payable_amount numeric, p_available_points integer) ③ 觸發器綁定不變$m$);
 
 -- ----- private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text)$m$, array[
     $m$'服務項目的數量格式不正確，必須是整數'$m$, $m$'服務項目的數量格式不正確,必須是整數'$m$,
@@ -229,11 +234,11 @@ select is(
     $m$'找不到其中一個料錢成本品項，或已下架'$m$, $m$'找不到其中一個料錢成本品項,或已下架'$m$,
     $m$'找不到這個付款方式，或已下架'$m$, $m$'找不到這個付款方式,或已下架'$m$
   ])),
-  $m$ce64c091a92de894087be1376e32e887$m$,
+  $m$b4d00699982d381b9fefa0089d092f4c$m$,
   $m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text)$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres,authenticated=X/postgres}$m$, $m$對應規則 3.5 第 7 點,模組 9 v2 付款方式驗證 + SPECS-INDEX #604 必填疊加:create_booking/update_booking 共用的驗證邏輯。#604:p_payment_method_id 為 null 時,create_booking(p_exclude_booking_id is null)一律擋下;update_booking 只在這筆訂單目前已存的值也是 null 時放行(維持原值),主動清空才擋下。其餘付款方式驗證邏輯(存在性/狀態/快照不重新整理)完全不動,見 20260919130400 的既有說明。#985:編輯既有訂單時,訂單原本就有的料錢品項維持原值,不要求料錢功能開啟、不要求仍上架;新加品項照舊檢查。只給本模組內部函式呼叫,不對外暴露。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$對應規則 3.5 第 7 點,模組 9 v2 付款方式驗證 + SPECS-INDEX #604 必填疊加:create_booking/update_booking 共用的驗證邏輯。#604:p_payment_method_id 為 null 時,create_booking(p_exclude_booking_id is null)一律擋下;update_booking 只在這筆訂單目前已存的值也是 null 時放行(維持原值),主動清空才擋下。其餘付款方式驗證邏輯(存在性/狀態/快照不重新整理)完全不動,見 20260919130400 的既有說明。#985:編輯既有訂單時,訂單原本就有的料錢品項維持原值,不要求料錢功能開啟、不要求仍上架;新加品項照舊檢查。只給本模組內部函式呼叫,不對外暴露。$m$],
   $m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text) ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text)$m$),
@@ -241,11 +246,12 @@ select is(
   $m$private.validate_booking_selection(p_merchant_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_assistant_staff_ids uuid[], p_material_cost_item_ids uuid[], p_exclude_booking_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_payment_method_id uuid, OUT end_at timestamp with time zone, OUT items_subtotal numeric, OUT payment_method_name text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.cancel_booking(p_booking_id uuid, p_reason text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.cancel_booking(p_booking_id uuid, p_reason text)$m$, array[
     $m$'只有「待確認」或「已確認」狀態的預約可以取消，目前狀態不允許這個操作(目前狀態：%)'$m$, $m$'只有「待確認」或「已確認」狀態的預約可以取消,目前狀態不允許這個操作(目前狀態:%)'$m$
   ])),
-  $m$36df95bc55e9a519eab036c7e6dfe1bc$m$,
+  $m$9150f0a71c5221bebc2379f2fbbb39cd$m$,
   $m$public.cancel_booking(p_booking_id uuid, p_reason text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.cancel_booking(p_booking_id uuid, p_reason text)$m$),
@@ -257,11 +263,12 @@ select is(
   $m$public.cancel_booking(p_booking_id uuid, p_reason text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.complete_booking(p_booking_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.complete_booking(p_booking_id uuid)$m$, array[
     $m$'只有「已接受」狀態的預約可以標記完成，目前狀態不允許這個操作'$m$, $m$'只有「已接受」狀態的預約可以標記完成,目前狀態不允許這個操作'$m$
   ])),
-  $m$a1b9c712eac0b47e99f57e13a9013705$m$,
+  $m$b84d0035c971f0951316229d7a56747a$m$,
   $m$public.complete_booking(p_booking_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.complete_booking(p_booking_id uuid)$m$),
@@ -273,11 +280,12 @@ select is(
   $m$public.complete_booking(p_booking_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.confirm_booking(p_booking_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.confirm_booking(p_booking_id uuid)$m$, array[
     $m$'只有「待確認」狀態的預約可以確認，目前狀態不允許這個操作(目前狀態：%)'$m$, $m$'只有「待確認」狀態的預約可以確認,目前狀態不允許這個操作(目前狀態:%)'$m$
   ])),
-  $m$f2bd4e2eb613e316a307f6b91b7daeb3$m$,
+  $m$1b63cef0795b3df7cb41bdee5e0a6a78$m$,
   $m$public.confirm_booking(p_booking_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.confirm_booking(p_booking_id uuid)$m$),
@@ -348,6 +356,7 @@ select is(
   $m$public.get_completed_booking_reversal_preview(p_booking_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.move_booking(p_booking_id uuid, p_dragged_staff_id uuid, p_target_staff_id uuid, p_target_start_at timestamp with time zone, p_expected_start_at timestamp with time zone, p_expected_staff_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.move_booking(p_booking_id uuid, p_dragged_staff_id uuid, p_target_staff_id uuid, p_target_start_at timestamp with time zone, p_expected_start_at timestamp with time zone, p_expected_staff_id uuid)$m$, array[
     $m$'這筆預約剛剛被其他人改過，畫面已重新整理，請再拖一次'$m$, $m$'這筆預約剛剛被其他人改過,畫面已重新整理,請再拖一次'$m$,
@@ -357,7 +366,7 @@ select is(
     $m$'「%」已經是這筆預約的助手，請先用編輯把助手改掉，或改拖給其他人'$m$, $m$'「%」已經是這筆預約的助手,請先用編輯把助手改掉,或改拖給其他人'$m$,
     $m$'找不到其中一位助手，或這位助手已被移除'$m$, $m$'找不到其中一位助手,或這位助手已被移除'$m$
   ])),
-  $m$11b37a204905a48c3cbe812b6dfbc0a0$m$,
+  $m$912c8d0ae8a97ba7055246835866c618$m$,
   $m$public.move_booking(p_booking_id uuid, p_dragged_staff_id uuid, p_target_staff_id uuid, p_target_start_at timestamp with time zone, p_expected_start_at timestamp with time zone, p_expected_staff_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.move_booking(p_booking_id uuid, p_dragged_staff_id uuid, p_target_staff_id uuid, p_target_start_at timestamp with time zone, p_expected_start_at timestamp with time zone, p_expected_staff_id uuid)$m$),
@@ -468,6 +477,7 @@ select is(
   $m$public.remove_booking_assistant(p_booking_id uuid, p_staff_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_items jsonb, p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_items jsonb, p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid)$m$, array[
     $m$'已完成或已取消的預約不能編輯，目前狀態不允許這個操作(目前狀態：%)'$m$, $m$'已完成或已取消的預約不能編輯,目前狀態不允許這個操作(目前狀態:%)'$m$,
@@ -481,7 +491,7 @@ select is(
   ])),
   -- 第 11 批 A #939(migration 20261007140150)改寫了會員判斷,基準改成「A 版本換回舊訊息後」的指紋;第 10 批改前指紋 ad73011a8c051b81809b0bf681b3c4e5
   -- 第 11 批 F #993(migration 20261007140300)再改料錢參數與寫入,基準再改成「F 版本換回舊訊息後」;A 版本為 03794e2fc0ee47f63c3c7da1f9435029
-  $m$d9d3aff5c3e5e4b154cac826dba9ef88$m$,
+  $m$a285474b8378acecbc295406e481b650$m$,
   $m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_items jsonb, p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_items jsonb, p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid)$m$),
@@ -493,12 +503,13 @@ select is(
   $m$public.update_booking(p_booking_id uuid, p_staff_id uuid, p_service_items jsonb, p_start_at timestamp with time zone, p_customer_name text, p_customer_phone text, p_customer_email text, p_notes text, p_assistant_staff_ids uuid[], p_material_cost_items jsonb, p_customer_address text, p_customer_notes text, p_custom_total_amount_enabled boolean, p_custom_total_amount numeric, p_discount_enabled boolean, p_discount_mode text, p_discount_value numeric, p_tax_enabled boolean, p_tax_mode text, p_tax_value numeric, p_payment_method_id uuid, p_custom_duration_enabled boolean, p_custom_duration_minutes integer, p_member_id uuid, p_hide_notes_from_staff boolean, p_points_override integer, p_points_redeemed integer, p_points_override_reset boolean, p_points_redeem_member_id uuid) ③ 觸發器綁定不變$m$);
 
 -- ----- public.update_booking_payment_method(p_booking_id uuid, p_payment_method_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.update_booking_payment_method(p_booking_id uuid, p_payment_method_id uuid)$m$, array[
     $m$'已完成或已取消的預約不能修改付款方式，目前狀態不允許這個操作(目前狀態：%)'$m$, $m$'已完成或已取消的預約不能修改付款方式,目前狀態不允許這個操作(目前狀態:%)'$m$,
     $m$'找不到這個付款方式，或已下架'$m$, $m$'找不到這個付款方式,或已下架'$m$
   ])),
-  $m$4cceaae30c232e6bfa8a8115e60c62bb$m$,
+  $m$96c3d7ca53ee2afe778d3607e023a7e2$m$,
   $m$public.update_booking_payment_method(p_booking_id uuid, p_payment_method_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.update_booking_payment_method(p_booking_id uuid, p_payment_method_id uuid)$m$),

@@ -4914,10 +4914,6 @@ export type Database = {
           user_id: string
         }[]
       }
-      get_merchant_billing_summary: {
-        Args: { p_merchant_id: string; p_month: number; p_year: number }
-        Returns: Json
-      }
       get_merchant_billing_summary_by_range: {
         Args: {
           p_end_date: string
@@ -5389,10 +5385,6 @@ export type Database = {
           note: string | null
           old_enabled: boolean | null
         }[]
-      }
-      platform_purge_merchant_members_and_points: {
-        Args: { p_merchant_id: string }
-        Returns: undefined
       }
       platform_remove_merchant_admin: {
         Args: { p_merchant_id: string; p_user_id: string }

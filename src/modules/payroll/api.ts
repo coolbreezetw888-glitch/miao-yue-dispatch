@@ -2,7 +2,7 @@
 // 這裡是唯一直接呼叫 supabase.from('merchant_payroll_settings' / 'staff_commission_rates' /
 // 'staff_salary_settings' / 'leave_type_deduction_rules' / 'booking_commission_records') 或
 // supabase.rpc('get_staff_commission_summary' / 'get_staff_monthly_payroll_summary' /
-// 'get_merchant_billing_summary' / 'recalculate_booking_commission') 的地方。其他模組不應該
+// 'get_merchant_billing_summary_by_range' / 'recalculate_booking_commission') 的地方。其他模組不應該
 // 直接操作這五張表(規格書第五節「對外介面」),一律 import 這個檔案匯出的 hooks/functions。
 //
 // 這個模組刻意把 hooks 跟底層 supabase 呼叫都放在同一個檔案(規格書 §5 明講「src/modules/payroll/
@@ -81,28 +81,6 @@ export function useMerchantPayrollSettings(
   });
 }
 
-export interface UpsertMerchantPayrollSettingsInput {
-  commissionBasisType: CommissionBasisType;
-}
-
-/** §5.1 對外介面:沒有既有列時新增,已有則更新(upsert on primary key merchant_id)。商家端
- * 三項調整規格書 §二 2.2.2:不再寫入 default_commission_rate_percentage(欄位不再使用,抽成
- * 完全改成服務項目層級)。§十 10.1:不再寫入 pay_days_per_month(欄位已移除,「月折算天數」
- * 改成系統依當月實際天數自動計算,不是商家可填寫的設定值)。 */
-export async function upsertMerchantPayrollSettings(
-  merchantId: string,
-  input: UpsertMerchantPayrollSettingsInput,
-): Promise<void> {
-  const { error } = await supabase.from("merchant_payroll_settings").upsert(
-    {
-      merchant_id: merchantId,
-      commission_basis_type: input.commissionBasisType,
-    },
-    { onConflict: "merchant_id" },
-  );
-  if (error) throw error;
-}
-
 // =========================================================================
 // 商家端三項調整規格書 §二:staff_service_commission_rates 讀寫(服務項目層級抽成設定),
 // 取代原本一人一個籠統比例的 staff_commission_rates(該表已經 drop)。
@@ -160,20 +138,6 @@ export async function upsertStaffServiceCommissionRate(
     },
     { onConflict: "staff_id,service_item_id" },
   );
-  if (error) throw error;
-}
-
-/** 移除單一「服務人員 × 服務項目」的抽成設定,恢復成「尚未設定=0元」(規則 2.10:允許
- * DELETE,不是危險操作)。 */
-export async function removeStaffServiceCommissionRate(
-  staffId: string,
-  serviceItemId: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from("staff_service_commission_rates")
-    .delete()
-    .eq("staff_id", staffId)
-    .eq("service_item_id", serviceItemId);
   if (error) throw error;
 }
 
@@ -352,37 +316,6 @@ export function useStaffMonthlyPayrollSummary(
     queryFn: () =>
       fetchStaffMonthlyPayrollSummary(staffId as string, year as number, month as number),
     enabled: Boolean(staffId) && Boolean(year) && Boolean(month),
-  });
-}
-
-// =========================================================================
-// §3.11/§5.5:店家端帳務報表。
-// =========================================================================
-export async function fetchMerchantBillingSummary(
-  merchantId: string,
-  year: number,
-  month: number,
-): Promise<MerchantBillingSummary> {
-  const { data, error } = await supabase.rpc("get_merchant_billing_summary", {
-    p_merchant_id: merchantId,
-    p_year: year,
-    p_month: month,
-  });
-  if (error) throw error;
-  return data as unknown as MerchantBillingSummary;
-}
-
-/** §5.5 對外介面:某商家某年月的營收/成本/抽成/薪資/概估毛利彙整,供 4.3 帳務報表頁使用。 */
-export function useMerchantBillingSummary(
-  merchantId: string | null | undefined,
-  year: number | null | undefined,
-  month: number | null | undefined,
-): UseQueryResult<MerchantBillingSummary> {
-  return useQuery({
-    queryKey: ["payroll-module", "merchant-billing-summary", merchantId, year, month],
-    queryFn: () =>
-      fetchMerchantBillingSummary(merchantId as string, year as number, month as number),
-    enabled: Boolean(merchantId) && Boolean(year) && Boolean(month),
   });
 }
 

@@ -28,7 +28,6 @@ import {
   fetchAccessibleMerchants,
   fetchMerchantAdminUsers,
   fetchMyAdminProfile,
-  getFeatureFlag,
   type MyAdminProfile,
 } from "./api";
 import { getCurrentMerchantStorageKey } from "./constants";
@@ -215,16 +214,6 @@ export function useRefetchAccessibleMerchants() {
 export function useClearCurrentMerchantSelection() {
   const { clearCurrentMerchantSelection } = useCurrentMerchantContext();
   return clearCurrentMerchantSelection;
-}
-
-/** 5.3 對外介面:讀取目前操作中商家的某個功能開關值。找不到列或尚未選定商家時回傳 null。 */
-export function useFeatureFlag(featureKey: string): UseQueryResult<boolean | null> {
-  const { merchant } = useCurrentMerchant();
-  return useQuery({
-    queryKey: ["merchant-module", "feature-flag", merchant?.id, featureKey],
-    queryFn: () => getFeatureFlag(merchant!.id, featureKey),
-    enabled: Boolean(merchant?.id),
-  });
 }
 
 /** 對應規格書「首頁外殼與主題色優化」1.2:首頁個人資料卡片用,讀取目前登入者自己在指定商家的

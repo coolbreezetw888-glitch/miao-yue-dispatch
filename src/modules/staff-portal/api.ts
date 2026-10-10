@@ -11,6 +11,7 @@
 // getErrorMessage() 取訊息。
 
 import { supabase } from "@/integrations/supabase/client";
+import { imageExtensionForMime } from "@/lib/imageUploadExtension";
 import type { Tables } from "@/integrations/supabase/types";
 import {
   buildCalendarStateStyleMap,
@@ -411,7 +412,8 @@ export async function uploadMyStaffAvatar(
     throw new Error(validationError);
   }
 
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "png";
+  // #1052 H2-12:副檔名由實際檔案類型決定,不沿用原檔名。
+  const ext = imageExtensionForMime(file.type);
   const path = `${merchantId}/self/${staffId}/avatar-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage

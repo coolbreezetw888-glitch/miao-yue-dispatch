@@ -14,6 +14,8 @@
 --   ㊶㊷    #986 第 9 批補釘:只放寬「這一筆訂單原本就有」的已下架品項(別張單的不行、拿掉後再加回不行);
 --            新加的品項照舊檢查(功能關、已下架、別家品項);新建訂單照舊檢查
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(42);
 

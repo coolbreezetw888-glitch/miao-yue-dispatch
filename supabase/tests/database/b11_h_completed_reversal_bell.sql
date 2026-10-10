@@ -7,6 +7,8 @@
 --   ① 管理員段拿掉「排除操作者本人」⇒ 1-2 轉紅;② 客服段拿掉「不是同店管理員」⇒ 1-4 轉紅;
 --   ③ 鈴鐺寫進引擎而不是包裝 ⇒ req987_03 與本檔 9-1 轉紅。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(37);
 
@@ -321,8 +323,9 @@ select ok(
 select is(
   (select md5(replace(prosrc, E'\r\n', E'\n')) from pg_proc
    where oid = 'private.reverse_booking_completion(uuid, text, text, boolean)'::regprocedure),
-  'b5499e10fd2524dc96b032fb8829210d',
-  '9-1 private.reverse_booking_completion 指紋 = 動工前正式庫實查值(引擎一字不改)'
+  -- #1051 加固(先驗權限再加鎖)改過本體 ⇒ 指紋更新為加固後的值(改前正式庫為 b5499e10…)。
+  'e8fcfd89d5dfc8c3aca51146d72596de',
+  '9-1 private.reverse_booking_completion 指紋 = 目前版本(引擎邏輯沒改;#1051 只調整加鎖順序)'
 );
 
 select * from finish();

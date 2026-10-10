@@ -133,7 +133,8 @@ function WholeDayOffTab({ merchantId, staffId }: { merchantId: string; staffId: 
   } = useMyAvailabilityOverrides(merchantId, rangeStart, rangeEnd);
   const [saving, setSaving] = useState(false);
 
-  const overridesList: StaffAvailabilityOverride[] = overrides ?? [];
+  // #1052 H2-09:包 useMemo,資料沒變時陣列參照不變,下面的 useMemo 才不會每次重算。
+  const overridesList: StaffAvailabilityOverride[] = useMemo(() => overrides ?? [], [overrides]);
   const highlightedDates = useMemo(() => {
     const set = new Set<string>();
     for (const { date } of monthGrid) {
@@ -212,7 +213,8 @@ function BySlotOffTab({ merchantId, staffId }: { merchantId: string; staffId: st
   );
   const [saving, setSaving] = useState(false);
 
-  const overridesList: StaffAvailabilityOverride[] = overrides ?? [];
+  // #1052 H2-09:包 useMemo,資料沒變時陣列參照不變,下面的 useMemo 才不會每次重算。
+  const overridesList: StaffAvailabilityOverride[] = useMemo(() => overrides ?? [], [overrides]);
   const overridesForSelectedDate = useMemo(
     () => overridesList.filter((o) => o.override_date === selectedDateKey),
     [overridesList, selectedDateKey],
@@ -319,17 +321,17 @@ export function DayOffTabsSection({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0">
-        <div>
+      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+        <div className="min-w-0">
           <CardTitle>排休設定</CardTitle>
           <CardDescription>
-            「整天排休」用月曆整天標記休假，「時段排休」可以精細調整單一半小時時段，兩者是同一份
-            資料的兩種操作入口，可以交互使用。
+            「整天排休」用月曆整天標記休假，「時段排休」可以精細調整單一半小時時段，兩者是同一份資料的兩種操作入口，可以交互使用。
           </CardDescription>
         </div>
         <button
           type="button"
-          className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+          // #1052 H2-10:不斷行、不被說明文字擠扁(375 原本會直排成四個字)。
+          className="shrink-0 whitespace-nowrap text-sm text-muted-foreground underline-offset-2 hover:underline"
           onClick={() =>
             void queryClient.invalidateQueries({
               queryKey: ["staff-portal-module", "my-availability-overrides"],

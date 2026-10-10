@@ -13,6 +13,8 @@
 --    跑測試的當下是幾號都一樣(automated-testing §「現在是幾年幾月」規則 1/2)。
 --    服務人員的薪資歷史起點也釘到 2025-01-01(規則 3,避免 per_staff_breakdown 因「當時還不存在」而漂移)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -174,7 +176,7 @@ from bookings b where b.id = bcr.booking_id
 
 -- 回歸基準:還沒有任何折抵時的兩支報表結果(去掉兩個新鍵)。
 select pg_temp.test_set_auth('e8050000-0000-4000-8000-000000000001');
-select (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8)
+select (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date)
         - 'total_points_redeem_amount' - 'points_feature_enabled')::text as before_month \gset
 select (get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', '2026-08-01', '2026-08-31')
         - 'total_points_redeem_amount' - 'points_feature_enabled')::text as before_range \gset
@@ -191,7 +193,7 @@ select pg_temp.test_set_auth('e8050000-0000-4000-8000-000000000001');
 
 -- ① ② 兩支 overload 都有新鍵、只算已完成
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8) ->> 'total_points_redeem_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) ->> 'total_points_redeem_amount')::numeric,
   42.50,
   '§3.15 ①②(按年月):8 月紅利折抵金額 = A 30 + B 12.5 = 42.5;取消的 C(99)、待確認的 D(7)、9 月才完成的 E(50)都不算'
 );
@@ -203,7 +205,7 @@ select is(
 
 -- ③ 完成時間基準
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 9) ->> 'total_points_redeem_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date) ->> 'total_points_redeem_amount')::numeric,
   50.00,
   '§3.15 ③(按年月):E 單 8 月預約、9 月完成 ⇒ 折抵金額算在 9 月(跟營收同一條完成時間基準)'
 );
@@ -218,14 +220,14 @@ select is(
   '§3.15 ③(按區間,單日):只查 8/11(台北)只會拿到 B 單的 12.5,區間邊界用台北時間'
 );
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 7) ->> 'total_points_redeem_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 7, 1), (make_date(2026, 7, 1) + interval '1 month - 1 day')::date) ->> 'total_points_redeem_amount')::numeric,
   0.00,
   '§3.15:沒有任何已完成訂單的月份 ⇒ 0(不是 null)'
 );
 
 -- ⑤ 回歸:既有鍵完全不受折抵影響
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8)
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date)
    - 'total_points_redeem_amount' - 'points_feature_enabled')::text,
   :'before_month',
   '§3.15 ⑤ 回歸必測(按年月):寫入折抵金額之後,既有的每一個鍵(營收、稅金、料錢、抽成、月薪、淨利、明細…)跟寫入前完全相同——折抵不從營收扣(第 3 題定案 A)'
@@ -237,16 +239,17 @@ select is(
   '§3.15 ⑤ 回歸必測(按區間):同上'
 );
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8) ->> 'total_revenue_excl_tax')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) ->> 'total_revenue_excl_tax')::numeric,
   (select sum(subtotal_amount_snapshot - discount_amount_snapshot) from bookings
    where id in (:'bka_id'::uuid, :'bkb_id'::uuid)),
   '§3.15 ⑤:8 月營收 = A、B 兩張單的「小計 − 折扣」,沒有減掉任何折抵金額'
 );
 select is(
-  (select count(*)::int from jsonb_object_keys(get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8))),
+  (select count(*)::int from jsonb_object_keys(public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date))),
   -- #985 第 8 批 8-8:尾端再加 3 個資訊鍵(material_cost_affects_commission_now + 兩個計數),鍵數預期 12 → 15;既有鍵逐鍵相等另由 req985_02 驗。
-  15,
-  '§3.15:按年月版回傳 15 個鍵(既有 10 個 + #848 新增 2 個 + #985 新增 3 個),沒有多也沒有少'
+  -- #1051:舊版按年月函式已移除,改查區間版整個月 ⇒ 區間版另有獎金 2 個鍵(total_monthly_bonus、bonus_feature_used)與工資 3 個鍵(total_wage_payout、wage_includes_estimate、wage_feature_used),共 20 個。
+  20,
+  '§3.15:帳務報表(整個月)回傳 20 個鍵,沒有多也沒有少'
 );
 select is(
   (select count(*)::int from jsonb_object_keys(get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', '2026-08-01', '2026-08-31'))),
@@ -259,7 +262,7 @@ select is(
 
 -- ④ points_feature_enabled
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8) -> 'points_feature_enabled'),
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) -> 'points_feature_enabled'),
   'true'::jsonb,
   '§3.15 ④:商家還沒有 merchant_member_settings 列 ⇒ points_feature_enabled = true(跟前端 DEFAULT_MERCHANT_MEMBER_SETTINGS 一致)'
 );
@@ -270,7 +273,7 @@ values ('e8050000-0000-4000-8000-000000000020', false);
 
 select pg_temp.test_set_auth('e8050000-0000-4000-8000-000000000001');
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8) -> 'points_feature_enabled'),
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) -> 'points_feature_enabled'),
   'false'::jsonb,
   '§3.15 ④(按年月):紅利功能關閉 ⇒ points_feature_enabled = false'
 );
@@ -280,7 +283,7 @@ select is(
   '§3.15 ④(按區間):紅利功能關閉 ⇒ points_feature_enabled = false'
 );
 select is(
-  (get_merchant_billing_summary('e8050000-0000-4000-8000-000000000020', 2026, 8) ->> 'total_points_redeem_amount')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8050000-0000-4000-8000-000000000020', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) ->> 'total_points_redeem_amount')::numeric,
   42.50,
   '§3.15:功能關閉時金額照算(要不要顯示由前端依 points_feature_enabled 決定,後端不藏數字)'
 );

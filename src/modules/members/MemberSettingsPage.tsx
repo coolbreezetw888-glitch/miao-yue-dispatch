@@ -167,10 +167,7 @@ function PolicyPreviewDialog({
       </FullPageLayerTrigger>
       {/* 🔴 全頁層:skill 三「使用者已裁決的個案」點名這個畫面歸全頁層,不要因為內容短就改回小卡窗。
           政策內容可以很長(點數規則 + 退換貨 + 個資聲明),一定要能捲。 */}
-      <FullPageLayerContent
-        title="會員政策(客戶端預覽)"
-        subtitle="這是模擬客戶未來在客戶端看到的排版樣子，不是真的串接客戶端頁面(客戶端尚未開發)。"
-      >
+      <FullPageLayerContent title="會員政策(客戶端預覽)" subtitle="這是客人在會員中心看到的樣子。">
         <div className="rounded-lg border border-border bg-muted/30 p-4">
           <p className="break-words text-sm font-semibold text-foreground">
             {merchantName}・會員政策
@@ -509,7 +506,7 @@ function MemberSettingsPageInner() {
         <CardHeader>
           <CardTitle>會員政策</CardTitle>
           <CardDescription>
-            啟用後，這段內容之後會顯示給客戶端(模組 13 之後串接)看到，例如點數使用規則、隱私聲明等。
+            啟用後，客人在會員中心會看到這段內容，例如點數使用規則、隱私聲明等。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

@@ -8,6 +8,8 @@
 --   3. 🔴 只取本商家的訂單:會員被搬到別的商家後,舊商家那邊訂單的地址不會出現在新商家(跨商家外洩)
 --   4. 原本的 6 個 key 都還在(前端既有欄位不受影響)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(5);
 

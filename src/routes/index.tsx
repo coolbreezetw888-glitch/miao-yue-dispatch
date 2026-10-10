@@ -46,7 +46,6 @@ import { toast } from "sonner";
 
 const navLinks = [
   { href: "#功能特色", label: "功能特色" },
-  { href: "#方案定價", label: "方案定價" },
   { href: "#適用產業", label: "適用產業" },
   { href: "#常見問題", label: "常見問題" },
 ];
@@ -124,12 +123,8 @@ const steps = [
 
 const faqs = [
   {
-    q: "收費怎麼算？",
-    a: "依商家數與服務人員數計費，基礎版 $99/月起，進階版為每間商家 $399/月加每位服務人員 $199/月。用多少算多少，隨時可調整。",
-  },
-  {
     q: "需要綁約嗎？",
-    a: "不需要。以月為單位訂閱，隨時可以停用，資料在停用後仍保留一段時間供您匯出。",
+    a: "不需要。隨時可以停用，資料在停用後仍保留一段時間供您匯出。",
   },
   {
     q: "服務人員端要下載 App 嗎？",
@@ -141,7 +136,7 @@ const faqs = [
   },
   {
     q: "適合多小的團隊使用？",
-    a: "一人工作室也適用。基礎版含 1 間商家與最多 3 位服務人員，團隊變大再升級即可。",
+    a: "一人工作室也適用，團隊變大時直接在後台新增服務人員即可。",
   },
   {
     q: "資料安全嗎？",
@@ -169,7 +164,6 @@ export default function Landing() {
         <Features />
         <Workflow />
         <StaffMobile />
-        <Pricing />
         <Industries />
         <Advantages />
         <Onboarding />
@@ -442,8 +436,8 @@ function StaffMobile() {
               服務人員端，用手機瀏覽器就能開
             </h2>
             <p className="mt-5 text-base leading-relaxed text-muted-foreground">
-              服務人員端是響應式網頁介面，透過手機瀏覽器開啟即可使用，不是需要安裝的原生 App，
-              也不需要通過任何商店審核或更新。
+              服務人員端是響應式網頁介面，透過手機瀏覽器開啟即可使用，不是需要安裝的原生
+              App，也不需要通過任何商店審核或更新。
             </p>
             <ul className="mt-7 space-y-3">
               {["我的訂單列表", "當日排程", "完工回報按鈕", "我的帳務摘要"].map((t) => (
@@ -499,47 +493,6 @@ function StaffMobile() {
             </div>
           </div>
         </Reveal>
-      </div>
-    </section>
-  );
-}
-
-function Pricing() {
-  return (
-    <section id="方案定價" className="scroll-mt-20 bg-surface py-20 sm:py-28">
-      <div className="mx-auto max-w-5xl px-5">
-        <SectionHeading eyebrow="Pricing" title="方案定價" subtitle="從一人工作室到多分店團隊。" />
-        <div className="mt-14 grid gap-6 md:grid-cols-2">
-          <Reveal>
-            <div className="h-full rounded-2xl border border-border bg-card p-8">
-              <h3 className="text-lg font-bold text-foreground">基礎版</h3>
-              <p className="mt-4 text-3xl font-extrabold text-foreground">$99/月起</p>
-              <p className="mt-3 text-sm text-muted-foreground">含 1 間商家、最多 3 位服務人員</p>
-              <Button asChild variant="outline" size="lg" className="mt-8 w-full">
-                <Link to="/signup">建立帳號</Link>
-              </Button>
-            </div>
-          </Reveal>
-          <Reveal delay={120}>
-            <div className="relative h-full rounded-2xl border-2 border-primary bg-card p-8 shadow-lg shadow-primary/10">
-              <span className="absolute -top-3 left-8 rounded-full bg-cta px-3 py-1 text-xs font-semibold text-cta-foreground">
-                多店推薦
-              </span>
-              <h3 className="text-lg font-bold text-foreground">進階版</h3>
-              <p className="mt-4 text-2xl font-extrabold text-foreground">
-                每間商家 $399/月
-                <span className="block text-lg">+ 每位服務人員 $199/月</span>
-              </p>
-              <p className="mt-3 text-sm text-muted-foreground">適合多分店、多位服務人員的團隊</p>
-              <Button asChild variant="cta" size="lg" className="mt-8 w-full">
-                <Link to="/signup">建立帳號</Link>
-              </Button>
-            </div>
-          </Reveal>
-        </div>
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          （以上為暫定方案，正式定價待確認）
-        </p>
       </div>
     </section>
   );
@@ -738,7 +691,7 @@ function Contact() {
 
 function Footer() {
   const cols = [
-    { title: "產品", links: ["功能特色", "方案定價", "適用產業"] },
+    { title: "產品", links: ["功能特色", "適用產業"] },
     { title: "支援", links: ["常見問題", "導入說明", "系統狀態"] },
     { title: "聯絡", links: ["LINE 官方帳號", "hello@miaoyue.app"] },
   ];

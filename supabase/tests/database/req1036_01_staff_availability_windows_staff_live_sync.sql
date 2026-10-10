@@ -22,6 +22,8 @@
 --
 -- pgTAP 整份檔案是同一筆交易 ⇒ 每段量測前用 pg_temp.reset_sig() 清 GUC 記號與訊號列(模擬新交易)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(32);
 

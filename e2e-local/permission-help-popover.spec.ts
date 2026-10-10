@@ -3,7 +3,8 @@
 // loopback guard 生效,不碰正式庫)。
 //
 //   ① 電腦 1280px:客服權限頁 → 說明不常駐 → 點「?」跳框(半形括號)→ 點旁邊關掉 → 開關狀態沒變、沒送出任何變更
-//   ② 手機 375px:服務人員 → 編輯 → 權限功能 8 個開關 → 說明不常駐、每個都有「?」、「即將推出」還在
+//   ② 手機 375px:服務人員 → 編輯 → 權限功能開關 → 說明不常駐、每個都有「?」;
+//      #1052 H2-03 起還沒上線的兩個開關(comingSoon)先不顯示,畫面不再有「即將推出」
 //      → 點「?」跳框 → 點旁邊關掉 → 開關狀態沒變
 //   ③ 320px:兩頁各點一顆「?」,說明框不超出畫面、整頁沒有橫向捲動
 //
@@ -124,23 +125,27 @@ test("#990 電腦 1280px:客服權限頁說明收進「?」,點開看得到(半�
   await page.context().close();
 });
 
-test("#990 手機 375px:服務人員權限 8 個開關說明收進「?」,「即將推出」還在,點 ? 不切換開關", async ({
+test("#990 手機 375px:服務人員權限開關說明收進「?」,還沒上線的開關不顯示,點 ? 不切換開關", async ({
   browser,
 }) => {
   const page = await openAsAdmin(browser, 375, "/app/staff");
   await openStaffEditor(page);
 
   for (const f of STAFF_BOOLEAN_PERMISSION_FIELDS) {
+    if (f.comingSoon) {
+      // #1052 H2-03:還沒上線的開關先不顯示
+      await expect(page.getByTestId(`permission-help-trigger-${f.key}`)).toHaveCount(0);
+      continue;
+    }
     await expect(page.getByTestId(`permission-help-trigger-${f.key}`)).toHaveAttribute(
       "aria-label",
       `說明：${f.label}`,
     );
     await expect(page.getByText(f.description, { exact: true })).toHaveCount(0);
   }
-  const comingSoon = STAFF_BOOLEAN_PERMISSION_FIELDS.filter((f) => f.comingSoon).length;
   await expect(
     page.getByTestId("permission-switch-title").filter({ hasText: "即將推出" }),
-  ).toHaveCount(comingSoon);
+  ).toHaveCount(0);
 
   const field = STAFF_BOOLEAN_PERMISSION_FIELDS.find((f) => f.key === "unlimited_backend_edit")!;
   const sw = page.getByRole("switch", { name: new RegExp(field.label) });

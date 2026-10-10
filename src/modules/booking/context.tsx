@@ -16,7 +16,6 @@ import {
   setStaffDayOverride as apiSetStaffDayOverride,
   updateBooking as apiUpdateBooking,
   updateBookingPaymentMethod as apiUpdateBookingPaymentMethod,
-  fetchBookingAmountSummary,
   fetchMerchantBookings,
   fetchMerchantBookingStatusColors,
   fetchMerchantBusinessHours,
@@ -34,7 +33,6 @@ import {
   updateMerchantBookingStatusColors as apiUpdateMerchantBookingStatusColors,
   updateMerchantCalendarStateStyles as apiUpdateMerchantCalendarStateStyles,
   upsertMerchantTaxSettings as apiUpsertMerchantTaxSettings,
-  type BookingAmountSummary,
   type BookingCardExtra,
   type CreateBookingInput,
   type MerchantBookingsFilters,
@@ -234,18 +232,6 @@ export async function clearStaffDayOverride(
   endTime: string,
 ): Promise<void> {
   return apiClearStaffDayOverride(staffId, overrideDate, startTime, endTime);
-}
-
-/** 模組 6 §6.1 對外介面:直接取得單筆訂單的金額 breakdown,供模組 8/12 之後複用,
- * 不用重新查三張關聯表自己加總。 */
-export function useBookingAmountSummary(
-  bookingId: string | null | undefined,
-): UseQueryResult<BookingAmountSummary | null> {
-  return useQuery({
-    queryKey: ["booking-module", "booking-amount-summary", bookingId],
-    queryFn: () => fetchBookingAmountSummary(bookingId as string),
-    enabled: Boolean(bookingId),
-  });
 }
 
 /** 建單與訂單管理介面優化 §7.5 對外介面:批次取得訂單卡片需要的延伸資訊(服務項目名稱清單、

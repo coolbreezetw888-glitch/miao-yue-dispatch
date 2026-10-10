@@ -169,25 +169,3 @@ export function TodoTag({
     </Badge>
   );
 }
-
-/**
- * 「即將推出」小灰標籤 —— SPECS-INDEX #977(2026-10-06)。
- *
- * 用在「設定可以先存,但對應的功能還沒正式上線」的欄位名稱旁邊(編輯服務人員 > 權限功能)。
- * 性質是**屬性**(靜態說明這個欄位的狀態),所以跟 AttributeTag 一樣方角、灰底、安靜(skill 二之四);
- * 刻意用 <span> 而不是 Badge(<div>):它常常放在 <label> 裡面,label 只能包行內元素。
- * 🔴 這個標籤只是標示,**不代表欄位被鎖住** —— 旁邊的開關 / 輸入框照常可以操作、照常存值。
- */
-export function ComingSoonTag({ className }: { className?: string | undefined }) {
-  return (
-    <span
-      data-testid="coming-soon-tag"
-      className={cn(
-        "ml-1.5 inline-flex shrink-0 items-center rounded-[4px] bg-muted px-1.5 py-px align-middle text-[11px] font-medium leading-4 text-muted-foreground",
-        className,
-      )}
-    >
-      即將推出
-    </span>
-  );
-}

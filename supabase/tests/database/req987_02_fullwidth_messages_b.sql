@@ -98,6 +98,7 @@ create function pg_temp.req987_triggers(p_sig text) returns text[] language sql 
 $$;
 
 -- ----- private.protect_merchant_member_settings_rule_columns() -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.protect_merchant_member_settings_rule_columns()$m$, array[
     $m$'紅利點數的規則設定(啟用開關、核發獎勵資格條件、紅利計算、點數使用、推薦系統、生日獎勵)需要「紅利點數管理」權限才能修改；「會員管理」權限可以做手動調整與登記兌換，但不能改這些規則'$m$, $m$'紅利點數的規則設定(啟用開關、核發獎勵資格條件、紅利計算、點數使用、推薦系統、生日獎勵)需要「紅利點數管理」權限才能修改;「會員管理」權限可以做手動調整與登記兌換,但不能改這些規則'$m$,
@@ -108,7 +109,7 @@ select is(
   $m$private.protect_merchant_member_settings_rule_columns() ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.protect_merchant_member_settings_rule_columns()$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$2026-09-24 使用者裁決(紅利點數管理權限拆分)的欄位層級保護;2026-10-01 紅利系統重構批次 1(§3.10)擴充保護清單、批次 6 隨 drop column 移除 points_earn_rate。merchant_member_settings 是整列 upsert(PostgREST 不是 RPC),RLS 的 UPDATE policy 是整列層級、WITH CHECK 看不到 OLD,所以用 BEFORE INSERT OR UPDATE trigger(比照 merchant_staff 上既有三支保護 trigger)。兩組欄位對稱處理:「紅利點數規則」= points_feature_enabled/reward_condition_mode/referral_bonus_points/birthday_bonus_points + 紅利計算(earn_mode/basic_points_per_order/basic_min_amount/basic_tiered_enabled)+ 點數使用(redeem_points_unit/redeem_amount_unit/redeem_max_ratio_percent)+ 推薦系統(referral_inviter_reward_enabled/referral_subsequent_bonus_points/referral_inviter_earning_enabled/referral_invitee_earning_enabled)+ 生日獎勵(birthday_bonus_enabled/birthday_line_message),要 private.can_manage_member_points;會員政策兩欄(policy_enabled/policy_content)要 private.can_manage_member_settings。⚠️ 判斷的是「值真的有變動」(is distinct from)而不是「payload 有沒有帶這個欄位」。INSERT 面跟 schema 實際預設值比對;seed_default_member_settings 只帶 merchant_id,所以建立新商家的路徑一定不會被擋。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$2026-09-24 使用者裁決(紅利點數管理權限拆分)的欄位層級保護;2026-10-01 紅利系統重構批次 1(§3.10)擴充保護清單、批次 6 隨 drop column 移除 points_earn_rate。merchant_member_settings 是整列 upsert(PostgREST 不是 RPC),RLS 的 UPDATE policy 是整列層級、WITH CHECK 看不到 OLD,所以用 BEFORE INSERT OR UPDATE trigger(比照 merchant_staff 上既有三支保護 trigger)。兩組欄位對稱處理:「紅利點數規則」= points_feature_enabled/reward_condition_mode/referral_bonus_points/birthday_bonus_points + 紅利計算(earn_mode/basic_points_per_order/basic_min_amount/basic_tiered_enabled)+ 點數使用(redeem_points_unit/redeem_amount_unit/redeem_max_ratio_percent)+ 推薦系統(referral_inviter_reward_enabled/referral_subsequent_bonus_points/referral_inviter_earning_enabled/referral_invitee_earning_enabled)+ 生日獎勵(birthday_bonus_enabled/birthday_line_message),要 private.can_manage_member_points;會員政策兩欄(policy_enabled/policy_content)要 private.can_manage_member_settings。⚠️ 判斷的是「值真的有變動」(is distinct from)而不是「payload 有沒有帶這個欄位」。INSERT 面跟 schema 實際預設值比對;seed_default_member_settings 只帶 merchant_id,所以建立新商家的路徑一定不會被擋。$m$],
   $m$private.protect_merchant_member_settings_rule_columns() ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.protect_merchant_member_settings_rule_columns()$m$),
@@ -116,6 +117,7 @@ select is(
   $m$private.protect_merchant_member_settings_rule_columns() ③ 觸發器綁定不變$m$);
 
 -- ----- private.protect_merchant_staff_pending_login_email_columns() -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$private.protect_merchant_staff_pending_login_email_columns()$m$, array[
     $m$'不能透過一般編輯直接變更登入信箱建議，請透過「修改登入信箱」的功能操作'$m$, $m$'不能透過一般編輯直接變更登入信箱建議,請透過「修改登入信箱」的功能操作'$m$
@@ -124,7 +126,7 @@ select is(
   $m$private.protect_merchant_staff_pending_login_email_columns() ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$private.protect_merchant_staff_pending_login_email_columns()$m$),
-  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m$NULL$m$, $m$對應規格書 2.2.1 邊界情況:擋下對 merchant_staff 三個 pending_admin_login_email* 欄位的直接 UPDATE,只放行 service_role 或已設定 staff_agent.bypass_pending_login_email_guard 旗標(request_staff_login_email_change/clear_staff_pending_login_email 專用)的呼叫。$m$],
+  array[$m$true$m$, $m$v$m$, $m${search_path=public}$m$, $m${postgres=X/postgres}$m$, $m$對應規格書 2.2.1 邊界情況:擋下對 merchant_staff 三個 pending_admin_login_email* 欄位的直接 UPDATE,只放行 service_role 或已設定 staff_agent.bypass_pending_login_email_guard 旗標(request_staff_login_email_change/clear_staff_pending_login_email 專用)的呼叫。$m$],
   $m$private.protect_merchant_staff_pending_login_email_columns() ② security definer / volatility / search_path / ACL / comment 不變$m$);
 select is(
   pg_temp.req987_triggers($m$private.protect_merchant_staff_pending_login_email_columns()$m$),
@@ -132,12 +134,13 @@ select is(
   $m$private.protect_merchant_staff_pending_login_email_columns() ③ 觸發器綁定不變$m$);
 
 -- ----- public.adjust_member_points(p_member_id uuid, p_points_delta integer, p_note text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.adjust_member_points(p_member_id uuid, p_points_delta integer, p_note text)$m$, array[
     $m$'手動調整會員點數，只有商家管理員可以操作'$m$, $m$'手動調整會員點數,只有商家管理員可以操作'$m$,
     $m$'這位會員目前只有 % 點，調整後不能變成負數'$m$, $m$'這位會員目前只有 % 點,調整後不能變成負數'$m$
   ])),
-  $m$69fa3e54b23a81ee8c9f348960106b5d$m$,
+  $m$03795a6693f2d0c377c6e21b30142323$m$,
   $m$public.adjust_member_points(p_member_id uuid, p_points_delta integer, p_note text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.adjust_member_points(p_member_id uuid, p_points_delta integer, p_note text)$m$),
@@ -165,11 +168,12 @@ select is(
   $m$public.batch_apply_staff_service_commission_rates(p_staff_id uuid, p_service_item_ids uuid[], p_commission_mode text, p_commission_value numeric) ③ 觸發器綁定不變$m$);
 
 -- ----- public.cancel_staff_leave(p_leave_id uuid) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.cancel_staff_leave(p_leave_id uuid)$m$, array[
     $m$'這筆請假紀錄目前狀態不是「進行中」，無法取消(目前狀態：%)'$m$, $m$'這筆請假紀錄目前狀態不是「進行中」,無法取消(目前狀態:%)'$m$
   ])),
-  $m$a5bc1c7a8aa84f15b0b2795cb719e89f$m$,
+  $m$39fc88f97947df9c7a4b519f6b305928$m$,
   $m$public.cancel_staff_leave(p_leave_id uuid) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.cancel_staff_leave(p_leave_id uuid)$m$),
@@ -385,11 +389,12 @@ select is(
   $m$public.record_invited_staff_login(p_staff_id uuid, p_user_id uuid, p_invited_login_email text, p_login_status text) ③ 觸發器綁定不變$m$);
 
 -- ----- public.redeem_member_points(p_member_id uuid, p_points integer, p_note text) -----
+-- #1051(全面體檢加固)改過本支函式 ⇒ 指紋/ACL 更新為加固後的值(加固內容見 migration 20261010230000~230300)。
 select is(
   md5(pg_temp.req987_swap_back($m$public.redeem_member_points(p_member_id uuid, p_points integer, p_note text)$m$, array[
     $m$'這位會員目前只有 % 點，無法兌換 % 點'$m$, $m$'這位會員目前只有 % 點,無法兌換 % 點'$m$
   ])),
-  $m$78d77a28b4761b8b80b2d6d917520345$m$,
+  $m$2d8b319e0e34c7d6c4c12cb98cd20105$m$,
   $m$public.redeem_member_points(p_member_id uuid, p_points integer, p_note text) ① 新訊息換回舊訊息後指紋 = 改前$m$);
 select is(
   pg_temp.req987_attrs($m$public.redeem_member_points(p_member_id uuid, p_points integer, p_note text)$m$),

@@ -15,6 +15,8 @@
 --   F04  p_days = 8、p_items 51 筆等輸入防護
 --   C02  效能:10 位上架服務人員、間隔 5 分、不指定、7 天(最壞情境:每個候選都要問完 10 個人)< 2 秒
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(55);
 

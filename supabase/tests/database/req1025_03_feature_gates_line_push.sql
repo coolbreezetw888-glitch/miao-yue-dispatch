@@ -14,6 +14,8 @@
 --      統計 platform_feature_usage_summary 細部功能跟著主功能算關
 --   ⑨  商家管理員不能自己打開(沒有寫入權限)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(42);
 

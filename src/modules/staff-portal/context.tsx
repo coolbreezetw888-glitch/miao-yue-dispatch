@@ -27,8 +27,6 @@ import type {
 } from "@/modules/booking/types";
 import { fetchMyStaffRow } from "@/modules/staff-agent/api";
 import type { MerchantStaff } from "@/modules/staff-agent/types";
-import { useStaffCommissionSummary, useStaffMonthlyPayrollSummary } from "@/modules/payroll/api";
-import type { StaffCommissionSummary, StaffMonthlyPayrollSummary } from "@/modules/payroll/types";
 
 import {
   fetchMyAvailabilityOverrides,
@@ -300,48 +298,6 @@ export function useMyAvailabilityOverrides(
       fetchMyAvailabilityOverrides(staffId as string, startDate as string, endDate as string),
     enabled: Boolean(staffId) && Boolean(startDate) && Boolean(endDate),
   });
-}
-
-/** 供 4.4 頁面在寫入後 invalidate 相關查詢用,集中管理 query key 前綴,避免各頁面各自拼字串。 */
-export function useInvalidateMyAvailability(): {
-  invalidate: (merchantId: string, staffId: string) => Promise<void>;
-} {
-  const queryClient = useQueryClient();
-  return {
-    invalidate: async (merchantId: string, staffId: string) => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: ["booking-module", "staff-availability-windows", staffId],
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ["staff-portal-module", "my-availability-overrides"],
-        }),
-      ]);
-      void merchantId;
-    },
-  };
-}
-
-// =========================================================================
-// 5.4:抽成/薪資報表自助檢視。內部取得自己的 staff_id 後呼叫模組 8 既有對外介面
-// (已在 3.17 疊加自助檢視分支),直接複用同一套查詢邏輯,不另外開發平行的「自助版」函式。
-// =========================================================================
-export function useMyStaffCommissionSummary(
-  merchantId: string | null | undefined,
-  year: number | null | undefined,
-  month: number | null | undefined,
-): UseQueryResult<StaffCommissionSummary> {
-  const { data: staffRow } = useActiveMyStaffRecord(merchantId);
-  return useStaffCommissionSummary(staffRow?.id ?? null, year, month);
-}
-
-export function useMyStaffMonthlyPayrollSummary(
-  merchantId: string | null | undefined,
-  year: number | null | undefined,
-  month: number | null | undefined,
-): UseQueryResult<StaffMonthlyPayrollSummary> {
-  const { data: staffRow } = useActiveMyStaffRecord(merchantId);
-  return useStaffMonthlyPayrollSummary(staffRow?.id ?? null, year, month);
 }
 
 // =========================================================================

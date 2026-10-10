@@ -947,7 +947,7 @@ export function useMemberReferrals(
 }
 
 // =========================================================================
-// §3.17/§3.18/§5.5:模組 2(超級管理員後台)專用掛鉤點。這次沒有任何 UI 使用,純粹是給模組 2
+// §3.17/§5.5(#1051 已移除 §3.18 的批次清除函式):模組 2(超級管理員後台)專用掛鉤點。這次沒有任何 UI 使用,純粹是給模組 2
 // 之後串接用的建構塊。
 // =========================================================================
 export async function platformExportMerchantMembersSnapshot(merchantId: string): Promise<unknown> {
@@ -956,11 +956,4 @@ export async function platformExportMerchantMembersSnapshot(merchantId: string):
   });
   if (error) throw error;
   return data;
-}
-
-export async function platformPurgeMerchantMembersAndPoints(merchantId: string): Promise<void> {
-  const { error } = await supabase.rpc("platform_purge_merchant_members_and_points", {
-    p_merchant_id: merchantId,
-  });
-  if (error) throw error;
 }

@@ -3,6 +3,8 @@
 -- (權限、格式檢查、null = 不改、舊 4 參數呼叫仍可用)、服務人員端 get_my_calendar_state_styles 讀得到、
 -- 函式屬性(SECURITY DEFINER、search_path、ACL)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(20);
 

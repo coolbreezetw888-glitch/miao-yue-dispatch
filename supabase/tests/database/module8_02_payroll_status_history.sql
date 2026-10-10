@@ -21,6 +21,14 @@
 -- ⚠️ 跟 timestamptz 欄位比較時要再 `at time zone 'Asia/Taipei'` 轉回 timestamptz
 --   (date_trunc 吃的是 naive timestamp,直接拿去跟 timestamptz 比會被當成 UTC,等於沒修)。
 begin;
+-- #1051:private 函式已收回 authenticated 執行權;本檔斷言直接以登入者身分呼叫下列輔助函式,在交易內暫時授權(rollback 後失效)。
+grant execute on function private.compute_staff_payroll(uuid, integer, integer) to authenticated;
+grant execute on function private.compute_staff_payroll_by_range(uuid, date, date) to authenticated;
+grant execute on function private.get_merchant_monthly_salary_base_as_of(uuid, timestamp with time zone) to authenticated;
+grant execute on function private.get_staff_payroll_status_as_of(uuid, timestamp with time zone) to authenticated;
+grant execute on function private.sync_staff_payroll_status_history(uuid, boolean) to authenticated;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- 49 → 51:2026-09-24 使用者裁決推翻了 §11.9「per_staff_breakdown 維持目前在職名單」那條決策
 -- 記錄(見下方 ⑨ 區塊),原本那一條改寫成三條,驗新的「該月月底當時在職」歷史母體。
@@ -517,25 +525,25 @@ select is(
 -- 都早於它自己的 effective_from(理由同⑥的說明),existed=false,不計入。
 -- =========================================================================
 select is(
-  (get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) ->> 'total_monthly_salary_base')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 2, 1), (make_date(2026, 2, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_base')::numeric,
   55000.00,
-  '§11.8 測試(核心):get_merchant_billing_summary(2026-02)的 total_monthly_salary_base = 30000(I)+25000(J估算)= 55000'
+  '§11.8 測試(核心):帳務報表(2026-02 整月)的 total_monthly_salary_base = 30000(I)+25000(J估算)= 55000'
 );
 
 select is(
-  (get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) ->> 'salary_estimation_applied')::boolean,
+  (public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 2, 1), (make_date(2026, 2, 1) + interval '1 month - 1 day')::date) ->> 'salary_estimation_applied')::boolean,
   true,
   '§11.8 測試(核心):2026-02 查詢涵蓋 J 的估算月份,salary_estimation_applied=true'
 );
 
 select is(
-  (get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 8) ->> 'total_monthly_salary_base')::numeric,
+  (public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) ->> 'total_monthly_salary_base')::numeric,
   65000.00,
-  '§11.8 測試(核心):get_merchant_billing_summary(2026-08)的 total_monthly_salary_base = 40000(I)+25000(J)= 65000,全部都不是估算'
+  '§11.8 測試(核心):帳務報表(2026-08 整月)的 total_monthly_salary_base = 40000(I)+25000(J)= 65000,全部都不是估算'
 );
 
 select is(
-  (get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 8) ->> 'salary_estimation_applied')::boolean,
+  (public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 8, 1), (make_date(2026, 8, 1) + interval '1 month - 1 day')::date) ->> 'salary_estimation_applied')::boolean,
   false,
   '§11.8 測試(核心):2026-08 查詢完全不涉及機制上線前的月份,salary_estimation_applied=false'
 );
@@ -571,7 +579,7 @@ select is(
 -- 出現。「人數會隨月份改變」那件事由 module8_03 用 9 月/10 月各 3 人/2 人的情境正式釘住。
 -- =========================================================================
 select is(
-  jsonb_array_length(get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) -> 'per_staff_breakdown'),
+  jsonb_array_length(public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 2, 1), (make_date(2026, 2, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'),
   2,
   '§11.9 已推翻(2026-09-24):per_staff_breakdown 改成「該月月底當時在職」的歷史母體 → 2026-02 只含 I/J 兩人,K 那時候還不存在(existed=false)所以不列入'
 );
@@ -579,7 +587,7 @@ select is(
 select ok(
   not exists (
     select 1 from jsonb_array_elements(
-      get_merchant_billing_summary('e8020000-0000-4000-8000-000000000022', 2026, 2) -> 'per_staff_breakdown'
+      public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(2026, 2, 1), (make_date(2026, 2, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
     ) as elem
     where elem ->> 'staff_id' = 'e8020000-0000-4000-8000-000000000038'
   ),
@@ -589,11 +597,7 @@ select ok(
 select ok(
   exists (
     select 1 from jsonb_array_elements(
-      get_merchant_billing_summary(
-        'e8020000-0000-4000-8000-000000000022',
-        extract(year from clock_timestamp() at time zone 'Asia/Taipei')::int,
-        extract(month from clock_timestamp() at time zone 'Asia/Taipei')::int
-      ) -> 'per_staff_breakdown'
+      public.get_merchant_billing_summary_by_range('e8020000-0000-4000-8000-000000000022', make_date(extract(year from clock_timestamp() at time zone 'Asia/Taipei')::int, extract(month from clock_timestamp() at time zone 'Asia/Taipei')::int, 1), (make_date(extract(year from clock_timestamp() at time zone 'Asia/Taipei')::int, extract(month from clock_timestamp() at time zone 'Asia/Taipei')::int, 1) + interval '1 month - 1 day')::date) -> 'per_staff_breakdown'
     ) as elem
     where elem ->> 'staff_id' = 'e8020000-0000-4000-8000-000000000038'
   ),

@@ -19,6 +19,8 @@
 --   T15 權限:沒有 orders 鑰匙 ⇒ 42501;新 helper 對 authenticated / anon / PUBLIC 都沒有 EXECUTE
 --   T16 交易原子性:要求折抵失敗 ⇒ 不多出新會員、原折抵沒被退
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(40);
 

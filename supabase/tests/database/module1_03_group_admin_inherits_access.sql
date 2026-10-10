@@ -3,6 +3,8 @@
 -- 判斷式(規則 2.4)——集團管理者不需要在 merchant_admins 裡另外掛一筆,光靠
 -- groups.group_admin_user_id 指到自己就自動有權限。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(5);
 

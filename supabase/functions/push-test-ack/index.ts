@@ -22,6 +22,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { errorCode } from "../_shared/safeLog.ts";
 
 function readEnvConfig() {
   return {
@@ -103,7 +104,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
   });
   if (error) {
     // 連錯誤都不透露給呼叫端,只留伺服器端的記錄。
-    console.error("[push-test-ack] ack_push_test_notification 失敗", error);
+    console.error("[push-test-ack] ack_push_test_notification 失敗", errorCode(error));
   } else if (data === false) {
     console.log("[push-test-ack] token 無效/過期/已使用過(回應仍然是 204)");
   }

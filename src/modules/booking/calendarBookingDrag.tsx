@@ -710,6 +710,8 @@ export function BookingDragGhost({ ghost }: { ghost: DragGhostModel | null }) {
           ghost.forbidden ? "border-destructive" : "border-brand",
           ghost.lifted && "scale-[1.03]",
           ghost.committing && "opacity-70",
+          // #1052 H2-10:不能放時殘影變半透明,底下欄位的紅框才看得到(殘影是 fixed z-50,會蓋住欄位)。
+          ghost.forbidden && "opacity-60",
         )}
         style={ghost.blockStyle}
       >

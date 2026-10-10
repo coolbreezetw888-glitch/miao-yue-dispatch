@@ -3,6 +3,8 @@
 -- get_staff/agent_login_email_status,以及 2.2.1 邊界情況(merchant_staff 三個 pending 欄位
 -- 不能被一般 UPDATE 直接改動,merchant_agents 本來就沒有給 authenticated 的 UPDATE 政策)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(33);
 

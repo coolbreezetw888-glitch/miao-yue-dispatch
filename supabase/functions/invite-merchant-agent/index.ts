@@ -26,6 +26,8 @@ import {
   resolveInviteAccount,
   supabaseInviteAccountDeps,
 } from "../_shared/inviteAccountResolver.ts";
+import { errorCode } from "../_shared/safeLog.ts";
+import { inviteRecordErrorMessage, inviteSendErrorMessage } from "../_shared/inviteErrors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -63,7 +65,7 @@ Deno.serve(async (req: Request) => {
   try {
     return await handleInviteMerchantAgent(req);
   } catch (err) {
-    console.error("[invite-merchant-agent] 未預期的例外", err);
+    console.error("[invite-merchant-agent] 未預期的例外", errorCode(err));
     return jsonResponse({ error: "系統發生非預期錯誤，請稍後再試或聯絡系統管理員" }, 500);
   }
 });
@@ -125,7 +127,7 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
   });
 
   if (adminCheckError) {
-    console.error("[invite-merchant-agent] am_i_merchant_admin 呼叫失敗", adminCheckError);
+    console.error("[invite-merchant-agent] am_i_merchant_admin 呼叫失敗", errorCode(adminCheckError));
     return jsonResponse({ error: "驗證權限時發生錯誤，請稍後再試" }, 500);
   }
 
@@ -149,14 +151,14 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
   );
 
   if (resolved.kind === "lookup_error") {
-    console.error("[invite-merchant-agent] lookup_auth_account_by_email 呼叫失敗", resolved.error);
+    console.error("[invite-merchant-agent] lookup_auth_account_by_email 呼叫失敗", errorCode(resolved.error));
     return jsonResponse({ error: "查詢帳號時發生錯誤，請稍後再試" }, 500);
   }
 
   if (resolved.kind === "send_error") {
     return jsonResponse(
       {
-        error: `邀請信寄送失敗：${resolved.message}(見規則 2.5，Supabase 免費方案寄信額度較低，若短時間內邀請多人可能會碰到這個限制)`,
+        error: inviteSendErrorMessage(resolved.message),
       },
       502,
     );
@@ -183,8 +185,8 @@ async function handleInviteMerchantAgent(req: Request): Promise<Response> {
   );
 
   if (recordError) {
-    console.error("[invite-merchant-agent] record_invited_merchant_agent 失敗", recordError);
-    return jsonResponse({ error: recordError.message || "寫入客服資料失敗，請稍後再試" }, 500);
+    console.error("[invite-merchant-agent] record_invited_merchant_agent 失敗", errorCode(recordError));
+    return jsonResponse({ error: inviteRecordErrorMessage(recordError, "寫入客服資料失敗，請稍後再試") }, 500);
   }
 
   return jsonResponse(

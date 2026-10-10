@@ -40,11 +40,11 @@ function jsonResponse(body: Record<string, unknown>, status: number): Response {
   });
 }
 
-/** 規則 4.8 步驟 3:比對 X-Cron-Secret 標頭是否等於環境變數裡的密鑰。獨立成純函式方便測試。 */
-export function isValidCronSecret(headerValue: string | null, expected: string): boolean {
-  if (!expected) return false;
-  return headerValue === expected;
-}
+/** 規則 4.8 步驟 3:比對 X-Cron-Secret 標頭是否等於環境變數裡的密鑰。
+ * #1051 起改用共用的固定時間比對(_shared/cronSecret.ts);環境變數沒設時一律擋下。 */
+import { isValidCronSecret } from "../_shared/cronSecret.ts";
+import { errorCode } from "../_shared/safeLog.ts";
+export { isValidCronSecret };
 
 export interface TaipeiTomorrowRange {
   /** 明天(台北時區)00:00 對應的真實 UTC 時間戳(毫秒),查詢 start_at >= 這個值。 */
@@ -120,7 +120,7 @@ async function handleRequest(req: Request): Promise<Response> {
     .lt("start_at", new Date(tomorrowEndUtcMs).toISOString());
 
   if (bookingsError) {
-    console.error("[push-notify-reminder-dispatch] 查詢明天訂單失敗", bookingsError);
+    console.error("[push-notify-reminder-dispatch] 查詢明天訂單失敗", errorCode(bookingsError));
     return jsonResponse({ error: "查詢明天訂單時發生錯誤" }, 500);
   }
 
@@ -147,7 +147,7 @@ async function handleRequest(req: Request): Promise<Response> {
       .select();
 
     if (dedupeError) {
-      console.error("[push-notify-reminder-dispatch] 寫入冪等紀錄失敗", booking.id, dedupeError);
+      console.error("[push-notify-reminder-dispatch] 寫入冪等紀錄失敗", booking.id, errorCode(dedupeError));
       continue;
     }
     if (!dedupeRows || dedupeRows.length === 0) {

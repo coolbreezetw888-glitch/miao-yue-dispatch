@@ -25,6 +25,8 @@
 --   ③ 白話錯誤訊息:手機格式錯誤不能讓商家看到資料庫原始的 check constraint 錯誤
 --   ④ 恢復功能:狀態正確、權限正確、原本的權限設定要一起復原
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(26);
 

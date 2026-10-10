@@ -34,6 +34,11 @@
 --    共用 helper 檔案會被誤判成「沒有 plan() 的測試檔」而報錯。
 
 begin;
+-- #1051:private 函式已收回 authenticated 執行權;本檔斷言直接以登入者身分呼叫下列輔助函式,在交易內暫時授權(rollback 後失效)。
+grant execute on function private.can_view_staff_own_payroll(uuid) to authenticated;
+grant execute on function private.has_own_staff_permission(uuid, text) to authenticated;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它

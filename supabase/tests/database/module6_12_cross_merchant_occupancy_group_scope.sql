@@ -15,6 +15,8 @@
 --   集團 G1:A 店、B 店(同集團)       集團 G2:C 店(不相關的商家)
 --   三店各有一位電話都是 0911222333 的服務人員 sa / sb / sc(sa 有開通登入,用來測服務人員端)
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它

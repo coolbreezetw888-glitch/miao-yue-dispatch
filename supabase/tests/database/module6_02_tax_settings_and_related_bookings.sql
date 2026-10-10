@@ -1,6 +1,8 @@
 -- 模組 6(訂單管理)§2.1(merchant_tax_settings CHECK 約束/RLS/預設值)、
 -- §3.3/§6.3(get_customer_related_bookings)、§3.2/§6.2(update_booking_payment_method)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它

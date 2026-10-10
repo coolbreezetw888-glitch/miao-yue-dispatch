@@ -7,6 +7,8 @@
 --   ⑳~㉖   C1-F01:anon 政策數 = 0;anon 直接讀 5 張表拿不到資料
 --   ㉗~㉜   新函式 ACL:兩支 public 函式 anon / authenticated 可執行、PUBLIC 不行;private 新函式三個角色都不行
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(37);
 
@@ -185,10 +187,11 @@ select is(
   (select count(*)::int from pg_policy where 'anon'::regrole = any(polroles)),
   0, '⑳ 沒有任何給 anon 的 RLS 政策');
 select pg_temp.test_set_auth('c1a00000-0000-4000-8000-000000000001', 'anon');
-select is((select count(*)::int from merchants), 0, '㉑ anon 直接讀 merchants ⇒ 0 列');
-select is((select count(*)::int from merchant_staff), 0, '㉒ anon 直接讀 merchant_staff ⇒ 0 列');
-select is((select count(*)::int from service_items), 0, '㉓ anon 直接讀 service_items ⇒ 0 列');
-select is((select count(*)::int from bookings), 0, '㉔ anon 直接讀 bookings ⇒ 0 列');
+-- #1051:anon 的表層權限已全部收回 ⇒ 直接讀表一律「沒有權限」(比原本的 0 列更嚴)。
+select throws_ok($$select count(*) from merchants$$, '42501', null, '㉑ anon 直接讀 merchants ⇒ 沒有權限');
+select throws_ok($$select count(*) from merchant_staff$$, '42501', null, '㉒ anon 直接讀 merchant_staff ⇒ 沒有權限');
+select throws_ok($$select count(*) from service_items$$, '42501', null, '㉓ anon 直接讀 service_items ⇒ 沒有權限');
+select throws_ok($$select count(*) from bookings$$, '42501', null, '㉔ anon 直接讀 bookings ⇒ 沒有權限');
 select throws_ok($$select count(*) from merchant_booking_settings$$, '42501', null,
   '㉕ anon 直接讀 merchant_booking_settings ⇒ 沒有權限');
 select pg_temp.test_clear_auth();

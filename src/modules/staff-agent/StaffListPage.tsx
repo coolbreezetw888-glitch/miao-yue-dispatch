@@ -56,7 +56,6 @@ import {
   CardDialogFooter,
   CardDialogHeader,
   CardDialogTitle,
-  ComingSoonTag,
   EmptyState,
   ErrorState,
   FieldInput,
@@ -804,7 +803,7 @@ export function StaffFormDialog({
             <FormSectionTitle>權限功能</FormSectionTitle>
             {/* SPECS-INDEX #977(2026-10-06):原本這裡有一條常駐 `!`「這些開關目前先存值,對應的功能上線後才
                 會實際生效」—— 對已經生效的兩項(商家後台編輯無時段限制、服務人員是否顯示會員資料)是錯的。
-                改成逐項在名稱旁標「即將推出」(ComingSoonTag),哪些還沒上線一眼看得出來,開關照常可以切換。 */}
+                改成逐項在名稱旁標「即將推出」;#1052 H2-03 起還沒上線的開關改成先不顯示(不對外承諾未來功能)。 */}
             {/* 2026-09-24 使用者裁決:三個「預約天數」欄位收斂成兩個(見 types.ts
                 STAFF_NUMBER_PERMISSION_FIELDS 上方的完整裁決註解)。欄位數從 3 變 2,所以格線
                 也從 sm:grid-cols-3 改成 sm:grid-cols-2,兩欄才不會留下一格空白。 */}
@@ -820,12 +819,7 @@ export function StaffFormDialog({
                   return (
                     <FormField
                       key={field.key}
-                      label={
-                        <>
-                          {field.label}
-                          {field.comingSoon ? <ComingSoonTag /> : null}
-                        </>
-                      }
+                      label={field.label}
                       htmlFor={`staff-${field.key}`}
                       helpLabel={`說明：${field.label}怎麼填`}
                       help={field.description}
@@ -876,20 +870,17 @@ export function StaffFormDialog({
               </div>
             ) : null}
             <div className="flex flex-col gap-2">
-              {STAFF_BOOLEAN_PERMISSION_FIELDS.filter((field) =>
-                isStaffBooleanFieldVisible(field.key, fieldFeatures),
+              {/* #1052 H2-03:還沒上線的開關(comingSoon)先不顯示;原值照樣跟著 form 存回。 */}
+              {STAFF_BOOLEAN_PERMISSION_FIELDS.filter(
+                (field) =>
+                  !field.comingSoon && isStaffBooleanFieldVisible(field.key, fieldFeatures),
               ).map((field) => (
                 <SwitchRow
                   key={field.key}
                   id={`staff-switch-${field.key}`}
-                  title={
-                    <>
-                      {field.label}
-                      {field.comingSoon ? <ComingSoonTag /> : null}
-                    </>
-                  }
+                  title={field.label}
                   description={field.description}
-                  // #990 第 11 批:說明收進名稱旁的 `?`;「即將推出」標籤在名稱裡,`?` 排在標籤後面。
+                  // #990 第 11 批:說明收進名稱旁的 `?`。
                   descriptionMode="popover"
                   helpLabel={`說明：${field.label}`}
                   helpTriggerTestId={`permission-help-trigger-${field.key}`}
@@ -1485,7 +1476,7 @@ function StaffListInner() {
                               表達,不再多一顆標籤。已移除的人不顯示登入標籤(沒有動作可做)。
 
                               🔴 #846(2026-09-30 使用者裁決):「尚未開通登入」這個標籤**一定要顯示**
-                              (它是事實資訊,而且「邀請登入」就在 ⋯ 選單裡,使用者需要知道現在是什麼狀態),
+                              (它是事實資訊,而且「邀請登入」就在卡片按鈕上(#1015 起),使用者需要知道現在是什麼狀態),
                               但樣式分兩種:
                                 - 這家已經有人開通登入 ⇒ 真的是待辦 ⇒ TodoTag(黃底 + `!`)
                                 - 這家一位都沒開通 ⇒ 這是「永久狀態」不是待辦 ⇒ 降級成 AttributeTag
@@ -1636,8 +1627,7 @@ function StaffListInner() {
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
               這個動作無法復原！只有在這位服務人員完全沒有任何歷史訂單/請假/
-              抽成紀錄時，系統才會真的允許刪除；如果有歷史紀錄牽連，系統會擋下
-              並告訴你原因，這個人會維持「已移除」狀態。
+              抽成紀錄時，系統才會真的允許刪除；如果有歷史紀錄牽連，系統會擋下並告訴你原因，這個人會維持「已移除」狀態。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>

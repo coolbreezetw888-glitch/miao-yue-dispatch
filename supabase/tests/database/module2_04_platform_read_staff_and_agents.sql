@@ -19,6 +19,8 @@
 -- 寫法比照 module2_02_platform_admin_sees_all.sql 與
 -- security_audit_01_execute_privileges_and_policy_roles.sql(pg_temp.test_set_auth 切換身分)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(29);
 

@@ -4,6 +4,8 @@
 -- 被替換、原樣送給收訊人看到。這支測試涵蓋:變數組裝正確(單日/區間兩種日期格式)、
 -- leave_type_name 讀 snapshot 不是即時 join、查無資料回傳空物件不報錯、權限只給 service_role。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(9);
 

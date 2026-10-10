@@ -16,6 +16,8 @@
 --      (record_invited_staff_login / mark_staff_login_active_if_self /
 --       update_my_staff_profile / hard_delete_merchant_staff)全部沒有被誤擋。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(20);
 

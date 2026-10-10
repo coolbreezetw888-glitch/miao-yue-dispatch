@@ -359,9 +359,10 @@ describe("#977 服務人員權限功能開關", () => {
     ).toContain("留空時系統會用 180 天");
   });
 
-  it("編輯服務人員畫面不再有「這些開關目前先存值」那條常駐提醒,改用「即將推出」標籤", () => {
+  it("編輯服務人員畫面不再有「這些開關目前先存值」那條常駐提醒;還沒上線的開關先不顯示(#1052 H2-03)", () => {
     const src = readSourceWithoutComments("src/modules/staff-agent/StaffListPage.tsx");
     expect(src).not.toContain("先存值");
-    expect(src).toContain("<ComingSoonTag />");
+    expect(src).not.toContain("ComingSoonTag");
+    expect(src).toContain("!field.comingSoon && isStaffBooleanFieldVisible(");
   });
 });

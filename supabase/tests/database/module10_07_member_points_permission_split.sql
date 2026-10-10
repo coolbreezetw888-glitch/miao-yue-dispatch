@@ -16,6 +16,8 @@
 --   客服會連「會員政策」都存不了——修了 A 卻壞了 B。
 --   下面 ③ 那一條就是專門釘這件事的:它必須通過,否則這次的實作是錯的。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(19);
 

@@ -36,11 +36,6 @@ export type BookingCommissionItemRecord = Tables<"booking_commission_item_record
 
 export type CommissionBasisType = "gross" | "net_of_material_cost";
 
-export const COMMISSION_BASIS_TYPE_LABELS: Record<CommissionBasisType, string> = {
-  gross: "服務金額全額",
-  net_of_material_cost: "扣除料錢成本後淨額",
-};
-
 export type DeductionMode =
   "no_deduction" | "full_day_rate" | "percentage_of_day_rate" | "fixed_amount_per_day";
 
@@ -139,7 +134,7 @@ export interface StaffMonthlyPayrollSummary {
   salary_history_estimated: boolean;
 }
 
-/** §3.11 get_merchant_billing_summary 回傳形狀(店家端帳務報表)。商家端三項調整規格書 §三 3.1:
+/** §3.11 get_merchant_billing_summary_by_range 回傳形狀(店家端帳務報表;舊的單月版已於 #1051 刪除)。商家端三項調整規格書 §三 3.1:
  * 原本單一的 total_revenue(含稅)拆成 total_revenue_excl_tax(未稅)+ total_tax_amount(稅金)。
  * §三 3.2:estimated_net_margin 改用未稅營收計算(原本誤用含稅營收,虛增這個數字),前端顯示
  * 名稱也從「概估毛利」改成「商家總淨利」,JSON 欄位名稱不變。§11.8(2026-09-22 新增):
@@ -204,7 +199,7 @@ export interface MerchantBillingSummary {
    * 只有 billing 鑰匙的客服讀不到 merchant_member_settings,所以「紅利折抵金額」卡片的開關只能看這個。 */
   points_feature_enabled: boolean;
   /** 這次查詢的區間是不是「完整月份」(起始日是某月 1 號 且 結束日是某月最後一天,可跨多月,
-   * 例如 2/1~4/30 也算)。按年月查詢的 get_merchant_billing_summary 永遠是完整月份,固定 true。
+   * 例如 2/1~4/30 也算)。(舊的單月版 get_merchant_billing_summary 已於 #1051 刪除。)
    *
    * ✅ 2026-09-24:資料庫端已上線,這支 RPC 一定會回傳這個欄位,所以型別是必填的 boolean
    * (開發期間曾為了「前端可能先上線、拿到還沒有這個欄位的舊回應」標成 optional 並在呼叫端寫

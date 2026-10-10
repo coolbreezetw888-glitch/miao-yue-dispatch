@@ -269,42 +269,48 @@ export function registerServiceWorkerAutoUpdate(): void {
 
   const serviceWorkerContainer = navigator.serviceWorker;
   const handleLoad = () => {
-    serviceWorkerContainer.register("/sw.js", { scope: "/" }).then((registration) => {
-      activeRegistration = registration;
-      // 頁面載入當下如果剛好已經有一個新版本卡在 waiting(例如上一次分頁關閉前使用者還沒按下
-      // 「重新整理」),視同「偵測到新版本」,通知訂閱者顯示提示條——不再像舊版一樣立刻自動送出
-      // SKIP_WAITING。
-      if (registration.waiting) {
-        markUpdateAvailable(registration.waiting, false);
-      }
+    serviceWorkerContainer
+      .register("/sw.js", { scope: "/" })
+      .then((registration) => {
+        activeRegistration = registration;
+        // 頁面載入當下如果剛好已經有一個新版本卡在 waiting(例如上一次分頁關閉前使用者還沒按下
+        // 「重新整理」),視同「偵測到新版本」,通知訂閱者顯示提示條——不再像舊版一樣立刻自動送出
+        // SKIP_WAITING。
+        if (registration.waiting) {
+          markUpdateAvailable(registration.waiting, false);
+        }
 
-      // 監聽這個 registration 之後偵測到的任何新版本(不論是瀏覽器自己在導覽時檢查到的,
-      // 還是下面 setInterval 主動戳出來的)。
-      registration.addEventListener("updatefound", () => {
-        const installingWorker = registration.installing;
-        if (!installingWorker) return;
-        installingWorker.addEventListener("statechange", () => {
-          // state 變成 'installed' 且目前已經有一個 controller 在控制這個分頁,代表這不是
-          // 「第一次安裝」,而是「已經有舊版本在跑,新版本裝好了」——這才是需要提示使用者更新的
-          // 情境。只記錄狀態、通知訂閱者,不自動套用。
-          if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-            markUpdateAvailable(installingWorker, true);
-          }
+        // 監聽這個 registration 之後偵測到的任何新版本(不論是瀏覽器自己在導覽時檢查到的,
+        // 還是下面 setInterval 主動戳出來的)。
+        registration.addEventListener("updatefound", () => {
+          const installingWorker = registration.installing;
+          if (!installingWorker) return;
+          installingWorker.addEventListener("statechange", () => {
+            // state 變成 'installed' 且目前已經有一個 controller 在控制這個分頁,代表這不是
+            // 「第一次安裝」,而是「已經有舊版本在跑,新版本裝好了」——這才是需要提示使用者更新的
+            // 情境。只記錄狀態、通知訂閱者,不自動套用。
+            if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
+              markUpdateAvailable(installingWorker, true);
+            }
+          });
         });
-      });
 
-      // 瀏覽器本身會在每次導覽時自動檢查一次新版本,但如果使用者整天開著同一個分頁完全不做
-      // 任何導覽,永遠不會觸發那個檢查——這裡額外每小時主動戳一次,確保這種情境也能在合理時間
-      // 內偵測到新版本(偵測到之後一樣只顯示提示條,不會自動整理)。
-      // #1014:改走 checkForServiceWorkerUpdate(共用節流、錯誤一律靜默忽略),行為跟原本一樣。
-      const intervalId = window.setInterval(
-        () => {
-          void checkForServiceWorkerUpdate();
-        },
-        60 * 60 * 1000,
-      );
-      autoUpdateTeardowns.push(() => window.clearInterval(intervalId));
-    });
+        // 瀏覽器本身會在每次導覽時自動檢查一次新版本,但如果使用者整天開著同一個分頁完全不做
+        // 任何導覽,永遠不會觸發那個檢查——這裡額外每小時主動戳一次,確保這種情境也能在合理時間
+        // 內偵測到新版本(偵測到之後一樣只顯示提示條,不會自動整理)。
+        // #1014:改走 checkForServiceWorkerUpdate(共用節流、錯誤一律靜默忽略),行為跟原本一樣。
+        const intervalId = window.setInterval(
+          () => {
+            void checkForServiceWorkerUpdate();
+          },
+          60 * 60 * 1000,
+        );
+        autoUpdateTeardowns.push(() => window.clearInterval(intervalId));
+      })
+      .catch(() => {
+        // #1052 H2-10:註冊失敗(例如開發模式沒有 /sw.js、瀏覽器停用 service worker)時靜默略過,
+        // 網站本身照常運作,只是沒有離線快取與新版本提示;不讓它變成 console 的 unhandled rejection。
+      });
   };
   window.addEventListener("load", handleLoad, { once: true });
   autoUpdateTeardowns.push(() => window.removeEventListener("load", handleLoad));

@@ -43,6 +43,8 @@ test.describe.configure({ mode: "default", timeout: 150_000 });
 let fixture: Req1025Fixture;
 let setupFailed = false;
 let recorders: RequestRecorder[] = [];
+// #1052 H2-14:瀏覽器 console 出現 React「same key」或「Warning:」開頭的警告 ⇒ 這條測試失敗。
+let consoleProblems: string[] = [];
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
@@ -63,14 +65,21 @@ test.afterAll(async () => {
 
 test.beforeEach(() => {
   recorders = [];
+  consoleProblems = [];
 });
 test.afterEach(() => {
   expect(recorders.length, "前提:這條測試至少開過一個頁面").toBeGreaterThan(0);
   for (const r of recorders) expectOnlyLocalRequests(r);
+  expect(consoleProblems, "console 不可以有 React same key / Warning: 警告").toEqual([]);
 });
 
 function track(page: Page): void {
   recorders.push(recordRequestHosts(page));
+  page.on("console", (msg) => {
+    if (msg.type() !== "error" && msg.type() !== "warning") return;
+    const text = msg.text();
+    if (/same key/i.test(text) || /^Warning:/.test(text)) consoleProblems.push(text);
+  });
 }
 
 async function openAs(

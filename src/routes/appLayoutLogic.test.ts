@@ -369,6 +369,43 @@ function appLayoutChildRoutePaths(): string[] {
 }
 
 describe("resolveAppHeaderTitle(頁首顯示目前功能頁名稱)", () => {
+  it("#1052 H2-06:服務人員登入端被關 ⇒ 不顯示「個人資料」,改顯示店名;拿不到店名就空白", () => {
+    expect(
+      resolveAppHeaderTitle({
+        pathname: "/app",
+        isStaffView: true,
+        staffPortalClosed: true,
+        merchantName: "涼風工匠",
+      }),
+    ).toBe("涼風工匠");
+    expect(
+      resolveAppHeaderTitle({
+        pathname: "/app/my-payroll",
+        isStaffView: true,
+        staffPortalClosed: true,
+        merchantName: null,
+      }),
+    ).toBe("");
+    // 商家端不受影響
+    expect(
+      resolveAppHeaderTitle({
+        pathname: "/app/calendar",
+        isStaffView: false,
+        staffPortalClosed: true,
+        merchantName: "涼風工匠",
+      }),
+    ).toBe("行事曆");
+    // 登入端開著照舊
+    expect(
+      resolveAppHeaderTitle({
+        pathname: "/app",
+        isStaffView: true,
+        staffPortalClosed: false,
+        merchantName: "涼風工匠",
+      }),
+    ).toBe("個人資料");
+  });
+
   it("使用者已經指定的那幾條,文字完全照指定", () => {
     expect(resolveAppHeaderTitle({ pathname: "/app", isStaffView: true })).toBe("個人資料");
     expect(resolveAppHeaderTitle({ pathname: "/app/calendar", isStaffView: false })).toBe("行事曆");

@@ -28,6 +28,7 @@
 //      **那件事在同一天稍早的 §5.2 改寫裡就已經做完了**(見下面「⚠️ §5.2 / §〇.11」那一段註解),
 //      這一批只是**依賴**那個順序,沒有再搬一次。順序已經是對的,不要再搬回去。
 // =========================================================================
+import { errorCode } from "./safeLog.ts";
 
 export type PushDispatchEventType =
   "booking_created" | "booking_cancelled" | "booking_updated" | "booking_reminder_next_day";
@@ -577,7 +578,7 @@ export async function dispatchPushForBooking(
         body: bodyFor(recipient),
       });
     } catch (err) {
-      console.error("[push-dispatch] writeInAppNotification 失敗(推播照樣繼續)", err);
+      console.error("[push-dispatch] writeInAppNotification 失敗(推播照樣繼續)", errorCode(err));
     }
   }
 

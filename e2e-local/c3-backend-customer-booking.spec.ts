@@ -274,8 +274,10 @@ test("C3-E02:編輯服務人員 ⇒ 客戶預約相關 4 項不再「即將推�
     const row = layer.getByText(label, { exact: true }).locator("..");
     await expect(row).not.toContainText("即將推出");
   }
-  // Google 日曆、施工照片仍是即將推出
-  await expect(layer.getByText("即將推出")).toHaveCount(2);
+  // #1052 H2-03:Google 日曆、施工照片還沒上線 ⇒ 開關先不顯示,畫面上不再有「即將推出」
+  await expect(layer.getByText("即將推出")).toHaveCount(0);
+  await expect(layer.getByText("服務人員Google日曆同步")).toHaveCount(0);
+  await expect(layer.getByText("服務人員施工圖片上傳")).toHaveCount(0);
   await layer.getByText("客戶預約自動接受").scrollIntoViewIfNeeded();
   await shotBoth(page, "backend-06-staff-settings");
 });

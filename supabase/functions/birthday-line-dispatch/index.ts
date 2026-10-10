@@ -90,17 +90,10 @@ export function renderBirthdayMessage(row: {
   return Array.from(text).slice(0, LINE_TEXT_MAX_LENGTH).join("");
 }
 
-/** 比對 X-Cron-Secret;環境變數沒設時一律擋下(避免空字串比對空字串放行)。 */
-export function isValidCronSecret(headerValue: string | null, expected: string): boolean {
-  if (!expected) return false;
-  if (headerValue === null || headerValue.length !== expected.length) return false;
-  // 固定時間比對,不因第一個不同字元的位置提早結束。
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= headerValue.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
-}
+/** 比對 X-Cron-Secret:#1051 起改用共用的固定時間比對(_shared/cronSecret.ts);環境變數沒設時一律擋下。 */
+import { isValidCronSecret } from "../_shared/cronSecret.ts";
+import { errorCode } from "../_shared/safeLog.ts";
+export { isValidCronSecret };
 
 export interface ClaimedBirthdayRow {
   grant_id: string;
@@ -178,7 +171,7 @@ export async function runBirthdayDispatch(
             null,
           );
         } catch (err) {
-          console.error("[birthday-line-dispatch] 回寫結果失敗", row.grant_id, err);
+          console.error("[birthday-line-dispatch] 回寫結果失敗", row.grant_id, errorCode(err));
         }
         // 回應格式不變(只回統計數字):沒發出去的算在 failed。
         summary.failed += 1;
@@ -208,14 +201,14 @@ export async function runBirthdayDispatch(
           rendered_message: text,
         });
       } catch (err) {
-        console.error("[birthday-line-dispatch] 寫入 line_notification_log 失敗", row.grant_id, err);
+        console.error("[birthday-line-dispatch] 寫入 line_notification_log 失敗", row.grant_id, errorCode(err));
       }
 
       try {
         await db.markResult(row.grant_id, status, result.ok ? null : result.errorDetail, logId);
       } catch (err) {
         // 回寫失敗:這筆維持「已認領、pending」,30 分鐘後下一次認領會把它標成 failed(不重送)。
-        console.error("[birthday-line-dispatch] 回寫結果失敗", row.grant_id, err);
+        console.error("[birthday-line-dispatch] 回寫結果失敗", row.grant_id, errorCode(err));
       }
 
       if (result.ok) summary.sent += 1;
@@ -303,7 +296,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     const summary = await runBirthdayDispatch(db, deps?.fetchImpl ?? fetch);
     return jsonResponse({ ...summary }, 200);
   } catch (err) {
-    console.error("[birthday-line-dispatch] 執行失敗", err);
+    console.error("[birthday-line-dispatch] 執行失敗", errorCode(err));
     return jsonResponse({ error: "執行失敗" }, 500);
   }
 }

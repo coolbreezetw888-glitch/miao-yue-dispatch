@@ -13,6 +13,8 @@
 --   D. get_point_formula_service_items:只回四欄;上架中 + 「有公式綁著的已下架」;沒綁的已下架不回;權限
 --   E. 權限衛生:兩支新函式 PUBLIC / anon 沒有 EXECUTE、authenticated 有
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(43);
 

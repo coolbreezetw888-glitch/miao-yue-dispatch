@@ -6,6 +6,8 @@
 --   §4.1(帶別人 target_id 的 insert/update 被擋下,核心必測)、§4.6(停用者排除 + 孤兒清理觸發器)、
 --   §5.1(resolve_push_recipients 六種情境 + anon/authenticated 被擋下)、§6.6(頻率限制)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(83);
 

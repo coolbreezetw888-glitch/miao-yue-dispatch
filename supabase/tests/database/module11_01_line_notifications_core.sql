@@ -3,6 +3,8 @@
 -- merchant_staff 既有 RLS 政策文字沒有變動 + 新觸發器正確擋下一般異動、憑證管理僅限管理員(核心必測)、
 -- can_manage_line_notification 權限邊界、seed_default_line_event_settings 疊加 create_group_and_merchant。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(42);
 
@@ -104,10 +106,11 @@ select throws_ok(
   '3.21:line_binding_codes 沒有任何 RLS 政策,一般角色直接 insert 被擋下'
 );
 
-select is(
-  (select count(*)::int from line_webhook_events),
-  0,
-  '3.21:line_webhook_events 一般角色 SELECT 不到任何資料(沒有政策)'
+-- #1051:0 policy 的表連 authenticated 的表層權限也收回 ⇒ 直接讀是「沒有權限」(比原本的 0 列更嚴)。
+select throws_ok(
+  $$select count(*) from line_webhook_events$$,
+  '42501', null,
+  '3.21:line_webhook_events 一般角色 SELECT 被擋下(沒有政策,也沒有表層權限)'
 );
 
 select throws_ok(
@@ -259,11 +262,14 @@ select lives_ok(
   $$select disconnect_merchant_line('ec000000-0000-4000-8000-000000000021')$$,
   '3.3:商家管理員解除串接成功'
 );
+-- #1051:merchant_line_configs 已收回 authenticated 表層權限 ⇒ 改用擁有者身分確認資料真的被刪除。
+select pg_temp.test_clear_auth();
 select is(
   (select count(*)::int from merchant_line_configs where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
   0,
   '3.3:解除串接後 merchant_line_configs 這筆確實被刪除'
 );
+select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
 select is(
   (select count(*)::int from merchant_line_event_settings where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
   5,

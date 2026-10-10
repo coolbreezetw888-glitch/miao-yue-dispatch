@@ -4,6 +4,8 @@
 -- 只要客服有「訂單管理」(orders)權限就放行,即使沒有各自的專屬管理權限;
 -- 但 INSERT/UPDATE 仍然只給專屬管理權限,不因為有 orders 權限就能寫入。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(14);
 

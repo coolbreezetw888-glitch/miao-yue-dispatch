@@ -21,6 +21,8 @@
 -- 檔頭:既有資料列從來沒機會填過,設 NOT NULL 會當場失敗,而管理員是商家老闆不能因為沒填電話
 -- 就被停用)。這條測試同時也是防止之後有人「順手統一」把欄位改成 NOT NULL 的護欄。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(18);
 

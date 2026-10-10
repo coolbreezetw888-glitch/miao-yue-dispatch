@@ -13,6 +13,8 @@
 --   G  IDOR:別店管理員 list / save / set / archive / preview / get 全擋;沒有薪資設定權限的客服擋
 --   H  get_staff_bonus_by_range:本人看得到自己、看不到別人;本人回應不含方案資訊;不完整月份列進 partial_months
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(69);
 
@@ -167,8 +169,8 @@ select is(
 select is(
   (select array_to_string(p.proacl, ',') from pg_proc p
    where p.oid = 'private.get_staff_payroll_status_as_of(uuid, timestamptz)'::regprocedure),
-  'postgres=X/postgres,authenticated=X/postgres',
-  'B4 get_staff_payroll_status_as_of 重建後 ACL 跟改前一樣'
+  'postgres=X/postgres',
+  'B4 get_staff_payroll_status_as_of 只有擁有者可執行(#1051 收回 private 函式的 authenticated 執行權)'
 );
 select is(
   (select pg_get_function_result('private.get_staff_payroll_status_as_of(uuid, timestamptz)'::regprocedure)),
@@ -194,8 +196,8 @@ select lives_ok($$select private.compute_staff_payroll_by_range('f1035a00-0000-4
 select is((select total_amount from private.get_merchant_monthly_salary_base_as_of('f1035a00-0000-4000-8000-000000000020', clock_timestamp())),
   58000.00::numeric, 'B9 呼叫者 get_merchant_monthly_salary_base_as_of 照常能跑(30000 + 28000)');
 select pg_temp.test_set_auth('f1035a00-0000-4000-8000-000000000001');
-select lives_ok($$select public.get_merchant_billing_summary('f1035a00-0000-4000-8000-000000000020', 2026, 9)$$,
-  'B10 呼叫者 get_merchant_billing_summary(舊版,Q11 不改)照常能跑');
+select lives_ok($$select public.get_merchant_billing_summary_by_range('f1035a00-0000-4000-8000-000000000020', make_date(2026, 9, 1), (make_date(2026, 9, 1) + interval '1 month - 1 day')::date)$$,
+  'B10 呼叫者 get_merchant_billing_summary_by_range(整個月份)照常能跑(#1051:舊版單月函式已移除)');
 select lives_ok($$select public.get_merchant_billing_summary_by_range('f1035a00-0000-4000-8000-000000000020', '2026-09-01', '2026-09-30')$$,
   'B11 呼叫者 get_merchant_billing_summary_by_range 照常能跑');
 

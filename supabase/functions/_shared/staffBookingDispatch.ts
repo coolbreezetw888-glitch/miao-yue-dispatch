@@ -8,6 +8,7 @@
 //
 // 回傳:true = 放行;false = 403;"error" = RPC 本身出錯(呼叫端回 500,fail closed,不當作通過)。
 // 原本就放行的人不會走到這裡(呼叫端只在 !allowed 時才呼叫),行為不變。
+import { errorCode } from "./safeLog.ts";
 
 export interface StaffDispatchRpcClient {
   rpc(fn: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
@@ -26,10 +27,7 @@ export async function checkStaffBookingDispatch(
     p_event_type: eventType,
   });
   if (error) {
-    console.error(
-      "[staff-booking-dispatch] can_staff_dispatch_booking_notification 呼叫失敗",
-      error,
-    );
+    console.error("[staff-booking-dispatch] can_staff_dispatch_booking_notification 呼叫失敗", errorCode(error));
     return "error";
   }
   return data === true;

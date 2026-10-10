@@ -3,6 +3,8 @@
 -- ② mark_agent_active_if_self / mark_staff_login_active_if_self 會把本人在所有商家、客服與服務人員
 --    兩張表裡的 invited 紀錄一起轉 active,而且不會動到別人的紀錄。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(24);
 

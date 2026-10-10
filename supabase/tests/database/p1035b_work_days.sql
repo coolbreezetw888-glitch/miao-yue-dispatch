@@ -133,8 +133,8 @@ select is(
 );
 select is(
   (select array_to_string(proacl, ',') from pg_proc where oid = 'private.get_staff_payroll_status_as_of(uuid, timestamptz)'::regprocedure),
-  'postgres=X/postgres,authenticated=X/postgres',
-  'D03 as_of 重建後 ACL 跟改前一樣'
+  'postgres=X/postgres',
+  'D03 as_of 只有擁有者可執行(#1051 收回 private 函式的 authenticated 執行權)'
 );
 
 -- 歷史往前挪:H、D、PR、MS 從 2025-01-01 起就是現在的狀態(只留最新一列)
@@ -157,7 +157,7 @@ select lives_ok($$select private.compute_staff_payroll_by_range('f1035c00-0000-4
 select lives_ok($$select private.get_merchant_monthly_salary_base_as_of('f1035c00-0000-4000-8000-000000000020', '2026-03-31 23:00+08')$$, 'D03 呼叫者 get_merchant_monthly_salary_base_as_of 可執行');
 select lives_ok($$select private.compute_staff_monthly_bonus('f1035c00-0000-4000-8000-000000000043', '2026-03-01')$$, 'D03 呼叫者 compute_staff_monthly_bonus 可執行');
 select pg_temp.test_set_auth('f1035c00-0000-4000-8000-000000000001');
-select lives_ok($$select public.get_merchant_billing_summary('f1035c00-0000-4000-8000-000000000020', 2026, 3)$$, 'D03 呼叫者 get_merchant_billing_summary(舊版)可執行');
+select lives_ok($$select public.get_merchant_billing_summary_by_range('f1035c00-0000-4000-8000-000000000020', make_date(2026, 3, 1), (make_date(2026, 3, 1) + interval '1 month - 1 day')::date)$$, 'D03 呼叫者 get_merchant_billing_summary_by_range(整個月份)可執行(#1051:舊版單月函式已移除)');
 select lives_ok($$select public.get_merchant_billing_summary_by_range('f1035c00-0000-4000-8000-000000000020', '2026-03-01', '2026-03-31')$$, 'D03 呼叫者 get_merchant_billing_summary_by_range 可執行');
 select lives_ok($$select public.get_staff_bonus_by_range('f1035c00-0000-4000-8000-000000000043', '2026-03-01', '2026-03-31')$$, 'D03 呼叫者 get_staff_bonus_by_range 可執行');
 reset role;

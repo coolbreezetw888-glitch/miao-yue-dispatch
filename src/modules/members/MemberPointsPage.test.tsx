@@ -52,6 +52,20 @@ vi.mock("@/modules/staff-agent/context", () => ({
   useAgentPermission: () => ({ data: state.agentPointsPermission }),
 }));
 
+// #1052 H2-05:頁面改讀 LINE 功能開關;這裡一律當開著(跟原本行為一樣),不打真的資料庫。
+vi.mock("@/modules/merchant/features", () => ({
+  MERCHANT_FEATURE_KEYS: {
+    lineNotifications: "line_notifications",
+    lineMarketing: "line_marketing",
+  },
+  useMerchantFeatures: () => ({
+    features: [],
+    hasFeature: () => true,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
 vi.mock("./RequireMemberPointsAccess", () => ({
   RequireMemberPointsAccess: ({ children }: { children: React.ReactNode }) => children,
 }));

@@ -799,9 +799,9 @@ function BookingStatusColorsCard({ merchantId }: { merchantId: string }) {
         <CardTitle>訂單狀態顏色設定</CardTitle>
         <CardDescription>
           自訂 4
-          種訂單狀態在行事曆、訂單管理頁顯示的代表色。訂單卡片上的狀態標籤會實心填入這個顏色，
-          文字一律是白色，所以<strong>挑太淺的顏色會看不清楚字</strong>，建議挑中等深度以上的顏色。
-          右側色塊就是實際會顯示的樣子。
+          種訂單狀態在行事曆、訂單管理頁顯示的代表色。訂單卡片上的狀態標籤會實心填入這個顏色，文字一律是白色，所以
+          <strong>挑太淺的顏色會看不清楚字</strong>
+          ，建議挑中等深度以上的顏色。右側色塊就是實際會顯示的樣子。
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2.5">

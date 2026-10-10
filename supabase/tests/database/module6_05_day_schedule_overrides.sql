@@ -1,6 +1,8 @@
 -- 模組 6(訂單管理,第二批)§5.5 第 3 點:get_merchant_day_schedule 擴充回傳 availability_overrides
 -- 陣列,驗證合併相鄰同值半小時格子成區間的邏輯正確(含「數值不同不合併」「有間隔不合併」的邊界)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(6);
 

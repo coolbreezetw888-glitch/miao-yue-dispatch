@@ -262,7 +262,7 @@ import {
 import MyCalendarPage from "@/modules/staff-portal/MyCalendarPage";
 // 2026-09-24 修正:CalendarPageRoleGate 改讀共用外殼算好的 isStaffView/isViewResolved,
 // 不再自己用 role==='staff' 判斷(雙重身分使用者會被誤判),詳見該元件上方註解。
-import { useAppLayoutContext } from "@/routes/AppLayout";
+import { useAppLayoutContext } from "@/routes/appLayoutContext";
 import {
   AMOUNT_ADJUSTMENT_MODE_LABELS,
   buildPaymentMethodOptions,

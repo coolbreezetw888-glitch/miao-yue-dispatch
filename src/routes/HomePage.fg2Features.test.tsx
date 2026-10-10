@@ -58,7 +58,7 @@ vi.mock("@/modules/staff-portal/MyStaffLineBindingCard", () => ({
 vi.mock("@/modules/push-notifications/PushSubscriptionCard", () => ({
   PushSubscriptionCard: () => <div data-testid="staff-push-card" />,
 }));
-vi.mock("./AppLayout", () => ({
+vi.mock("./appLayoutContext", () => ({
   useAppLayoutContext: () => ({
     email: "staff@test.local",
     newEmail: null,

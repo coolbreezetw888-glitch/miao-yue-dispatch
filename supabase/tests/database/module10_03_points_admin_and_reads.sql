@@ -3,6 +3,8 @@
 -- 生日贈點(批次 5 起改測 run_birthday_bonus_grants,§2.9)、get_member_point_history/get_member_related_bookings/
 -- get_member_referrals(唯讀函式 + 一之二節方向二權限邊界)、platform_export/purge(規則 2.9)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 -- ─── SPECS-INDEX #977(2026-10-06,第 3 批)測試墊片:no_time_slot_limit 不再影響後台 ───────────────
 -- 「客戶預約無時段限制」(no_time_slot_limit)改成只管客戶線上預約,後台建單 / 改單 / 行事曆一律不看它
@@ -36,7 +38,7 @@ create trigger req977_full_day_windows
   for each row execute function pg_temp.req977_full_day_windows();
 -- ─── 墊片結束 ──────────────────────────────────────────────────────────────────────────────
 
-select plan(35);
+select plan(29);
 
 create function pg_temp.test_set_auth(p_user_id uuid, p_role text default 'authenticated')
 returns void language plpgsql as $$
@@ -374,63 +376,11 @@ select throws_ok(
 );
 select pg_temp.test_clear_auth();
 
--- purge:只有平台管理員能執行,商家管理員/客服皆被擋下。
-select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
-select throws_ok(
-  $$select platform_purge_merchant_members_and_points('ec000000-0000-4000-8000-000000000021')$$,
-  '42501', null,
-  '3.18:商家管理員呼叫 platform_purge_merchant_members_and_points 被擋下(這是真正不可逆的硬刪除,不開放給商家自己操作)'
-);
-select pg_temp.test_clear_auth();
-
--- 注意:bookings 表的 SELECT 政策(bookings_select)要求 can_manage_bookings(即
--- is_merchant_admin 或 orders 權限客服),平台管理員本身不滿足這個條件(is_platform_admin 是
--- 一把完全獨立的鑰匙)——這裡「訂單筆數不受影響」的驗證改用商家管理員的身分讀取,只有真正呼叫
--- platform_purge_merchant_members_and_points 那一步才切換成平台管理員身分。
-select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
-
+-- #1051:平台批次清除函式 platform_purge_merchant_members_and_points 前端從未使用,已移除(要用時再做成有快照與紀錄的版本)。
 select is(
-  (select count(*)::int from bookings where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
-  1,
-  '3.18 前置確認:清空前這間商家有 1 筆訂單'
-);
-
-select pg_temp.test_clear_auth();
-select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000002');
-
-select platform_purge_merchant_members_and_points('ec000000-0000-4000-8000-000000000021');
-
-select is(
-  (select count(*)::int from members where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
-  0,
-  '3.18:執行後 members 該商家資料歸零'
-);
-
-select is(
-  (select count(*)::int from member_point_transactions where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
-  0,
-  '3.18:執行後 member_point_transactions 該商家資料歸零'
-);
-
-select pg_temp.test_clear_auth();
-select pg_temp.test_set_auth('ec000000-0000-4000-8000-000000000001');
-
-select is(
-  (select count(*)::int from bookings where merchant_id = 'ec000000-0000-4000-8000-000000000021'),
-  1,
-  '3.18:bookings 本身筆數不受影響(訂單沒有被刪除)'
-);
-
-select is(
-  (select member_id from bookings where id = :'read_test_booking_id'::uuid),
+  to_regprocedure('public.platform_purge_merchant_members_and_points(uuid)'),
   null,
-  '3.18:on delete set null 生效,bookings.member_id 正確變成 null,其餘欄位(如金額)不受影響'
-);
-
-select is(
-  (select final_amount_snapshot from bookings where id = :'read_test_booking_id'::uuid),
-  1000.00,
-  '3.18:bookings 其餘欄位(final_amount_snapshot)完全不受清空操作影響'
+  '3.18(#1051):平台批次清除會員與點數的函式已移除'
 );
 
 select pg_temp.test_clear_auth();

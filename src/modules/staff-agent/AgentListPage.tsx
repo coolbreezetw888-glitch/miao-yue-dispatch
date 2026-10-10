@@ -229,8 +229,7 @@ function AgentFormDialog({
         <CardDialogHeader>
           <CardDialogTitle>編輯客服資料</CardDialogTitle>
           <CardDialogDescription>
-            這裡只會更新基本資料，不會影響對方的登入帳號——登入信箱要用清單上的「修改登入信箱」
-            另外處理，權限要用「權限設定」另外調整。
+            這裡只會更新基本資料，不會影響對方的登入帳號——登入信箱要用清單上的「修改登入信箱」另外處理，權限要用「權限設定」另外調整。
           </CardDialogDescription>
         </CardDialogHeader>
         {/* 底部按鈕列在 <form> 外面(小卡窗的 Footer 是獨立區塊),儲存鈕用 form 屬性指回這張表單。 */}
@@ -665,8 +664,7 @@ function AgentListInner() {
           <CardAlertDialogHeader>
             <CardAlertDialogTitle>確定要移除這位客服嗎？</CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              移除後對方無法再看到這間店的任何資料，但對方的秒約帳號本身不受影響，
-              資料採軟刪除，之後仍可查詢紀錄。
+              移除後對方無法再看到這間店的任何資料，但對方的秒約帳號本身不受影響，資料採軟刪除，之後仍可查詢紀錄。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>
           <CardAlertDialogFooter>
@@ -696,9 +694,8 @@ function AgentListInner() {
               確定要真正刪除「{hardDeletingAgent?.name}」嗎？
             </CardAlertDialogTitle>
             <CardAlertDialogDescription>
-              這個動作無法復原！這位客服的紀錄與權限設定會被徹底刪除，之後在名單上
-              再也找不到，也無法用「恢復」救回。對方的秒約帳號本身不受影響，同一個 Email
-              之後仍然可以重新邀請。只有在確定不再需要這筆資料(例如邀請時 Email
+              這個動作無法復原！這位客服的紀錄與權限設定會被徹底刪除，之後在名單上再也找不到，也無法用「恢復」救回。對方的秒約帳號本身不受影響，同一個
+              Email 之後仍然可以重新邀請。只有在確定不再需要這筆資料(例如邀請時 Email
               打錯字、對方永遠不會來註冊)時才使用；若只是暫時停用，請維持 「已移除」狀態即可。
             </CardAlertDialogDescription>
           </CardAlertDialogHeader>

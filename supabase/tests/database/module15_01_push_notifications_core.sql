@@ -9,6 +9,8 @@
 --    另外 ⑤ 寫入 push_notification_log 的欄位 staff_id → target_type/target_id(§2.4/§3.2)。
 --    新增的資料表/函式(§2.2/§2.5/§2.6/§5.1/§6.6/§4.6)測試放在 module15_02_push_multi_role.sql。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(37);
 
@@ -352,10 +354,11 @@ select lives_ok(
 );
 
 select pg_temp.test_set_auth('ec500000-0000-4000-8000-000000000001');
-select is(
-  (select count(*)::int from push_reminder_dedupe_log where booking_id = 'ec500000-0000-4000-8000-000000000091'),
-  0,
-  '2.4(核心必測):沒有任何 RLS 政策,商家管理員也完全看不到冪等紀錄表'
+-- #1051:0 policy 的表連 authenticated 的表層權限也收回 ⇒ 直接讀是「沒有權限」(比原本的 0 列更嚴)。
+select throws_ok(
+  $$select count(*) from push_reminder_dedupe_log where booking_id = 'ec500000-0000-4000-8000-000000000091'$$,
+  '42501', null,
+  '2.4(核心必測):沒有任何 RLS 政策,商家管理員也完全讀不到冪等紀錄表'
 );
 select pg_temp.test_clear_auth();
 

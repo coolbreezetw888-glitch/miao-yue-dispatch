@@ -13,6 +13,8 @@
 --   ⑤ 紅利退回備註(refund_booking_redeem)兩句是全形版
 --   ⑥ 權限屬性不變:四支函式 security definer + search_path=public,ACL 跟改前一致
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(14);
 
@@ -151,7 +153,8 @@ select is(
                                     ('private', 'protect_merchant_member_settings_rule_columns'),
                                     ('private', 'refund_booking_redeem'))),
   array[
-    'private.protect_merchant_member_settings_rule_columns|true|{search_path=public}|NULL',
+    -- #1051:private 函式一律收回 PUBLIC 執行權 ⇒ 由 NULL(預設)變成只有擁有者。
+    'private.protect_merchant_member_settings_rule_columns|true|{search_path=public}|{postgres=X/postgres}',
     'private.refund_booking_redeem|true|{search_path=public}|{postgres=X/postgres}',
     'public.seed_default_line_event_settings|true|{search_path=public}|{postgres=X/postgres,service_role=X/postgres}',
     'public.seed_default_push_event_settings|true|{search_path=public}|{postgres=X/postgres,service_role=X/postgres}'

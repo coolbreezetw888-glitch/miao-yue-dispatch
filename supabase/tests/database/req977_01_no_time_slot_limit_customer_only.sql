@@ -21,6 +21,8 @@
 -- 故障注入(engineer 已做,見回報):把 check_staff_legacy_range 的 `if v_ok then` 改回
 --   `if v_ok and not p_staff.no_time_slot_limit then` ⇒ ④⑥⑧ 轉紅(⑦ 連帶紅:⑥ 已先建了同時段的單);① 仍綠(沒開的人本來就不受影響,這正是要證明的事)。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(14);
 
@@ -454,7 +456,8 @@ select is(
     array_to_string((select proacl from pg_proc where oid = 'public.get_staff_schedule_overview(uuid, date, date)'::regprocedure), ' ')
   ],
   array[
-    '(預設)',
+    -- #1051:private 函式一律收回 PUBLIC 執行權 ⇒ 由「(預設)」變成只有擁有者。
+    'postgres=X/postgres',
     'postgres=X/postgres authenticated=X/postgres service_role=X/postgres',
     'postgres=X/postgres authenticated=X/postgres service_role=X/postgres'
   ],

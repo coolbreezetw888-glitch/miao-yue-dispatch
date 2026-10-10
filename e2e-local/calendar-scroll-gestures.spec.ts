@@ -489,11 +489,16 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
       await expectHit(page, from, block, "P1 色塊");
       const before = await scrollState(page);
 
-      // 立刻滑:touchStart 之後馬上連續 move,總共遠小於 500ms。
+      // 立刻滑:touchStart 之後馬上 move。
+      // #1052 H2-14(偶發失敗修穩):真正決定「算不算長按」的是**第一步超過閾值(10px)的移動**有沒有在
+      // 500ms 內送到 —— 一送到,狀態機就標記成捲動,之後長按計時到了也不會進拖拉。原本是把 8 步 CDP 呼叫
+      // 全部算進 450ms,機器忙的時候光是送完 8 步就會超時,行為其實正確卻判紅。改成只量到第一步(12px)為止;
+      // 後面 7 步照樣送,讓格線真的捲動。斷言本身(不進拖拉、沒殘影、有捲動、不打 RPC)完全不變。
       const t0 = Date.now();
       await touchStart(cdp, from);
-      for (let i = 1; i <= 8; i++) await touchMove(cdp, { x: from.x - i * 12, y: from.y });
+      await touchMove(cdp, { x: from.x - 12, y: from.y });
       const elapsed = Date.now() - t0;
+      for (let i = 2; i <= 8; i++) await touchMove(cdp, { x: from.x - i * 12, y: from.y });
       // 手指還沒放開就先驗(放開後殘影本來就會消失)。
       await expect(grid(page), "短滑不應該進入 dragging").not.toHaveAttribute(
         "data-drag-phase",
@@ -501,7 +506,7 @@ test.describe("手機組:直接滑 = 捲動、長按才拖、短按開詳情(現
       );
       expect(await page.getByTestId("booking-drag-ghost").count(), "短滑不應該出現殘影").toBe(0);
       await touchEnd(cdp);
-      expect(elapsed, "前提:這次滑動在長按門檻 500ms 之內完成").toBeLessThan(450);
+      expect(elapsed, "前提:第一步移動(超過閾值)在長按門檻 500ms 之內送到").toBeLessThan(450);
 
       await expect
         .poll(async () => (await scrollState(page)).left - before.left, {

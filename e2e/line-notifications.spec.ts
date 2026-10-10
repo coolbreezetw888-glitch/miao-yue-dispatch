@@ -97,11 +97,11 @@ test("LINE 串接設定頁(§4.1):貼假憑證測試連線真的失敗,正確顯
   });
   await expect(page.getByText("尚未串接")).toBeVisible();
 
-  await page.getByLabel(/^Channel ID\s*\*?$/).fill(`e2e-fake-channel-id-${fixture.runId}`);
-  await page.getByLabel(/^Channel Secret\s*\*?$/).fill(`e2e-fake-channel-secret-${fixture.runId}`);
-  await page
-    .getByLabel(/^Channel Access Token\s*\*?$/)
-    .fill(`e2e-fake-access-token-${fixture.runId}`);
+  // #1052 H2-14:同一頁還有「LINE 登入」卡片也叫 Channel ID / Channel Secret,用標籤找會撞名
+  // (strict mode 失敗、serial 後面整串跟著不跑),改用 Messaging API 表單自己的欄位 id。
+  await page.locator("#line-channel-id").fill(`e2e-fake-channel-id-${fixture.runId}`);
+  await page.locator("#line-channel-secret").fill(`e2e-fake-channel-secret-${fixture.runId}`);
+  await page.locator("#line-channel-token").fill(`e2e-fake-access-token-${fixture.runId}`);
   await page.getByRole("button", { name: "儲存並測試連線" }).click();
 
   // 這裡刻意不 mock——讓已經部署上線的 line-test-connection Edge Function 真的打一次
@@ -137,13 +137,9 @@ test("LINE 串接設定頁(§4.1):mock 測試連線成功時正確顯示成功�
     timeout: LOAD_TIMEOUT,
   });
 
-  await page.getByLabel(/^Channel ID\s*\*?$/).fill(`e2e-fake-channel-id-mock-${fixture.runId}`);
-  await page
-    .getByLabel(/^Channel Secret\s*\*?$/)
-    .fill(`e2e-fake-channel-secret-mock-${fixture.runId}`);
-  await page
-    .getByLabel(/^Channel Access Token\s*\*?$/)
-    .fill(`e2e-fake-access-token-mock-${fixture.runId}`);
+  await page.locator("#line-channel-id").fill(`e2e-fake-channel-id-mock-${fixture.runId}`);
+  await page.locator("#line-channel-secret").fill(`e2e-fake-channel-secret-mock-${fixture.runId}`);
+  await page.locator("#line-channel-token").fill(`e2e-fake-access-token-mock-${fixture.runId}`);
   await page.getByRole("button", { name: "儲存並測試連線" }).click();
 
   // 「連線成功」同時會出現在表單下方的訊息段落跟一則 toast,這裡只鎖定表單下方那一段

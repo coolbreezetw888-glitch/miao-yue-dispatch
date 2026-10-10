@@ -14,6 +14,8 @@
 --            已完成訂單的還原 / 取消(管理員專用)服務人員仍被擋(方案 A1)
 --   ㉝~㉞   後台不受影響:管理員取消 / 完成的操作紀錄仍是 merchant_admin
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(34);
 

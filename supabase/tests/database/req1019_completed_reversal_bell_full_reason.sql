@@ -2,6 +2,8 @@
 -- migration 20261008130000_req1019_completed_reversal_bell_full_reason.sql。
 -- 走真的包裝函式(cancel_completed_booking / revert_completed_booking),由管理員甲操作、管理員乙收通知。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(9);
 

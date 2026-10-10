@@ -11,6 +11,8 @@
 --   B  店家報表:有方案的店 淨利 = 原算法 − 獎金、明細月薪列 bonus_amount;不完整月份 null;
 --      沒有方案的店 total_monthly_bonus = 0、bonus_feature_used = false、淨利不變
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(40);
 

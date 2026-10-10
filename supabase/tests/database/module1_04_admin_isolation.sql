@@ -2,6 +2,8 @@
 -- 對應 supabase/migrations/20260915100000_merchant_group_schema.sql 的 merchants_select /
 -- groups_select RLS 政策——兩個互不相干的商家管理員,彼此完全看不到對方的資料。
 begin;
+-- #1051:migration 已把「新函式預設給 PUBLIC 執行權」關掉;本檔的測試輔助函式需要讓測試角色呼叫,在這個交易內恢復(rollback 後失效)。
+alter default privileges for role postgres grant execute on functions to public;
 
 select plan(8);
 

@@ -22,6 +22,8 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { errorCode } from "../_shared/safeLog.ts";
+import { checkMerchantFeature, FEATURE_LINE_NOTIFICATIONS } from "../_shared/featureGate.ts";
 
 
 // =========================================================================
@@ -120,7 +122,7 @@ export async function replyLineMessage(
     });
   } catch (err) {
     // 3.12 邊界情況:回覆訊息失敗不影響綁定本身是否成功,只記錄 log,不往外拋。
-    console.error("[line-webhook] replyLineMessage 失敗(不影響綁定結果)", err);
+    console.error("[line-webhook] replyLineMessage 失敗(不影響綁定結果)", errorCode(err));
   }
 }
 
@@ -191,7 +193,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
     .maybeSingle();
 
   if (configError) {
-    console.error("[line-webhook] 查詢 merchant_line_configs 失敗", configError);
+    console.error("[line-webhook] 查詢 merchant_line_configs 失敗", errorCode(configError));
     return new Response("OK", { status: 200 });
   }
   if (!config) {
@@ -236,10 +238,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
 
     if (insertEventError) {
       // 極少數情況下(例如真的同時處理兩次)插入會因為主鍵重複而失敗,視為已處理過,跳過即可。
-      console.error(
-        "[line-webhook] 寫入 line_webhook_events 失敗,視為已處理過跳過",
-        insertEventError,
-      );
+      console.error("[line-webhook] 寫入 line_webhook_events 失敗,視為已處理過跳過", errorCode(insertEventError));
       continue;
     }
 
@@ -264,6 +263,15 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
       event.message.text &&
       isSixDigitBindingCode(event.message.text)
     ) {
+      // #1051(H1-21):這間店的「LINE 通知」平台功能沒開 ⇒ 不綁定、不回覆(查詢失敗也當沒開)。
+      const lineNotificationsGate = await checkMerchantFeature(adminClient, merchantId, FEATURE_LINE_NOTIFICATIONS);
+      if (lineNotificationsGate !== true) {
+        if (lineNotificationsGate === "error") console.error("[line-webhook] internal_merchant_has_feature 失敗");
+        continue;
+      }
+
+      // #1051(H1-20):錯誤次數限制在資料庫 consume_line_binding_code 裡處理(同一 LINE 帳號 × 同一間店
+      // 1 小時內錯 5 次 ⇒ 暫停受理 1 小時),回傳結果與「代碼無效或已過期」相同,這裡照舊回同一句。
       const { data: consumeResult, error: consumeError } = await adminClient.rpc(
         "consume_line_binding_code",
         {
@@ -274,7 +282,7 @@ export async function handleRequest(req: Request, deps?: HandleRequestDeps): Pro
       );
 
       if (consumeError) {
-        console.error("[line-webhook] consume_line_binding_code 呼叫失敗", consumeError);
+        console.error("[line-webhook] consume_line_binding_code 呼叫失敗", errorCode(consumeError));
         continue;
       }
 
